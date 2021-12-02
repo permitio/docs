@@ -5,7 +5,10 @@ const lightCodeTheme = require("./src/css/prism-theme");
 const darkCodeTheme = require("prism-react-renderer/themes/dracula");
 
 const companyWebsiteUrl =
-  process.env.COMPANY_WEBSITE_URL ?? "https://authorizon1.netlify.com/";
+  process.env.COMPANY_WEBSITE_URL ?? "https://authorizon1.netlify.com";
+
+const apiReferenceUrl =
+  process.env.API_REFERENCE_URL ?? "https://api.authorizon.com/redoc";
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -56,25 +59,20 @@ const config = {
             label: "Docs",
           },
           {
-            to: `${companyWebsiteUrl}/blog`,
-            label: "Blog",
+            to: `${apiReferenceUrl}`,
+            label: "API Reference",
             position: "left",
             target: "_self",
           },
           {
-            to: `${companyWebsiteUrl}/blog`,
-            label: "Blog",
+            type: "doc",
+            docId: "changelog",
             position: "left",
-            target: "_self",
+            label: "Changelog",
           },
           {
             href: "https://github.com/facebook/docusaurus",
             label: "GitHub",
-            position: "right",
-          },
-          {
-            href: "https://facebook.com/",
-            label: "Facebook",
             position: "right",
           },
         ],

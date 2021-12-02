@@ -29,9 +29,9 @@ const sidebars = {
 
   mySidebar: [
     {
-      type: "category",
-      label: "Getting Started",
-      items: ["home"],
+      type: "doc",
+      id: "home",
+      label: "Welcome",
     },
     {
       type: "category",
