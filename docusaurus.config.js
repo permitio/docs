@@ -4,6 +4,9 @@
 const lightCodeTheme = require("prism-react-renderer/themes/github");
 const darkCodeTheme = require("prism-react-renderer/themes/dracula");
 
+const companyWebsiteUrl =
+  process.env.COMPANY_WEBSITE_URL ?? "https://authorizon1.netlify.com/";
+
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "Authorizon",
@@ -25,9 +28,7 @@ const config = {
           sidebarPath: require.resolve("./sidebars.js"),
           routeBasePath: "/",
         },
-        blog: {
-          showReadingTime: true,
-        },
+        blog: false, // disables docusaurus blog
         theme: {
           customCss: require.resolve("./src/css/custom.css"),
         },
@@ -50,9 +51,14 @@ const config = {
             type: "doc",
             docId: "intro",
             position: "left",
-            label: "Tutorial",
+            label: "Docs",
           },
-          { to: "/blog", label: "Blog", position: "left" },
+          {
+            to: `${companyWebsiteUrl}/blog`,
+            label: "Blog",
+            position: "left",
+            target: "_self",
+          },
           {
             href: "https://github.com/facebook/docusaurus",
             label: "GitHub",
