@@ -39,10 +39,11 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       navbar: {
-        title: "Authorizon",
         logo: {
-          alt: "My Site Logo",
-          src: "img/logo.svg",
+          alt: "Authorizon",
+          src: "img/authorizon-logo.svg",
+          srcDark: "img/authorizon-logo-dark.svg",
+          width: 130,
         },
         items: [
           {
