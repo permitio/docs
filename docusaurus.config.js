@@ -49,9 +49,15 @@ const config = {
         items: [
           {
             type: "doc",
-            docId: "intro",
+            docId: "home",
             position: "left",
             label: "Docs",
+          },
+          {
+            to: `${companyWebsiteUrl}/blog`,
+            label: "Blog",
+            position: "left",
+            target: "_self",
           },
           {
             to: `${companyWebsiteUrl}/blog`,
@@ -79,7 +85,7 @@ const config = {
             items: [
               {
                 label: "Tutorial",
-                to: "/docs/intro",
+                to: "/docs/home",
               },
             ],
           },
