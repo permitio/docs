@@ -71,9 +71,16 @@ const config = {
             label: "Changelog",
           },
           {
-            href: "https://github.com/facebook/docusaurus",
-            label: "GitHub",
+            href: "https://github.com/authorizon",
             position: "right",
+            className: "header-github-link",
+            "aria-label": "Github",
+          },
+          {
+            href: "https://bit.ly/opal-slack",
+            position: "right",
+            className: "header-slack-link",
+            "aria-label": "Slack community",
           },
         ],
       },
