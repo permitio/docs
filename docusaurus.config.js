@@ -91,8 +91,8 @@ const config = {
             title: "Docs",
             items: [
               {
-                label: "Tutorial",
-                to: "/docs/home",
+                label: "Home",
+                to: "/",
               },
             ],
           },
@@ -117,10 +117,6 @@ const config = {
             title: "More",
             items: [
               {
-                label: "Blog",
-                to: "/blog",
-              },
-              {
                 label: "GitHub",
                 href: "https://github.com/facebook/docusaurus",
               },
@@ -129,10 +125,6 @@ const config = {
           {
             title: "Even More",
             items: [
-              {
-                label: "Blog",
-                to: "/blog",
-              },
               {
                 label: "GitHub",
                 href: "https://github.com/facebook/docusaurus",
@@ -150,6 +142,12 @@ const config = {
       prism: {
         theme: lightCodeTheme,
         darkTheme: darkCodeTheme,
+      },
+      //search configuration
+      algolia: {
+        appId: process.env.APPLICATION_ID,
+        apiKey: process.env.API_KEY,
+        indexName: "docs",
       },
     }),
 };
