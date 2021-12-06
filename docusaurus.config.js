@@ -10,6 +10,20 @@ const companyWebsiteUrl =
 const apiReferenceUrl =
   process.env.API_REFERENCE_URL ?? "https://api.authorizon.com/redoc";
 
+const algoliaAppId = process.env.APPLICATION_ID || "";
+const algoliaApiKey = process.env.API_KEY || "";
+
+let searchConfig = {};
+if (algoliaAppId && algoliaApiKey) {
+  searchConfig = {
+    algolia: {
+      appId: process.env.APPLICATION_ID,
+      apiKey: process.env.API_KEY,
+      indexName: "docs",
+    },
+  };
+}
+
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "Authorizon",
@@ -144,11 +158,7 @@ const config = {
         darkTheme: darkCodeTheme,
       },
       //search configuration
-      algolia: {
-        appId: process.env.APPLICATION_ID,
-        apiKey: process.env.API_KEY,
-        indexName: "docs",
-      },
+      ...searchConfig,
     }),
 };
 
