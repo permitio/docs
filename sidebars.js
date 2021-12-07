@@ -35,6 +35,7 @@ const sidebars = {
     },
     {
       type: "category",
+      collapsible: false,
       label: "Overview",
       items: [
         {
@@ -45,6 +46,7 @@ const sidebars = {
     },
     {
       type: "category",
+      collapsible: false,
       label: "Get Started",
       items: [
         {
@@ -55,6 +57,7 @@ const sidebars = {
     },
     {
       type: "category",
+      collapsible: false,
       label: "Features",
       items: [
         {
@@ -65,6 +68,7 @@ const sidebars = {
     },
     {
       type: "category",
+      collapsible: false,
       label: "Concepts",
       items: [
         {
@@ -75,10 +79,12 @@ const sidebars = {
     },
     {
       type: "category",
+      collapsible: false,
       label: "Reference",
       items: [
         {
           type: "category",
+          collapsible: true,
           label: "SDKs",
           items: [
             {
