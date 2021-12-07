@@ -5,10 +5,10 @@ const lightCodeTheme = require("./src/css/prism-theme");
 const darkCodeTheme = require("prism-react-renderer/themes/dracula");
 
 const companyWebsiteUrl =
-  process.env.COMPANY_WEBSITE_URL ?? "https://authorizon1.netlify.com";
+  process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
 
 const apiReferenceUrl =
-  process.env.API_REFERENCE_URL ?? "https://api.authorizon.com/redoc";
+  process.env.API_REFERENCE_URL ?? "https://api.permit.io/redoc";
 
 const algoliaAppId = process.env.APPLICATION_ID || "";
 const algoliaApiKey = process.env.API_KEY || "";
@@ -26,14 +26,14 @@ if (algoliaAppId && algoliaApiKey) {
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: "Authorizon",
-  tagline: "Permissions for everyone",
-  url: "https://docs.authorizon.com",
+  title: "Permit.io",
+  tagline: "Fullstack Authorization as a Service",
+  url: "https://docs.permit.io",
   baseUrl: "/",
   onBrokenLinks: "throw",
   onBrokenMarkdownLinks: "warn",
   favicon: "img/favicon.ico",
-  organizationName: "authorizon", // Usually your GitHub org/user name.
+  organizationName: "permitio", // Usually your GitHub org/user name.
   projectName: "docs", // Usually your repo name.
 
   presets: [
@@ -60,10 +60,10 @@ const config = {
     ({
       navbar: {
         logo: {
-          alt: "Authorizon",
-          src: "img/authorizon-logo.svg",
-          srcDark: "img/authorizon-logo-dark.svg",
-          width: 130,
+          alt: "Permit.io",
+          src: "img/permitio-logo.svg",
+          srcDark: "img/permitio-logo-dark.svg",
+          width: 110,
         },
         items: [
           {
