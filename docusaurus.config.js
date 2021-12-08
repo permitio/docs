@@ -27,7 +27,7 @@ if (algoliaAppId && algoliaApiKey) {
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "Permit.io",
-  tagline: "Fullstack Authorization as a Service",
+  tagline: "Fullstack Authorization",
   url: "https://docs.permit.io",
   baseUrl: "/",
   onBrokenLinks: "throw",
