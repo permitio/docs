@@ -10,17 +10,15 @@ This repository contains the source code to our docs site at [docs.permit.io](ht
 ### Local Development
 This website is built using [Docusaurus 2](https://docusaurus.io/), a modern static website generator.
 
-1) Clone the repo
+To install the required NPM packages run:
+```sh
+yarn
+```
 
-2) Install the required NPM packages
-    ```sh
-    yarn
-    ```
-
-3) Start the docs website on port 3000:
-    ```sh
-    yarn start
-    ```
+To Start the docs website on port 3000 run:
+```sh
+yarn start
+```
 
 This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
 
