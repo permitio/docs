@@ -93,11 +93,11 @@ const sidebars = {
             },
           ],
         },
-        {
-          type: "doc",
-          id: "reference/pdp_api_reference",
-          label: "PDP Reference",
-        },
+        // {
+        //   type: "doc",
+        //   id: "reference/pdp_api_reference",
+        //   label: "PDP Reference",
+        // },
         {
           type: "doc",
           id: "reference/api_reference",
