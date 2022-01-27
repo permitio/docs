@@ -106,6 +106,7 @@ const config = {
       prism: {
         theme: lightCodeTheme,
         darkTheme: darkCodeTheme,
+        additionalLanguages: ["java", "csharp", "groovy"],
       },
       //search configuration
       ...searchConfig,
