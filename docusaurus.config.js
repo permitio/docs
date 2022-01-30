@@ -32,7 +32,7 @@ const config = {
   baseUrl: "/",
   onBrokenLinks: "throw",
   onBrokenMarkdownLinks: "warn",
-  favicon: "img/favicon.png",
+  favicon: "img/favicon-black.png",
   organizationName: "permitio", // Usually your GitHub org/user name.
   projectName: "docs", // Usually your repo name.
 
@@ -101,7 +101,7 @@ const config = {
       footer: {
         style: "dark",
         links: [],
-        copyright: `Copyright © ${new Date().getFullYear()} Permit, Inc.`,
+        copyright: `Copyright © ${new Date().getFullYear()} Authorizon, Inc.`,
       },
       prism: {
         theme: lightCodeTheme,
