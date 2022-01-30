@@ -32,7 +32,7 @@ const config = {
   baseUrl: "/",
   onBrokenLinks: "throw",
   onBrokenMarkdownLinks: "warn",
-  favicon: "img/favicon.ico",
+  favicon: "img/favicon-black.png",
   organizationName: "permitio", // Usually your GitHub org/user name.
   projectName: "docs", // Usually your repo name.
 
@@ -85,7 +85,7 @@ const config = {
             label: "Changelog",
           },
           {
-            href: "https://github.com/authorizon",
+            href: "https://github.com/permitio",
             position: "right",
             className: "header-github-link",
             "aria-label": "Github",
