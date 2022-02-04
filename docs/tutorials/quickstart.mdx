@@ -3,44 +3,188 @@ sidebar_position: 1
 title: Quickstart
 ---
 
-# Quickstart: Add permissions to your app
+## Quickstart: Integrate OPToggles with your app
 
-In this tutorial, we will show you how to integrate your app with Permit.io in few simple steps.
+In this tutorial, we will show you how to integrate your app with OPToggles in few simple steps:
+- Setup OPA 
+- Setup OPAL server and OPAL client
+- Config OPTpggles to receive callbacks from OPAL client
+- Build and Run OPToggles
 
-## Setup Your PDP (policy decision point) container
+### Setup OPA 
 
-We provide you with a Policy-Decision-Point - aka an authorization microservice, as a container for you to use.
-Follow these steps to install:
+TBD
 
-#### 1. Pull our PDP container from Docker Hub ([Click here to install Docker](https://docs.docker.com/get-docker/])):
+### Setup OPAL server and OPAL client
+
+We wrote a long step-by-step manual with all supported configurations on how to run OPAL that you can find [here](https://github.com/permitio/opal/blob/master/docs/HOWTO/get_started_with_opal_using_docker.md#--get-started-with-opal-docker-containers_).
+
+This is a short version and it will relate to the happy path for such a setup.
+
+#### 1. Get OPAL Server from Docker Hub ([Click here to install Docker](https://docs.docker.com/get-docker/])):
+
+First, get the OPAL server image:
+<code>docker pull permitio/opal-server</code>
+
+Next, let's config the server:
+
+##### Set the OPAL policy repo in OPAL_POLICY_REPO_URL
+Highlights: 
+- The policy Must be available from the machine running OPAL
+- Supported URI schemes: https:// and ssh (i.e: git@).
+
+
+##### Set the polling interval in OPAL_POLICY_REPO_POLLING_INTERVAL
+Highlights:
+- You can set it to use polling (less recommended) and webhooks (recommended)
+- If your server is hosted at https://opal.yourdomain.com the webhook URL must be https://opal.yourdomain.com/webhook. See Github’s guide on webhooks configuration.
+
+
+##### Set up repo webhook secret OPAL_POLICY_REPO_WEBHOOK_SECRET
+Highlights:
+- Typically, you will need to share a secret with your webhook provider. You can use the OPAL CLI to create a cryptographically strong secret to use.
+- Install the CLI to a new python virtualenv
+<code>pyenv virtualenv opal
+pyenv activate opal
+pip install opal-server
+Use the CLI to generate a secret
+	opal-server generate-secret
+</code>
+
+Now, let’s run the docker:
+```
+  docker run -it \
+  -v ~/.ssh:/root/ssh \
+  -e "OPAL_AUTH_PRIVATE_KEY=$(OPAL_AUTH_PRIVATE_KEY)" \
+  -e "OPAL_AUTH_PUBLIC_KEY=$(OPAL_AUTH_PUBLIC_KEY)" \
+  -e "OPAL_POLICY_REPO_URL=$(OPAL_POLICY_REPO_URL)" \
+  -p 7002:7002 \
+  permitio/opal-server
+```
+
+##### Set up the base data source configuration for OPAL client OPAL_DATA_CONFIG_SOURCES
+The configuration is structured as directives for the client, each directive specifies what to fetch (url), and where to put it in OPA data document hierarchy (destination path).
+
+The value of the data source config variable is a json encoding of the ServerDataSourceConfig pydantic model.
+
+Use <code>​​json.dumps()</code> to get it in one line of code:
+```
+  {
+    "config": {
+        "entries": [
+            {
+                "url": "https://api.permit.io/v1/policy-config",
+                "topics": [
+                    "policy_data"
+                ],
+                "config": {
+                    "headers": {
+                        "Authorization": "Bearer FAKE-SECRET"
+                    }
+                }
+            }
+        ]
+    }
+  }
+```
+
+Your server is configured and ready to run!
+```
+docker run -it \
+  --env OPAL_BROADCAST_URI \
+  --env UVICORN_NUM_WORKERS \
+  --env OPAL_POLICY_REPO_URL \
+  --env OPAL_POLICY_REPO_WEBHOOK_SECRET \
+  --env OPAL_DATA_CONFIG_SOURCES \
+  --env OPAL_AUTH_PRIVATE_KEY \
+  --env OPAL_AUTH_PUBLIC_KEY \
+  --env OPAL_AUTH_MASTER_TOKEN \
+  -p 7002:7002 \
+  permitio/opal-server
+```
+
+#### Run OPAL client
+
+Once OPAL server is running, it’s time to run OPAL client.
+There are many more optional steps and configurations, follow [this link](https://github.com/permitio/opal/blob/master/docs/HOWTO/get_started_with_opal_using_docker.md#-how-to-run-opal-client) to learn more.
+
+Pull the latest OPAL client:
+```docker pull permitio/opal-client```
+
+Then, declare configuration with environment variable:
+```# let's say this is the (shortened) token we obtained from opal server
+export OPAL_CLIENT_TOKEN=eyJ0...8wsk
+# and this is where we deployed opal server
+export OPAL_SERVER_URL=https://opal.yourdomain.com
+# and let's say we subscribe to a specific tenant's data updates (i.e: `tenant1`)
+export OPAL_DATA_TOPICS=policy_data/tenant1
+```
+
+Run the OPAL client:
+```docker run -it \
+  --env OPAL_CLIENT_TOKEN \
+  --env OPAL_SERVER_URL \
+  --env OPAL_DATA_TOPICS \
+  -p 7000:7000 \
+  -p 8181:8181 \
+  permitio/opal-client
+```
 
 ```
 docker pull permitio/pdp:latest
 ```
-#### 2. Get Permit.io API key
 
-Navigate to [Project management](https://app.permit.io/project-management).  
-Find the active environment with the green dot on the icon.  
-Click on "Copy secret key" button of the active environment. 
-<img src={https://i.postimg.cc/7hvpTFzc/Copy-secret-key.png} alt="Copy Secret Key" />
+### Config OPTpggles
 
-Or: 
-Click on your user icon at the top right of the screen and click there "Copy SDK secret key".
-<img src={https://i.postimg.cc/y8MY78Y4/Copy-secret-key-2.png} alt="Copy Secret Key" />
+OPToggles should be run as a docker container. <br/>
 
-#### 3. Run the container (replace `<YOUR_API_KEY>` with your API key):
+Port 8080 should be exposed to listen to both OPAL trigger callbacks and http health checks. And configuration yaml file
+could be supplied through a volume mount.
 
-```
-docker run \
-  -p 7000:7000 \
-  --env PDP_API_KEY=<YOUR_API_KEY> \
-  permitio/pdp
+For example:
 
+```sh
+docker run -n optoggles -p 8080:8080 -v $PWD/config.yaml:/optoggles/config.yaml --rm -it authorizon/optoggles:latest
 ```
 
-## Add the SDK to your code - per lanague:
+Where `config.yaml`:
 
-1. [Node.js](/reference/SDKs/nodejs)
-2. [Python](/reference/SDKs/python)
+```yaml
+sources:
+  - id: myopal
+    url: http://opalclient:7000
+    advertisedAddress: optoggles:8080
 
-more SDKs coming soon...
+target:
+  targetType: launchdarkly
+  targetSpec:
+    # Replace with your API token
+    launchdarklyToken: "api-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+toggles:
+  - key: "somefeature"
+    usersPolicy:
+      source: myopal
+      package: "app.rules"
+      rule: "somefeature_users"
+    spec:
+      name: "Some Feature Toggle"
+      projKey: "default"
+      environments: [ "production", "staging" ]
+```
+
+- Optoggles would register to receive callbacks on policy/data changes from `OPAL Client` instance running
+  at `opalclient:7000`.
+- It would query `OPAL`'s corresponding `OPA` instance for the new value of `somefeature_users` on every
+  change (`somefeature_users` is a set of all usernames allowed for some feature).
+- It would sync the toggle `somefeature` in your `LaunchDarkly` account to target the current set of usernames allowed
+  by the policy. (and create the toggle if it doesn't already exists)
+- Health checks are available under `http://optoggles:8080/health[/live,/started]` ([More details](howitworks.md#healthchecks))
+
+### Build and Run OPToggles
+
+Building your own version of `OPToggles` is as simple as:
+
+```shell
+docker build . -t optoggles:$IMAGE_TAG
+```

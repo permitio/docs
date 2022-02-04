@@ -1,35 +1,62 @@
-# Permit.io Docs Website
-This repository contains the source code to our docs site at [docs.permit.io](https://docs.permit.io).
+<p  align="center">
+ <img src="https://i.ibb.co/m4cN6nW/optoggles.png" height=170 alt="optoggles" border="0" />
+</p>
+<h1 align="center">
+🎚️ OPToggles 🎚️
+</h1>
 
-### Writing docs
-* Docs are located in the `docs/` folder
-* All docs must be in the `md` format (markdown) or the `mdx` format (Markdown with react)
-* Check out [this tutorial](https://docusaurus.io/docs/create-doc) on how to write docs
-* You can configure the sidebar by editing `sidebars.js` (as shown in [this tutorial](https://docusaurus.io/docs/sidebar))
+<h2 align="center">
+Open policy based feature toggling
+</h2>
 
-### Local Development
-This website is built using [Docusaurus 2](https://docusaurus.io/), a modern static website generator.
+<a href="https://hub.docker.com/r/authorizon/optoggles" target="_blank">
+    <img src="https://img.shields.io/docker/pulls/authorizon/optoggles?label=Docker%20pulls" alt="Docker pulls">
+</a>
+<a href="https://opal-access.slack.com/" target="_blank">
+    <img src="https://img.shields.io/badge/Slack%20Community-4A154B?logo=slack&logoColor=white" alt="Join our Slack!">
+</a>
 
-To install the required NPM packages run:
-```sh
-yarn
-```
+# What is OPToggles?
+We often want our frontend to reflect the permissions enforced by the backend. E.g. if a user is not allowed to click run the action behind a button - don't show them that button. 
 
-To Start the docs website on port 3000 run:
-```sh
-yarn start
-```
+`OPToggles` brings the power of <a href="https://github.com/permitio/opal" target="_blank">`OPA` + `OPAL`</a> into your existing feature toggling solutions. <br/>
+It enables you to create user targeted feature flags/toggles based on <a href="https://openpolicyagent.org" target="_blank">Open Policy</a> managed authorization rules, and keep them
+synced thanks to `OPAL`'s realtime policy and policy-data change detection.<br/>
+<br/>
+With OPToggles frontend devs can continue to enjoy working with the feature flags they are familar with, and backend-devs easily harness the power of open-policy.
 
-This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
 
-### Build
+<img src="docs/optoggles-demo.gif" alt="OPToggles Demo">
 
-This command generates static content into the `build` directory and can be served using any static contents hosting service:
+</br>
 
-```
-$ yarn build
-```
+# Documentation
+- ⚡️ &nbsp; [Quick Start Guide](docs/quickstart.md)
+- 🤿 &nbsp; [How Does It Work](docs/howitworks.md)
+- 🦮 &nbsp; [First OPToggle Walkthrough](docs/walkthrough.md)
+- 📓 &nbsp; [Configuration File Reference](docs/configuration.md)
+- 📖 &nbsp; [For further reading check out our Blog](https://www.Permit.io/blog).
 
-### Deploy
+# <a name="community"></a>👥 Community & Contribution
 
-Merging new code to master will auto-deploy to [netlify](https://app.netlify.com/sites/permitio-docs/overview).
+
+
+**Come talk to us about OPToggles, or authorization in general - we would love to hear from you ❤️**
+
+You can raise questions and ask for features to be added to the road-map in our [**Github discussions**](https://github.com/permitio/OPToggles/discussions), report issues in [**Github issues**](https://github.com/permitio/OPToggles/issues), follow us on Twitter to get the latest OPToggles updates, and join our Slack community to chat about authorization, open-source, realtime communication, tech any anything else!
+</br>
+</br>
+If you are using our project, please consider giving us a ⭐️
+</br>
+</br>
+
+[![Button][join-slack-link]][badge-slack-link] </br> [![Button][follow-twitter-link]][badge-twitter-link]
+
+## Contributing to OPToggles
+- Pull requests are welcome! (please make sure to include *passing* tests and docs)
+- Prior to submitting a PR - open an issue on GitHub, or make sure your PR addresses an existing issue well.  
+
+[join-slack-link]: https://i.ibb.co/wzrGHQL/Group-749.png
+[badge-slack-link]: https://bit.ly/opal-slack
+[follow-twitter-link]: https://i.ibb.co/YZwWJm7/Group-751.png
+[badge-twitter-link]: https://twitter.com/opal

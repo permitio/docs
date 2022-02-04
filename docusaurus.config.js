@@ -60,9 +60,9 @@ const config = {
     ({
       navbar: {
         logo: {
-          alt: "Permit.io",
-          src: "img/permitio-logo.svg",
-          srcDark: "img/permitio-logo-dark.svg",
+          alt: "OPToggles",
+          src: "img/optoggles-logo.svg",
+          srcDark: "img/optoggles-logo-dark.svg",
           width: 110,
         },
         items: [
