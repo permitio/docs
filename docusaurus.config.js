@@ -101,7 +101,7 @@ const config = {
       footer: {
         style: "dark",
         links: [],
-        copyright: `Copyright © ${new Date().getFullYear()} Authorizon, Inc.`,
+        copyright: `Copyright © ${new Date().getFullYear()} Permit, Inc.`,
       },
       prism: {
         theme: lightCodeTheme,
