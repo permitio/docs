@@ -110,6 +110,14 @@ const config = {
       },
       //search configuration
       ...searchConfig,
+      announcementBar: {
+        id: "support_us",
+        content:
+          '⭐️ If you like Permit, give it a star on <a href="https://www.github.com/permitio/opal" target="_blank" rel="noopener noreferrer">GitHub</a> and follow us on <a href="https://www.twitter.com/permit_io" target="_blank" rel="noopener noreferrer">Twitter</a>',
+        backgroundColor: "#6851ff",
+        textColor: "#FFFFFF",
+        isCloseable: true,
+      },
     }),
 };
 
