@@ -32,7 +32,7 @@ const config = {
   baseUrl: "/",
   onBrokenLinks: "throw",
   onBrokenMarkdownLinks: "warn",
-  favicon: "img/favicon-black.png",
+  favicon: "img/favicon.ico",
   organizationName: "permitio", // Usually your GitHub org/user name.
   projectName: "docs", // Usually your repo name.
 
