@@ -53,7 +53,7 @@ const config = {
     ],
   ],
 
-  plugins: ["docusaurus-plugin-sass"],
+  plugins: ["docusaurus-plugin-sass", "plugin-image-zoom"],
 
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
