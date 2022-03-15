@@ -103,6 +103,11 @@ const sidebars = {
           id: "reference/api_reference",
           label: "API Reference",
         },
+        {
+          type: "doc",
+          id: "reference/api_with_cli",
+          label: "Call API with CLI",
+        },
       ],
     },
     // {
