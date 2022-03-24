@@ -84,12 +84,6 @@ const config = {
             target: "_self",
           },
           {
-            type: "doc",
-            docId: "changelog",
-            position: "left",
-            label: "Changelog",
-          },
-          {
             href: "https://github.com/permitio",
             position: "right",
             className: "header-github-link",
