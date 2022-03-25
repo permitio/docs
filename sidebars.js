@@ -84,7 +84,7 @@ const sidebars = {
       items: [
         {
           type: "category",
-          collapsible: true,
+          collapsible: false,
           label: "SDKs",
           items: [
             {
