@@ -13,7 +13,7 @@ export const PlayerWithControlls = () => {
         }}
         url="/video/Mcdonalds-onboarding.mp4"
       />
-      <a onClick={() => player.seekTo(12.7)}>Seek to 12.7</a>
+      {/* <a onClick={() => player.seekTo(12.7)}>Seek to 12.7</a> */}
     </>
   );
 };
