@@ -90,6 +90,12 @@ const config = {
             "aria-label": "Github",
           },
           {
+            href: "https://twitter.com/permit_io",
+            position: "right",
+            className: "header-twitter-link",
+            "aria-label": "Twitter",
+          },
+          {
             href: "https://bit.ly/opal-slack",
             position: "right",
             className: "header-slack-link",
