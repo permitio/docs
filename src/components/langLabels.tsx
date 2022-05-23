@@ -18,7 +18,18 @@ export const PythonLabel = () => (
       src={"/img/languages/python.svg"}
       style={{ width: 22 }}
     />{" "}
-    Python
+    Python (asyncio)
+  </span>
+);
+
+export const SyncPythonLabel = () => (
+  <span>
+    <img
+      className="langLabelImage"
+      src={"/img/languages/python.svg"}
+      style={{ width: 22 }}
+    />{" "}
+    Python (sync)
   </span>
 );
 
