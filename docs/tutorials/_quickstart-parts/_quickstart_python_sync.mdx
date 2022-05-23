@@ -1,4 +1,4 @@
-## Add the SDK to your Python code
+## Add the SDK to your Python code (sync)
 
 Init the Python SDK and check for permissions.
 
@@ -10,8 +10,10 @@ pip install permit
 
 2. Add the SDK to your code (in the top of your py file):
 
+Notice that you need to import the class `Permit` from `permit.sync` to get the sync-python SDK:
+
 ```python
-from permit import Permit
+from permit.sync import Permit
 ```
 
 3. Create a new instance of the SDK:
@@ -39,7 +41,7 @@ You can run a permission check with `permit.check()`, you will need 3 components
 In the following example we are checking the a user with id `jack@pirates.com` can `create` a `document` resource:
 
 ```python
-permitted = await permit.check("jack@pirates.com", "create", "document")
+permitted = permit.check("jack@pirates.com", "create", "document")
 
 if permitted:
     print("Jack is permitted to create a document")
@@ -67,7 +69,7 @@ user = {
     "lastName": "Sparrow", # optional
     "email": "jack@pirates.com", # optional
 }
-await permit.write(permit.api.sync_user(user))
+permit.write(permit.api.sync_user(user))
 ```
 
 ### Sync user with initial roles
@@ -84,7 +86,7 @@ user = {
     # jack will be assign the admin role in the default tenant upon creation
     "roles": [{"role":"admin", "tenant": "default"}]
 }
-await permit.write(permit.api.sync_user(user))
+permit.write(permit.api.sync_user(user))
 ```
 
 :::note
@@ -108,7 +110,7 @@ cool_company_tenant = {
     "name": "Cool Company Inc"
 }
 
-await permit.write(permit.api.create_tenant(cool_company_tenant))
+permit.write(permit.api.create_tenant(cool_company_tenant))
 ```
 
 ### Assign role
@@ -116,7 +118,7 @@ await permit.write(permit.api.create_tenant(cool_company_tenant))
 You can assign a role to a user in a given tenant:
 
 ```python
-await permit.write(
+permit.write(
     permit.api.assign_role("jack@pirates.com", "viewer", "cool_company_inc")
 )
 ```
@@ -128,7 +130,7 @@ will run them according to the order you specify.
 
 ```python
 # runs the mutations in order:
-await permit.write(
+permit.write(
     # first creates the user "jack"
     permit.api.sync_user({
         "key": "jack@pirates.com",
@@ -165,7 +167,7 @@ pyenv virtualenv permissions && pyenv activate permissions
 Now install the Permit.io SDK (We'll also install the FastAPI and Uvicorn packages in order to run an HTTP server in our example):
 
 ```
-pip install permit fastapi "uvicorn[standard]"
+pip install permit flask
 ```
 
 Create a file called test.py:
@@ -174,15 +176,17 @@ Create a file called test.py:
 touch test.py
 ```
 
-Copy the following code inside test.py and replace with your `api key` and `user-object`:  
- You can find instructions on getting a secret API key in the previous section
+Copy the following code inside test.py and replace with your `api key` and `user-object`:
+You can find instructions on getting a secret API key in the previous section
 
 ```python
-from permit import Permit
-from fastapi import FastAPI, status, HTTPException
-from fastapi.responses import JSONResponse
+import json
 
-app = FastAPI()
+from permit.sync import Permit
+
+from flask import Flask, Response
+
+app = Flask(__name__)
 
 # This line initializes the SDK and connects your python app
 # to the Permit.io PDP container you've set up in the previous step.
@@ -193,46 +197,68 @@ permit = Permit(
     token="[YOUR_API_KEY]",
 )
 
-user = {
-    "key": "jack@pirates.com",
-    "firstName": "Jack",
-    "lastName": "Sparrow",
-    "email": "jack@pirates.com",
-}
+def sync_objects():
+    # first let's create a user:
+    user = {
+        "key": "jack@pirates.com",
+        "firstName": "Jack",
+        "lastName": "Sparrow",
+        "email": "jack@pirates.com",
+        "roles": [{"role":"admin", "tenant": "default"}]
+    }
+    permit.write(permit.api.sync_user(user))
 
-# Example user object
-# You would usually get the user from your authentication layer (e.g. Auth0, Cognito, etc) via a JWT token or a database.
-# Once you extract the user from the JWT you will need to tell Permit its unique id so we can assign permissions to that user.
-@app.on_event('startup')
-async def sync_objects():
-    """
-    Typically, you need to call sync_user when you first identify a new user in the system
-    (after the user's first login into your app).
-    """
-    # creates jack and then assign the admin role to jack in the default tenant
-    await permit.write(
-        permit.api.sync_user(user),
-        permit.api.assign_role("jack@pirates.com", "admin", "default")
+    tenant2 = {
+        "key": "tenant2",
+        "name": "Second Tenant"
+    }
+
+    # create tenant 2 and assign role viewer to user jack
+    permit.write(
+        permit.api.create_tenant(tenant2),
+        permit.api.assign_role("jack@pirates.com", "viewer", "tenant2")
     )
 
-@app.get("/")
-async def check_permissions():
-    permitted = await permit.check("jack@pirates.com", "create", "document")
-    if not permitted:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
-            "result": f"{user.get('firstName')} {user.get('lastName')} is NOT PERMITTED to create document!"
-        })
+sync_objects()
 
-    return JSONResponse(status_code=status.HTTP_200_OK, content={
-        "result": f"{user.get('firstName')} {user.get('lastName')} is PERMITTED to create document!"
-    })
+@app.route("/")
+def check_permissions():
+    # After we created this user in the previous step, we also synced the user's identifier
+    # to permit.io servers with permit.write(permit.api.syncUser(user)). The user identifier
+    # can be anything (email, db id, etc) but must be unique for each user. Now that the
+    # user is synced, we can use its identifier to check permissions with `permit.check()`.
+    permitted = permit.check("jack@pirates.com", "retrieve", "task") # default tenant is used
+    if not permitted:
+        return Response(json.dumps({
+            "result": f"Jack Sparrow is NOT PERMITTED to retrieve task!"
+        }), status=403, mimetype='application/json')
+
+    return Response(json.dumps({
+            "result": f"Jack Sparrow is PERMITTED to retrieve task!"
+        }), status=200, mimetype='application/json')
+
+@app.route("/tenant2")
+def check_permissions_tenant2():
+    # After we created this user in the previous step, we also synced the user's identifier
+    # to permit.io servers with permit.write(permit.api.syncUser(user)). The user identifier
+    # can be anything (email, db id, etc) but must be unique for each user. Now that the
+    # user is synced, we can use its identifier to check permissions with `permit.check()`.
+    permitted = permit.check("jack@pirates.com", "create", {"type": "task", "tenant": "tenant2"}) # tenant2 is used
+    if not permitted:
+        return Response(json.dumps({
+            "result": f"Jack Sparrow is NOT PERMITTED to create task (tenant 2)!"
+        }), status=403, mimetype='application/json')
+
+    return Response(json.dumps({
+            "result": f"Jack Sparrow is PERMITTED to create task (tenant 2)!"
+        }), status=200, mimetype='application/json')
 
 ```
 
 Now that your application is ready, let's run it:
 
 ```
-uvicorn test:app --reload --port=4000
+FLASK_APP=test flask run --host=0.0.0.0
 ```
 
-Finally, go to [http://localhost:4000](http://localhost:4000) to see the outcome of the permission check.
+Finally, go to [http://localhost:5000](http://localhost:5000) to see the outcome of the permission check.
