@@ -36,22 +36,56 @@ You can pass the identity from the JWT directly to Permit.io checks
 Per action/resource the user is trying to access you can pass the JWT |(or the UUID derived from it) to Permit.io to check if the user has permission to do so.
 As mentioned above this is the first argument expected by [`permit.check()`](/tutorials/quickstart#check-for-permissions)
 
-## Example applications
+## Example applications using Permit.io and an AuthN solution
 
 - [Home-brewed authentication for a Python Flask app using Hasura and PostgreSQL](https://github.com/permitio/permit-hasura-python-example)
+
   ```python
-  @app.route("/animals", methods=["GET"])
-  def list_animals():
-      try:
-          token = get_token_from_header()
-          # We used the email as our unique identifier (in Prod a UUID would be better)
-          id = token["email"]
-          # enforce app-level access with Permit
-          if permit.check(id, "list", "animals"):
-              user_response = client.list_animals()
-              return jsonify(user_response["data"]["user"])
-          else:
-              return make_response(jsonify({
-                  'message': 'Not allowed'
-              } )), 403
+    @app.route("/login", methods=["POST"])
+    def login_handler():
+    args = AuthArgs.from_request(request.get_json())
+    user_response = client.find_user_by_email(args.email)
+    user = user_response["data"]["user"][0]
+    try:
+    Password.verify(user.get("password"), args.password)
+    rehash_and_save_password_if_needed(user, args.password)
+    return JsonWebToken(generate_token(user)).to_json()
+    except VerifyMismatchError:
+    return {"message": "Invalid credentials"}, 401
+
+    @app.route("/animals", methods=["GET"])
+    def list_animals():
+    try:
+    token = get_token_from_header() # We used the email as our unique identifier (in Prod a UUID would be better)
+    id = token["email"] # enforce app-level access with Permit
+    if permit.check(id, "list", "animals"):
+    user_response = client.list_animals()
+    return jsonify(user_response["data"]["user"])
+    else:
+    return make_response(jsonify({
+    'message': 'Not allowed'
+    } )), 403
+  ```
+
+- [Authentication for a Nodejs Express app using Auth0](https://github.com/permitio/todoapp-node)
+  ```js
+  router.post(
+    "",
+    async function (
+      req: express.Request,
+      res: express.Response,
+      next: express.NextFunction
+    ) {
+      // permissions check
+      const permitted = await permit.check(req.activeUser?.id, "create", {
+        type: "task",
+        tenant: req.params.boardId,
+      });
+      if (!permitted) {
+        res.status(403).send("Forbidden: not allowed by policy!");
+        return;
+      }
+      // ...
+    }
+  );
   ```
