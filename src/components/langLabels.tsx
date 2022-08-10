@@ -54,3 +54,14 @@ export const NodeJSLabel = () => (
     NodeJS
   </span>
 );
+
+export const TypeScriptLabel = () => (
+  <span>
+    <img
+      className="langLabelImage"
+      src={"/img/languages/typescript.svg"}
+      style={{ width: 22 }}
+    />{" "}
+    TypeScript
+  </span>
+);
