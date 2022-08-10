@@ -58,6 +58,9 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
+      imageZoom: {
+        selector: '.markdown :not(em) > img',
+      },
       navbar: {
         logo: {
           alt: "Permit.io",
