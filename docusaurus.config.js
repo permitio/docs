@@ -87,6 +87,10 @@ const config = {
 						target: "_self",
 					},
 					{
+						type: "docsVersionDropdown",
+						position: "right",
+					},
+					{
 						href: "https://github.com/permitio",
 						position: "right",
 						className: "header-github-link",
