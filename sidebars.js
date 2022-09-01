@@ -119,7 +119,7 @@ const sidebars = {
 		{
 			type: "category",
 			collapsible: true,
-			collapsed: true,
+			collapsed: false,
 			label: "API",
 			items: [
 				{
@@ -147,6 +147,11 @@ const sidebars = {
 							type: "doc",
 							id: "api/working-with-abac/condition-set-rules",
 							label: "Condition Set Rules",
+						},
+						{
+							type: "doc",
+							id: "api/working-with-abac/examples",
+							label: "Examples",
 						},
 					],
 				},
