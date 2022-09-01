@@ -7,8 +7,7 @@ const darkCodeTheme = require("prism-react-renderer/themes/dracula");
 const companyWebsiteUrl =
 	process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
 
-const apiReferenceUrl =
-	process.env.API_REFERENCE_URL ?? "/reference/api_reference";
+const apiReferenceUrl = process.env.API_REFERENCE_URL ?? "api/api_reference";
 
 const algoliaAppId = process.env.APPLICATION_ID || "";
 const algoliaApiKey = process.env.API_KEY || "";
