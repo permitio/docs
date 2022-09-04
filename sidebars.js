@@ -138,8 +138,8 @@ const sidebars = {
 						},
 						{
 							type: "doc",
-							id: "api/working-with-abac/conditions",
-							label: "Conditions",
+							id: "api/working-with-abac/operators",
+							label: "Operators",
 						},
 						{
 							type: "doc",

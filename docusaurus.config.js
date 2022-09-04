@@ -122,8 +122,7 @@ const config = {
 				copyright: `Copyright © ${new Date().getFullYear()} Permit, Inc.`,
 			},
 			prism: {
-				theme: lightCodeTheme,
-				darkTheme: darkCodeTheme,
+				theme: require("prism-react-renderer/themes/dracula"),
 				additionalLanguages: ["java", "csharp", "groovy"],
 			},
 			//search configuration
