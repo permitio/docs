@@ -31,6 +31,7 @@ const sidebars = {
 				{
 					type: "category",
 					label: "Policy Editor",
+					collapsed: false,
 					items: [
 						{
 							type: "doc",
