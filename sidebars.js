@@ -129,7 +129,7 @@ const sidebars = {
 					type: "category",
 					collapsible: true,
 					collapsed: true,
-					label: "Working with ABAC",
+					label: "ABAC API",
 					items: [
 						{
 							type: "doc",
