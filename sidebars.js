@@ -4,7 +4,7 @@ const sidebars = {
 		{
 			type: "doc",
 			id: "home",
-			label: "Welcome",
+			label: "WELCOME",
 		},
 		{
 			type: "category",
