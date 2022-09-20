@@ -186,11 +186,11 @@ const sidebars = {
 			collapsed: false,
 			label: "API",
 			items: [
-				{
-					type: "doc",
-					id: "api/migrating-v1-v2",
-					label: "Migrating v1 to v2",
-				},
+				// {
+				// 	type: "doc",
+				// 	id: "api/migrating-v1-v2",
+				// 	label: "Migrating v1 to v2",
+				// },
 				{
 					type: "category",
 					collapsible: true,
@@ -385,18 +385,18 @@ const sidebars = {
 				},
 			],
 		},
-		{
-			type: "category",
-			collapsed: true,
-			label: "Release Notes",
-			items: [
-				{
-					type: "doc",
-					id: "release-notes/v2",
-					label: "v. 2.0.0",
-				},
-			],
-		},
+		// {
+		// 	type: "category",
+		// 	collapsed: true,
+		// 	label: "Release Notes",
+		// 	items: [
+		// 		{
+		// 			type: "doc",
+		// 			id: "release-notes/v2",
+		// 			label: "v. 2.0.0",
+		// 		},
+		// 	],
+		// },
 		{
 			type: "doc",
 			id: "faq",
