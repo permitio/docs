@@ -293,6 +293,11 @@ const sidebars = {
 							items: [
 								{
 									type: "doc",
+									id: "sdk/nodejs/user/sync-user",
+									label: "syncUser",
+								},
+								{
+									type: "doc",
 									id: "sdk/nodejs/user/get-user",
 									label: "getUser",
 								},
