@@ -3,4 +3,137 @@ sidebar_position: 1
 title: Migrating v1 to v2
 ---
 
-#### We are still getting this page ready. Come back soon.
+## Who is this guide for?
+
+Anyone who's used our original v1 API, which was publicly the most recent version until recently.
+
+## Why migrate?
+
+The v2 API was built from the ground up to be more convenient to use and faster than the v1 API. While you can keep using v1 for a while, we'll eventually retire it. Also, going forward new features (like ABAC) will only be available in v2.
+
+## TL;DR - What changed
+
+- There is now a strict hierarchy of objects - Organizations contain Projects which contain Environments, which with few exceptions contain all objects you're familiar with.
+- All objects are divided into general, schema and facts objects, and can be found under their respective roots.
+
+  - General objects are Organizations, Projects, Environments.
+  - Schema objects are Roles, Resources, Actions, and Condition Sets.
+  - Facts objects are Tenants, Users, Role Assignments, and Condition Set Rules.
+
+- Previously we had slugs, custom_ids and keys in various places. In v2 they've all been replaced with keys, which are immutable strings unique under their respective namespaces that can look like whatever you want, and can be used wherever UUIDs are used. They enable better looking URLs and simpler integration with your system's native naming rules.
+- Organization-scoped schema objects are no longer supported (if you don't know what that means, good news, almost no one is using them anyway). In v1 they'll show up and work as intended in PDPs, but in v2 they'll be shown under a special compatibility environment called “v1compat_global_env”, and won't function in v2 PDPs. You're advised to move to properly scoped objects under a single environment.
+- The v1 API can be used and will show the same schema and data as v2, as will v1 PDPs, but they're deprecated and we recommend you move to v2 as soon as convenient. You can use both APIs interchangeably, but except quirks as they have different assumptions about the structure of data.
+
+Find the new redoc at **https://api.permit.io/v2/redoc**.
+
+As always, we're available on **[Slack](https://permit-io.slack.com/join/shared_invite/zt-nz6yjgnp-RlP9rtOPwO0n0aH_vLbmBQ#/shared-invite/email)**, so if you need help, feel free to ask.
+
+## New Object Hierarchy
+
+In v2, we rebuilt the object tree from the ground up to make sense and be internally consistent. Everything (with few exceptions) starts at Organizations. These represent your company. When Microsoft uses Permit.io, Microsoft would be the Organization.
+Under Organizations are Projects. They represent specific products that happen to be owned by the same organization, but otherwise share little. In Microsoft's example, they would be e.g. “Windows”, “Azure” and “Flight Simulator”.
+Under Projects are Environments. Think of them like git branches. For example, you'd create “prod” and “staging”, one for each environment you have running. Most of the time they would be similar and even identical. In the near future, we'll make it possible to directly duplicate and merge environments just like git branches.
+
+### Types of objects
+
+Under these environments exist most other objects you know - Resources, Roles, Users, etc. These are divided into two categories (the third being the first three objects we discussed - Organizations, Projects and Environments).
+Schema objects represent the “rules of the game”. There you define what can exist and be allowed. Resources (including their actions and attributes), Roles (and their permissions), and Condition Sets (which are new ABAC objects) are schema objects and live under the /v2/schema root.
+Facts represent the “contents of the game”. There you define what actually exists - Tenants, Users, Role Assignments, and Condition Set Rules (which are another type of new ABAC objects). They live in /v2/facts.
+
+### Object Paths
+
+Every object category has a consistent path hierarchy. Wherever you see {something_id}, you can place either the object's UUID as assigned by Permit, or the object's key as defined by you when you create the object.
+
+### Keys
+
+The key can be anything you like (including your own UUID), as long as it's unique in its namespace. In this case, “unique” refers to the (object_type, key) tuple and “namespace” usually means Environment (for Environment the relevant namespace is Project, for Project it's Organization). For example, you can have a Resource keyed “john” and a Role keyed “john” at the same time in the same Environment, and you can have two Resources keyed “john” in two different Environments, but you can't have two Resources keyed “john” in the same Environment. Likewise, you can have two Environments keyed “prod” in different Projects, but not in the same one.
+
+Note that the key is immutable and other than serving as a search key and being checked for uniqueness, is completely ignored by Permit. You can place whatever you want in there, even encrypt your own system's IDs and place them there. Permit's backend won't care as long as they're unique and consistent.
+
+The keys replace v1 concepts such as slugs and custom_ids. They're now consistent and exist in all primary schema and facts objects. Note that they're also mandatory in all objects that have them.
+
+#### Examples
+
+A few examples of object paths using both keys and UUIDs:
+
+#### Under the “windows” Project and “prod” Environment, a Resource called “Game”:
+
+- /v2/schema/windows/prod/resources/Game
+
+#### Same Resource, but using its UUID:
+
+- /v2/schema/windows/prod/resources/9014f244-9034-49a9-81ff-053a65f67ff1
+
+#### Under the “azure” Project, the “staging” Environment:
+
+- /v2/projects/azure/envs/staging
+
+#### Or again, using its UUID:
+
+- /v2/projects/azure/envs/1e9472f5-24d7-4b3b-b49b-39d2e8843913
+
+#### And using both the Project's UUID and the Environment' UUID:
+
+- /v2/projects/541e3523-2cdb-468a-8ca8-e7e8ccdb415d/envs/1e9472f5-24d7-4b3b-b49b-39d2e8843913
+
+### General objects
+
+The general objects are:
+
+- **Organizations at /v2/orgs**
+- **Projects at /v2/projects**
+- **Environments at /v2/projects/{project_id}/envs**
+
+You can notice that Projects start their own hierarchy, and are not under Organizations. That's because we consider Organizations to be a kind of a global namespace that is implicit in its usage. By design, an API key can only be attached to a single Organization (or an object under it, that is a Project or Environment), so the association with the Organization is implicit. The /orgs endpoint can be used to query which Organization an API key can access, but will always return just one.
+
+### Schema Objects
+
+Schema objects represent the “rules of the game”, or what could exist. They all live under an Environment, which is reflected in their paths.
+
+- Resources at **/v2/schema/{proj_id}/{env_id}/resources**
+  - Resource actions at **/v2/schema/{proj_id}/{env_id}/resources/{resource_id}/actions**
+  - Resource attributes at **/v2/schema/{proj_id}/{env_id}/resources/{resource_id}/attributes**
+- Roles at **/v2/schema/{proj_id}/{env_id}/roles**
+- Condition Sets at **/v2/schema/{proj_id}/{env_id}/condition_sets**
+
+As you can see, the paths are nice and consistent.
+
+### Facts Objects
+
+Facts represent the “contents of the game”. There you define what actually exists.
+
+- Users at **/v2/facts/{proj_id}/{env_id}/users**
+- Tenants at **/v2/facts/{proj_id}/{env_id}/tenants**
+  - Tenant-User associations at **/v2/facts/{proj_id}/{env_id}/tenants/{tenant_id}/users**
+- Role Assignments at **/v2/facts/{proj_id}/{env_id}/role_assignments**
+- Condition Set Rules at **/v2/facts/{proj_id}/{env_id}/set_rules**
+
+## Organization-Scoped Schema Objects
+
+#### These are no longer supported in v2.
+
+In v1 they'll show up as always and work normally in PDPs, but in v2 they'll be shown under a special compatibility environment called “v1compat_global_env” in a project called “v1compat_global_project”.
+
+They will also not function in v2 PDPs.
+
+You're advised to move to properly scoped objects under a single environment.
+
+## How to Migrate
+
+So you've decided you want to migrate. Obviously if you have code that interfaces directly with the Permit.io cloud API you'll need to change it to match the new interface.
+
+If you're using global objects, the first step would be to migrate to properly scoped objects in Environments. Almost no one is using them, so most likely you don't need to do anything.
+
+Other than that, you'll want to switch to the new v2 PDP. It's configured exactly the same, and if you're not using global objects, should work identically but be a lot faster, as we've also done major optimization work on the v2 PDPs. We've made sure the v1 SDKs work properly with v2 PDPs and vice versa, so you don't need to upgrade in any particular order.
+
+Once you've done that, you might want to switch to the v2 SDKs. For now, they're available in Python, Javascript, and .Net, with other languages becoming available in the coming weeks.
+V1 API Deprecation
+The v1 API can be used and will show the same schema and data as v2, as will v1 PDPs, but they're deprecated and we recommend you move to v2 as soon as convenient.
+
+You can use both APIs interchangeably, but except quirks as they have different assumptions about the structure of data.
+
+We're going to keep supporting the v1 API for the foreseeable future, but keep in mind that going forward new features will only be available in v2. We've taken into account a lot of user feedback in designing v2, so upgrading will make your life easier.
+Documentation & Support
+You can find the new redoc at **https://api.permit.io/v2/redoc**.
+
+As always, we're available on **[Slack](https://permit-io.slack.com/join/shared_invite/zt-nz6yjgnp-RlP9rtOPwO0n0aH_vLbmBQ#/shared-invite/email)**, so feel free to ask if you need support.
