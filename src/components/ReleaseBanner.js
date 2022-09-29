@@ -20,7 +20,7 @@ export default function ReleaseBanner() {
 					fontWeight: "bold",
 				}}
 			>
-				<span style={{ padding: 20 }}>WARNING!</span>
+				<span style={{ padding: 20 }}>INFO</span>
 			</div>
 			<div style={{ padding: 20 }}>
 				<span>
