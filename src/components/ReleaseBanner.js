@@ -4,7 +4,7 @@ export default function ReleaseBanner() {
 	return (
 		<div
 			style={{
-				backgroundColor: "#ff9db1",
+				backgroundColor: "rgba(255, 174, 127, 0.4)",
 				borderRadius: 5,
 				marginBottom: 20,
 			}}
@@ -13,11 +13,13 @@ export default function ReleaseBanner() {
 				style={{
 					width: "100%",
 					height: 40,
-					backgroundColor: "rgb(255, 55, 95)",
+					backgroundColor: "rgba(255, 134, 61, 0.4)",
 					position: "relative",
 					display: "flex",
 					alignItems: "center",
 					fontWeight: "bold",
+					borderTopRightRadius: 5,
+					borderTopLeftRadius: 5,
 				}}
 			>
 				<span style={{ padding: 20 }}>INFO</span>
