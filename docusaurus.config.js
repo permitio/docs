@@ -44,12 +44,12 @@ const config = {
 				docs: {
 					sidebarPath: require.resolve("./sidebars.js"),
 					routeBasePath: "/",
-					// lastVersion: "current",
+					lastVersion: "current",
 					versions: {
 						current: {
 							label: "2.0.0",
-							// path: "/",
-							path: "2.0.0",
+							path: "/",
+							// path: "2.0.0",
 						},
 					},
 				},
