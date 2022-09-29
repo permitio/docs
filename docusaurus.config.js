@@ -8,7 +8,7 @@ const companyWebsiteUrl =
 	process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
 
 const apiReferenceUrl =
-	process.env.API_REFERENCE_URL ?? "https://api.permit.io/redoc";
+	process.env.API_REFERENCE_URL ?? "https://api.permit.io/v2/redoc";
 
 const algoliaAppId = process.env.APPLICATION_ID || "";
 const algoliaApiKey = process.env.API_KEY || "";
