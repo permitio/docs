@@ -389,6 +389,136 @@ const sidebars = {
 						},
 					],
 				},
+				{
+					type: "category",
+					label: "Python",
+					items: [
+						// {
+						// 	type: "doc",
+						// 	id: "sdk/nodejs/quickstart-nodejs",
+						// 	label: "Quickstart",
+						// },
+						{
+							type: "category",
+							label: "Tenant",
+							items: [
+								{
+									type: "doc",
+									id: "sdk/python/tenant/get-tenant",
+									label: "get_tenant",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/tenant/create-tenant",
+									label: "create_tenant",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/tenant/update-tenant",
+									label: "update_tenant",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/tenant/delete-tenant",
+									label: "delete_tenant",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/tenant/list-tenants",
+									label: "list_tenants",
+								},
+							],
+						},
+						{
+							type: "category",
+							label: "User",
+							items: [
+								{
+									type: "doc",
+									id: "sdk/python/user/sync-user",
+									label: "sync_user",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/user/get-user",
+									label: "get_user",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/user/create-user",
+									label: "create_user",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/user/delete-user",
+									label: "delete_user",
+								},
+							],
+						},
+						{
+							type: "category",
+							label: "Role",
+							items: [
+								{
+									type: "doc",
+									id: "sdk/python/role/get-role",
+									label: "get_role",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/role/get-assigned-roles",
+									label: "get_assigned_roles",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/role/create-role",
+									label: "creat_role",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/role/update-role",
+									label: "update_roles",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/role/delete-role",
+									label: "delete_role",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/role/assign-role",
+									label: "assign_role",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/role/unassign-role",
+									label: "unassign_role",
+								},
+							],
+						},
+						{
+							type: "category",
+							label: "Resource",
+							items: [
+								{
+									type: "doc",
+									id: "sdk/python/resource/create-resource",
+									label: "create_resource",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/resource/update-resource",
+									label: "update_resource",
+								},
+								{
+									type: "doc",
+									id: "sdk/python/resource/delete-resource",
+									label: "delete_resource",
+								},
+							],
+						},
+					],
+				},
 			],
 		},
 		{
