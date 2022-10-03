@@ -393,11 +393,11 @@ const sidebars = {
 					type: "category",
 					label: "Python",
 					items: [
-						// {
-						// 	type: "doc",
-						// 	id: "sdk/nodejs/quickstart-nodejs",
-						// 	label: "Quickstart",
-						// },
+						{
+							type: "doc",
+							id: "sdk/python/quickstart-python",
+							label: "Quickstart",
+						},
 						{
 							type: "category",
 							label: "Tenant",
@@ -443,11 +443,11 @@ const sidebars = {
 									id: "sdk/python/user/get-user",
 									label: "get_user",
 								},
-								{
-									type: "doc",
-									id: "sdk/python/user/create-user",
-									label: "create_user",
-								},
+								// {
+								// 	type: "doc",
+								// 	id: "sdk/python/user/create-user",
+								// 	label: "create_user",
+								// },
 								{
 									type: "doc",
 									id: "sdk/python/user/delete-user",
@@ -472,18 +472,18 @@ const sidebars = {
 								{
 									type: "doc",
 									id: "sdk/python/role/create-role",
-									label: "creat_role",
+									label: "create_role",
 								},
 								{
 									type: "doc",
 									id: "sdk/python/role/update-role",
 									label: "update_roles",
 								},
-								{
-									type: "doc",
-									id: "sdk/python/role/delete-role",
-									label: "delete_role",
-								},
+								// {
+								// 	type: "doc",
+								// 	id: "sdk/python/role/delete-role",
+								// 	label: "delete_role",
+								// },
 								{
 									type: "doc",
 									id: "sdk/python/role/assign-role",
