@@ -395,7 +395,7 @@ const sidebars = {
 					items: [
 						{
 							type: "doc",
-							id: "sdk/python/quickstart-python",
+							id: "sdk/python-v2/quickstart-python",
 							label: "Quickstart",
 						},
 						{
@@ -404,27 +404,27 @@ const sidebars = {
 							items: [
 								{
 									type: "doc",
-									id: "sdk/python/tenant/get-tenant",
+									id: "sdk/python-v2/tenant/get-tenant",
 									label: "get_tenant",
 								},
 								{
 									type: "doc",
-									id: "sdk/python/tenant/create-tenant",
+									id: "sdk/python-v2/tenant/create-tenant",
 									label: "create_tenant",
 								},
 								{
 									type: "doc",
-									id: "sdk/python/tenant/update-tenant",
+									id: "sdk/python-v2/tenant/update-tenant",
 									label: "update_tenant",
 								},
 								{
 									type: "doc",
-									id: "sdk/python/tenant/delete-tenant",
+									id: "sdk/python-v2/tenant/delete-tenant",
 									label: "delete_tenant",
 								},
 								{
 									type: "doc",
-									id: "sdk/python/tenant/list-tenants",
+									id: "sdk/python-v2/tenant/list-tenants",
 									label: "list_tenants",
 								},
 							],
@@ -435,22 +435,22 @@ const sidebars = {
 							items: [
 								{
 									type: "doc",
-									id: "sdk/python/user/sync-user",
+									id: "sdk/python-v2/user/sync-user",
 									label: "sync_user",
 								},
 								{
 									type: "doc",
-									id: "sdk/python/user/get-user",
+									id: "sdk/python-v2/user/get-user",
 									label: "get_user",
 								},
 								// {
 								// 	type: "doc",
-								// 	id: "sdk/python/user/create-user",
+								// 	id: "sdk/python-v2/user/create-user",
 								// 	label: "create_user",
 								// },
 								{
 									type: "doc",
-									id: "sdk/python/user/delete-user",
+									id: "sdk/python-v2/user/delete-user",
 									label: "delete_user",
 								},
 							],
@@ -461,37 +461,37 @@ const sidebars = {
 							items: [
 								{
 									type: "doc",
-									id: "sdk/python/role/get-role",
+									id: "sdk/python-v2/role/get-role",
 									label: "get_role",
 								},
 								{
 									type: "doc",
-									id: "sdk/python/role/get-assigned-roles",
+									id: "sdk/python-v2/role/get-assigned-roles",
 									label: "get_assigned_roles",
 								},
 								{
 									type: "doc",
-									id: "sdk/python/role/create-role",
+									id: "sdk/python-v2/role/create-role",
 									label: "create_role",
 								},
 								{
 									type: "doc",
-									id: "sdk/python/role/update-role",
+									id: "sdk/python-v2/role/update-role",
 									label: "update_roles",
 								},
 								// {
 								// 	type: "doc",
-								// 	id: "sdk/python/role/delete-role",
+								// 	id: "sdk/python-v2/role/delete-role",
 								// 	label: "delete_role",
 								// },
 								{
 									type: "doc",
-									id: "sdk/python/role/assign-role",
+									id: "sdk/python-v2/role/assign-role",
 									label: "assign_role",
 								},
 								{
 									type: "doc",
-									id: "sdk/python/role/unassign-role",
+									id: "sdk/python-v2/role/unassign-role",
 									label: "unassign_role",
 								},
 							],
@@ -502,17 +502,17 @@ const sidebars = {
 							items: [
 								{
 									type: "doc",
-									id: "sdk/python/resource/create-resource",
+									id: "sdk/python-v2/resource/create-resource",
 									label: "create_resource",
 								},
 								{
 									type: "doc",
-									id: "sdk/python/resource/update-resource",
+									id: "sdk/python-v2/resource/update-resource",
 									label: "update_resource",
 								},
 								{
 									type: "doc",
-									id: "sdk/python/resource/delete-resource",
+									id: "sdk/python-v2/resource/delete-resource",
 									label: "delete_resource",
 								},
 							],
