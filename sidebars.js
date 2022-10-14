@@ -556,6 +556,11 @@ const sidebars = {
 			id: "faq",
 			label: "FAQ",
 		},
+		{
+			type: "doc",
+			id: "status",
+			label: "Permit Status",
+		},
 	],
 };
 
