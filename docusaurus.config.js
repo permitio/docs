@@ -97,6 +97,12 @@ const config = {
 						target: "_self",
 					},
 					{
+						type: "doc",
+						docId: "status",
+						position: "left",
+						label: "Permit Status",
+					},
+					{
 						type: "docsVersionDropdown",
 						position: "right",
 					},
