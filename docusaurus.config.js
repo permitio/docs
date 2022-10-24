@@ -8,7 +8,7 @@ const companyWebsiteUrl =
 	process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
 
 const apiReferenceUrl =
-	process.env.API_REFERENCE_URL ?? "https://api.permit.io/redoc";
+	process.env.API_REFERENCE_URL ?? "https://api.permit.io/v2/redoc";
 
 const algoliaAppId = process.env.APPLICATION_ID || "";
 const algoliaApiKey = process.env.API_KEY || "";
@@ -44,10 +44,14 @@ const config = {
 				docs: {
 					sidebarPath: require.resolve("./sidebars.js"),
 					routeBasePath: "/",
+					lastVersion: "current",
 					versions: {
 						current: {
 							label: "2.0.0",
-							path: "2.0.0",
+							path: "/",
+						},
+						"1.0.0": {
+							banner: "none",
 						},
 					},
 				},
@@ -91,6 +95,12 @@ const config = {
 						label: "API Reference",
 						position: "left",
 						target: "_self",
+					},
+					{
+						type: "doc",
+						docId: "status",
+						position: "left",
+						label: "Permit Status",
 					},
 					{
 						type: "docsVersionDropdown",
