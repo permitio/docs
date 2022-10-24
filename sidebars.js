@@ -261,6 +261,17 @@ const sidebars = {
 			items: [
 				{
 					type: "category",
+					label: "DotNet",
+					items: [
+						{
+							type: "doc",
+							id: "sdk/dotnet/quickstart-dotnet",
+							label: "Quickstart",
+						},
+					],
+				},
+				{
+					type: "category",
 					label: "NodeJS",
 					items: [
 						{
