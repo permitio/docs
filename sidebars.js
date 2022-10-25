@@ -396,14 +396,13 @@ const sidebars = {
 						{
 							type: "doc",
 							id: "sdk/python/quickstart-python",
-							label: "Quickstart Sync",
 							label: "Quickstart Async",
 						},
-						{
-							type: "doc",
-							id: "sdk/python/quickstart-python-sync",
-							label: "Quickstart Sync",
-						},
+						// {
+						// 	type: "doc",
+						// 	id: "sdk/python/quickstart-python-sync",
+						// 	label: "Quickstart Sync",
+						// },
 						{
 							type: "category",
 							label: "Tenant",
