@@ -261,6 +261,105 @@ const sidebars = {
 			items: [
 				{
 					type: "category",
+					label: "DotNet",
+					items: [
+						{
+							type: "doc",
+							id: "sdk/dotnet/quickstart-dotnet",
+							label: "Quickstart",
+						},
+						{
+							type: "category",
+							label: "Tenant",
+							items: [
+								{
+									type: "doc",
+									id: "sdk/dotnet/tenant/GetTenant",
+									label: "GetTenant",
+								},
+								{
+									type: "doc",
+									id: "sdk/dotnet/tenant/CreateTenant",
+									label: "CreateTenant",
+								},
+								{
+									type: "doc",
+									id: "sdk/dotnet/tenant/UpdateTenant",
+									label: "UpdateTenant",
+								},
+								{
+									type: "doc",
+									id: "sdk/dotnet/tenant/DeleteTenant",
+									label: "DeleteTenant",
+								},
+							],
+						},
+						{
+							type: "category",
+							label: "User",
+							items: [
+								{
+									type: "doc",
+									id: "sdk/dotnet/user/SyncUser",
+									label: "SyncUser",
+								},
+								{
+									type: "doc",
+									id: "sdk/dotnet/user/GetUser",
+									label: "GetUser",
+								},
+								{
+									type: "doc",
+									id: "sdk/dotnet/user/CreateUser",
+									label: "CreateUser",
+								},
+								{
+									type: "doc",
+									id: "sdk/dotnet/user/DeleteUser",
+									label: "DeleteUser",
+								},
+							],
+						},
+						{
+							type: "category",
+							label: "Role",
+							items: [
+								{
+									type: "doc",
+									id: "sdk/dotnet/role/GetRole",
+									label: "GetRole",
+								},
+								{
+									type: "doc",
+									id: "sdk/dotnet/role/CreateRole",
+									label: "CreateRole",
+								},
+								{
+									type: "doc",
+									id: "sdk/dotnet/role/ListRoles",
+									label: "ListRoles",
+								},
+								{
+									type: "doc",
+									id: "sdk/dotnet/role/AssignRole",
+									label: "AssignRole",
+								},
+								{
+									type: "doc",
+									id: "sdk/dotnet/role/ListAssignedRoles",
+									label: "ListAssignedRoles",
+								},
+								{
+									type: "doc",
+									id: "sdk/dotnet/role/UnassignRole",
+									label: "UnassignRole",
+								},
+							],
+						},
+					],
+				},
+				{
+					type: "category",
 					label: "NodeJS",
 					items: [
 						{
