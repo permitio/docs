@@ -177,8 +177,8 @@ const sidebars = {
 					items: [
 						{
 							type: "doc",
-							id: "integrations/authentication/overview",
-							label: "Overview",
+							id: "integrations/authentication/flexibility",
+							label: "Flexibility",
 						},
 						{
 							type: "doc",
