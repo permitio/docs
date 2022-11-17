@@ -168,6 +168,7 @@ const sidebars = {
 		{
 			type: "category",
 			collapsible: true,
+			collapsed: false,
 			label: "Integrations",
 			items: [
 				{
