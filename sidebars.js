@@ -173,12 +173,13 @@ const sidebars = {
 				{
 					type: "category",
 					collapsible: true,
+					collapsed: false,
 					label: "Authentication Providers",
 					items: [
 						{
 							type: "doc",
-							id: "integrations/authentication/flexibility",
-							label: "Flexibility",
+							id: "integrations/authentication/your-authentication",
+							label: "Your Authentication",
 						},
 						{
 							type: "doc",
