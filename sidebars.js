@@ -168,6 +168,54 @@ const sidebars = {
 		{
 			type: "category",
 			collapsible: true,
+			collapsed: false,
+			label: "Integrations",
+			items: [
+				{
+					type: "category",
+					collapsible: true,
+					collapsed: false,
+					label: "Authentication Providers",
+					items: [
+						{
+							type: "doc",
+							id: "integrations/authentication/your-authentication",
+							label: "Your Authentication",
+						},
+						{
+							type: "doc",
+							id: "integrations/authentication/supertokens",
+							label: "SuperTokens x Permit",
+						},
+						{
+							type: "doc",
+							id: "integrations/authentication/fusionauth",
+							label: "FusionAuth x Permit",
+						},
+					],
+				},
+				{
+					type: "category",
+					collapsible: true,
+					label: "Gateways",
+					items: [
+						{
+							type: "doc",
+							id: "integrations/gateways/overview",
+							label: "Overview",
+						},
+						{
+							type: "doc",
+							id: "integrations/gateways/kong",
+							label: "Kong x Permit",
+						},
+					],
+				},
+			],
+		},
+		{
+			type: "category",
+			collapsible: true,
 			label: "Concepts",
 			items: [
 				{
