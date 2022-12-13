@@ -159,6 +159,85 @@ const sidebars = {
 				// 	],
 				// },
 				{
+					type: "category",
+					collapsible: true,
+					collapsed: true,
+					label: "Permit Elements",
+					items: [
+						{
+							type: "doc",
+							id: "features/permit-elements/overview",
+							label: "Overview",
+						},
+						{
+							type: "category",
+							collapsible: true,
+							collapsed: true,
+							label: "Elements",
+							items: [
+								{
+									type: "doc",
+									id: "features/permit-elements/element/user-management",
+									label: "User Management",
+								},
+								{
+									type: "doc",
+									id: "features/permit-elements/element/audit-logs",
+									label: "Audit Logs",
+								},
+								{
+									type: "doc",
+									id: "features/permit-elements/element/approval-flows",
+									label: "Approval Flows",
+								},
+							],
+						},
+						{
+							type: "doc",
+							id: "features/permit-elements/permission-levels",
+							label: "Permission Levels",
+						},
+						{
+							type: "category",
+							collapsible: true,
+							collapsed: true,
+							label: "Configuration",
+							items: [
+								{
+									type: "doc",
+									id: "features/permit-elements/configuration/theming",
+									label: "Theming",
+								},
+								{
+									type: "doc",
+									id: "features/permit-elements/configuration/user-data",
+									label: "User Data",
+								},
+								{
+									type: "doc",
+									id: "features/permit-elements/configuration/webhook",
+									label: "Webhook",
+								},
+							],
+						},
+						{
+							type: "doc",
+							id: "features/permit-elements/user-preview",
+							label: "User Preview",
+						},
+						{
+							type: "doc",
+							id: "features/permit-elements/iframe",
+							label: "Working with the iFrame",
+						},
+						{
+							type: "doc",
+							id: "features/permit-elements/demo",
+							label: "Demo",
+						},
+					],
+				},
+				{
 					type: "doc",
 					id: "features/coming-soon",
 					label: "Coming Soon",
@@ -705,7 +784,7 @@ const sidebars = {
 		{
 			type: "doc",
 			id: "status",
-			label: "Permit Status",
+			label: "PERMIT STATUS",
 		},
 	],
 };
