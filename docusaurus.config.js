@@ -63,7 +63,21 @@ const config = {
 		],
 	],
 
-	plugins: ["docusaurus-plugin-sass", "plugin-image-zoom"],
+	plugins: [
+		"docusaurus-plugin-sass",
+		"plugin-image-zoom",
+		async function docusaurusTailwind() {
+			return {
+				name: "docusaurus-tailwindcss",
+				configurePostCss(postcssOptions) {
+					// Appends TailwindCSS and AutoPrefixer.
+					postcssOptions.plugins.push(require("tailwindcss"));
+					postcssOptions.plugins.push(require("autoprefixer"));
+					return postcssOptions;
+				},
+			};
+		},
+	],
 
 	themeConfig:
 		/** @type {import('@docusaurus/preset-classic').ThemeConfig} */
