@@ -66,7 +66,7 @@ const config = {
 	plugins: [
 		"docusaurus-plugin-sass",
 		"plugin-image-zoom",
-		async function docusaurusTailwind() {
+		async function TailwindCSSPlugin(context, options) {
 			return {
 				name: "docusaurus-tailwindcss",
 				configurePostCss(postcssOptions) {

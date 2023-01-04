@@ -71,6 +71,7 @@ export default function EmailUpdatesBox(props) {
 							<a href="https://permit.io" className="text-[#6851ff]">
 								privacy policy
 							</a>
+							.
 						</span>
 					</>
 				)}
