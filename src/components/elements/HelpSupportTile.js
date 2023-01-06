@@ -5,10 +5,10 @@ export default function HelpSupportTile() {
 		<div className="py-6 mt-8">
 			<div className="flex">
 				<span className="text-xl font-bold mr-2">Was this page helpful?</span>
-				<button className="bg-[#6851ff] text-white ml-2 px-4 rounded font-semibold">
+				<button className="bg-[#6851ff] text-white ml-2 px-4 rounded font-semibold border-none cursor-pointer">
 					Yes
 				</button>
-				<button className="bg-[#6851ff] text-white ml-2 px-4 rounded font-semibold">
+				<button className="bg-[#6851ff] text-white ml-2 px-4 rounded font-semibold border-none cursor-pointer">
 					No
 				</button>
 			</div>
@@ -51,7 +51,7 @@ export default function HelpSupportTile() {
 							className="w-full border-none outline-none text-sm"
 						/>
 						<button
-							className="w-28 bg-white text-[#6851ff] font-medium text-sm"
+							className="w-28 bg-white text-[#6851ff] font-medium text-sm border-none cursor-pointer"
 							onClick={() => textBox()}
 						>
 							Sign Up

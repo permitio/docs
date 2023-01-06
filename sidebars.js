@@ -228,7 +228,7 @@ const sidebars = {
 						{
 							type: "doc",
 							id: "features/permit-elements/iframe",
-							label: "Working with the iFrame",
+							label: "Embedding Elements",
 						},
 						{
 							type: "doc",

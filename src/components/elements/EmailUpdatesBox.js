@@ -60,7 +60,7 @@ export default function EmailUpdatesBox(props) {
 								className="w-full px-6 border-none outline-none"
 							/>
 							<button
-								className="w-28 bg-white text-[#6851ff] font-semibold"
+								className="w-28 bg-white text-[#6851ff] font-semibold border-none cursor-pointer"
 								onClick={() => textBox()}
 							>
 								Sign Up
