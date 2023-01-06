@@ -227,7 +227,7 @@ const sidebars = {
 						},
 						{
 							type: "doc",
-							id: "features/permit-elements/iframe",
+							id: "features/permit-elements/embedding-elements",
 							label: "Embedding Elements",
 						},
 						{
