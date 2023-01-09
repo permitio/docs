@@ -5,12 +5,16 @@ import anime from "animejs/lib/anime.es.js";
 import ReactMarkdown from "react-markdown";
 import { CodeBlock, tomorrowNightBlue } from "react-code-blocks";
 import "./CodeDropdown.scss";
+import { render } from "react-dom";
 
 export default function CodeDropdown(props) {
 	const [isOpen, setOpen] = useState(props.open);
 	const [mode, setMode] = useState("dark");
-	const [language, setLanguage] = useState("javascript");
-	const [languages, setLanguages] = useState(["npm", "yarn"]);
+	const [language, setLanguage] = useState(props.language);
+	const [languages, setLanguages] = useState(props.languages);
+	const [code] = useState(props.code);
+
+	const [currentKey, setCurrentKey] = useState(0);
 
 	// FUTURE ANIMATION POSSIBILITIES
 
@@ -28,13 +32,6 @@ export default function CodeDropdown(props) {
 	// 			opacity: ["0", "1"],
 	// 		});
 	// }, [isOpen]);
-
-	const renderLanguages = () => {
-		languages.map((lang) => {
-			console.log(lang);
-			return <div>{lang}</div>;
-		});
-	};
 
 	return (
 		<div className="flex flex-col">
@@ -99,10 +96,22 @@ export default function CodeDropdown(props) {
 					<ReactMarkdown>{props.children}</ReactMarkdown>
 
 					<div className="parentCodeSelector w-full">
-						<div className="w-full bg-[#002451] h-8">{renderLanguages()}</div>
+						<div className="w-full bg-[#0f2540] h-8 flex items-center border-b-2 border-black rounded-t-md">
+							{languages.map((lang, i) => {
+								return (
+									<div
+										key={i}
+										className="text-white h-full px-3 flex items-center justify-center hover:bg-[#4e3bdb] hover:cursor-pointer text-xs font-semibold first:rounded-tl-md"
+										onClick={() => setCurrentKey(i)}
+									>
+										{lang}
+									</div>
+								);
+							})}
+						</div>
 						<CodeBlock
 							style={{ width: "100%" }}
-							text={props.code}
+							text={code[currentKey]}
 							language={language}
 							showLineNumbers={props.showLineNumbers}
 							theme={tomorrowNightBlue}
