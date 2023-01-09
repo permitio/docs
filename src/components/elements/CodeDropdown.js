@@ -1,14 +1,16 @@
 import React, { useState } from "react";
 import anime from "animejs/lib/anime.es.js";
-import SyntaxHighlighter from "react-syntax-highlighter";
-import { docco } from "react-syntax-highlighter/dist/esm/styles/hljs";
+// import SyntaxHighlighter from "react-syntax-highlighter";
+// import { docco } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import ReactMarkdown from "react-markdown";
-import { CodeBlock } from "@atlaskit/code";
-import GlobalTheme from "@atlaskit/theme/components";
+import { CodeBlock, tomorrowNightBlue } from "react-code-blocks";
+import "./CodeDropdown.scss";
 
 export default function CodeDropdown(props) {
 	const [isOpen, setOpen] = useState(props.open);
 	const [mode, setMode] = useState("dark");
+	const [language, setLanguage] = useState("javascript");
+	const [languages, setLanguages] = useState(["npm", "yarn"]);
 
 	// FUTURE ANIMATION POSSIBILITIES
 
@@ -26,6 +28,13 @@ export default function CodeDropdown(props) {
 	// 			opacity: ["0", "1"],
 	// 		});
 	// }, [isOpen]);
+
+	const renderLanguages = () => {
+		languages.map((lang) => {
+			console.log(lang);
+			return <div>{lang}</div>;
+		});
+	};
 
 	return (
 		<div className="flex flex-col">
@@ -89,13 +98,18 @@ export default function CodeDropdown(props) {
 				<div className="w-full mb-6 px-3">
 					<ReactMarkdown>{props.children}</ReactMarkdown>
 
-					<GlobalTheme.Provider value={() => ({ mode })}>
+					<div className="parentCodeSelector w-full">
+						<div className="w-full bg-[#002451] h-8">{renderLanguages()}</div>
 						<CodeBlock
-							language={props.language}
-							showLineNumbers={props.showLineNumbers}
+							style={{ width: "100%" }}
 							text={props.code}
+							language={language}
+							showLineNumbers={props.showLineNumbers}
+							theme={tomorrowNightBlue}
+							wrapLines={true}
+							CodeBlock
 						/>
-					</GlobalTheme.Provider>
+					</div>
 				</div>
 			) : null}
 		</div>
