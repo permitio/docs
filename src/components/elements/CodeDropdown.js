@@ -112,7 +112,7 @@ export default function CodeDropdown(props) {
 						<CodeBlock
 							style={{ width: "100%" }}
 							text={code[currentKey]}
-							language={language}
+							language={language[currentKey]}
 							showLineNumbers={props.showLineNumbers}
 							theme={tomorrowNightBlue}
 							wrapLines={true}
