@@ -198,42 +198,9 @@ const sidebars = {
 							label: "Permission Levels",
 						},
 						{
-							type: "category",
-							collapsible: true,
-							collapsed: true,
-							label: "Configuration",
-							items: [
-								{
-									type: "doc",
-									id: "features/permit-elements/configuration/theming",
-									label: "Theming",
-								},
-								{
-									type: "doc",
-									id: "features/permit-elements/configuration/user-data",
-									label: "User Data",
-								},
-								{
-									type: "doc",
-									id: "features/permit-elements/configuration/webhook",
-									label: "Webhook",
-								},
-							],
-						},
-						{
 							type: "doc",
 							id: "features/permit-elements/user-preview",
 							label: "User Preview",
-						},
-						{
-							type: "doc",
-							id: "features/permit-elements/embedding-elements",
-							label: "Embedding Elements",
-						},
-						{
-							type: "doc",
-							id: "features/permit-elements/demo",
-							label: "Demo",
 						},
 					],
 				},

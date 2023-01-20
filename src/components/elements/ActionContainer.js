@@ -19,21 +19,27 @@ export default function ActionContainer(props) {
 				<span
 					className={cx(
 						"mb-3",
+						"text-lg",
 						"font-semibold",
-						props.reverse ? "ml-4" : "mr-4"
+						props.reverse ? "ml-6" : "mr-6"
 					)}
 				>
 					{props.title}
 				</span>
-				<span className={cx("mb-3", props.reverse ? "ml-4" : "mr-4")}>
+				<span className={cx("mb-3", props.reverse ? "ml-6" : "mr-6")}>
 					{props.description}
 				</span>
 				{props.callToAction ? (
 					<span
 						onClick={() => redirectUser()}
-						className="font-semibold text-[#6851ff] hover:cursor-pointer"
+						className={cx(
+							"font-semibold",
+							"text-[#6851ff]",
+							"hover:cursor-pointer",
+							props.reverse ? "ml-6" : "mr-6"
+						)}
 					>
-						Get Started →
+						{props.callToAction} →
 					</span>
 				) : null}
 			</div>
