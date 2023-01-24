@@ -149,6 +149,11 @@ const config = {
 				theme: require("prism-react-renderer/themes/dracula"),
 				additionalLanguages: ["java", "csharp", "groovy"],
 			},
+			colorMode: {
+				defaultMode: "light",
+				disableSwitch: true,
+				respectPrefersColorScheme: false,
+			},
 			//search configuration
 			...searchConfig,
 			announcementBar: {
