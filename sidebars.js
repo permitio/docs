@@ -158,6 +158,52 @@ const sidebars = {
         // 		},
         // 	],
         // },
+		{
+			type: "category",
+			collapsible: true,
+			collapsed: true,
+			label: "Permit Elements",
+			items: [
+				{
+					type: "doc",
+					id: "features/permit-elements/overview",
+					label: "Overview",
+				},
+				{
+					type: "category",
+					collapsible: true,
+					collapsed: true,
+					label: "Elements",
+					items: [
+						{
+							type: "doc",
+							id: "features/permit-elements/element/user-management",
+							label: "User Management",
+						},
+						{
+							type: "doc",
+							id: "features/permit-elements/element/audit-logs",
+							label: "Audit Logs",
+						},
+						{
+							type: "doc",
+							id: "features/permit-elements/element/approval-flows",
+							label: "Approval Flows",
+						},
+					],
+				},
+				{
+					type: "doc",
+					id: "features/permit-elements/permission-levels",
+					label: "Permission Levels",
+				},
+				{
+					type: "doc",
+					id: "features/permit-elements/user-preview",
+					label: "User Preview",
+				},
+			],
+		},
         {
           type: "doc",
           id: "features/coming-soon",
