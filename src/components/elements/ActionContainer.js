@@ -35,6 +35,7 @@ export default function ActionContainer(props) {
 						className={cx(
 							"font-semibold",
 							"text-[#6851ff]",
+							"dark:text-[#a796ff]",
 							"hover:cursor-pointer",
 							props.reverse ? "ml-6" : "mr-6"
 						)}

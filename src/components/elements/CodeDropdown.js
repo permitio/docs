@@ -37,19 +37,19 @@ export default function CodeDropdown(props) {
 		<div className="flex flex-col">
 			<div className="w-full flex justify-between items-center p-3 border-t-[1px] border-solid border-l-0 border-b-0 border-r-0 border-slate-200">
 				<div className="flex justify-center items-center">
-					<span className="text-xl text-slate-500 mr-3 font-semibold">
+					<span className="text-xl text-slate-500 dark:text-slate-400 mr-3 font-semibold">
 						{props.number}
 					</span>
-					<span className="text-xl font-semibold mr-3 text-slate-900">
+					<span className="text-xl font-semibold mr-3 text-slate-900 dark:text-slate-300">
 						{props.title}
 					</span>
 					{props.client ? (
-						<span className="text-xs bg-slate-200 px-1.5 py-0.5 rounded">
+						<span className="text-xs bg-slate-200 dark:bg-slate-200 0 px-1.5 py-0.5 rounded text-slate-900">
 							Client-side
 						</span>
 					) : null}
 					{props.server ? (
-						<span className="text-xs bg-slate-200 px-1.5 py-0.5 rounded">
+						<span className="text-xs bg-slate-200 dark:bg-slate-200 px-1.5 py-0.5 rounded text-slate-900">
 							Server-side
 						</span>
 					) : null}
