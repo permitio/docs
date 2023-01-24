@@ -31,13 +31,13 @@ export default function EmailUpdatesBox(props) {
 	return (
 		<div className="w-full flex flex-col">
 			<span className="text-xl font-bold">Sign up for updates</span>
-			<div className="flex flex-col items-center bg-slate-50 mt-8 rounded px-20 py-6 h-60 justify-center">
+			<div className="flex flex-col items-center bg-slate-100 dark:bg-slate-300 mt-8 rounded px-20 py-6 h-60 justify-center">
 				{success ? (
 					<>
 						<span className="text-2xl font-semibold text-blue-900">
 							Thanks for signing up!
 						</span>
-						<span className="mt-4">
+						<span className="mt-4 dark:text-slate-900">
 							We will keep you updated if anything new will get released.
 						</span>
 					</>
@@ -46,7 +46,7 @@ export default function EmailUpdatesBox(props) {
 						<span className="text-2xl font-semibold text-blue-900">
 							Sign up to be notified of new features
 						</span>
-						<span className="mt-4">
+						<span className="mt-4 dark:text-slate-900">
 							Provide your email to receive early access to eligible beta
 							features for Permit Elements.
 						</span>
@@ -57,16 +57,16 @@ export default function EmailUpdatesBox(props) {
 									setEmail(e.target.value);
 								}}
 								placeholder="Email"
-								className="w-full px-6 border-none outline-none"
+								className="w-full px-6 border-none outline-none dark:bg-white dark:text-slate-900"
 							/>
 							<button
-								className="w-28 bg-white text-[#6851ff] font-semibold border-none cursor-pointer"
+								className="w-28 bg-white dark:bg-[#6851ff] text-[#6851ff] dark:text-white font-semibold border-none cursor-pointer"
 								onClick={() => textBox()}
 							>
 								Sign Up
 							</button>
 						</div>
-						<span className="text-xs mt-2">
+						<span className="text-xs mt-2 dark:text-slate-900">
 							Read our{" "}
 							<a href="https://permit.io" className="text-[#6851ff]">
 								privacy policy

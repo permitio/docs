@@ -48,10 +48,10 @@ export default function HelpSupportTile() {
 								setEmail(e.target.value);
 							}}
 							placeholder="Email"
-							className="w-full border-none outline-none text-sm"
+							className="w-full border-none outline-none text-sm dark:bg-white dark:text-slate-900 dark:pl-4"
 						/>
 						<button
-							className="w-28 bg-white text-[#6851ff] font-medium text-sm border-none cursor-pointer"
+							className="w-28 bg-white dark:bg-[#6851ff] text-[#6851ff] dark:text-white font-medium text-sm border-none cursor-pointer"
 							onClick={() => textBox()}
 						>
 							Sign Up

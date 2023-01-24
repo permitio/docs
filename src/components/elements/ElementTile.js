@@ -14,7 +14,9 @@ export default function ElementTile(props) {
 					redirectUser();
 				}}
 			>
-				<span className="mr-4 font-semibold text-[#6851ff]">{props.title}</span>
+				<span className="mr-4 font-semibold text-[#6851ff] dark:text-[#a796ff]">
+					{props.title}
+				</span>
 				{props.recommended ? (
 					<div className="flex items-center justify-center bg-[#6851ff] px-2 text-xs text-white text-bold rounded">
 						RECOMMENDED
