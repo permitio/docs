@@ -3,7 +3,7 @@ import cx from "classnames";
 
 export default function ActionContainer(props) {
 	const redirectUser = () => {
-		document.push("/features/permit-elements/element/user-management");
+		window.location.href = props.redirect;
 	};
 
 	return (
