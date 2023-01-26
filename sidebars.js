@@ -146,6 +146,11 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: "doc",
+          id: "features/multitenancy",
+          label: "Multitenancy",
+        },
         // {
         // 	type: "category",
         // 	collapsible: true,
@@ -158,52 +163,52 @@ const sidebars = {
         // 		},
         // 	],
         // },
-		{
-			type: "category",
-			collapsible: true,
-			collapsed: true,
-			label: "Permit Elements",
-			items: [
-				{
-					type: "doc",
-					id: "features/permit-elements/overview",
-					label: "Overview",
-				},
-				{
-					type: "category",
-					collapsible: true,
-					collapsed: true,
-					label: "Elements",
-					items: [
-						{
-							type: "doc",
-							id: "features/permit-elements/element/user-management",
-							label: "User Management",
-						},
-						{
-							type: "doc",
-							id: "features/permit-elements/element/audit-logs",
-							label: "Audit Logs",
-						},
-						{
-							type: "doc",
-							id: "features/permit-elements/element/approval-flows",
-							label: "Approval Flows",
-						},
-					],
-				},
-				{
-					type: "doc",
-					id: "features/permit-elements/permission-levels",
-					label: "Permission Levels",
-				},
-				{
-					type: "doc",
-					id: "features/permit-elements/user-preview",
-					label: "User Preview",
-				},
-			],
-		},
+        {
+          type: "category",
+          collapsible: true,
+          collapsed: true,
+          label: "Permit Elements",
+          items: [
+            {
+              type: "doc",
+              id: "features/permit-elements/overview",
+              label: "Overview",
+            },
+            {
+              type: "category",
+              collapsible: true,
+              collapsed: true,
+              label: "Elements",
+              items: [
+                {
+                  type: "doc",
+                  id: "features/permit-elements/element/user-management",
+                  label: "User Management",
+                },
+                {
+                  type: "doc",
+                  id: "features/permit-elements/element/audit-logs",
+                  label: "Audit Logs",
+                },
+                {
+                  type: "doc",
+                  id: "features/permit-elements/element/approval-flows",
+                  label: "Approval Flows",
+                },
+              ],
+            },
+            {
+              type: "doc",
+              id: "features/permit-elements/permission-levels",
+              label: "Permission Levels",
+            },
+            {
+              type: "doc",
+              id: "features/permit-elements/user-preview",
+              label: "User Preview",
+            },
+          ],
+        },
         {
           type: "doc",
           id: "features/coming-soon",
@@ -285,11 +290,6 @@ const sidebars = {
           type: "doc",
           id: "concepts/control-plane-and-data-plane",
           label: "Control & Data Planes",
-        },
-        {
-          type: "doc",
-          id: "concepts/multi-tenancy",
-          label: "Multi-Tenancy",
         },
         {
           type: "doc",
