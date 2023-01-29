@@ -530,8 +530,8 @@ const sidebars = {
                 },
                 {
                   type: "doc",
-                  id: "sdk/golang/user/ListAssignedRoles",
-                  label: "ListAssignedRoles",
+                  id: "sdk/golang/user/GetAssignedRoles",
+                  label: "GetAssignedRoles",
                 },
                 {
                   type: "doc",
@@ -556,8 +556,13 @@ const sidebars = {
                 },
                 {
                   type: "doc",
-                  id: "sdk/golang/role/List",
-                  label: "List",
+                  id: "sdk/golang/role/Delete",
+                  label: "Delete",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/role/Update",
+                  label: "Update",
                 },
               ],
             },
