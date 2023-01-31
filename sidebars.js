@@ -466,6 +466,110 @@ const sidebars = {
         },
         {
           type: "category",
+          label: "Golang",
+          items: [
+            {
+              type: "doc",
+              id: "sdk/golang/quickstart-golang",
+              label: "Quickstart",
+            },
+            {
+              type: "category",
+              label: "Tenant",
+              items: [
+                {
+                  type: "doc",
+                  id: "sdk/golang/tenant/Get",
+                  label: "Get",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/tenant/Create",
+                  label: "Create",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/tenant/Update",
+                  label: "Update",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/tenant/Delete",
+                  label: "Delete",
+                },
+              ],
+            },
+            {
+              type: "category",
+              label: "User",
+              items: [
+                {
+                  type: "doc",
+                  id: "sdk/golang/user/SyncUser",
+                  label: "SyncUser",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/user/Get",
+                  label: "Get",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/user/Create",
+                  label: "Create",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/user/Delete",
+                  label: "Delete",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/user/AssignRole",
+                  label: "AssignRole",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/user/GetAssignedRoles",
+                  label: "GetAssignedRoles",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/user/UnassignRole",
+                  label: "UnassignRole",
+                },
+              ],
+            },
+            {
+              type: "category",
+              label: "Role",
+              items: [
+                {
+                  type: "doc",
+                  id: "sdk/golang/role/Get",
+                  label: "Get",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/role/Create",
+                  label: "Create",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/role/Delete",
+                  label: "Delete",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/role/Update",
+                  label: "Update",
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "category",
           label: "NodeJS",
           items: [
             {
