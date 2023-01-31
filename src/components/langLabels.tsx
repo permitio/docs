@@ -22,6 +22,17 @@ export const PythonLabel = () => (
   </span>
 );
 
+export const GolangLabel = () => (
+  <span>
+    <img
+      className="langLabelImage"
+      src={"/img/languages/golang.svg"}
+      style={{ width: 22 }}
+    />{" "}
+    Golang
+  </span>
+);
+
 export const SyncPythonLabel = () => (
   <span>
     <img

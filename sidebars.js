@@ -146,6 +146,11 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: "doc",
+          id: "features/multitenancy",
+          label: "Multitenancy",
+        },
         // {
         // 	type: "category",
         // 	collapsible: true,
@@ -158,52 +163,52 @@ const sidebars = {
         // 		},
         // 	],
         // },
-		{
-			type: "category",
-			collapsible: true,
-			collapsed: true,
-			label: "Permit Elements",
-			items: [
-				{
-					type: "doc",
-					id: "features/permit-elements/overview",
-					label: "Overview",
-				},
-				{
-					type: "category",
-					collapsible: true,
-					collapsed: true,
-					label: "Elements",
-					items: [
-						{
-							type: "doc",
-							id: "features/permit-elements/element/user-management",
-							label: "User Management",
-						},
-						{
-							type: "doc",
-							id: "features/permit-elements/element/audit-logs",
-							label: "Audit Logs",
-						},
-						{
-							type: "doc",
-							id: "features/permit-elements/element/approval-flows",
-							label: "Approval Flows",
-						},
-					],
-				},
-				{
-					type: "doc",
-					id: "features/permit-elements/permission-levels",
-					label: "Permission Levels",
-				},
-				{
-					type: "doc",
-					id: "features/permit-elements/user-preview",
-					label: "User Preview",
-				},
-			],
-		},
+        {
+          type: "category",
+          collapsible: true,
+          collapsed: true,
+          label: "Permit Elements",
+          items: [
+            {
+              type: "doc",
+              id: "features/permit-elements/overview",
+              label: "Overview",
+            },
+            {
+              type: "category",
+              collapsible: true,
+              collapsed: true,
+              label: "Elements",
+              items: [
+                {
+                  type: "doc",
+                  id: "features/permit-elements/element/user-management",
+                  label: "User Management",
+                },
+                {
+                  type: "doc",
+                  id: "features/permit-elements/element/audit-logs",
+                  label: "Audit Logs",
+                },
+                {
+                  type: "doc",
+                  id: "features/permit-elements/element/approval-flows",
+                  label: "Approval Flows",
+                },
+              ],
+            },
+            {
+              type: "doc",
+              id: "features/permit-elements/permission-levels",
+              label: "Permission Levels",
+            },
+            {
+              type: "doc",
+              id: "features/permit-elements/user-preview",
+              label: "User Preview",
+            },
+          ],
+        },
         {
           type: "doc",
           id: "features/coming-soon",
@@ -285,11 +290,6 @@ const sidebars = {
           type: "doc",
           id: "concepts/control-plane-and-data-plane",
           label: "Control & Data Planes",
-        },
-        {
-          type: "doc",
-          id: "concepts/multi-tenancy",
-          label: "Multi-Tenancy",
         },
         {
           type: "doc",
@@ -459,6 +459,110 @@ const sidebars = {
                   type: "doc",
                   id: "sdk/dotnet/role/UnassignRole",
                   label: "UnassignRole",
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "category",
+          label: "Golang",
+          items: [
+            {
+              type: "doc",
+              id: "sdk/golang/quickstart-golang",
+              label: "Quickstart",
+            },
+            {
+              type: "category",
+              label: "Tenant",
+              items: [
+                {
+                  type: "doc",
+                  id: "sdk/golang/tenant/Get",
+                  label: "Get",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/tenant/Create",
+                  label: "Create",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/tenant/Update",
+                  label: "Update",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/tenant/Delete",
+                  label: "Delete",
+                },
+              ],
+            },
+            {
+              type: "category",
+              label: "User",
+              items: [
+                {
+                  type: "doc",
+                  id: "sdk/golang/user/SyncUser",
+                  label: "SyncUser",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/user/Get",
+                  label: "Get",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/user/Create",
+                  label: "Create",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/user/Delete",
+                  label: "Delete",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/user/AssignRole",
+                  label: "AssignRole",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/user/GetAssignedRoles",
+                  label: "GetAssignedRoles",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/user/UnassignRole",
+                  label: "UnassignRole",
+                },
+              ],
+            },
+            {
+              type: "category",
+              label: "Role",
+              items: [
+                {
+                  type: "doc",
+                  id: "sdk/golang/role/Get",
+                  label: "Get",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/role/Create",
+                  label: "Create",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/role/Delete",
+                  label: "Delete",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/golang/role/Update",
+                  label: "Update",
                 },
               ],
             },
