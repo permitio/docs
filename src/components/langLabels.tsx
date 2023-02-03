@@ -1,9 +1,8 @@
 import React from "react";
-import NoZoomImage from "./NoZoomImage";
 
 export const CSharpLabel = () => (
   <span>
-    <NoZoomImage
+    <img
       className="langLabelImage"
       src={"/img/languages/csharp.svg"}
       style={{ width: 22 }}
