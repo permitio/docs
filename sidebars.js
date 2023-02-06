@@ -713,7 +713,7 @@ const sidebars = {
 							items: [
 								{
 									type: "doc",
-									id: "sdk/ruby/user/sync-user",
+									id: "sdk/ruby/user/sync_user",
 									label: "sync_user",
 								},
 							],
