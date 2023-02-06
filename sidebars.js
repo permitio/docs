@@ -700,6 +700,28 @@ const sidebars = {
 				},
 				{
 					type: "category",
+					label: "Ruby",
+					items: [
+						{
+							type: "doc",
+							id: "sdk/ruby/quickstart-ruby",
+							label: "Quickstart Ruby",
+						},
+						{
+							type: "category",
+							label: "User",
+							items: [
+								{
+									type: "doc",
+									id: "sdk/ruby/user/sync-user",
+									label: "sync_user",
+								},
+							],
+						},
+					],
+				},
+				{
+					type: "category",
 					label: "Python",
 					items: [
 						{
@@ -835,7 +857,7 @@ const sidebars = {
 				},
 				{
 					type: "category",
-					label: "Java (V1)",
+					label: "xJava (V1)",
 					items: [
 						{
 							type: "doc",
