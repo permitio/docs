@@ -33,6 +33,17 @@ export const GolangLabel = () => (
   </span>
 );
 
+export const RubyLabel = () => (
+  <span>
+    <img
+      className="langLabelImage"
+      src={"/img/languages/ruby.svg"}
+      style={{ width: 22 }}
+    />{" "}
+    Ruby
+  </span>
+);
+
 export const SyncPythonLabel = () => (
   <span>
     <img
