@@ -702,7 +702,7 @@ const sidebars = {
 							],
 						},
 					],
-				}, ,
+				},
 				{
 					type: "category",
 					label: "Ruby",
