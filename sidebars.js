@@ -862,7 +862,7 @@ const sidebars = {
 				},
 				{
 					type: "category",
-					label: "Erlang (beta)",
+					label: "Erlang (Beta)",
 					items: [
 						{
 							type: "doc",
