@@ -873,6 +873,39 @@ const sidebars = {
 				},
 				{
 					type: "category",
+					label: "Kotlin (Beta)",
+					items: [
+						{
+							type: "doc",
+							id: "sdk/kotlin/quickstart-kotlin",
+							label: "Quickstart Kotlin",
+						},
+					],
+				},
+				{
+					type: "category",
+					label: "C++ (Beta)",
+					items: [
+						{
+							type: "doc",
+							id: "sdk/cpp/quickstart-cpp",
+							label: "Quickstart C++",
+						},
+					],
+				},
+				{
+					type: "category",
+					label: "PHP (Beta)",
+					items: [
+						{
+							type: "doc",
+							id: "sdk/php/quickstart-php",
+							label: "Quickstart PHP",
+						},
+					],
+				},
+				{
+					type: "category",
 					label: "xJava (V1)",
 					items: [
 						{
