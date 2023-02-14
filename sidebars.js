@@ -705,6 +705,17 @@ const sidebars = {
 				},
 				{
 					type: "category",
+					label: "Erlang (beta)",
+					items: [
+						{
+							type: "doc",
+							id: "sdk/erlang/quickstart-erlang",
+							label: "Quickstart Erlang",
+						},
+					],
+				},
+				{
+					type: "category",
 					label: "Ruby",
 					items: [
 						{
