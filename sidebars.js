@@ -702,18 +702,7 @@ const sidebars = {
 							],
 						},
 					],
-				},
-				{
-					type: "category",
-					label: "Erlang (beta)",
-					items: [
-						{
-							type: "doc",
-							id: "sdk/erlang/quickstart-erlang",
-							label: "Quickstart Erlang",
-						},
-					],
-				},
+				}, ,
 				{
 					type: "category",
 					label: "Ruby",
@@ -868,6 +857,17 @@ const sidebars = {
 									label: "delete_resource",
 								},
 							],
+						},
+					],
+				},
+				{
+					type: "category",
+					label: "Erlang (beta)",
+					items: [
+						{
+							type: "doc",
+							id: "sdk/erlang/quickstart-erlang",
+							label: "Quickstart Erlang",
 						},
 					],
 				},
