@@ -379,105 +379,6 @@ const sidebars = {
       items: [
         {
           type: "category",
-          label: "DotNet",
-          items: [
-            {
-              type: "doc",
-              id: "sdk/dotnet/quickstart-dotnet",
-              label: "Quickstart",
-            },
-            {
-              type: "category",
-              label: "Tenant",
-              items: [
-                {
-                  type: "doc",
-                  id: "sdk/dotnet/tenant/GetTenant",
-                  label: "GetTenant",
-                },
-                {
-                  type: "doc",
-                  id: "sdk/dotnet/tenant/CreateTenant",
-                  label: "CreateTenant",
-                },
-                {
-                  type: "doc",
-                  id: "sdk/dotnet/tenant/UpdateTenant",
-                  label: "UpdateTenant",
-                },
-                {
-                  type: "doc",
-                  id: "sdk/dotnet/tenant/DeleteTenant",
-                  label: "DeleteTenant",
-                },
-              ],
-            },
-            {
-              type: "category",
-              label: "User",
-              items: [
-                {
-                  type: "doc",
-                  id: "sdk/dotnet/user/SyncUser",
-                  label: "SyncUser",
-                },
-                {
-                  type: "doc",
-                  id: "sdk/dotnet/user/GetUser",
-                  label: "GetUser",
-                },
-                {
-                  type: "doc",
-                  id: "sdk/dotnet/user/CreateUser",
-                  label: "CreateUser",
-                },
-                {
-                  type: "doc",
-                  id: "sdk/dotnet/user/DeleteUser",
-                  label: "DeleteUser",
-                },
-              ],
-            },
-            {
-              type: "category",
-              label: "Role",
-              items: [
-                {
-                  type: "doc",
-                  id: "sdk/dotnet/role/GetRole",
-                  label: "GetRole",
-                },
-                {
-                  type: "doc",
-                  id: "sdk/dotnet/role/CreateRole",
-                  label: "CreateRole",
-                },
-                {
-                  type: "doc",
-                  id: "sdk/dotnet/role/ListRoles",
-                  label: "ListRoles",
-                },
-                {
-                  type: "doc",
-                  id: "sdk/dotnet/role/AssignRole",
-                  label: "AssignRole",
-                },
-                {
-                  type: "doc",
-                  id: "sdk/dotnet/role/ListAssignedRoles",
-                  label: "ListAssignedRoles",
-                },
-                {
-                  type: "doc",
-                  id: "sdk/dotnet/role/UnassignRole",
-                  label: "UnassignRole",
-                },
-              ],
-            },
-          ],
-        },
-        {
-          type: "category",
           label: "Golang",
           items: [
             {
@@ -712,28 +613,6 @@ const sidebars = {
         },
         {
           type: "category",
-          label: "Ruby",
-          items: [
-            {
-              type: "doc",
-              id: "sdk/ruby/quickstart-ruby",
-              label: "Quickstart Ruby",
-            },
-            {
-              type: "category",
-              label: "User",
-              items: [
-                {
-                  type: "doc",
-                  id: "sdk/ruby/user/sync_user",
-                  label: "sync_user",
-                },
-              ],
-            },
-          ],
-        },
-        {
-          type: "category",
           label: "Python",
           items: [
             {
@@ -869,6 +748,272 @@ const sidebars = {
         },
         {
           type: "category",
+          label: "Ruby",
+          items: [
+            {
+              type: "doc",
+              id: "sdk/ruby/quickstart-ruby",
+              label: "Quickstart Ruby",
+            },
+            {
+              type: "category",
+              label: "User",
+              items: [
+                {
+                  type: "doc",
+                  id: "sdk/ruby/user/sync_user",
+                  label: "sync_user",
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "category",
+          label: "Java",
+          items: [
+            {
+              type: "doc",
+              id: "sdk/java/quickstart-java",
+              label: "Quickstart",
+            },
+            {
+              type: "category",
+              label: "Tenant",
+              items: [
+                {
+                  type: "doc",
+                  id: "sdk/java/tenant/get",
+                  label: "get",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/tenant/create",
+                  label: "create",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/tenant/update",
+                  label: "update",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/tenant/delete",
+                  label: "delete",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/tenant/list",
+                  label: "list",
+                },
+              ],
+            },
+            {
+              type: "category",
+              label: "User",
+              items: [
+                {
+                  type: "doc",
+                  id: "sdk/java/user/sync",
+                  label: "sync",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/user/get",
+                  label: "get",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/user/create",
+                  label: "create",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/user/delete",
+                  label: "delete",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/user/list",
+                  label: "list",
+                },
+              ],
+            },
+            {
+              type: "category",
+              label: "Role",
+              items: [
+                {
+                  type: "doc",
+                  id: "sdk/java/role/get",
+                  label: "get",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/role/get-assigned-roles",
+                  label: "getAssignedRoles",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/role/create",
+                  label: "create",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/role/update",
+                  label: "update",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/role/delete",
+                  label: "delete",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/role/assign-role",
+                  label: "assignRole",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/role/unassign-role",
+                  label: "unassignRole",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/role/list",
+                  label: "list",
+                },
+              ],
+            },
+            {
+              type: "category",
+              label: "Resource",
+              items: [
+                {
+                  type: "doc",
+                  id: "sdk/java/resource/create",
+                  label: "create",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/resource/update",
+                  label: "update",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/resource/delete",
+                  label: "delete",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/java/resource/list",
+                  label: "list",
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "category",
+          label: "DotNet",
+          items: [
+            {
+              type: "doc",
+              id: "sdk/dotnet/quickstart-dotnet",
+              label: "Quickstart",
+            },
+            {
+              type: "category",
+              label: "Tenant",
+              items: [
+                {
+                  type: "doc",
+                  id: "sdk/dotnet/tenant/GetTenant",
+                  label: "GetTenant",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/dotnet/tenant/CreateTenant",
+                  label: "CreateTenant",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/dotnet/tenant/UpdateTenant",
+                  label: "UpdateTenant",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/dotnet/tenant/DeleteTenant",
+                  label: "DeleteTenant",
+                },
+              ],
+            },
+            {
+              type: "category",
+              label: "User",
+              items: [
+                {
+                  type: "doc",
+                  id: "sdk/dotnet/user/SyncUser",
+                  label: "SyncUser",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/dotnet/user/GetUser",
+                  label: "GetUser",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/dotnet/user/CreateUser",
+                  label: "CreateUser",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/dotnet/user/DeleteUser",
+                  label: "DeleteUser",
+                },
+              ],
+            },
+            {
+              type: "category",
+              label: "Role",
+              items: [
+                {
+                  type: "doc",
+                  id: "sdk/dotnet/role/GetRole",
+                  label: "GetRole",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/dotnet/role/CreateRole",
+                  label: "CreateRole",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/dotnet/role/ListRoles",
+                  label: "ListRoles",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/dotnet/role/AssignRole",
+                  label: "AssignRole",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/dotnet/role/ListAssignedRoles",
+                  label: "ListAssignedRoles",
+                },
+                {
+                  type: "doc",
+                  id: "sdk/dotnet/role/UnassignRole",
+                  label: "UnassignRole",
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "category",
           label: "Erlang (Beta)",
           items: [
             {
@@ -910,18 +1055,7 @@ const sidebars = {
               label: "Quickstart PHP",
             },
           ],
-        },
-        {
-          type: "category",
-          label: "xJava (V1)",
-          items: [
-            {
-              type: "doc",
-              id: "sdk/java/java_sdk_v1",
-              label: "Quickstart",
-            },
-          ],
-        },
+        }
       ],
     },
     {
