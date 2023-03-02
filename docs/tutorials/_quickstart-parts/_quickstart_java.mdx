@@ -18,7 +18,7 @@ For **[Maven](https://maven.apache.org/)** projects, use:
 <dependency>
   <groupId>io.permit</groupId>
   <artifactId>permit-sdk-java</artifactId>
-  <version>0.0.11</version>
+  <version>1.0.0</version>
 </dependency>
 ```
 
@@ -31,7 +31,7 @@ For **[Gradle](https://gradle.org/)** projects, configure `permit-sdk-java` as a
 dependencies {
   // ...
 
-  implementation 'io.permit:permit-sdk-java:0.0.11'
+  implementation 'io.permit:permit-sdk-java:1.0.0'
 }
 ```
 
@@ -48,11 +48,13 @@ import io.permit.sdk.PermitConfig;
 // This line initializes the SDK and connects your Java app
 // to the Permit.io PDP container you've set up in the previous step.
 Permit permit = new Permit(
-  new PermitConfig.Builder("[YOUR_API_KEY]")
-    // in production, you might need to change this url to fit your deployment
-    .withPdpAddress("http://localhost:7766")
-    .build()
-  );
+    new PermitConfig.Builder("[YOUR_API_KEY]")
+        // in production, you might need to change this url to fit your deployment
+        .withPdpAddress("http://localhost:7766")
+        // optionally, if you wish to get more debug messages to your log, set this to true
+        .withDebugMode(false)
+        .build()
+    );
 ```
 
 3. Sync the user to the permissions system
@@ -61,22 +63,32 @@ Permit permit = new Permit(
    you need to declare the user in the permission system so you can run `permit.check()` on that user.
 
 ```java
-// init your user (only needed ONCE, after the user first logins successfully)
-User user = new User.Builder("[A_USER_ID]")
-  .withEmail("john@smith.com")
-  .withFirstName("John")
-  .withLastName("Smith")
-  // you can assign role to the user at login
-  .withRoles(new ArrayList<>(List.of(new AssignedRole[]{
-      new AssignedRole("roleId", "tenantId"),
-      // example assign the user (at login) to the default tenant with an admin role
-      new AssignedRole("admin", "default"),
-  })))
-  .build();
+import io.permit.sdk.api.models.CreateOrUpdateResult;
+import io.permit.sdk.openapi.models.UserRead;
+import io.permit.sdk.enforcement.User;
 
-// You need to call sync user in order to create the user in the
-// permission system and be able to ask permit.check() on that user
-permit.api.syncUser(user);
+// optional - save the user attributes in permit so that they are
+// automatically available as ABAC attributes in permit.check()
+HashMap<String, Object> userAttributes = new HashMap<>();
+userAttributes.put("age", Integer.valueOf(20));
+userAttributes.put("subscription", "pro");
+
+// Syncing the user to the permission system
+CreateOrUpdateResult<UserRead> response = permit.api.users.sync(
+  (new User.Builder("[A_UNIQUE_USER_ID]"))
+    .withEmail("john@smith.com") // optional
+    .withFirstName("John") // optional
+    .withLastName("Smith") // optional
+    .withAttributes(userAttributes) // optional, used for ABAC permission checks
+    .build()
+);
+
+// assign the `admin` role to the user in the `default` tenant
+permit.api.users.assignRole(user.key, "admin", "default");
+
+// the response object contains the user, and whether or not the user was create or updated
+UserRead user = response.getResult();
+boolean wasCreated = response.wasCreated();
 ```
 
 <br />
@@ -87,10 +99,14 @@ permit.api.syncUser(user);
 import io.permit.sdk.enforcement.Resource;
 import io.permit.sdk.enforcement.User;
 
+// to run a permission check, use permit.check()
 boolean permitted = permit.check(
-  user,
+  // the user you check permission on
+  User.fromString("[A_USER_ID]"),
+  // the action (key) the user want to perform
   "create",
-  Resource.fromString("document")
+  // the resource the user is trying to access
+  new Resource.Builder("document").withTenant("default").build()
 );
 
 if (permitted) {
@@ -137,9 +153,12 @@ package com.example.myproject;
 
 import io.permit.sdk.Permit;
 import io.permit.sdk.PermitConfig;
-import io.permit.sdk.api.PermitApiException;
+import io.permit.sdk.api.PermitApiError;
+import io.permit.sdk.api.PermitContextError;
 import io.permit.sdk.enforcement.Resource;
 import io.permit.sdk.enforcement.User;
+import io.permit.sdk.openapi.models.UserCreate;
+import io.permit.sdk.openapi.models.UserRead;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.http.HttpStatus;
@@ -152,53 +171,64 @@ import java.io.IOException;
 @RestController
 @SpringBootApplication
 public class DemoApplication {
-  // You can open http://localhost:4000 to invoke this http
-  // endpoint, and see the outcome of the permission check.
-  @GetMapping("/")
-  ResponseEntity<String> home() throws IOException, PermitApiException {
-    // init the permit SDK
-    Permit permit = new Permit(
-    new PermitConfig.Builder("[YOUR_API_KEY]")
-      // in production, you might need to change this url to fit your deployment
-      .withPdpAddress("http://localhost:7000")
-      .build()
-    );
 
-    // init your user (only needed ONCE, after the user first logins successfully)
-    User user = new User.Builder("[A_USER_ID]")
-      .withEmail("john@smith.com")
-      .withFirstName("John")
-      .withLastName("Smith")
-      .withRoles(new ArrayList<>(List.of(new AssignedRole[]{
-          new AssignedRole("roleId", "tenantId"),
-          // assign the user the admin role inside the default tenant
-          new AssignedRole("admin", "default"),
-      })))
-      .build();
+	final Permit permit;
+	final UserRead user;
 
-    // You need to call sync user in order to create the user in the
-    // permission system and be able to ask permit.check() on that user
-    permit.api.syncUser(user);
+	public DemoApplication() {
+		// init the permit SDK
+		this.permit = new Permit(
+			new PermitConfig.Builder("[YOUR_API_KEY]")
+				.withPdpAddress("http://localhost:7766")
+				.withApiUrl("https://api.stg.permit.io")
+				.withDebugMode(true)
+				.build()
+		);
 
-    boolean permitted = permit.check(
-      user, // you may also call User.fromString("[A_USER_ID]"),
-      "create",
-      Resource.fromString("document")
-    );
+		try {
+			// typically you would sync a user to the permission system
+			// and assign an initial role when the user signs up to the system
+			this.user = permit.api.users.sync(
+				// the user "key" is any id that identifies the user uniquely
+				// but is typically taken straight from the user JWT `sub` claim
+				new UserCreate("[A_USER_ID]")
+					.withEmail("user@example.com")
+					.withFirstName("Joe")
+					.withLastName("Doe")
+			).getResult();
 
-    if (permitted) {
-      return ResponseEntity.status(HttpStatus.OK).body(
-        "User is PERMITTED to create a document"
-      );
-    } else {
-      return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
-        "User is NOT PERMITTED to create a document"
-      );
-    }
-  }
+			// assign the `admin` role to the user in the `default` tenant
+			permit.api.users.assignRole(user.key, "admin", "default");
+		} catch (IOException | PermitApiError | PermitContextError e) {
+			throw new RuntimeException(e);
+		}
+	}
 
-  public static void main(String[] args) {
-    SpringApplication.run(DemoApplication.class, args);
-  }
+	@GetMapping("/")
+	ResponseEntity<String> home() throws IOException, PermitApiError, PermitContextError {
+		// is `user` allowed to do `action` on `resource`?
+		User user = User.fromString("[A_USER_ID]"); // pass the user key to init a user from string
+		String action = "create";
+		Resource resource = new Resource.Builder("document")
+			.withTenant("default")
+			.build();
+
+		// to run a permission check, use permit.check()
+		boolean permitted = permit.check(user, action, resource);
+
+		if (permitted) {
+			return ResponseEntity.status(HttpStatus.OK).body(
+				"Joe Doe is PERMITTED to create document!"
+			);
+		} else {
+			return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
+				"Joe Doe is NOT PERMITTED to create document!"
+			);
+		}
+	}
+
+	public static void main(String[] args) {
+		SpringApplication.run(DemoApplication.class, args);
+	}
 }
 ```
