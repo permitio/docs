@@ -125,6 +125,11 @@ const sidebars = {
 									id: "features/policy-editor/abac/building-abac-policy",
 									label: "Building an ABAC Policy",
 								},
+								{
+									type: "doc",
+									id: "features/policy-editor/abac/defining-attributes",
+									label: "Defining Attributes",
+								},
 							],
 						},
 					],
