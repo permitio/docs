@@ -130,6 +130,11 @@ const sidebars = {
                   id: "features/policy-editor/abac/defining-attributes",
                   label: "Defining Attributes",
                 },
+                {
+                  type: "doc",
+                  id: "features/policy-editor/abac/patterns",
+                  label: "Design Patterns",
+                },
               ],
             },
           ],
@@ -1055,7 +1060,7 @@ const sidebars = {
               label: "Quickstart PHP",
             },
           ],
-        }
+        },
       ],
     },
     {
