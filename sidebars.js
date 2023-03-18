@@ -58,6 +58,17 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: "category",
+          label: "Deploying",
+          items: [
+            {
+              type: "doc",
+              id: "tutorials/deploying/overview",
+              label: "Deploying Permit",
+            },
+          ],
+        },
       ],
     },
     {

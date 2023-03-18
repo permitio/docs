@@ -35,7 +35,8 @@ const config = {
   favicon: "img/favicon.ico",
   organizationName: "permitio", // Usually your GitHub org/user name.
   projectName: "docs", // Usually your repo name.
-
+  markdown: { mermaid: true },
+  themes: ["@docusaurus/theme-mermaid"],
   presets: [
     [
       "@docusaurus/preset-classic",
@@ -159,7 +160,7 @@ const config = {
       },
       prism: {
         theme: require("prism-react-renderer/themes/dracula"),
-        additionalLanguages: ["java","ruby", "csharp", "groovy", "go"],
+        additionalLanguages: ["java", "ruby", "csharp", "groovy", "go"],
       },
       colorMode: {
         defaultMode: "light",
