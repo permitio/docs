@@ -56,6 +56,11 @@ const sidebars = {
               id: "tutorials/onboarding/connect-your-app",
               label: "Connect Your App",
             },
+            {
+              type: "doc",
+              id: "tutorials/onboarding/deploying-to-production",
+              label: "Deploying To Production",
+            },
           ],
         },
         {
