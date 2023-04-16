@@ -267,7 +267,7 @@ const sidebars = {
 				},
 				{
 					type: "doc",
-					id: "foAz/how-to-use",
+					id: "foAz/getting-started",
 					label: "Getting Started",
 				},
 				{
