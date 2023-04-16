@@ -249,15 +249,28 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "features/FoAz",
-          label: "Frontend-only Authz (FoAz)",
-        },
-        {
-          type: "doc",
           id: "features/coming-soon",
           label: "Coming Soon",
         },
       ],
+    },
+    {
+      type: "category",
+      collapsible: true,
+      collapsed: false,
+      label: "FoAz",
+      items: [
+        {
+          type: "doc",
+          id: "foAz/overview",
+          label: "Frontend-only Authz (FoAz)",
+        },
+        {
+          type: "doc",
+          id: "foAz/how-to-use",
+          label: "How To Use",
+        }
+      ]
     },
     {
       type: "category",
