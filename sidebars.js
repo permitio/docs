@@ -270,6 +270,11 @@ const sidebars = {
 					id: "foAz/how-to-use",
 					label: "Getting Started",
 				},
+				{
+					type: "doc",
+					id: "foAz/foaz-examples",
+					label: "FoAz Examples",
+				},
 			],
 		},
 		{
