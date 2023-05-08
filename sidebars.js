@@ -340,6 +340,18 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: "category",
+          collapsible: true,
+          label: "Cedar",
+          items: [
+            {
+              type: "doc",
+              id: "integrations/cedar/overview",
+              label: "Overview",
+            },
+          ],
+        }
       ],
     },
     {
