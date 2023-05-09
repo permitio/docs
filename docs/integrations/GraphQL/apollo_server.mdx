@@ -1,0 +1,95 @@
+---
+sidebar_position: 2
+title: Apollo Server
+---
+
+## Apollo Server
+
+I've used this exmaple of Apollo Server to add permissions with Permit to it.
+You can clone it [here](https://github.com/apollographql/fullstack-tutorial/tree/main/final/server).
+
+Once you have it cloned, you can go to the [permit application](https://app.permit.io/get-started/connect-an-sdk) 
+#### 1. Add the permit package to your project 
+`npm install permitio`
+#### 2. Import the package into your server 
+`const { Permit } = require("permitio");`
+#### 3. Create the permit object with the secret api key
+Copy it from the code example in this page [Permit connect sdk](https://app.permit.io/get-started/connect-an-sdk)
+and replace it with the token placeholder in the code below
+```js
+const permit = new Permit({
+  // in production, you might need to change this url to fit your deployment
+  pdp: "https://cloudpdp.api.permit.io",
+  // your api key
+  token: "permit_key_secret"
+});
+```
+#### 4 (option 1) Create a Plugin to check the permissions of each request and a map of operationName to resource and action in Permit policy
+```js
+const PermissionMap = {
+  "login": {resource: "user", action: "login"},
+  "logout": {resource: "user", action: "logout"},
+  "me": {resource: "user", action: "get"},
+  "launches": {resource: "launch", action: "getall"},
+  "getlaunch": {resource: "launch", action: "get"},
+}
+
+const permitPlugin = {
+  async requestDidStart(context) {
+    const operationName = context.request.operationName;
+    var userId = await getUserIdFromJWT("");
+    let allowed = false;
+    if (operationName.toLowerCase() in PermissionMap) {
+      const { resource, action } = PermissionMap[operationName.toLowerCase()];
+      allowed = await permit.check(userId, action, resource);
+    }
+    else {
+      console.warn('No such operation in PermissionMap', operationName);
+    }
+    if (!allowed) {
+      throw new Error("Not allowed");
+    }
+  },
+};
+```
+
+
+#### 4 (option 2) If you prefer detecting the resource and actions automatically, you can use the following plugin instead the last steps
+```js
+
+const permitPluginAutoDetect = {
+  requestDidStart(requestContext) {
+    return {
+      async didResolveOperation (context) {
+        const op = context.operationName
+        var userId = await getUserIdFromJWT("");
+        isMutation = context.operation.operation === 'mutation'
+        const allowed = await permit.check(userId, isMutation? "write": "read", op.toLowerCase()) // this will look like "action: write, resource:launches" or "action: read, resource:launches"
+        if (!allowed) {
+          throw new Error("Not allowed");
+        }
+      },
+    }
+  },
+}
+```
+
+#### 5. Add the plugin to the Apollo Server plugins list 
+(if you used the auto detect plugin, add permitPluginAutoDetect instead)
+```js
+// Set up Apollo Server
+const server = new ApolloServer({
+  debug: true,
+  typeDefs,
+  resolvers,
+  dataSources,
+  context,
+  introspection: true,
+  apollo: {
+    key: process.env.APOLLO_KEY,
+  },
+  plugins: [ApolloServerPluginLandingPageLocalDefault({ embed: true }), permitPlugin]
+});
+```
+
+
