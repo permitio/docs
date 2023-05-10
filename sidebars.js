@@ -331,6 +331,18 @@ const sidebars = {
         {
           type: "category",
           collapsible: true,
+          label: "Policy Engines",
+          items: [
+            {
+              type: "doc",
+              id: "integrations/policy-engines/overview",
+              label: "Overview",
+            },
+          ],
+        },
+        {
+          type: "category",
+          collapsible: true,
           label: "GraphQL",
           items: [
             {
