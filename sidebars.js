@@ -331,6 +331,23 @@ const sidebars = {
         {
           type: "category",
           collapsible: true,
+          label: "GraphQL",
+          items: [
+            {
+              type: "doc",
+              id: "integrations/GraphQL/overview",
+              label: "Overview",
+            },
+            {
+              type: "doc",
+              id: "integrations/GraphQL/apollo_server",
+              label: "Apollo Server",
+            },
+          ],
+        },
+        {
+          type: "category",
+          collapsible: true,
           label: "Gitops",
           items: [
             {
