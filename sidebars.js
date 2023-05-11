@@ -367,6 +367,11 @@ const sidebars = {
               id: "integrations/gitops/overview",
               label: "Overview",
             },
+            {
+              type: "doc",
+              id: "integrations/gitops/github",
+              label: "GitHub",
+            },
           ],
         },
       ],
