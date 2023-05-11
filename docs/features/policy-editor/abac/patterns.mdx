@@ -1,0 +1,104 @@
+---
+sidebar_position: 4
+title: ABAC Design Patterns
+---
+
+import Prism from "prism-react-renderer/prism";
+(typeof global !== "undefined" ? global : window).Prism = Prism;
+// add rego code syntax highlighting
+require("prismjs/components/prism-rego");
+
+Below you'd find common authorization design-patterns implemented in ABAC, and guides on how to implement them.
+
+## Ownership
+
+Ownership is one of the more common authorization patterns - in which a user can perform actions only on resources they own.
+There are three easy ways (in addition to writing policy directly as code) to implement ownership in Permit.io - all are equally valid and it's mostly a matter of taste.
+
+- ### Ownership via tenants
+
+  Ownership is defined by having the user and resource belong to the same tenant.
+  While implemented as an ABAC policy behind the scenes - you don't need to actually do so yourself - and you can enjoy the simplified API which treats tenants as a first class citizen.
+
+  [Read here](/features/multitenancy) on creating and checking permissions based on tenancy.
+
+- ### Ownership via list on resource
+
+  The resource has an attribute listing all the user ids that own it.
+  Use a [resource-set](/features/policy-editor/abac/building-abac-policy#define-a-resource-set) to check against the list.
+
+  It would look something like this:
+
+  <img src="/img/resource_ownership.jpg" style={{ maxHeight: "45vh" }} />
+
+  And the permission check (assuming loading the attribute as part of the check) would look something like this:
+
+  ```javascript
+  const permitted = await permit.check(userKey, "read", {
+    type: "file", // The resource name
+    attributes: {
+      owners: [
+        "d08c85a349994aeb89a3f02c08bdb340", // user-1
+        "48fb889360604253a5189580b48694cf", // user-2
+      ],
+    },
+  });
+  ```
+
+- ### Ownership via list on user profile
+  The user profile has an attribute listing all the resource ids that it owns.
+  Use a [user-set](/features/policy-editor/abac/building-abac-policy#define-a-user-set) to check against the list.
+
+## Belonging to a group
+
+Groups are a classic ReBAC concept; but ReBAC is a subset of ABAC, and we can often use it to implement group affiliation.
+The group can be represented as a resource by itself, a tenant, or an attribute of users or resources.
+
+- ### Group by tenants
+
+  You can use tenants as groups - having several tenants together form the actual higher level tenant.
+  Those can then be grouped by [tenant attributes](/features/policy-editor/abac/defining-attributes#define-stored-tenant-attributes).
+
+- ### Group by attributes
+  You can assign users and resources to a group using an attribute like `group_id` or `group_name` -
+  Implementation here is very similar to the ownership design pattern.
+
+:::info
+Once we add ReBAC and groups natively to Permit.io - those would be the default recommended way to implement groups.
+:::
+
+## Combining your own OPA Rego code with Permit.io generated ABAC code
+
+You can generate a custom attributes in Rego, and then use them in an ABAC [Userset](/features/policy-editor/abac/building-abac-policy#define-a-user-set).
+For example, when defining a new attribute on users representing whether there is an intersection, instead of using static values in the user editor,
+we can add something like this in the custom/ directory in your [gitops](/integrations/gitops/overview) repo:
+
+```rego
+package permit.custom
+import future.keywords.in
+
+default custom_user_attributes["has_intersection"] = false
+custom_user_attributes["has_intersection"] := true {
+    # Convert the two attributes to sets so we can test for intersections
+    user_attr_set = {x | some x in data.users[input.user.key].attributes["attr_in_user"]}
+    res_attr_set = {x | some x in input.resource.attributes["attr_in_resource"]}
+    # Test for an intersection
+    count(user_attr_set & res_attr_set) > 0
+}
+```
+
+You can then use the new attribute to define a userset, just like with static attributes.
+:::info
+Note that the package name must be `permit.custom` and the rule name must be `custom_user_attributes`, as that's where the Permit generated code looks for custom attributes. Other than these two requirements, you can do whatever you want.
+:::
+
+### Testing locally
+
+Here is a [OPA playground link with the above example](https://play.openpolicyagent.org/p/115vpZj3ow)
+If you want to play directly with the OPA instance in a PDP, simply expose its port, which is 8181 by default.
+The API key would be the same one as the regular port. For example:
+
+`docker run -it -p 7767:7000 -p 8181:8181 -e PDP_API_KEY=permit_key_XXXXX permitio/pdp-v2:latest`
+
+With this, you can send a POST with the input data to `http://localhost:8181/v1/data/permit` and get all the raw outputs, including policy debug data we use to develop our internal policy.
+To speed up iteration on the Rego code (when you feel you've done what you can with the playground), you can update your custom policy directly on your local OPA without going through git, for example, `http://localhost:8181/v1/policies/custom/example.rego` using the same API key.

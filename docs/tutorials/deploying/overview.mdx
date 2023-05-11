@@ -1,0 +1,152 @@
+---
+sidebar_position: 1
+title: Deploying Permit in your App
+---
+
+Hi 👋, if you're here you have probably successfully [completed the onboarding guide](/tutorials/onboarding/connect-your-app), connected your application with Permit and checked for Permissions.
+
+Now, let's talk about the various ways you can go about deploying Permit as part of your app.
+
+### Deployable components
+
+As you can see in the diagram below there a few key components that are part of every deployment, the only components you have to have are your App with an enforcement point; but some additional can be added to enjoy more features.
+
+| Component                                               | Must ?   | Reason                                                                                                                                                                             |
+| ------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Your App                                                | MUST     | Otherwise what's the point? 😜😅                                                                                                                                                   |
+| [Policy Enforcement Point(PEP)](/concepts/glossary#pep) | MUST     | Otherwise what's the point? 😜😅 These can be [Frontend code, Backend code](/tutorials/quickstart#integrate-sdk), [reverse proxy, or API Gateway](/integrations/gateways/overview) |
+| [Policy Decision Point (PDP)](/concepts/pdp)            | OPTIONAL | Permit can host it for you. But it's recommended to use locally in production.                                                                                                     |
+| Policy Git repository                                   | OPTIONAL | Permit can host it for you. You'd host the repo is you want to use the [Gitops](/integrations/gitops/overview) / manually add policy as code,                                      |
+
+![Connectivity Map Diagram](/img/diagrams/connectivity.svg)
+
+## PDP Deployments
+
+The PDP provides fast, zero-latency, scalable, secure policy decision making for your software.
+
+:::info
+The PDP opens an outgoing HTTPS websocket connection to Permit.io, which is used to subscribe to updates.
+The updates happen asynchronously in the background - they are not part of the authorization query critical path.  
+:::
+
+We often refer to the cloud-hosted PDP option as full-SaaS or cloud-PDP, and the local PDP option as [hybrid SaaS](/concepts/control-plane-and-data-plane).
+Hybrid SaaS is the default recommended layout.
+
+- ### Use the cloud PDP
+
+  ```mermaid
+  flowchart LR
+    a-- query -->b
+    subgraph Your-VPC
+      a[Your App]
+    end
+    subgraph Permit.io  Cloud
+      b[Cloud PDP]
+    end
+  ```
+
+  By default when you first try out Permit, you start with the "cloud" PDP we host for you at "https://cloudpdp.api.permit.io" .
+  This is a great way to start, and can be scalable for some use cases; but we do recommend running with your own local PDP in production or in any performance critical deployments.
+  :::note
+  Custom cloud PDP deployments (e.g. different AWS regions, different clouds, different network setups, different SSL / TLS configurations) are available to enterprise tier customers.
+  Please reach out to us at [support@permit.io](mailto:support@permit.io), or schedule a call via this link: [https://calendly.com/permitio/](https://calendly.com/permitio/)
+  :::
+
+- ### Deploy as a Sidecar
+
+  ```mermaid
+  flowchart LR
+    b -- subscribe for updates --> c
+    subgraph Your-VPC
+      a[Your App] -- query --> b[PDP Sidecar]
+    end
+    subgraph Permit.io  Cloud
+      c[OPAL Server]
+    end
+  ```
+
+  The most common way to deploy the PDP locally is as a sidecar - i.e. you run one PDP container next to each
+  of your own microservices.
+  This is also the easiest way to scale your authorization layer with your application.
+
+  In this layout you of course enjoy zero-latency between your application and the PDP - this together with
+  improved stability and security (no dependency on other clouds) is the main reason to use a local PDP compared to a cloud pdp.
+
+  #### Running the sidecar in Kubernetes?
+
+  There are a few things you need to make sure you do:
+
+  1. **API Service** - You need to open up it's port 7000 (often mapped to 7766 when running locally)
+  2. **OPA Service** - You can open up port 8181 to expose OPA directly
+  3. Use the `/healthcheck` endpoint on the API to check for readiness
+
+  If you need more advanced policy level healthchecks, you can read more about them as part of OPAL [here](https://docs.opal.ac/tutorials/healthcheck_policy_and_update_callbacks/).
+
+  <br></br>
+
+- ### Deploy as a Cluster
+
+  ```mermaid
+  flowchart LR
+    PDP1 -- subscribe  --> c
+    PDP2 -- subscribe  --> c
+    PDPX -- subscribe  --> c
+    subgraph Your-VPC
+      a[Your App] -- query --> ld[Load Balancer]
+      ld --> PDP1
+      ld --> PDP2
+      ld --> PDPX[PDP ...]
+    end
+    subgraph Permit.io  Cloud
+      c[OPAL Server]
+    end
+  ```
+
+  In this slightly more advanced deployment, you run multiple instances of the same PDP (with the same [environnement key](http://localhost:4444/features/projects-and-env#environments)) behind a load-balancer and direct your services to it.
+  Just like with any other microservice - this enables you scale out the PDPs elastically to match the demand coming from your application.
+  Unless your application is bound to face extreme workloads, and/or highly dynamic workloads, usually there isn't much added benefit for this deployment style over the sidecar one;
+  but even if this is just your preference it's reason enough to work with this layout.
+  When possible prefer to have the various microservices / apps on the same physical node as the PDPs, or close to it as possible to minimize latency.
+
+  - #### Deploy as a Cluster with Sharding / Chaining
+
+    For truly massive data sets needed in the PDP, you can apply sharding (using Permit environments and/or OPAL topics) to split the data between multiple PDPs within the same cluster, and reroute the requests to the relevant PDP service-mesh style.
+    In addition, you can apply chaining, using OPA's http.send as part of the policy in one PDP to fetch the missing data from another.
+
+- ### Deploy for Serverless
+
+  ```mermaid
+  flowchart LR
+    b -- subscribe for updates --> c
+    subgraph Your-VPC
+     a[Your Cloud Function] -- query --> b[PDP Container]
+    end
+    subgraph Permit.io  Cloud
+      c[OPAL Server]
+    end
+  ```
+
+  When running your app on a Serverless platform (e.g. AWS Lambda, GCP cloud-run),
+  you can simply run a the PDP as a container on your platform's container service, fro example - ECS-Fargate (which BTW is also considered serverless by AWS' definition).
+  The PDP and the app will enjoy all the same latency reductions as if it was running on another cloud function - as long as it's part of the same VPC.
+  If for some reason it is important to that the PDP itself will also run as part of the cloud-function service; please reach to us on the Slack community for additional support.
+
+- ### Deploy as Single Star PDP
+
+  In cases where you don't expect to have a lot of data and you can secure a strong (CPU and memory) machine to host the PDP you can even use one PDP, in a star topology, for your entire deployment.
+  This is not very common practice, but still legitimate.
+  When possible prefer to have the various services / apps on the same physical node as the PDP, or close to it as possible to minimize latency.
+
+  ```mermaid
+  flowchart LR
+    PDP -- subscribe  --> c
+    subgraph Your-VPC
+      service1 -- query --> PDP
+      service2 -- query --> PDP
+      service3 -- query --> PDP
+      serviceX[service ...] -- query --> PDP
+    end
+    subgraph Permit.io  Cloud
+      c[OPAL Server]
+    end
+  ```
