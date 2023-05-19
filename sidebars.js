@@ -178,6 +178,19 @@ const sidebars = {
           ],
         },
         {
+          type: "category",
+          collapsible: true,
+          collapsed: true,
+          label: "Loading data",
+          items: [
+            {
+              type: "doc",
+              id: "features/loading-data/via-opal",
+              label: "Loading data via OPAL",
+            },
+          ],
+        },
+        {
           type: "doc",
           id: "features/multitenancy",
           label: "Multitenancy",
