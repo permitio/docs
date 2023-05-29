@@ -267,6 +267,11 @@ const sidebars = {
 				},
 				{
 					type: "doc",
+					id: "foaz/using-permit-overview",
+					label: "Getting Started",
+				},
+				{
+					type: "doc",
 					id: "foaz/fetching-jwks",
 					label: "Fetching JWKs",
 				},
@@ -277,8 +282,8 @@ const sidebars = {
 				},
 				{
 					type: "doc",
-					id: "foaz/getting-started",
-					label: "Getting Started",
+					id: "foaz/detailed-guide",
+					label: "Detailed Guide",
 				},
 				{
 					type: "doc",
