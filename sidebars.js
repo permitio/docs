@@ -290,6 +290,11 @@ const sidebars = {
 					id: "frontend-only-authz/foaz-examples",
 					label: "FoAz Examples",
 				},
+				{
+					type: "doc",
+					id: "frontend-only-authz/foaz-standard",
+					label: "Internet Standard",
+				},
 			],
 		},
 		{
