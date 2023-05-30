@@ -262,32 +262,32 @@ const sidebars = {
 			items: [
 				{
 					type: "doc",
-					id: "foaz/overview",
+					id: "foAz/overview",
 					label: "Frontend-only Authz (FoAz)",
 				},
 				{
 					type: "doc",
-					id: "foaz/using-permit-overview",
+					id: "foAz/using-permit-overview",
 					label: "Getting Started",
 				},
 				{
 					type: "doc",
-					id: "foaz/fetching-jwks",
+					id: "foAz/fetching-jwks",
 					label: "Fetching JWKs",
 				},
 				{
 					type: "doc",
-					id: "foaz/configuring-jwks",
+					id: "foAz/configuring-jwks",
 					label: "Configuring JWKs",
 				},
 				{
 					type: "doc",
-					id: "foaz/detailed-guide",
+					id: "foAz/detailed-guide",
 					label: "Detailed Guide",
 				},
 				{
 					type: "doc",
-					id: "foaz/foaz-examples",
+					id: "foAz/foaz-examples",
 					label: "FoAz Examples",
 				},
 			],
