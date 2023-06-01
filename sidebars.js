@@ -70,7 +70,12 @@ const sidebars = {
 						{
 							type: "doc",
 							id: "tutorials/deploying/overview",
-							label: "Deploying Permit",
+							label: "Deploying Permit SaaS",
+						},
+						{
+							type: "doc",
+							id: "tutorials/deploying/on-prem",
+							label: "Deploying Permit on-prem",
 						},
 					],
 				},
@@ -352,12 +357,46 @@ const sidebars = {
 				{
 					type: "category",
 					collapsible: true,
+					label: "Policy Engines",
+					items: [
+						{
+							type: "doc",
+							id: "integrations/policy-engines/overview",
+							label: "Overview",
+						},
+					],
+				},
+				{
+					type: "category",
+					collapsible: true,
+					label: "GraphQL",
+					items: [
+						{
+							type: "doc",
+							id: "integrations/GraphQL/overview",
+							label: "Overview",
+						},
+						{
+							type: "doc",
+							id: "integrations/GraphQL/apollo_server",
+							label: "Apollo Server",
+						},
+					],
+				},
+				{
+					type: "category",
+					collapsible: true,
 					label: "Gitops",
 					items: [
 						{
 							type: "doc",
 							id: "integrations/gitops/overview",
 							label: "Overview",
+						},
+						{
+							type: "doc",
+							id: "integrations/gitops/github",
+							label: "GitHub",
 						},
 					],
 				},
