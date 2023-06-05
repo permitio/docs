@@ -276,6 +276,7 @@ const sidebars = {
 					id: "foaz/overview",
 					label: "Frontend-only Authz (FoAz)",
 				},
+
 				{
 					type: "doc",
 					id: "foaz/using-permit-overview",
