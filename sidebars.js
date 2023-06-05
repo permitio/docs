@@ -299,6 +299,11 @@ const sidebars = {
 				},
 				{
 					type: "doc",
+					id: "foaz/visual-guide",
+					label: "Working with the UI",
+				},
+				{
+					type: "doc",
 					id: "foaz/foaz-examples",
 					label: "FoAz Examples",
 				},
