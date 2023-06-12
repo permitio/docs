@@ -617,124 +617,129 @@ const sidebars = {
 							label: "Quickstart",
 						},
 						{
-							type: "category",
-							label: "Tenant",
-							items: [
-								{
-									type: "doc",
-									id: "sdk/nodejs/tenant/get-tenant",
-									label: "getTenant",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/tenant/create-tenant",
-									label: "createTenant",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/tenant/update-tenant",
-									label: "updateTenant",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/tenant/delete-tenant",
-									label: "deleteTenant",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/tenant/list-tenants",
-									label: "listTenants",
-								},
-							],
+							type: "doc",
+							id: "sdk/nodejs/usage-example",
+							label: "Usage examples",
 						},
-						{
-							type: "category",
-							label: "User",
-							items: [
-								{
-									type: "doc",
-									id: "sdk/nodejs/user/sync-user",
-									label: "syncUser",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/user/get-user",
-									label: "getUser",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/user/create-user",
-									label: "createUser",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/user/delete-user",
-									label: "deleteUser",
-								},
-							],
-						},
-						{
-							type: "category",
-							label: "Role",
-							items: [
-								{
-									type: "doc",
-									id: "sdk/nodejs/role/get-role",
-									label: "getRole",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/role/get-assigned-roles",
-									label: "getAssignedRoles",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/role/create-role",
-									label: "createRole",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/role/update-role",
-									label: "updateRoles",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/role/delete-role",
-									label: "deleteRole",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/role/assign-role",
-									label: "assignRole",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/role/unassign-role",
-									label: "unassignRole",
-								},
-							],
-						},
-						{
-							type: "category",
-							label: "Resource",
-							items: [
-								{
-									type: "doc",
-									id: "sdk/nodejs/resource/create-resource",
-									label: "createResource",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/resource/update-resource",
-									label: "updateResource",
-								},
-								{
-									type: "doc",
-									id: "sdk/nodejs/resource/delete-resource",
-									label: "deleteResource",
-								},
-							],
-						},
+						// {
+						// 	type: "category",
+						// 	label: "Tenant",
+						// 	items: [
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/tenant/get-tenant",
+						// 			label: "getTenant",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/tenant/create-tenant",
+						// 			label: "createTenant",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/tenant/update-tenant",
+						// 			label: "updateTenant",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/tenant/delete-tenant",
+						// 			label: "deleteTenant",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/tenant/list-tenants",
+						// 			label: "listTenants",
+						// 		},
+						// 	],
+						// },
+						// {
+						// 	type: "category",
+						// 	label: "User",
+						// 	items: [
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/user/sync-user",
+						// 			label: "syncUser",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/user/get-user",
+						// 			label: "getUser",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/user/create-user",
+						// 			label: "createUser",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/user/delete-user",
+						// 			label: "deleteUser",
+						// 		},
+						// 	],
+						// },
+						// {
+						// 	type: "category",
+						// 	label: "Role",
+						// 	items: [
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/role/get-role",
+						// 			label: "getRole",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/role/get-assigned-roles",
+						// 			label: "getAssignedRoles",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/role/create-role",
+						// 			label: "createRole",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/role/update-role",
+						// 			label: "updateRoles",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/role/delete-role",
+						// 			label: "deleteRole",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/role/assign-role",
+						// 			label: "assignRole",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/role/unassign-role",
+						// 			label: "unassignRole",
+						// 		},
+						// 	],
+						// },
+						// {
+						// 	type: "category",
+						// 	label: "Resource",
+						// 	items: [
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/resource/create-resource",
+						// 			label: "createResource",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/resource/update-resource",
+						// 			label: "updateResource",
+						// 		},
+						// 		{
+						// 			type: "doc",
+						// 			id: "sdk/nodejs/resource/delete-resource",
+						// 			label: "deleteResource",
+						// 		},
+						// 	],
+						// },
 					],
 				},
 				{
@@ -754,7 +759,7 @@ const sidebars = {
 						{
 							type: "doc",
 							id: "sdk/python/usage-example",
-							label: "Usage example",
+							label: "Usage examples",
 						},
 					],
 				},
