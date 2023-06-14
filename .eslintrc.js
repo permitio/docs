@@ -15,7 +15,11 @@ module.exports = {
     "no-unused-vars": ["warn", { vars: "all", args: "after-used", ignoreRestSiblings: false }],
 =======
     "no-unused-vars": ["error", { vars: "all", args: "after-used", ignoreRestSiblings: false }],
+<<<<<<< HEAD
 >>>>>>> a3fa717 (Removed yarn lock file)
+=======
+>>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
+>>>>>>> 7895135 (Added eslint, prettier, husky packages. Installed eslint plugins)
     "spellcheck/spell-checker": [
       "error",
       {
@@ -44,7 +48,11 @@ module.exports = {
 
 =======
           "nodejs",
+<<<<<<< HEAD
 >>>>>>> a3fa717 (Removed yarn lock file)
+=======
+>>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
+>>>>>>> 7895135 (Added eslint, prettier, husky packages. Installed eslint plugins)
           "faq",
           "sdk",
           "unassign",
@@ -60,7 +68,11 @@ module.exports = {
           "erlang",
           "kotlin",
           "cpp",
+<<<<<<< HEAD
 >>>>>>> a3fa717 (Removed yarn lock file)
+=======
+>>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
+>>>>>>> 7895135 (Added eslint, prettier, husky packages. Installed eslint plugins)
           "pho",
           "integrations",
           "href",
@@ -87,7 +99,11 @@ module.exports = {
           "algolia",
           "ecma",
           "lang",
+<<<<<<< HEAD
 >>>>>>> a3fa717 (Removed yarn lock file)
+=======
+>>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
+>>>>>>> 7895135 (Added eslint, prettier, husky packages. Installed eslint plugins)
         ],
       },
     ],
@@ -96,7 +112,11 @@ module.exports = {
       "error",
 =======
       "off",
+<<<<<<< HEAD
 >>>>>>> a3fa717 (Removed yarn lock file)
+=======
+>>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
+>>>>>>> 7895135 (Added eslint, prettier, husky packages. Installed eslint plugins)
       {
         endOfLine: "auto",
       },
