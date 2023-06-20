@@ -1,0 +1,252 @@
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+---
+
+sidebar_position: 1
+title: Modeling Google Drive Permissions
+
+---
+
+# Modeling Google Drive Permissions with ReBAC
+
+This tutorial explains how to build a simplified [Google Drive](https://www.google.com/drive/) permission system using [Permit.io](https://permit.io).
+
+:::info Early Access Feature
+**ReBAC** (relationship based access control) is now in early access. &nbsp; **[Contact us](https://bit.ly/permit-slack)** to try it out.
+:::
+
+## Before you start
+
+1. [Sign up to Permit.io](tutorials/onboarding/lets-begin.mdx)
+2. [Get your environment API Key](tutorials/quickstart.mdx)
+
+## The Google Drive Model
+
+### Overview
+
+Google drive is a system you can use to store, share, and collaborate on files and folders.
+
+The G-Drive permission model is [documented here](https://developers.google.com/drive/api/guides/ref-roles).
+For simplicity we will implement a subset of it with Permit.
+
+Our requirements:
+
+1. **Object Hierarchy:** A google drive account can contain many folders and files. Folders can contain other files and folders.
+2. **Direct file access:** A user can be a viewer of file, a commenter (meaning he can view and comment on the contents) or an editor (can view, comment and edit).
+3. **Folder-level access:** A user can be granted access to a folder. A user access level on a certain folder will grant that same access level on all the files within the folder.
+4. **Account admin access:** A user can be granted admin access to the entire account, which will grant the highest permission level on all folders and files within the account.
+5. **General access to "Everyone in account":** Files can be shared with all the users who are associated with the account that contains the file (share with all account members).
+
+### Schema objects
+
+Before we can start implementing the model, let's describe the different types of Permit API objects we will work with.
+
+#### Resources
+
+**Resources** in Permit are objects that you can enforce permissions on. Each resource has a predefined set of actions that a user can perform on said resource.
+
+When we refer to resources we typically refer to types and not to specific instances of that resource.
+
+Permit ReBAC allows you to model your resources as a graph.
+Each resource (a type) is a node in the graph, and can connect to other resources via edges called relations.
+
+The resources we will define for this example are:
+
+```
+- Account
+- Folder
+- File
+```
+
+#### Resource Relations
+
+A **relation** is a type of an edge in the graph between two resources.
+
+A relation called `parent` between a `File` resource and a `Folder` creates the ability to define this type of relationship between two resource instances of these types, for example:
+
+```
+(Folder:soc2, parent, File:access-control-policy)
+```
+
+The relations we will define are:
+
+```js
+Folder.account -> Account // relation from folder to its parent account
+File.account -> Account // relation from file to its parent account
+Folder.parent -> Folder // relation from folder to its parent folder (optional)
+File.parent -> Folder // relation from file to its parent folder (optional)
+```
+
+#### Resource Roles
+
+Each resource type can define its own roles. A **resource role** represents an access level (or a set of permissions) that can be granted on instances of a specific resource type.
+
+Resource roles are typically denoted like this: `Folder#editor`. The notation means: a resource role with key `editor` that is defined on the resource type with key `Folder`.
+
+The resource roles we will define are:
+
+```
+- Account#admin
+- Account#member
+
+- Folder#editor
+- Folder#commenter
+- Folder#viewer
+
+- File#editor
+- File#commenter
+- File#viewer
+```
+
+#### The model so far
+
+In this diagram:
+
+- **Resources** are denoted by black circles
+- **Resource Roles** are denoted by blue circles
+- **Resource Relations** are denoted by black edges (or arrows)
+
+![Resource Window](/img/rebac/resource_roles.png)
+
+### Data objects
+
+#### Resource Instances
+
+A resource instance is a specific object whos type is defined by a resource (type).
+
+For example: `Folder:soc2` is a resource instance whos type is the resource `Folder` and instance key is `soc2`.
+Each instance is denoted `type:instance` where `type` is the key of the resource (type) and `instance` is the key of the resource instance.
+
+You cannot have two resource instances with the same type and the same key, `Folder:soc2` is unique under your environment.
+
+**Users** and **Tenants** in permit are first-class objects who are infact instances belonging to the `User` and `Tenant` built-in resource types respectively.
+
+#### Relationships
+
+A relationship is a system fact that describs a connection (a directed edge in the graph) between a subject, relation and object.
+
+A relationship will always specifies the subject first, the relation second and the object third: `(subject, relation, object)`
+
+Examples:
+
+```
+(Folder:soc2, parent, File:access-control-policy)
+(Folder:rnd, parent, File:system-architecture)
+(Account:permitio, parent, File:rnd)
+```
+
+#### Role Assignments
+
+Role assignments are special type of relationship where:
+
+- the subject is a user
+- the relation is a role
+- the object is a resource instance
+
+Examples:
+
+```
+(john@company.com, viewer, File:system-architecture)
+```
+
+### Test scenarios
+
+- users (and what roles they have)
+- folders (and what files they contain, and under which account they belong)
+- files
+- expectations
+
+## Implementing with Permit
+
+### 0. Define resources, roles and relations
+
+define:
+
+- resources
+- resource roles
+- resource relations
+
+Let's start by creating the Account resource:
+
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```sh
+curl https://api.permit.io/v2/schema/default/dev/resources \
+  -u permit_key_4eC3
+```
+
+  </TabItem>
+  <TabItem value="node" label="Node.js">
+
+```ts
+import { Permit, ResourceRead } from "permitio";
+
+const permit = new Permit({ token: "<YOUR_API_KEY>" });
+
+const document = await permit.api.resources.create({
+  key: "document",
+  name: "Document",
+  urn: "prn:gdrive:document",
+  description: "google drive document",
+  actions: {
+    create: {},
+    read: {},
+    update: {},
+    delete: {},
+  },
+  attributes: {
+    private: {
+      type: "bool",
+      description: "whether the document is private",
+    },
+  },
+});
+```
+
+  </TabItem>
+  <TabItem value="python" label="Python">
+
+```py
+print("hello world")
+```
+
+  </TabItem>
+</Tabs>
+
+### 1. Direct access to files
+
+define both:
+
+- direct access to user who is an internal user (has member role on the account)
+- direct access to user who is an external user (not related to the account)
+  (google drives allows to invite any email to any file)
+
+### 2. Permissions on Folders
+
+show direct access to folder (e.g to rename)
+
+### 3. Folder permissions grant file permissions
+
+- explain we want:
+
+  - Folder#editor -> File#editor
+  - Folder#commenter -> File#commenter
+  - Folder#viewer -> File#viewer
+
+  - we also want derivation from parent folder to child folder?
+
+- explain derivation
+
+- show how to implement
+
+### 4. Account admin permissions
+
+- derive:
+  - Account#admin -> Folder#editor
+  - Account#admin -> File#editor (for files directly under account)
+
+### 5. General access to "Everyone in account"
+
+- TBD
