@@ -1,4 +1,4 @@
----
+
 sidebar_position: 1
 title: Modeling Google Drive Permissions
 ---
@@ -31,10 +31,12 @@ For simplicity we will implement a subset of it with Permit.
 Our requirements:
 
 1. **Object Hierarchy:** A google drive account can contain many folders and files. Folders can contain other files and folders.
-2. **Direct file access:** A user can be a viewer of file, a commenter (meaning he can view and comment on the contents) or an editor (can view, comment and edit).
+2. **Direct file access:** A user can be a viewer of file, a commenter (meaning they can view and comment on the contents) or an editor (can view, comment and edit).
 3. **Folder-level access:** A user can be granted access to a folder. A user access level on a certain folder will grant that same access level on all the files within the folder.
 4. **Account admin access:** A user can be granted admin access to the entire account, which will grant the highest permission level on all folders and files within the account.
 5. **General access to "Everyone in account":** Files can be shared with all the users who are associated with the account that contains the file (share with all account members).
+
+## ReBAC Objects in Permit
 
 ### Schema objects
 
@@ -42,7 +44,7 @@ Before we can start implementing the model, let's describe the different types o
 
 #### Resources
 
-**Resources** in Permit are objects that you can enforce permissions on. Each resource has a predefined set of actions that a user can perform on said resource.
+**Resources** in Permit are types of objects that you can enforce permissions on. Each resource has a predefined set of actions that a user can perform on it.
 
 When we refer to resources we typically refer to types and not to specific instances of that resource.
 
@@ -80,7 +82,7 @@ File.parent -> Folder // relation from file to its parent folder (optional)
 
 Each resource type can define its own roles. A **resource role** represents an access level (or a set of permissions) that can be granted on instances of a specific resource type.
 
-Resource roles are typically denoted like this: `Folder#editor`. The notation means: a resource role with key `editor` that is defined on the resource type with key `Folder`.
+Resource roles are typically denoted as `Folder#editor`, which means "a resource role with key `editor` that is defined on the resource type with key `Folder`".
 
 The resource roles we will define are:
 
@@ -102,7 +104,7 @@ The resource roles we will define are:
 In this diagram:
 
 - **Resources** are denoted by black circles
-- **Resource Roles** are denoted by blue circles
+- **Resource Roles** are denoted by <span style={{color: "blue"}}>blue circles</span>
 - **Resource Relations** are denoted by black edges (or arrows)
 
 ![Resource Window](/img/rebac/resource_roles.png)
@@ -113,10 +115,9 @@ In this diagram:
 
 A resource instance is a specific object whos type is defined by a resource (type).
 
-For example: `Folder:soc2` is a resource instance whos type is the resource `Folder` and instance key is `soc2`.
-Each instance is denoted `type:instance` where `type` is the key of the resource (type) and `instance` is the key of the resource instance.
+Each instance is denoted `type:instance` where `type` is the key of the resource (type) and `instance` is the key of the resource instance. For example, `Folder:soc2` is a resource instance whos type is the resource `Folder` and instance key is `soc2`.
 
-You cannot have two resource instances with the same type and the same key, `Folder:soc2` is unique under your environment.
+Resource instances unique within your environment. For example, there can be only one resource instance named `Folder:soc2`.
 
 **Users** and **Tenants** in permit are first-class objects who are infact instances belonging to the `User` and `Tenant` built-in resource types respectively.
 
@@ -155,96 +156,560 @@ Examples:
 - files
 - expectations
 
-## Implementing with Permit
+## Creating the schema with Permit
 
-### 0. Define resources, roles and relations
+First, we need to define our schema. This includes:
 
-define:
+* resources
+* resource roles
+* resource relations
 
-- resources
-- resource roles
-- resource relations
+### 1. Define resources and roles
 
 Let's start by creating the Account resource:
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
 
-```sh
-curl https://api.permit.io/v2/schema/default/dev/resources \
-  -u permit_key_4eC3
-```
-
-  </TabItem>
-  <TabItem value="node" label="Node.js">
-
-```ts
-import { Permit, ResourceRead } from "permitio";
-
-const permit = new Permit({ token: "<YOUR_API_KEY>" });
-
-const document = await permit.api.resources.create({
-  key: "document",
-  name: "Document",
-  urn: "prn:gdrive:document",
-  description: "google drive document",
-  actions: {
-    create: {},
-    read: {},
-    update: {},
-    delete: {},
-  },
-  attributes: {
-    private: {
-      type: "bool",
-      description: "whether the document is private",
+```bash
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "account",
+    "name": "Account",
+    "actions": {
+        "invite-member": {},
+        "list-members": {},
+        "remove-member": {}
     },
-  },
-});
-```
-
-  </TabItem>
-  <TabItem value="python" label="Python">
-
-```py
-print("hello world")
+    "roles": {
+        "admin": {
+            "name": "Admin",
+            "permissions": [
+				"invite-member",
+				"list-members",
+				"remove-member"
+			]
+        },
+        "member": {
+            "name": "Member",
+            "permissions": [
+				"list-members"
+			]
+        }
+    }
+  }'
 ```
 
   </TabItem>
 </Tabs>
 
-### 1. Direct access to files
+We've created the Account resource, with three actions: `invite-member`, `list-members`, and `remove-member`.
 
-define both:
+We've also created two roles, `admin` and `member`. The `admin` role has permission to perform all actions, while the `member` action can only perform `list-members`.
 
-- direct access to user who is an internal user (has member role on the account)
-- direct access to user who is an external user (not related to the account)
-  (google drives allows to invite any email to any file)
+Let's do the same with the Folder and File resources:
 
-### 2. Permissions on Folders
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
 
-show direct access to folder (e.g to rename)
+```bash
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "folder",
+    "name": "Folder",
+    "actions": {
+        "list-files": {},
+        "create-file": {},
+        "rename": {}
+    },
+    "roles": {
+        "editor": {
+            "name": "Editor",
+            "permissions": [
+				"list-files",
+				"create-file",
+				"rename"
+			]
+        },
+        "commenter": {
+            "name": "Commenter",
+            "permissions": [
+				"list-files"
+			]
+        },
+        "viewer": {
+            "name": "Viewer",
+            "permissions": [
+				"list-files"
+			]
+        }
+    }
+  }'
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "file",
+    "name": "File",
+    "actions": {
+        "read": {},
+        "comment": {},
+        "update": {},
+        "delete": {}
+    },
+    "roles": {
+        "editor": {
+            "name": "Editor",
+            "permissions": [
+				"read",
+				"comment",
+				"update",
+				"delete"
+			]
+        },
+        "commenter": {
+            "name": "Commenter",
+            "permissions": [
+				"read",
+				"comment"
+			]
+        },
+        "viewer": {
+            "name": "Viewer",
+            "permissions": [
+				"read"
+			]
+        }
+    }
+  }'
+```
 
-### 3. Folder permissions grant file permissions
+  </TabItem>
+</Tabs>
 
-- explain we want:
+Note that for the Folder resource, we've defined two identical roles - commenter and viewer. Don't worry, we'll differentiate between them later on.
 
-  - Folder#editor -> File#editor
-  - Folder#commenter -> File#commenter
-  - Folder#viewer -> File#viewer
+### 2. Define resource relations
 
-  - we also want derivation from parent folder to child folder?
+We'll define the parent relation, linking a file to the folder that contains it:
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
 
-- explain derivation
+```bash
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/file/relations \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "parent",
+    "name": "Parent",
+    "subject_resource": "folder"
+  }'
+```
 
-- show how to implement
+  </TabItem>
+</Tabs>
 
-### 4. Account admin permissions
+Obviously, folders can also be in folders, so let's create that as well. Note that this relation is recursive, that is, it points from a type to itself (but not necessarily from an instance to itself):
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
 
-- derive:
-  - Account#admin -> Folder#editor
-  - Account#admin -> File#editor (for files directly under account)
+```bash
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/folder/relations \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "parent",
+    "name": "Parent",
+    "subject_resource": "folder"
+  }'
+```
 
-### 5. General access to "Everyone in account"
+  </TabItem>
+</Tabs>
 
-- TBD
+And let's create the two relations linking files and folders to their account:
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/folder/relations \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "account",
+    "name": "Account",
+    "subject_resource": "account"
+  }'
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/file/relations \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "account",
+    "name": "Account",
+    "subject_resource": "account"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+## Define the actual permissions
+
+Let's define some users and grant them permissions!
+
+### 1. Create some resource instances and users
+
+Let's create ourselves an Account:
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/resource_instances \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resource": "account",
+    "key": "acme",
+    "tenant": "default"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+Let's also create a folder and a file:
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/resource_instances \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resource": "folder",
+    "key": "finance",
+    "tenant": "default"
+  }'
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/resource_instances \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resource": "file",
+    "key": "2023_report",
+    "tenant": "default"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+And finally, two users:
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/users \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "jane@acme.com"
+  }'
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/users \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "john@acme.com"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+### 2. Direct access to files
+
+The simplest thing we can do is assign files to users. Let's give John read-only access (i.e. the `viewer` role) to the 2023_report file:
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/role_assignments \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user": "john@acme.com",
+    "role": "viewer",
+    "resource_instance": "file:2023_report"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+### 3. Permissions on Folders
+
+Let's grant Jane the `editor` role on our folder, finance:
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/role_assignments \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user": "jane@acme.com",
+    "role": "editor",
+    "resource_instance": "folder:finance"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+### 4. Folder permissions grant file permissions
+
+Note that while now Jane can `list-files`, `create-file` and `rename` the folder, she can't actually access files in the folder. In fact, there are no files in the folder. Let's fix that.
+
+First, we'll create a parent relationship from the 2023_report file to the finance folder:
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/relationship_tuples \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "folder:finance",
+    "relation": "parent",
+    "object": "file:2023_report"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+Then, we'll change the schema slightly and add a role derivation. When a user has a role on a specific resource instance, and there is a role derivation on that resource type, the user will also get the derived role on any resource instances that have the derivation's specified relationship with that original resource instance.
+
+For example, we want anyone who has the `editor` role on a folder, to automatically get the `editor` role on any file contained within that folder, that is, any file that has a parent relationship with that folder. 
+
+Let's define that:
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/file/roles/editor \
+  -X PATCH \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "granted_to": {
+        "users_with_role": [
+            {
+                "linked_by_relation": "parent",
+                "on_resource": "folder",
+                "role": "editor"
+            }
+        ]
+	}
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+We'll do the same to also propagate the other roles:
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/file/roles/commenter \
+  -X PATCH \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "granted_to": {
+        "users_with_role": [
+            {
+                "linked_by_relation": "parent",
+                "on_resource": "folder",
+                "role": "commenter"
+            }
+        ]
+	}
+  }'
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/file/roles/viewer \
+  -X PATCH \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "granted_to": {
+        "users_with_role": [
+            {
+                "linked_by_relation": "parent",
+                "on_resource": "folder",
+                "role": "viewer"
+            }
+        ]
+	}
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+Note that now finally the `commenter` role on a folder is different from the `viewer` role, because different roles on files are derived from them.
+
+### 5. Account admin permissions
+
+Now that we've granted specific permissions to the folder, let's do the same to the acme Account. Since role derivations propagate recursively, associating a folder with an account will grant permissions not only on that folder, but also on the files it contains.
+
+Let's give anyone who has the `admin` role on an account also have the `editor` on any folder and file within it:
+
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/folder/roles/editor \
+  -X PATCH \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "granted_to": {
+        "users_with_role": [
+            {
+                "linked_by_relation": "account",
+                "on_resource": "account",
+                "role": "admin"
+            }
+        ]
+	}
+  }'
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/file/roles/editor \
+  -X PATCH \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "granted_to": {
+        "users_with_role": [
+            {
+                "linked_by_relation": "account",
+                "on_resource": "account",
+                "role": "admin"
+            }
+        ]
+	}
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+Let's also give anyone who has the `member` role on an account the `viewer` on any folder and file within it:
+
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/folder/roles/viewer \
+  -X PATCH \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "granted_to": {
+        "users_with_role": [
+            "linked_by_relation": "account",
+            "on_resource": "account",
+            "role": "member"
+        ]
+	}
+  }'
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/file/roles/viewer \
+  -X PATCH \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "granted_to": {
+        "users_with_role": [
+            {
+                "linked_by_relation": "account",
+                "on_resource": "account",
+                "role": "member"
+            }
+        ]
+	}
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+### 6. General access to "Everyone in account"
+The last thing we're missing is the ability to give anyone in an account the editor role on a specific file. To do that, we'll add another relation from files to accounts called account_global, and create a role derivation giving any member of the account the editor role on these files.
+
+First, we'll create the new relation:
+
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/file/relations \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "account_global",
+    "name": "Account Global",
+    "subject_resource": "account"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+Then let's add the derived role (note that since we're PATCHing the editor role, we also specify the existing relation):
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/file/roles/editor \
+  -X PATCH \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "granted_to": {
+        "users_with_role": [
+            {
+                "linked_by_relation": "parent",
+                "on_resource": "folder",
+                "role": "editor"
+            },
+            {
+                "linked_by_relation": "account_global",
+                "on_resource": "account",
+                "role": "member"
+            }
+        ]
+	}
+  }'
+```
+
+  </TabItem>
+</Tabs>
