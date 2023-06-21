@@ -1,4 +1,4 @@
-
+---
 sidebar_position: 1
 title: Modeling Google Drive Permissions
 ---
@@ -11,7 +11,7 @@ import TabItem from "@theme/TabItem";
 This tutorial explains how to build a simplified [Google Drive](https://www.google.com/drive/) permission system using [Permit.io](https://permit.io).
 
 :::info Early Access Feature
-**ReBAC** (relationship based access control) is now in early access. &nbsp; **[Contact us](https://bit.ly/permit-slack)** to try it out.
+**[ReBAC](https://en.wikipedia.org/wiki/Relationship-based_access_control)** (relationship based access control) is now in early access. &nbsp; **[Contact us](https://bit.ly/permit-slack)** to try it out.
 :::
 
 ## Before you start
@@ -125,7 +125,7 @@ Resource instances unique within your environment. For example, there can be onl
 
 A relationship is a system fact that describs a connection (a directed edge in the graph) between a subject, relation and object.
 
-A relationship will always specifies the subject first, the relation second and the object third: `(subject, relation, object)`
+A relationship specifies the subject first, the relation second and the object third: `(subject, relation, object)`
 
 Examples:
 
@@ -137,7 +137,7 @@ Examples:
 
 #### Role Assignments
 
-Role assignments are special type of relationship where:
+Role assignments are a special type of relationship where:
 
 - the subject is a user
 - the relation is a role
@@ -151,10 +151,7 @@ Examples:
 
 ### Test scenarios
 
-- users (and what roles they have)
-- folders (and what files they contain, and under which account they belong)
-- files
-- expectations
+We're going to create a few users, a few folders and a few files, establish the relationships between them, assign some roles, and then see how permission checks take what we've defined into account.
 
 ## Creating the schema with Permit
 
@@ -166,7 +163,7 @@ First, we need to define our schema. This includes:
 
 ### 1. Define resources and roles
 
-Let's start by creating the Account resource:
+Let's start by creating the Account resource type, which represents an organization's account in Google Drive. In the next section, we'll create a specific instance of this resource type for our fictional company, ACME, Inc.
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -210,7 +207,7 @@ We've created the Account resource, with three actions: `invite-member`, `list-m
 
 We've also created two roles, `admin` and `member`. The `admin` role has permission to perform all actions, while the `member` action can only perform `list-members`.
 
-Let's do the same with the Folder and File resources:
+Let's do the same with the Folder and File resource types:
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -298,7 +295,7 @@ Note that for the Folder resource, we've defined two identical roles - commenter
 
 ### 2. Define resource relations
 
-We'll define the parent relation, linking a file to the folder that contains it:
+We'll define the parent relation, linking a file to the folder that contains it. As discussed before, relations define the kind of links that can exist between resource instances, so we define them on their corresponding resource types.
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
 
@@ -317,7 +314,7 @@ curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resou
   </TabItem>
 </Tabs>
 
-Obviously, folders can also be in folders, so let's create that as well. Note that this relation is recursive, that is, it points from a type to itself (but not necessarily from an instance to itself):
+Obviously, folders can also be in folders, so let's create that as well. Note that this relation is recursive, which means that it points from a resource type to itself, but the relationships that are defined using them will not necessarily be from an resource instance to itself - usually they'll point to another instance of the same type.
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
 
@@ -370,7 +367,8 @@ Let's define some users and grant them permissions!
 
 ### 1. Create some resource instances and users
 
-Let's create ourselves an Account:
+We'll create a resource instance of type Account that represents our company, ACME, Inc.
+In following calls, this resource will be referred to `account:acme`, as its resource type key is `account` and its instance key is `acme`.
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
 
@@ -443,7 +441,9 @@ curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/users 
 
 ### 2. Direct access to files
 
-The simplest thing we can do is assign files to users. Let's give John read-only access (i.e. the `viewer` role) to the 2023_report file:
+The simplest thing we can do is assign files to users. A Role Assignment can point at an entire resource type (as in RBAC, which is not what we're using in this tutorial), or in our case, to a specific resource instance (ReBAC).
+
+Let's give John read-only access (i.e. the `viewer` role) to the 2023_report file:
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
 
@@ -464,7 +464,8 @@ curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/role_a
 
 ### 3. Permissions on Folders
 
-Let's grant Jane the `editor` role on our folder, finance:
+Just like we can give permissions on files, we can do the same on folders. Let's grant Jane the `editor` role on our folder, finance:
+
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
 
@@ -488,6 +489,7 @@ curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/role_a
 Note that while now Jane can `list-files`, `create-file` and `rename` the folder, she can't actually access files in the folder. In fact, there are no files in the folder. Let's fix that.
 
 First, we'll create a parent relationship from the 2023_report file to the finance folder:
+
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
 
@@ -622,45 +624,6 @@ curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resou
   </TabItem>
 </Tabs>
 
-Let's also give anyone who has the `member` role on an account the `viewer` on any folder and file within it:
-
-<Tabs groupId="language">
-  <TabItem value="curl" label="cURL">
-
-```bash
-curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/folder/roles/viewer \
-  -X PATCH \
-  -H "Authorization: Bearer $permit_sdk_api_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "granted_to": {
-        "users_with_role": [
-            "linked_by_relation": "account",
-            "on_resource": "account",
-            "role": "member"
-        ]
-	}
-  }'
-curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/file/roles/viewer \
-  -X PATCH \
-  -H "Authorization: Bearer $permit_sdk_api_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "granted_to": {
-        "users_with_role": [
-            {
-                "linked_by_relation": "account",
-                "on_resource": "account",
-                "role": "member"
-            }
-        ]
-	}
-  }'
-```
-
-  </TabItem>
-</Tabs>
-
 ### 6. General access to "Everyone in account"
 The last thing we're missing is the ability to give anyone in an account the editor role on a specific file. To do that, we'll add another relation from files to accounts called account_global, and create a role derivation giving any member of the account the editor role on these files.
 
@@ -713,3 +676,98 @@ curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resou
 
   </TabItem>
 </Tabs>
+
+## Doing permission checks
+
+Now that we've configured everything and pushed some data, let's do a few permission checks to see what permissions Jane and John have.
+
+First, we'll launch a Policy Decision Point (PDP). The PDP is a small container that fetches policy and data from Permit's cloud service and has all it needs to make decisions locally.
+```bash
+docker run -it \
+    -e PDP_API_KEY=$permit_sdk_api_key \
+    -p 7766:7000 \
+    -p 8081:8081 \
+    permitio/pdp-v2:latest
+```
+
+That second port (8081) is optional. You can use it if you want to interact directly with the OPA instance running within the PDP.
+
+Let's first see if John can read the 2023_report file:
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl http://localhost:7766/allowed \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "user": {
+            "key": "john@acme.com"
+        },
+        "resource": {
+            "tenant": "default",
+            "type": "file",
+            "key": "2023_report"
+        },
+        "action": "read"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+We get back this result:
+TODO
+
+Meaning, John can read the file. Can he update it?
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl http://localhost:7766/allowed \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "user": {
+            "key": "john@acme.com"
+        },
+        "resource": {
+            "tenant": "default",
+            "type": "file",
+            "key": "2023_report"
+        },
+        "action": "update"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+No, because he only has viewer permissions. Can Jane update the file?
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl http://localhost:7766/allowed \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "user": {
+            "key": "jane@acme.com"
+        },
+        "resource": {
+            "tenant": "default",
+            "type": "file",
+            "key": "2023_report"
+        },
+        "action": "update"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+Yes! Jane can update the file because she has editor permissions on the finance folder, and those permissions propagate through the derived role.
