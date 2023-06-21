@@ -4,11 +4,9 @@
 const lightCodeTheme = require("./src/css/prism-theme");
 const darkCodeTheme = require("prism-react-renderer/themes/dracula");
 
-const companyWebsiteUrl =
-  process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
+const companyWebsiteUrl = process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
 
-const apiReferenceUrl =
-  process.env.API_REFERENCE_URL ?? "https://api.permit.io/v2/redoc";
+const apiReferenceUrl = process.env.API_REFERENCE_URL ?? "https://api.permit.io/v2/redoc";
 
 const algoliaAppId = process.env.APPLICATION_ID || "";
 const algoliaApiKey = process.env.API_KEY || "";
@@ -78,6 +76,7 @@ const config = {
       },
     ],
     "docusaurus-plugin-sass",
+    "docusaurus-plugin-hotjar",
     "plugin-image-zoom",
     async function TailwindCSSPlugin(context, options) {
       return {
@@ -97,6 +96,10 @@ const config = {
     ({
       imageZoom: {
         selector: ".markdown :not(em) > img",
+      },
+      hotjar: {
+        // Added fake appID as variables are pulled from netlify & error without alternative
+        applicationId: process.env.HOTJAR_ID || "1234567890",
       },
       navbar: {
         logo: {
