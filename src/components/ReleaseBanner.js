@@ -29,7 +29,6 @@ export default function ReleaseBanner() {
           This is documentation for Permit.io 1.0.0, which is{" "}
           <span style={{ fontWeight: "bold" }}>supported for backward compatibility only</span>.
         </span>
-
         <br />
         <span>
           For up-to-date documentation, see the latest version{" "}
