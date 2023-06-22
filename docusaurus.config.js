@@ -2,7 +2,7 @@
 // Note: type annotations allow type checking and IDEs autocompletion
 
 const lightCodeTheme = require("./src/css/prism-theme");
-const darkCodeTheme = require("prism-react-renderer/themes/dracula");
+// const darkCodeTheme = require("prism-react-renderer/themes/dracula");
 
 const companyWebsiteUrl =
 	process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
@@ -78,7 +78,10 @@ const config = {
 			},
 		],
 		"docusaurus-plugin-sass",
+<<<<<<< HEAD
 		"docusaurus-plugin-hotjar",
+=======
+>>>>>>> 340b4ca (Updated packaes)
 		"plugin-image-zoom",
 		async function TailwindCSSPlugin(context, options) {
 			return {
@@ -99,10 +102,13 @@ const config = {
 			imageZoom: {
 				selector: ".markdown :not(em) > img",
 			},
+<<<<<<< HEAD
 			hotjar: {
 				// Added fake appID as variables are pulled from netlify & error without alternative
 				applicationId: process.env.HOTJAR_ID || "1234567890",
 			},
+=======
+>>>>>>> 340b4ca (Updated packaes)
 			navbar: {
 				logo: {
 					alt: "Permit.io",

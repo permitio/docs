@@ -1,7 +1,5 @@
 import React, { useState } from "react";
 import anime from "animejs/lib/anime.es.js";
-// import SyntaxHighlighter from "react-syntax-highlighter";
-// import { docco } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import ReactMarkdown from "react-markdown";
 import { CodeBlock, tomorrowNightBlue } from "react-code-blocks";
 import "./CodeDropdown.scss";
