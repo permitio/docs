@@ -441,44 +441,36 @@ In this diagram:
 
 ### 1. Direct file access
 
-Let's define some users and grant them permissions!
+Before we can show how to assign direct file access to users, we need to model these files and users.
 
-We'll create a resource instance of type Account that represents our company, ACME, Inc.
-In following calls, this resource will be referred to `account:acme`, as its resource type key is `account` and its instance key is `acme`.
+#### Creating the user
+
+We create a user john@acme.com who will have a direct `viewer` access to a file:
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
 
 ```bash
-curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/resource_instances \
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/users \
   -X POST \
   -H "Authorization: Bearer $permit_sdk_api_key" \
   -H "Content-Type: application/json" \
   -d '{
-    "resource": "account",
-    "key": "acme",
-    "tenant": "default"
+    "key": "john@acme.com"
   }'
 ```
 
   </TabItem>
 </Tabs>
 
-Let's also create a folder and a file:
+#### Creating the file
+
+Now let's create the file instance:
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
 
 ```bash
-curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/resource_instances \
-  -X POST \
-  -H "Authorization: Bearer $permit_sdk_api_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "resource": "folder",
-    "key": "finance",
-    "tenant": "default"
-  }'
 curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/resource_instances \
   -X POST \
   -H "Authorization: Bearer $permit_sdk_api_key" \
@@ -493,34 +485,16 @@ curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/resour
   </TabItem>
 </Tabs>
 
-And finally, two users:
+:::info Tenant-boundaries for resource instances
+Note that a resource instance must always belong to a tenant so that tenant-boundaries can still be maintained for end-customers.
+The tenant can be used to signify a completely separated end-customer account on your system.
+:::
 
-<Tabs groupId="language">
-  <TabItem value="curl" label="cURL">
+#### Assigning the viewer role to the user
 
-```bash
-curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/users \
-  -X POST \
-  -H "Authorization: Bearer $permit_sdk_api_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "key": "jane@acme.com"
-  }'
-curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/users \
-  -X POST \
-  -H "Authorization: Bearer $permit_sdk_api_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "key": "john@acme.com"
-  }'
-```
+In order to assign the viewer access on the file, we must create a **role assignment** object.
 
-  </TabItem>
-</Tabs>
-
-The simplest thing we can do is assign files to users. A Role Assignment can point at an entire resource type (as in RBAC, which is not what we're using in this tutorial), or in our case, to a specific resource instance (ReBAC).
-
-Let's give John read-only access (i.e. the `viewer` role) to the 2023_report file:
+Let's give John read-only access (i.e. the `viewer` role) to the `2023_report` file:
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -540,9 +514,79 @@ curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/role_a
   </TabItem>
 </Tabs>
 
+#### Bonus: creating resource instances implicitly
+
+We could actually achieve the same result with less api calls.
+
+Creating the user will remain the same as before, but we can skip creating the file and instead assign the role based on the instance key.
+Permit will assume such instance exists on your end and create it implicitly.
+
+Let's give John read-only access (i.e. the `viewer` role) to the `2023_report` file (and create the file implicitly):
+
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/role_assignments \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user": "john@acme.com",
+    "role": "viewer",
+    "resource_instance": "file:2023_report",
+    "tenant": "default",
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+Note that tenant **must be specified** if the resource instance is to be created implicitly.
+
 ### 2. Folder-level access
 
-Just like we can give permissions on files, we can do the same on folders. Let's grant Jane the `editor` role on our folder, finance:
+Just like we can give permissions on files, we can do the same on folders. Let's grant Jane the `editor` role on the `finance` folder.
+
+We'll create a user for jane first:
+
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/users \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "jane@acme.com"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+Then we create the folder instance:
+
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/resource_instances \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resource": "folder",
+    "key": "finance",
+    "tenant": "default"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+And finally we assign the role (`editor` access to the folder):
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -564,9 +608,11 @@ curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/role_a
 
 ### 3. Folder permissions propagate to child files and folders
 
-Note that while now Jane can `list-files`, `create-file` and `rename` the folder, she can't actually access files in the folder. In fact, there are no files in the folder. Let's fix that.
+Note that while Jane can now `list-files`, `create-file` and `rename` the folder, she can't actually access files within the folder. In fact, there are no files in the folder yet. Let's fix that.
 
-First, we'll create a parent relationship from the 2023_report file to the finance folder:
+#### Creating a relationship tuple
+
+First, we'll create a `parent` relationship from the `2023_report` file to the `finance` folder:
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -586,11 +632,33 @@ curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/relati
   </TabItem>
 </Tabs>
 
-Then, we'll change the schema slightly and add a role derivation. When a user has a role on a specific resource instance, and there is a role derivation on that resource type, the user will also get the derived role on any resource instances that have the derivation's specified relationship with that original resource instance.
+:::info Relationship tuples vs. Role assignments
+Role assignments and relationship tuples are quite similar:
 
-For example, we want anyone who has the `editor` role on a folder, to automatically get the `editor` role on any file contained within that folder, that is, any file that has a parent relationship with that folder.
+- Role assignments create a role relationship between a user and a resource instance.
+- Relationship tuples create a relationship between two resource instances.
 
+The truth is, role assignments are actually a special type of relationship tuples (where the subject is a user and the relation is a role).
+:::
+
+#### Creating a role derivation
+
+Next, we'll change our graph schema slightly and add a **role derivation**.
+
+A role derivation is a rule that specifies that a role on one resource instance **automatically means** another role on a **related** resource instance.
+
+More strictly:
+
+```
+If a user has role `A` on a folder `X`, it implies that the same user
+should be automatically granted a role `B` on all files where
+the file `parent` is the `X` folder.
+```
+
+In our case, we want anyone who has the `editor` role on a folder, to automatically get the `editor` role on any file contained within that folder, that is, any file that has a `parent` relationship with that folder.
 Let's define that:
+
+#### folder#editor -> file#editor (via `parent`)
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -616,7 +684,11 @@ curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resou
   </TabItem>
 </Tabs>
 
-We'll do the same to also propagate the other roles:
+Note that the url endpoint modifies the granted role (`file#editor`) and specifies that it's granted to users with the `folder#editor` role on linked `parent` folders.
+
+We'll do the same to also propagate the other roles from folder to file.
+
+#### folder#commenter -> file#commenter (via `parent`)
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -637,6 +709,17 @@ curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resou
         ]
 	}
   }'
+```
+
+  </TabItem>
+</Tabs>
+
+#### folder#viewer -> file#viewer (via `parent`)
+
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
 curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/file/roles/viewer \
   -X PATCH \
   -H "Authorization: Bearer $permit_sdk_api_key" \
@@ -657,13 +740,79 @@ curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resou
   </TabItem>
 </Tabs>
 
-Note that now finally the `commenter` role on a folder is different from the `viewer` role, because different roles on files are derived from them.
+Note that now finally the `folder#commenter` role is finally different (granting different permissions) from `folder#viewer`, because they derive different roles on `file`.
 
 ### 4. Account admin permissions
 
-Now that we've granted specific permissions to the folder, let's do the same to the acme Account. Since role derivations propagate recursively, associating a folder with an account will grant permissions not only on that folder, but also on the files it contains.
+We wish that if a user is granted admin access on the entire account, it will grant the highest permission level on all folders and files within the account.
 
-Let's give anyone who has the `admin` role on an account also have the `editor` on any folder and file within it:
+We need to first define an account (called `acme`) that will be related to our files and folders.
+
+#### account:acme
+
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/resource_instances \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resource": "account",
+    "key": "acme",
+    "tenant": "default"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+#### relationship (account:acme, 'account', folder:finance)
+
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/relationship_tuples \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "account:acme",
+    "relation": "account",
+    "object": "folder:finance"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+#### relationship (account:acme, 'account', file:2023_report)
+
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
+curl https://api.us-west-2.permit.io/v2/facts/$permit_project/$permit_env/relationship_tuples \
+  -X POST \
+  -H "Authorization: Bearer $permit_sdk_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "account:acme",
+    "relation": "account",
+    "object": "file:2023_report"
+  }'
+```
+
+  </TabItem>
+</Tabs>
+
+#### Role derivations
+
+Since role derivations propagate recursively, associating a folder with an account will grant permissions not only on that folder, but also on the files it contains.
+
+Let's grant anyone who has the `account#admin` role the `folder#editor` role on any folder in that account:
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -684,6 +833,17 @@ curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resou
         ]
 	}
   }'
+```
+
+  </TabItem>
+</Tabs>
+
+Let's grant anyone who has the `account#admin` role the `file#editor` role on any file in that account:
+
+<Tabs groupId="language">
+  <TabItem value="curl" label="cURL">
+
+```bash
 curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resources/file/roles/editor \
   -X PATCH \
   -H "Authorization: Bearer $permit_sdk_api_key" \
@@ -706,7 +866,7 @@ curl https://api.us-west-2.permit.io/v2/schema/$permit_project/$permit_env/resou
 
 ### 5. General access to "Everyone in account"
 
-The last thing we're missing is the ability to give anyone in an account the editor role on a specific file. To do that, we'll add another relation from files to accounts called account_global, and create a role derivation giving any member of the account the editor role on these files.
+The last thing we're missing is the ability to give anyone in an account the editor role on a specific file. To do that, we'll add another relation from files to accounts called `account_global`, and create a role derivation giving any member of the account the editor role on these files.
 
 First, we'll create the new relation:
 
@@ -765,6 +925,21 @@ Now that we've configured everything and pushed some data, let's do a few permis
 
 First, we'll launch a Policy Decision Point (PDP). The PDP is a small container that fetches policy and data from Permit's cloud service and has all it needs to make decisions locally.
 
+<Tabs groupId="region">
+  <TabItem value="uswest" label="US West">
+
+```bash
+docker run -it \
+    -e PDP_API_KEY=$permit_sdk_api_key \
+    -e PDP_CONTROL_PLANE=https://api.us-west-2.permit.io \
+    -p 7766:7000 \
+    -p 8081:8081 \
+    permitio/pdp-v2:latest
+```
+
+  </TabItem>
+  <TabItem value="useast" label="US East">
+
 ```bash
 docker run -it \
     -e PDP_API_KEY=$permit_sdk_api_key \
@@ -772,6 +947,9 @@ docker run -it \
     -p 8081:8081 \
     permitio/pdp-v2:latest
 ```
+
+  </TabItem>
+</Tabs>
 
 That second port (8081) is optional. You can use it if you want to interact directly with the OPA instance running within the PDP.
 
@@ -801,10 +979,7 @@ curl http://localhost:7766/allowed \
   </TabItem>
 </Tabs>
 
-We get back this result:
-TODO
-
-Meaning, John can read the file. Can he update it?
+We get back a `true` result, meaning that John can read the file. Can he update it?
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -830,7 +1005,9 @@ curl http://localhost:7766/allowed \
   </TabItem>
 </Tabs>
 
-No, because he only has viewer permissions. Can Jane update the file?
+We get back a `false` result, meaning that John cannot update the file. That's because he only has `viewer` permissions on the file.
+
+Can Jane update the file?
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
