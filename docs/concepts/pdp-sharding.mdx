@@ -36,11 +36,11 @@ The flow of an authorization request will be as follows:
 
 
 To achieve sharding, multiple PDPs should be run.
-Currently, we assume a fixed number of PDPs, although scaling would be available soon.
+Currently, we assume a fixed number of PDPs, although dynamic scaling would be available soon.
 
 For the SDK’s queries to reach the correct PDP instance (holding the shard that has the correct tenant id), we are using Envoy.
 The SDK is configured with Envoy’s address as its PDP, and Envoy forwards the requests based on the Tenant ID to the corresponding PDP.
-Our backend sharding is implemented using that same algorithm, Thus both Envoy and our backend are mapping the same tenant ids to the same shard ids.
+Permit.io's backend uses that very same sharding algorithm, Thus both Envoy and the backend are mapping the same tenant ids to the same shard ids.
 
 
 ## Quickstart
@@ -51,7 +51,7 @@ The following configuration should be used:
 
 1. Create a docker network for the envoy and pdp containers to communicate:
     ```sh
-    docker network create envoy
+    docker network create pdp-net
     ```
 2. Create the envoy configuration file:
     ```yaml
@@ -97,34 +97,34 @@ The following configuration should be used:
           cluster_name: pdp_cluster
           endpoints:
           - lb_endpoints:
-         # Replicate for each Shard / PDP {
             - endpoint:
                 address:
                   socket_address:
-                    address: $PDP-1-ADDRESS
-                    port_value: 80
+                    # replace the address with the PDP's address
+                    address: pdp-0
+                    port_value: 7766
+              metadata:
+                filter_metadata:
+                  envoy.lb:
+                    hash_key: 0
+            - endpoint:
+                address:
+                  socket_address:
+                    # replace the address with the PDP's address
+                    address: pdp-1
+                    port_value: 7766
               metadata:
                 filter_metadata:
                   envoy.lb:
                     hash_key: 1
-         # }. And another one as an example:
-            - endpoint:
-                address:
-                  socket_address:
-                    address: $PDP-2-ADDRESS
-                    port_value: 80
-              metadata:
-                filter_metadata:
-                  envoy.lb:
-                    hash_key: 2
     ```
 3. Run Envoy:
     ```sh
-   docker run --rm -it --network=envoy \
-      -v $(pwd)/my-custom-envoy.yaml:/envoy-custom.yaml \
+   docker run --rm -it --network=pdp-net \
+      -v $(pwd)/pdp-lb-envoy.yaml:/envoy-custom.yaml \
       -p 9901:9901 \
       -p 10000:10000 \
-      envoyproxy/envoy:dev-d266941360e811eb34fc632d914211437e13f962 \
+      envoyproxy/envoy:v1.26-latest \
           -c /envoy-custom.yaml
     ```
 4. Run PDPs:
@@ -133,7 +133,7 @@ The following configuration should be used:
     docker run -it \
       -p 7766:7000 \
       --name pdp-0 \
-      --network=envoy \
+      --network=pdp-net \
       --env PDP_API_KEY=<YOUR_API_KEY> \
       --env PDP_SHARD_ORD=0 \
       permitio/pdp-v2:latest
@@ -143,7 +143,7 @@ The following configuration should be used:
     docker run -it \
       -p 7766:7000 \
       --name pdp-1 \
-      --network=envoy \
+      --network=pdp-net \
       --env PDP_API_KEY=<YOUR_API_KEY> \
       --env PDP_SHARD_ORD=1 \
       permitio/pdp-v2:latest
