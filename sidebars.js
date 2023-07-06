@@ -353,6 +353,11 @@ const sidebars = {
               id: "integrations/authentication/fusionauth",
               label: "FusionAuth x Permit",
             },
+            {
+              type: "doc",
+              id: "integrations/authentication/auth0-sync-script",
+              label: "Auth0 Sync Script",
+            },
           ],
         },
         {
