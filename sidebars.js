@@ -345,6 +345,11 @@ const sidebars = {
             },
             {
               type: "doc",
+              id: "integrations/authentication/auth0",
+              label: "Auth0 x Permit",
+            },
+            {
+              type: "doc",
               id: "integrations/authentication/supertokens",
               label: "SuperTokens x Permit",
             },
