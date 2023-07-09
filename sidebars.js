@@ -344,9 +344,22 @@ const sidebars = {
               label: "Your Authentication",
             },
             {
-              type: "doc",
-              id: "integrations/authentication/auth0",
+              type: "category",
+              collapsible: true,
+              collapsed: false,    
               label: "Auth0 x Permit",
+              items: [
+                {
+                  type: "doc",
+                  id: "integrations/authentication/auth0",
+                  label: "Setting it up in your app",
+                },
+                {
+                  type: "doc",
+                  id: "integrations/authentication/auth0-demo",
+                  label: "Demo Application",
+                }
+              ]
             },
             {
               type: "doc",
