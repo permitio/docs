@@ -91,13 +91,6 @@ const config = {
 				},
 			};
 		},
-		// [
-		// 	"@docusaurus/plugin-content-docs",
-		// 	{
-		// 		routeBasePath: "/",
-		// 		sidebarPath: require.resolve("./sidebars.js"),
-		// 	},
-		// ],
 	],
 
 	themeConfig:
