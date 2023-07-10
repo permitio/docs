@@ -151,7 +151,7 @@ const config = {
 						"aria-label": "Twitter",
 					},
 					{
-						href: "https://bit.ly/opal-slack",
+						href: "https://io.permit.io/docs-to-slack",
 						position: "right",
 						className: "header-slack-link",
 						"aria-label": "Slack community",
