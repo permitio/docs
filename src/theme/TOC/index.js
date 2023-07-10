@@ -4,7 +4,6 @@ import EditThisPage from "@theme/EditThisPage";
 
 export default function TOC({ toc, editUrl, ...props }) {
 	const URL_BASE_PATH = "https://github.com/permitio/docs/tree/master/docs";
-	console.log("EDIT URL: ", window.location.pathname);
 
 	return (
 		<div className="toc-wrapper">
