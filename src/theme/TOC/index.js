@@ -13,7 +13,7 @@ export default function TOC({ toc, editUrl, ...props }) {
 
 	// TODO: Needs improvement.
 	// Avoids home.mdx files throwing a 404.
-	const getWindowLocationPathname = (pathname) => {
+	const getFileForPathname = (pathname) => {
 		if (pathname === "/") {
 			return "home.mdx";
 		}
@@ -31,7 +31,7 @@ export default function TOC({ toc, editUrl, ...props }) {
 						editUrl={
 							URL_BASE_PATH +
 							window.location.pathname +
-							getWindowLocationPathname(window.location.pathname) +
+							getFileForPathname(window.location.pathname) +
 							URL_TRACKING
 						}
 					/>
