@@ -40,8 +40,11 @@ const config = {
 	presets: [
 		[
 			"@docusaurus/preset-classic",
-			/** @type {import('@docusaurus/preset-classic').Options} */
-			({
+			{
+				gtag: {
+					trackingID: "G-S2W3HZX9EZ",
+					anonymizeIP: true,
+				},
 				docs: {
 					sidebarPath: require.resolve("./sidebars.js"),
 					routeBasePath: "/",
@@ -60,7 +63,7 @@ const config = {
 				theme: {
 					customCss: require.resolve("./src/css/custom.scss"),
 				},
-			}),
+			},
 		],
 	],
 
@@ -151,7 +154,7 @@ const config = {
 						"aria-label": "Twitter",
 					},
 					{
-						href: "https://bit.ly/opal-slack",
+						href: "https://io.permit.io/docs-to-slack",
 						position: "right",
 						className: "header-slack-link",
 						"aria-label": "Slack community",
