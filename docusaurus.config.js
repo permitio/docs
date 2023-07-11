@@ -161,11 +161,6 @@ const config = {
 					},
 				],
 			},
-			footer: {
-				style: "dark",
-				links: [],
-				copyright: `Copyright © ${new Date().getFullYear()} Permit, Inc.`,
-			},
 			prism: {
 				theme: require("prism-react-renderer/themes/dracula"),
 				additionalLanguages: ["java", "ruby", "csharp", "groovy", "go"],
