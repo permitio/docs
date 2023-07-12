@@ -77,6 +77,71 @@ const config = {
 						from: "/concepts/multi-tenancy",
 						to: "/features/multitenancy",
 					},
+					{
+						from: "/reference/sdks/python/sync_resources/",
+						to: "/sdk/python/quickstart_python_sync",
+					},
+					{
+						from: [
+							"/sdk/python/role/create-role/",
+							"/sdk/python/role/get-role/",
+							"/sdk/python/resource/update-resource/",
+							"/sdk/python/tenant/update-tenant/",
+							"/reference/SDKs/Python/sync_user",
+						],
+						to: "/sdk/python/usage-example",
+					},
+					{
+						from: "/reference/sdks/java/sync_user/",
+						to: "/sdk/java/user/sync",
+					},
+					{
+						from: "/reference/sdks/java/quickstart_java/",
+						to: "/sdk/java/quickstart-java",
+					},
+					{
+						from: ["/reference/sdks/dotnet/sync_user/"],
+						to: "/sdk/dotnet/user/SyncUser",
+					},
+					{
+						from: [
+							"/tutorials/connect_your_app/",
+							"/tutorials/connecting_to_authentication/",
+						],
+						to: "/tutorials/onboarding/connect-your-app",
+					},
+					{
+						from: "/features/policy_editor/",
+						to: "/category/policy-editor",
+					},
+					{
+						from: [
+							"/tutorials/demo",
+							"/tutorials/configuration",
+							"/tutorials/healthchecks",
+						],
+						to: "/tutorials/quickstart",
+					},
+					{
+						from: "/concepts/projects_and_environments",
+						to: "/features/projects-and-env",
+					},
+					{
+						from: "/reference/api_with_cli/",
+						to: "/api/api-with-cli",
+					},
+					{
+						from: "/overview/permit_data_model/",
+						to: "/",
+					},
+					{
+						from: "/features/Audit Logs/troubleshooting",
+						to: "/features/audit-logs/troubleshooting",
+					},
+					{
+						from: "/features/coming_soon/",
+						to: "/features/coming-soon",
+					},
 				],
 			},
 		],
