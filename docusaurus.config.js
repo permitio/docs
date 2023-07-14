@@ -142,6 +142,8 @@ const config = {
 						from: "/features/coming_soon/",
 						to: "/features/coming-soon",
 					},
+
+					// Backward compatability for side-navigation full rewrite.
 				],
 			},
 		],
