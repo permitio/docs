@@ -108,7 +108,7 @@ const config = {
 							"/tutorials/connect_your_app/",
 							"/tutorials/connecting_to_authentication/",
 						],
-						to: "/tutorials/onboarding/connect-your-app",
+						to: "/getting-started/create-your-account/",
 					},
 					{
 						from: "/features/policy_editor/",
@@ -186,12 +186,12 @@ const config = {
 						position: "left",
 						label: "Home",
 					},
-					{
-						type: "doc",
-						docId: "home",
-						position: "left",
-						label: "Docs",
-					},
+					// {
+					// 	type: "doc",
+					// 	docId: "home",
+					// 	position: "left",
+					// 	label: "Docs",
+					// },
 					{
 						to: `${apiReferenceUrl}`,
 						label: "API Reference",
