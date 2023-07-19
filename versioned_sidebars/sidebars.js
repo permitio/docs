@@ -194,6 +194,11 @@ const sidebars = {
           id: "concepts/pdp",
           label: "Policy Decision Point",
         },
+        {
+          type: "doc",
+          id: "concepts/pdp-sharding",
+          label: "PDP Sharding",
+        },
       ],
     },
     {
