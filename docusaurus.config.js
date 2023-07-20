@@ -106,9 +106,9 @@ const config = {
 					{
 						from: [
 							"/tutorials/connect_your_app/",
-							"/tutorials/connecting_to_authentication/",
+							"/tutorials/connecting_to_authentication",
 						],
-						to: "/getting-started/create-your-account/",
+						to: "/getting-started/create-your-account",
 					},
 					{
 						from: "/features/policy_editor/",
@@ -120,7 +120,7 @@ const config = {
 							"/tutorials/configuration",
 							"/tutorials/healthchecks",
 						],
-						to: "/tutorials/quickstart",
+						to: "/getting-started/create-your-account",
 					},
 					{
 						from: "/concepts/projects_and_environments",
