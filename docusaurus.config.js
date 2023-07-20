@@ -171,6 +171,14 @@ const config = {
 						from: ["/concepts/authorization-concepts", "/concepts/glossary"],
 						to: "/overview/permit-basics",
 					},
+					{
+						from: "tutorials/deploying/on-prem",
+						to: "getting-started/deploying/on-prem",
+					},
+					{
+						from: "tutorials/deploying/overview",
+						to: "getting-started/deploying/overview",
+					},
 				],
 			},
 		],
