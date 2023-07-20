@@ -1,5 +1,6 @@
 // @ts-check
 // Note: type annotations allow type checking and IDEs autocompletion
+const path = require("path");
 
 const lightCodeTheme = require("./src/css/prism-theme");
 const darkCodeTheme = require("prism-react-renderer/themes/dracula");
@@ -13,30 +14,33 @@ const apiReferenceUrl =
 const algoliaAppId = process.env.APPLICATION_ID || "";
 const algoliaApiKey = process.env.API_KEY || "";
 
-let searchConfig = {};
-if (algoliaAppId && algoliaApiKey) {
-	searchConfig = {
-		algolia: {
-			appId: process.env.APPLICATION_ID,
-			apiKey: process.env.API_KEY,
-			indexName: "docs",
-		},
-	};
-}
+// let searchConfig = {};
+// if (algoliaAppId && algoliaApiKey) {
+// 	searchConfig = {
+// 		algolia: {
+// 			appId: process.env.APPLICATION_ID,
+// 			apiKey: process.env.API_KEY,
+// 			indexName: "docs",
+// 			contextualSearch: true,
+// 		},
+// 	};
+// }
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-	title: "Permit.io",
-	tagline: "Fullstack Authorization",
-	url: "https://docs.permit.io",
+	title: "Permit.io Documentation",
+	tagline:
+		"Permit is a Fullstack Authorization as a Service, allowing you to configure policies with a no-code UI and bake in enforcement points into your application, never having to write permissions again.",
+	url: "https://permit.io",
 	baseUrl: "/",
 	onBrokenLinks: "throw",
-	onBrokenMarkdownLinks: "warn",
+	onBrokenMarkdownLinks: "throw",
 	favicon: "img/favicon.ico",
 	organizationName: "permitio", // Usually your GitHub org/user name.
 	projectName: "docs", // Usually your repo name.
-	markdown: { mermaid: true },
-	themes: ["@docusaurus/theme-mermaid"],
+	themes: [
+		path.resolve(__dirname, "./node_modules/@docusaurus/theme-search-algolia"),
+	],
 	presets: [
 		[
 			"@docusaurus/preset-classic",
@@ -209,36 +213,16 @@ const config = {
 				applicationId: process.env.HOTJAR_ID || "1234567890",
 			},
 			navbar: {
+				hideOnScroll: true,
 				logo: {
-					alt: "Permit.io",
-					src: "img/permitio-logo.svg",
-					srcDark: "img/permitio-logo-dark.svg",
-					width: 110,
+					alt: "Permit.io logo",
+					src: "logo/logo-light.png",
+					srcDark: "logo/logo-dark.png",
+					href: "/",
+					target: "_self",
+					width: 170,
 				},
 				items: [
-					{
-						href: "https://app.permit.io",
-						position: "left",
-						label: "Home",
-					},
-					// {
-					// 	type: "doc",
-					// 	docId: "home",
-					// 	position: "left",
-					// 	label: "Docs",
-					// },
-					{
-						to: `${apiReferenceUrl}`,
-						label: "API Reference",
-						position: "left",
-						target: "_self",
-					},
-					{
-						type: "doc",
-						docId: "status",
-						position: "left",
-						label: "Permit Status",
-					},
 					{
 						type: "docsVersionDropdown",
 						position: "right",
@@ -272,8 +256,12 @@ const config = {
 				disableSwitch: false,
 				respectPrefersColorScheme: false,
 			},
-			//search configuration
-			...searchConfig,
+			algolia: {
+				appId: "5XEC02AV6V",
+				apiKey: "468aa3509ee97f55ff3c6dcff73c61c4",
+				indexName: "docs",
+				contextualSearch: true,
+			},
 			announcementBar: {
 				id: "support_us",
 				content:
