@@ -151,7 +151,7 @@ const config = {
 							"/tutorials/onboarding/your-workspace",
 							"/tutorials/onboarding/policy-and-resources",
 							"/tutorials/onboarding/roles-and-permissions",
-							// "/tutorials/onboarding/connect-your-app",
+							"/tutorials/onboarding/connect-your-app",
 						],
 						to: "/getting-started/create-your-account",
 					},
