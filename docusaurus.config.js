@@ -106,9 +106,9 @@ const config = {
 					{
 						from: [
 							"/tutorials/connect_your_app/",
-							"/tutorials/connecting_to_authentication/",
+							"/tutorials/connecting_to_authentication",
 						],
-						to: "/tutorials/onboarding/connect-your-app",
+						to: "/getting-started/create-your-account",
 					},
 					{
 						from: "/features/policy_editor/",
@@ -120,7 +120,7 @@ const config = {
 							"/tutorials/configuration",
 							"/tutorials/healthchecks",
 						],
-						to: "/tutorials/quickstart",
+						to: "/getting-started/create-your-account",
 					},
 					{
 						from: "/concepts/projects_and_environments",
@@ -141,6 +141,43 @@ const config = {
 					{
 						from: "/features/coming_soon/",
 						to: "/features/coming-soon",
+					},
+
+					// Backward compatability links for side-navigation (full rewrite).
+
+					{
+						from: [
+							"/tutorials/onboarding/lets-begin",
+							"/tutorials/onboarding/your-workspace",
+							"/tutorials/onboarding/policy-and-resources",
+							"/tutorials/onboarding/roles-and-permissions",
+							"/tutorials/onboarding/connect-your-app",
+						],
+						to: "/getting-started/create-your-account",
+					},
+					{
+						from: "/tutorials/quickstart",
+						to: "/getting-started/quickstart",
+					},
+					{
+						from: "/tutorials/introduction/what-is-permit",
+						to: "/overview/what-is-permit",
+					},
+					{
+						from: "/security/connectivity",
+						to: "/overview/how-permit-works",
+					},
+					{
+						from: ["/concepts/authorization-concepts", "/concepts/glossary"],
+						to: "/overview/permit-basics",
+					},
+					{
+						from: "/tutorials/deploying/on-prem",
+						to: "/getting-started/deploying/on-prem",
+					},
+					{
+						from: "/tutorials/deploying/overview",
+						to: "/getting-started/deploying/overview",
 					},
 				],
 			},
@@ -184,12 +221,12 @@ const config = {
 						position: "left",
 						label: "Home",
 					},
-					{
-						type: "doc",
-						docId: "home",
-						position: "left",
-						label: "Docs",
-					},
+					// {
+					// 	type: "doc",
+					// 	docId: "home",
+					// 	position: "left",
+					// 	label: "Docs",
+					// },
 					{
 						to: `${apiReferenceUrl}`,
 						label: "API Reference",
