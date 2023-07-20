@@ -179,6 +179,11 @@ const config = {
 						from: "/tutorials/deploying/overview",
 						to: "/getting-started/deploying/overview",
 					},
+					// FOAZ FIX
+					{
+						from: "/frontend-only-authz/overview",
+						to: "/foaz/overview",
+					},
 				],
 			},
 		],
