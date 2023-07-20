@@ -143,7 +143,34 @@ const config = {
 						to: "/features/coming-soon",
 					},
 
-					// Backward compatability for side-navigation full rewrite.
+					// Backward compatability links for side-navigation (full rewrite).
+
+					{
+						from: [
+							"/tutorials/onboarding/lets-begin",
+							"/tutorials/onboarding/your-workspace",
+							"/tutorials/onboarding/policy-and-resources",
+							"/tutorials/onboarding/roles-and-permissions",
+							"/tutorials/onboarding/connect-your-app",
+						],
+						to: "/getting-started/create-your-account",
+					},
+					{
+						from: "/tutorials/quickstart",
+						to: "/getting-started/quickstart",
+					},
+					{
+						from: "/tutorials/introduction/what-is-permit",
+						to: "/overview/what-is-permit",
+					},
+					{
+						from: "/security/connectivity",
+						to: "/overview/how-permit-works",
+					},
+					{
+						from: ["/concepts/authorization-concepts", "/concepts/glossary"],
+						to: "/overview/permit-basics",
+					},
 				],
 			},
 		],
