@@ -11,21 +11,6 @@ const companyWebsiteUrl =
 const apiReferenceUrl =
 	process.env.API_REFERENCE_URL ?? "https://api.permit.io/v2/redoc";
 
-const algoliaAppId = process.env.APPLICATION_ID || "";
-const algoliaApiKey = process.env.API_KEY || "";
-
-// let searchConfig = {};
-// if (algoliaAppId && algoliaApiKey) {
-// 	searchConfig = {
-// 		algolia: {
-// 			appId: process.env.APPLICATION_ID,
-// 			apiKey: process.env.API_KEY,
-// 			indexName: "docs",
-// 			contextualSearch: true,
-// 		},
-// 	};
-// }
-
 /** @type {import('@docusaurus/types').Config} */
 const config = {
 	title: "Permit.io Documentation",
@@ -39,7 +24,7 @@ const config = {
 	organizationName: "permitio", // Usually your GitHub org/user name.
 	projectName: "docs", // Usually your repo name.
 	themes: [
-		path.resolve(__dirname, "./node_modules/@docusaurus/theme-search-algolia"),
+		// path.resolve(__dirname, "./node_modules/@docusaurus/theme-search-algolia"),
 	],
 	presets: [
 		[
@@ -223,6 +208,11 @@ const config = {
 					width: 170,
 				},
 				items: [
+					{
+						type: "search",
+						position: "left",
+						className: "algolia-search",
+					},
 					{
 						type: "docsVersionDropdown",
 						position: "right",
