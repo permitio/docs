@@ -23,9 +23,8 @@ const config = {
 	favicon: "img/favicon.ico",
 	organizationName: "permitio", // Usually your GitHub org/user name.
 	projectName: "docs", // Usually your repo name.
-	themes: [
-		// path.resolve(__dirname, "./node_modules/@docusaurus/theme-search-algolia"),
-	],
+	markdown: { mermaid: true },
+	themes: ["@docusaurus/theme-mermaid"],
 	presets: [
 		[
 			"@docusaurus/preset-classic",
