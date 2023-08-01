@@ -144,6 +144,10 @@ const config = {
 						to: "/getting-started/create-your-account",
 					},
 					{
+						from: "/tutorials/onboarding/deploying-to-production",
+						to: "/getting-started/deploying/deploy-to-production",
+					},
+					{
 						from: "/tutorials/quickstart",
 						to: "/getting-started/quickstart",
 					},
