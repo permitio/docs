@@ -18,7 +18,7 @@ export default function TOC({ toc, editUrl, ...props }) {
 
 	const onEditThisPageClick = useCallback(() => {
 		if (window.gtag) {
-			window.gtag("event", "click", {
+			window.gtag("event", "click_edit_github", {
 				event_category: "EditOnGitHub",
 				event_label: "edit_on_github",
 				value: window.location.pathname,
