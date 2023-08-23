@@ -86,7 +86,7 @@ export default function TOC({ toc, editUrl, ...props }) {
 								height="19px"
 								fill="#2196f3"
 								alt="Zoom Logo"
-								className="h-full mr-2 ml-[-1px]"
+								className="h-full mr-[6px] ml-[-1px]"
 							>
 								<circle cx="24" cy="24" r="20" fill="#2196f3" />
 								<path
