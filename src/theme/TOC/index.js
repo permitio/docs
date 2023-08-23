@@ -78,6 +78,32 @@ export default function TOC({ toc, editUrl, ...props }) {
 								Join our community
 							</a>
 						</div>
+						<div className="flex content-center items-center mt-2 hover:opacity-75">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								viewBox="0 0 48 48"
+								width="19px"
+								height="19px"
+								fill="#2196f3"
+								alt="Zoom Logo"
+								className="h-full mr-2 ml-[-1px]"
+							>
+								<circle cx="24" cy="24" r="20" fill="#2196f3" />
+								<path
+									fill="#fff"
+									d="M29,31H14c-1.657,0-3-1.343-3-3V17h15c1.657,0,3,1.343,3,3V31z"
+								/>
+								<polygon fill="#fff" points="37,31 31,27 31,21 37,17" />
+							</svg>
+							<a
+								href="https://io.permit.io/docs-to-call"
+								target="_blank"
+								id="join-community"
+								className="font-semibold text-[0.875rem] hover:text-slate-900 hover:underline hover:cursor-pointer"
+							>
+								Schedule a call
+							</a>
+						</div>
 					</>
 				)}
 			</BrowserOnly>
