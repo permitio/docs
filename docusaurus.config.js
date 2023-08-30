@@ -188,6 +188,115 @@ const config = {
 						from: "/features/policy-editor/abac",
 						to: "/how-to/build-policies/abac/overview",
 					},
+					{
+						from: "/features/audit-logs/types",
+						to: "/how-to/use-audit-logs/types",
+					},
+					{
+						from: "/features/audit-logs/filtering",
+						to: "/how-to/use-audit-logs/filtering",
+					},
+					{
+						from: "/features/audit-logs/troubleshooting",
+						to: "/how-to/use-audit-logs/troubleshooting",
+					},
+					{
+						from: "/features/audit-logs/errors/cloud_pdp_not_supporting_abac",
+						to: "/how-to/use-audit-logs/errors/cloud_pdp_not_supporting_abac",
+					},
+					{
+						from: "/features/audit-logs/errors/no_matching_resourcesets",
+						to: "/how-to/use-audit-logs/errors/no_matching_resourcesets",
+					},
+					{
+						from: "/features/audit-logs/errors/no_matching_rules",
+						to: "/how-to/use-audit-logs/errors/no_matching_rules",
+					},
+					{
+						from: "/features/audit-logs/errors/no_matching_usersets",
+						to: "/how-to/use-audit-logs/errors/no_matching_usersets",
+					},
+					{
+						from: "/features/audit-logs/errors/no_permission",
+						to: "/how-to/use-audit-logs/errors/no_permission",
+					},
+					{
+						from: "/features/audit-logs/errors/no_role_in_tenant",
+						to: "/how-to/use-audit-logs/errors/no_role_in_tenant",
+					},
+					{
+						from: "/features/audit-logs/errors/no_such_action",
+						to: "/how-to/use-audit-logs/errors/no_such_action",
+					},
+					{
+						from: "/features/audit-logs/errors/no_such_resource",
+						to: "/how-to/use-audit-logs/errors/no_such_resource",
+					},
+					{
+						from: "/features/audit-logs/errors/no_such_tenant",
+						to: "/how-to/use-audit-logs/errors/no_such_tenant",
+					},
+					{
+						from: "/features/audit-logs/errors/no_user_roles",
+						to: "/how-to/use-audit-logs/errors/no_user_roles",
+					},
+					{
+						from: "/features/audit-logs/errors/user_not_synced",
+						to: "/how-to/use-audit-logs/errors/user_not_synced",
+					},
+					{
+						from: "/getting-started/deploying/cloud-hosts/gcp-cloud-run",
+						to: "/how-to/deploy/cloud-hosts/gcp-cloud-run",
+					},
+					{
+						from: "/getting-started/deploying/cloud-hosts/kubernetes-raw",
+						to: "/how-to/deploy/cloud-hosts/kubernetes-raw",
+					},
+					{
+						from: "/getting-started/deploying/deploy-to-production",
+						to: "/how-to/deploy/deploy-to-production",
+					},
+					{
+						from: "/getting-started/deploying/overview",
+						to: "/how-to/deploy/overview",
+					},
+					{
+						from: "/getting-started/deploying/on-prem",
+						to: "/how-to/deploy/on-prem",
+					},
+					{
+						from: "/features/projects-and-env",
+						to: "/manage-your-account/projects-and-env",
+					},
+					{
+						from: "/features/user-management",
+						to: "/how-to/build-policies/policy-basics",
+					},
+					{
+						from: [
+							"/features/settings/team-management",
+							"/features/settings/api-key-management",
+							"/features/settings/activity-logs",
+							"/features/settings/api-log",
+						],
+						to: "/manage-your-account/workspace-settings",
+					},
+					{
+						from: "/features/permit-elements/*",
+						to: "/embeddable-uis/*",
+					},
+					{
+						from: "/features/multitenancy",
+						to: "/concepts/multitenancy",
+					},
+					{
+						from: "/features/loading-data/via-api",
+						to: "/how-to/manage-data/load-data/via-api",
+					},
+					{
+						from: "/features/loading-data/via-opal",
+						to: "/how-to/manage-data/load-data/via-opal",
+					},
 				],
 			},
 		],
