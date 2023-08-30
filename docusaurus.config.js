@@ -176,6 +176,18 @@ const config = {
 						from: "/frontend-only-authz/overview",
 						to: "/foaz/overview",
 					},
+					{
+						from: "/features/ppolicy-editor/editor-overview",
+						to: "/how-to/build-policies/policy-basics",
+					},
+					{
+						from: "/features/ppolicy-editor/rbac",
+						to: "/how-to/build-policies/rbac",
+					},
+					{
+						from: "/features/ppolicy-editor/abac",
+						to: "/how-to/build-policies/abac",
+					},
 				],
 			},
 		],
