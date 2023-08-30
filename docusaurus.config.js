@@ -63,7 +63,7 @@ const config = {
 					// Backwards support - We moved multitenancy into features
 					{
 						from: "/concepts/multi-tenancy",
-						to: "/features/multitenancy",
+						to: "/how-to/build-policies/policy-basics",
 					},
 					{
 						from: "/reference/sdks/python/sync_resources/",
@@ -100,7 +100,7 @@ const config = {
 					},
 					{
 						from: "/features/policy_editor/",
-						to: "/category/policy-editor",
+						to: "/how-to/build-policies/policy-basics",
 					},
 					{
 						from: [
@@ -112,7 +112,7 @@ const config = {
 					},
 					{
 						from: "/concepts/projects_and_environments",
-						to: "/features/projects-and-env",
+						to: "/manage-your-account/projects-and-env",
 					},
 					{
 						from: "/reference/api_with_cli/",
@@ -124,11 +124,11 @@ const config = {
 					},
 					{
 						from: "/features/Audit Logs/troubleshooting",
-						to: "/features/audit-logs/troubleshooting",
+						to: "/how-to/use-audit-logs/troubleshooting",
 					},
 					{
 						from: "/features/coming_soon/",
-						to: "/features/coming-soon",
+						to: "/coming-soon",
 					},
 
 					// Backward compatability links for side-navigation (full rewrite).
@@ -145,7 +145,7 @@ const config = {
 					},
 					{
 						from: "/tutorials/onboarding/deploying-to-production",
-						to: "/getting-started/deploying/deploy-to-production",
+						to: "/how-to/deploy/deploy-to-production",
 					},
 					{
 						from: "/tutorials/quickstart",
@@ -165,11 +165,11 @@ const config = {
 					},
 					{
 						from: "/tutorials/deploying/on-prem",
-						to: "/getting-started/deploying/on-prem",
+						to: "/how-to/deploy/on-prem",
 					},
 					{
 						from: "/tutorials/deploying/overview",
-						to: "/getting-started/deploying/overview",
+						to: "/how-to/deploy/overview",
 					},
 					// FOAZ FIX
 					{
@@ -177,16 +177,16 @@ const config = {
 						to: "/foaz/overview",
 					},
 					{
-						from: "/features/ppolicy-editor/editor-overview",
+						from: "/features/policy-editor/editor-overview",
 						to: "/how-to/build-policies/policy-basics",
 					},
 					{
-						from: "/features/ppolicy-editor/rbac",
-						to: "/how-to/build-policies/rbac",
+						from: "/features/policy-editor/rbac",
+						to: "/how-to/build-policies/rbac/overview",
 					},
 					{
-						from: "/features/ppolicy-editor/abac",
-						to: "/how-to/build-policies/abac",
+						from: "/features/policy-editor/abac",
+						to: "/how-to/build-policies/abac/overview",
 					},
 				],
 			},
