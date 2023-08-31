@@ -282,8 +282,32 @@ const config = {
 						to: "/manage-your-account/workspace-settings",
 					},
 					{
-						from: "/features/permit-elements/*",
-						to: "/embeddable-uis/*",
+						from: "/features/permit-elements/overview",
+						to: "/embeddable-uis/overview",
+					},
+					{
+						from: "/features/permit-elements/element/user-management",
+						to: "/embeddable-uis/element/user-management",
+					},
+					{
+						from: "/features/permit-elements/element/audit-logs",
+						to: "/embeddable-uis/element/audit-logs",
+					},
+					{
+						from: "/features/permit-elements/element/approval-flows",
+						to: "/embeddable-uis/element/approval-flows",
+					},
+					{
+						from: "/features/permit-elements/email-configuration-and-templates",
+						to: "/embeddable-uis/email-configuration-and-templates",
+					},
+					{
+						from: "/features/permit-elements/permission-levels",
+						to: "/embeddable-uis/permission-levels",
+					},
+					{
+						from: "/features/permit-elements/user-preview",
+						to: "/embeddable-uis/user-preview",
 					},
 					{
 						from: "/features/multitenancy",
