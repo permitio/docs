@@ -63,7 +63,7 @@ const config = {
 					// Backwards support - We moved multitenancy into features
 					{
 						from: "/concepts/multi-tenancy",
-						to: "/features/multitenancy",
+						to: "/how-to/build-policies/policy-basics",
 					},
 					{
 						from: "/reference/sdks/python/sync_resources/",
@@ -100,7 +100,7 @@ const config = {
 					},
 					{
 						from: "/features/policy_editor/",
-						to: "/category/policy-editor",
+						to: "/how-to/build-policies/policy-basics",
 					},
 					{
 						from: [
@@ -112,7 +112,7 @@ const config = {
 					},
 					{
 						from: "/concepts/projects_and_environments",
-						to: "/features/projects-and-env",
+						to: "/manage-your-account/projects-and-env",
 					},
 					{
 						from: "/reference/api_with_cli/",
@@ -124,11 +124,11 @@ const config = {
 					},
 					{
 						from: "/features/Audit Logs/troubleshooting",
-						to: "/features/audit-logs/troubleshooting",
+						to: "/how-to/use-audit-logs/troubleshooting",
 					},
 					{
 						from: "/features/coming_soon/",
-						to: "/features/coming-soon",
+						to: "/coming-soon",
 					},
 
 					// Backward compatability links for side-navigation (full rewrite).
@@ -145,7 +145,7 @@ const config = {
 					},
 					{
 						from: "/tutorials/onboarding/deploying-to-production",
-						to: "/getting-started/deploying/deploy-to-production",
+						to: "/how-to/deploy/deploy-to-production",
 					},
 					{
 						from: "/tutorials/quickstart",
@@ -165,16 +165,161 @@ const config = {
 					},
 					{
 						from: "/tutorials/deploying/on-prem",
-						to: "/getting-started/deploying/on-prem",
+						to: "/how-to/deploy/on-prem",
 					},
 					{
 						from: "/tutorials/deploying/overview",
-						to: "/getting-started/deploying/overview",
+						to: "/how-to/deploy/overview",
 					},
 					// FOAZ FIX
 					{
 						from: "/frontend-only-authz/overview",
 						to: "/foaz/overview",
+					},
+					{
+						from: "/features/policy-editor/editor-overview",
+						to: "/how-to/build-policies/policy-basics",
+					},
+					{
+						from: "/features/policy-editor/rbac",
+						to: "/how-to/build-policies/rbac/overview",
+					},
+					{
+						from: "/features/policy-editor/abac",
+						to: "/how-to/build-policies/abac/overview",
+					},
+					{
+						from: "/features/audit-logs/types",
+						to: "/how-to/use-audit-logs/types",
+					},
+					{
+						from: "/features/audit-logs/filtering",
+						to: "/how-to/use-audit-logs/filtering",
+					},
+					{
+						from: "/features/audit-logs/troubleshooting",
+						to: "/how-to/use-audit-logs/troubleshooting",
+					},
+					{
+						from: "/features/audit-logs/errors/cloud_pdp_not_supporting_abac",
+						to: "/how-to/use-audit-logs/errors/cloud_pdp_not_supporting_abac",
+					},
+					{
+						from: "/features/audit-logs/errors/no_matching_resourcesets",
+						to: "/how-to/use-audit-logs/errors/no_matching_resourcesets",
+					},
+					{
+						from: "/features/audit-logs/errors/no_matching_rules",
+						to: "/how-to/use-audit-logs/errors/no_matching_rules",
+					},
+					{
+						from: "/features/audit-logs/errors/no_matching_usersets",
+						to: "/how-to/use-audit-logs/errors/no_matching_usersets",
+					},
+					{
+						from: "/features/audit-logs/errors/no_permission",
+						to: "/how-to/use-audit-logs/errors/no_permission",
+					},
+					{
+						from: "/features/audit-logs/errors/no_role_in_tenant",
+						to: "/how-to/use-audit-logs/errors/no_role_in_tenant",
+					},
+					{
+						from: "/features/audit-logs/errors/no_such_action",
+						to: "/how-to/use-audit-logs/errors/no_such_action",
+					},
+					{
+						from: "/features/audit-logs/errors/no_such_resource",
+						to: "/how-to/use-audit-logs/errors/no_such_resource",
+					},
+					{
+						from: "/features/audit-logs/errors/no_such_tenant",
+						to: "/how-to/use-audit-logs/errors/no_such_tenant",
+					},
+					{
+						from: "/features/audit-logs/errors/no_user_roles",
+						to: "/how-to/use-audit-logs/errors/no_user_roles",
+					},
+					{
+						from: "/features/audit-logs/errors/user_not_synced",
+						to: "/how-to/use-audit-logs/errors/user_not_synced",
+					},
+					{
+						from: "/getting-started/deploying/cloud-hosts/gcp-cloud-run",
+						to: "/how-to/deploy/cloud-hosts/gcp-cloud-run",
+					},
+					{
+						from: "/getting-started/deploying/cloud-hosts/kubernetes-raw",
+						to: "/how-to/deploy/cloud-hosts/kubernetes-raw",
+					},
+					{
+						from: "/getting-started/deploying/deploy-to-production",
+						to: "/how-to/deploy/deploy-to-production",
+					},
+					{
+						from: "/getting-started/deploying/overview",
+						to: "/how-to/deploy/overview",
+					},
+					{
+						from: "/getting-started/deploying/on-prem",
+						to: "/how-to/deploy/on-prem",
+					},
+					{
+						from: "/features/projects-and-env",
+						to: "/manage-your-account/projects-and-env",
+					},
+					{
+						from: "/features/user-management",
+						to: "/how-to/build-policies/policy-basics",
+					},
+					{
+						from: [
+							"/features/settings/team-management",
+							"/features/settings/api-key-management",
+							"/features/settings/activity-logs",
+							"/features/settings/api-log",
+						],
+						to: "/manage-your-account/workspace-settings",
+					},
+					{
+						from: "/features/permit-elements/overview",
+						to: "/embeddable-uis/overview",
+					},
+					{
+						from: "/features/permit-elements/element/user-management",
+						to: "/embeddable-uis/element/user-management",
+					},
+					{
+						from: "/features/permit-elements/element/audit-logs",
+						to: "/embeddable-uis/element/audit-logs",
+					},
+					{
+						from: "/features/permit-elements/element/approval-flows",
+						to: "/embeddable-uis/element/approval-flows",
+					},
+					{
+						from: "/features/permit-elements/email-configuration-and-templates",
+						to: "/embeddable-uis/email-configuration-and-templates",
+					},
+					{
+						from: "/features/permit-elements/permission-levels",
+						to: "/embeddable-uis/permission-levels",
+					},
+					{
+						from: "/features/permit-elements/user-preview",
+						to: "/embeddable-uis/user-preview",
+					},
+					{
+						from: "/features/multitenancy",
+						to: "/concepts/multitenancy",
+					},
+					{
+						from: "/features/loading-data/via-api",
+						to: "/how-to/manage-data/load-data/via-api",
+					},
+					{
+						from: "/features/loading-data/via-opal",
+						to: "/how-to/manage-data/load-data/via-opal",
 					},
 				],
 			},
