@@ -315,11 +315,15 @@ const config = {
 					},
 					{
 						from: "/features/loading-data/via-api",
-						to: "/how-to/manage-data/load-data/via-api",
+						to: "/how-to/manage-data/load-data",
 					},
 					{
 						from: "/features/loading-data/via-opal",
-						to: "/how-to/manage-data/load-data/via-opal",
+						to: "/how-to/manage-data/load-data",
+					},
+					{
+						from: "/concepts/pdp-sharding",
+						to: "/how-to/manage-data/pdp-sharding",
 					},
 				],
 			},
