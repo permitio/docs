@@ -1,0 +1,117 @@
+---
+sidebar_position: 3
+title: Check in All Tenants
+---
+
+
+To validate permissions irrespective of the tenant, you can use the `permit.AllTenantsCheck` function.
+This function determines if a user has permissions for a specified action on a resource across any tenant.
+
+## Simple Usage
+
+The `permit.AllTenantsCheck` function accepts an [individual check requests](./check) as input.
+The tenant key isn't required and will be ignored if provided:
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+)
+import p "github.com/permitio/permit-golang/pkg/permit"
+import "github.com/permitio/permit-golang/pkg/config"
+import "github.com/permitio/permit-golang/pkg/enforcement"
+
+func main() {
+	// Create permit client
+	permitConfig := config.NewConfigBuilder("<YOUR_API_TOKEN>").Build()
+	permit := p.New(permitConfig)
+
+	// Create user and resource variables
+	user := enforcement.UserBuilder("john@doe.com").Build()
+	resource := enforcement.ResourceBuilder("document").Build()
+
+	var allowedTenants []enforcement.TenantDetails
+	// Check a user's permissions for a specified action on a resource across all tenants
+	allowedTenants, err := permit.AllTenantsCheck(user, "read", resource)
+	if err != nil {
+		fmt.Printf("Error enforcing permissions: %s", err)
+	} else if len(allowedTenants) > 0 {
+		fmt.Println("John is PERMITTED to create a document in some tenant in the environment")
+		for i, tenant := range allowedTenants {
+			attributes, _ := json.MarshalIndent(tenant.Attributes, "", "\t")
+			fmt.Printf("%d. Allowed Tenant is '%s', attributes are:\n%s",
+				i, tenant.Key, attributes,
+			)
+		}
+	} else {
+		fmt.Println("John is NOT PERMITTED to create a document in any tenant in the environment")
+	}
+}
+```
+
+The result will be an array containing the details about the request for each allowed tenant,
+including the allowed tenant's attributes.
+
+## Enforce with attributes
+
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+)
+import p "github.com/permitio/permit-golang/pkg/permit"
+import "github.com/permitio/permit-golang/pkg/config"
+import "github.com/permitio/permit-golang/pkg/enforcement"
+
+func main() {
+	// Create permit client
+	permitConfig := config.NewConfigBuilder("<YOUR_API_TOKEN>").Build()
+	permit := p.New(permitConfig)
+
+	// Create user and resource variables with attributes
+	user := enforcement.UserBuilder("john@doe.com").WithAttributes(map[string]string{
+        "location": "England",
+        "department": "Engineering",
+    }).Build()
+    resource := enforcement.ResourceBuilder("document").WithAttributes(map[string]string{
+        "hasApproval": "true",
+    }).Build()
+
+	var allowedTenants []enforcement.TenantDetails
+	// Check a user's permissions for a specified action on a resource across all tenants
+	allowedTenants, err := permit.AllTenantsCheck(user, "read", resource);
+    if err != nil {
+		fmt.Printf("Error enforcing permissions: %s", err)
+	} else if len(allowedTenants) > 0 {
+		fmt.Println("John is PERMITTED to create a document in some tenant in the environment")
+		for i, tenant := range allowedTenants {
+			attributes, _ := json.MarshalIndent(tenant.Attributes, "", "\t")
+			fmt.Printf("%d. Allowed Tenant is '%s', attributes are:\n%s",
+				i, tenant.Key, attributes,
+			)
+		}
+	} else {
+		fmt.Println("John is NOT PERMITTED to create a document in any tenant in the environment")
+	}
+}
+```
+
+:::note
+
+Enforcing with relationships ( ReBAC ) is not supported for Any Tenant Check.
+This is because the relationships check is performed on a resource instance, which is always scoped to a single Tenant.
+The output will always be an empty array if it isn't allowed in the scoped Tenant and
+an array with a single element if it is allowed, and therefore it is better to use simple check for better performance.
+
+:::
+
+:::warning
+
+When using [PDP Sharding](/concepts/pdp-sharding), the Any Tenant Check operation will not work properly.
+This is because the Any Tenant Check operation is executed on a single PDP instance,
+which has the data for a subset of the tenants in the environment and not for all of them.
+
+:::
