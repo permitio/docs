@@ -3,7 +3,13 @@ sidebar_position: 6
 title: Working with the UI
 ---
 
-# Working with the FoAz UI
+import copyingCode from "/static/ui-videos/foaz/copying-the-code-snippet.mp4";
+
+Frontend-only-Authorization (FoAz) is a method allowing frontend applications to enforce protected access to APIs without requiring
+a dedicated backend.
+
+FoAz allows frontend developers to securely use sensitive resources directly from the frontend, while gating for permissions and
+without exposing any secrets or sensitive data.
 
 :::note
 Before you will be able to configure new mapping rules for your frontend-only authorization, you will need to
@@ -19,6 +25,13 @@ Here is a visual representation of the FoAz UI for better understanding:
 
 ### Mapping Rules
 
+**Mapping rules** are elegantly structured into **four distinct components**:
+
+1. The **specified API endpoint URL** to evaluate permissions prior to initiation.
+2. The designated **HTTP method** to categorize the nature of the request.
+3. The identified Permit **resource** being accessed or manipulated.
+4. The explicit **action** being undertaken on the said resource.
+
 The mapping rules feature in the FoAz UI links HTTP URLs to particular resources and actions within the Permit.io platform.
 These rules are essential for controlling access and permissions on your website or application. Each rule defines the
 association between an incoming HTTP request and the corresponding resource within your application that the request should
@@ -29,15 +42,17 @@ interact with.
 By correctly setting up mapping rules, you can ensure that requests are correctly routed and that users only have access
 to the resources that they are authorized to view or modify.
 
-### Proxy Request URL
+### Streamlining Mapping Rules with URL templating
 
-In FoAz UI, you can set variables as part of the URL using the following syntax: `{var1}`. This feature is called templating
-the URL, and it's beneficial to reduce the overall number of mapping rules required.
+Within the FoAz UI, you have the option to integrate variables directly into the URL, utilizing a syntax denoted as `{var1}`.
+This process, referred to as URL templating, serves as a potent tool in minimizing the number of necessary mapping rules,
+thus promoting a more streamlined approach.
 
-For example, you might set up a URL like this: `example.com/v1/{customer_id}/payments`.
+To illustrate, consider the configuration of a URL in the following manner: `example.com/v1/{customer_id}/payments`.
 
-In this case, `{customer_id}` is a placeholder that will be replaced with the actual customer ID during the request.
-This strategy allows you to use a single mapping rule for all customers, rather than needing a separate rule for each customer.
+Here, {customer_id} functions as a dynamic placeholder, primed to be substituted with the actual customer ID when a
+request is initiated. This technique facilitates a more efficient system, where a solitary mapping rule can encompass
+all customers, negating the need for individual rules per customer.
 
 ### Secret configuration
 
@@ -56,3 +71,79 @@ integrated third-party services.
 Safeguarding these secrets is critical. Always follow best practices to keep these secrets secure and
 never expose them in places where unauthorized individuals might gain access.
 :::
+
+## Setting up the PDP
+
+To use the URL Mapping permissions check, you must first set up the PDP. You must deploy the following version of the PDP that
+supports the URL Mapping check. First pull the PDP (Policy-decision-point).
+
+```bash
+docker pull permitio/pdp-v2:0.2.19-rc.2
+```
+
+Now run the PDP locally. Remember to replace your API key with the `environment` API key in which you are building your policies.
+
+```
+docker run -it -p 7766:7000 --env PDP_API_KEY=<YOUR_API_KEY> permitio/pdp-v2:0.2.19-rc.2
+```
+
+## Checking for permissions
+
+As part of the permission check, we will be authorizing the current logged in user, and hence we will need to verify that their
+JWT matches with the previously configured JWKS (JSON Web Key Sets). We will be passing in the JWT as part of the `Authorization`
+header in our HTTP request.
+
+We then need to perform a basic fetch request, constructing our unique URL. Here is the example we will work with. Let's destructure
+it for easier understanding.
+
+```bash
+https://proxy.api.permit.io/proxy/<UNIQUE-MAPPING-ID>?url=https://some-rest-api.vercel.app/api/something
+```
+
+1. The URL is composed of our `proxy URL` which directly defines the proxy API endpoint and the current mapping rule we are
+   referring to, by passing in the `mapping rule id`.
+
+```bash
+https://proxy.api.permit.io/proxy/<UNIQUE-MAPPING-ID>
+```
+
+2. The we are passing in a URL which is the secure endpoint that we are intending to call to retrieve sensitive data.
+
+```bash
+?url=https://some-rest-api.vercel.app/api/something
+```
+
+Now that the PDP is running, we have configured our policy within Permit, and have our logged in user synced with Permit,
+we can write fetch request, and perform this call securely vi the Permit proxy.
+
+```javascript
+const sendFoazRequest = async (req, res) => {
+	// This should be the JWT fetched from your current session, depending on the AuthN provider you are using.
+	const token = await getJWT();
+
+	// This is the call to the desired API endpoint via the Permit authorization proxy.
+	await fetch(
+		"https://proxy.api.permit.io/proxy/1fc72853b4de83hdisisj3439fjkefm?url=https://some-rest-api.vercel.app/api/something",
+		{
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				// Passing in the current logged in user JWT as part of the Authorization header.
+				Authorization: `Bearer ${token}`,
+			},
+			body: JSON.stringify({ secretCode: 123456 }),
+		}
+	)
+		.then((response) => response.json())
+		.then((data) => console.log(data))
+		.catch((error) => console.error("Error:", error));
+};
+```
+
+## Copying the fetch request template from the UI
+
+To make it even easier for you, we already provide you with the template code snippet for the fetch request.
+
+<video controls>
+	<source src={copyingCode} />
+</video>
