@@ -9,7 +9,7 @@ Since Permit.io cloud configuration generates Policy as Code for each user confi
 This document demonstrates an example of a use-case that is not supported via Permit.io UI but easily possible through Policy as Code extension to the Permit.io UI configuration.
 
 ## Deny All Rule
-When a policy is configured in Permit.io UI, whether it’s RBAC, ABAC, or ReBAC, the policy generated is `Allow` policy. This means that if some of the rules allow the user to perform the action, the `check` function will return `true`.
+When a policy is configured in Permit.io's UI, whether it's an RBAC, ABAC, or ReBAC policy, the generated policy rules are Allow rules. This means that if any of the rules allow the user to perform the action, the check function will return true.
 
 In some edge cases, a developer would want to create a special `Deny` rule, which means if a user does not pass a rule, no matter what, they will get `false` due to the `check` function.
 For example, we would like to restrict access to a role `tmp-admin` only to boundaries of time, so even if the configured policy returns `true`, the `Deny` rule will block the access.
