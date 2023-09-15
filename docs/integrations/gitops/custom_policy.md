@@ -111,7 +111,7 @@ print(policies.__allow_sources)
 
 ## Enfore the deny ALL policy
 As we mentioned before, the current Permit.io generated policies evaluate all the `allowing_source` in an `or` operator.
-In our `deny all` example, we would like to calculate the particular `custom` package as an end argument to the total policy evaluation.
+In our `deny` example, we would like to calculate the particular `custom` package as an end argument to the total policy evaluation.
 This means no matter what is the total evaluation result, the final result will depend on our custom rule result.
 
 To do so, we need to tweak our desired deny rules to the `root.rego` file in the root folder (the file that centralized the policy evaluation).
