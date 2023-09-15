@@ -3,30 +3,38 @@ sidebar_position: 3
 title: Write Custom Policies
 ---
 
-While Permit.io UI is a good fit for almost every policy configuration need, sometimes developers need to extend their policy configuration to something nonexistent.
+While Permit.io platform is a good fit for almost every policy configuration need, sometimes developers need to extend their policy configuration to something nonexistent.
 Since Permit.io cloud configuration generates Policy as Code for each user configuration, extending it by writing custom policy code yourself is easy.
 
 This document demonstrates an example of a use-case that is not supported via Permit.io UI but easily possible through Policy as Code extension to the Permit.io UI configuration.
 
-## Deny All Rule
-When a policy is configured in Permit.io's UI, whether it's an RBAC, ABAC, or ReBAC policy, the generated policy rules are Allow rules. This means that if any of the rules allow the user to perform the action, the check function will return true.
+##  The Deny Rule
+Before we go diving into the custom policy example, let's give an example of a common scenario where developers would want to extend Permit.io platform configuration with their own code - `Deny` rules.
+When a policy is configured in Permit.io's platform, whether it's an RBAC, ABAC, or ReBAC policy, the generated policy rules are Allow rules. This means that if any of the rules allow the user to perform the action, the check function will return true.
 
-In some edge cases, a developer would want to create a special `Deny` rule, which means if a user does not pass a rule, no matter what, they will get `false` due to the `check` function.
+In some cases, a developer would want to create a special `Deny` rule, which means if a user does not pass a rule, no matter what, they will get `false` due to the `check` function.
+
 For example, we would like to restrict access to a role `tmp-admin` only to boundaries of time, so even if the configured policy returns `true`, the `Deny` rule will block the access.
 
 ## Writing Custom Policy
 Permit.io is based on the open-source policy engine, OPA, and Cedar (TBA more soon) to keep the policy configuration flexible.
 Each engine has a Policy language to write policies, Rego, and Cedar (respectively). This article will show an example of writing custom Rego code to extend Permit.io policy configuration.
 As the first step, you should follow the following guide to enable the GitOps feature that will let you write custom code.
-If you enable the GitOps feature already, continue to the next step to write the custom deny rule.
+
+_If you enable the GitOps feature already, continue to the next step to write the custom deny rule._
 
 ## The `custom.rego` file
 Permit.io policy repository structure consists two folders, `permit` and `custom`.
 As it might sound from the name, the custom folder is where developers can write the custom Rego code, if you’d look there you’ll find a file named custom.rego with a sample policy script.
-Rego is a logical language (same as Prolog/Datalog), and hence, it could look unnatural for developers who code in common languages, but our rule is quite simple and we will guide step by step.
+
+_Rego is a logical language (same as Prolog/Datalog), and hence, it could look unnatural for developers who code in common languages, but our rule is quite simple and we will guide step by step._
 
 Let’s take a look at the file to understand the initial structure of our custom rule:
-In the first row, you can see the `package permit.custom` declaration. Using this declaration, we can use this custom Rego configuration in other places in our project.
+In the first row, you can see the `package` declaration.
+\```
+`package permit.custom` 
+\```
+The purpose of this declaration, is the ability to use this custom Rego configuration in other places in our project.
 We will use it later to import the custom code to Permit.io centralized policy configuration, so when you use the SDK to call the PDP, the engine will calculate this policy package.
 
 Next, we will find the basic declaration for logical policy, the default value that is equal to false.
@@ -34,6 +42,7 @@ Next, we will find the basic declaration for logical policy, the default value t
 default allow := false
 ```
 Basically, this is a deny rule, which means every time this policy is calculated, the value is false.
+
 With the default configuration of Permit.io Rego code, custom policies are calculated in an or operator, which means that if other rule return true we will ignore the false values.
 Of course, to handle the deny rule, we would like to change it, and we will get to it later.
 
@@ -109,7 +118,7 @@ For example, if you add the following print in the first allow section, you’ll
 print(policies.__allow_sources)
 ```
 
-## Enfore the deny ALL policy
+## Enfore the deny policy
 As we mentioned before, the current Permit.io generated policies evaluate all the `allowing_source` in an `or` operator.
 In our `deny` example, we would like to calculate the particular `custom` package as an end argument to the total policy evaluation.
 This means no matter what is the total evaluation result, the final result will depend on our custom rule result.
