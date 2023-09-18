@@ -1,0 +1,116 @@
+---
+sidebar_position: 3
+title: Check in All Tenants
+---
+
+To validate permissions irrespective of the tenant, you can use the `permit.AllTenantsCheck` function.
+This function determines if a user has permissions for a specified action on a resource across all tenants,
+the response will be a list of tenants in which the user is allowed to perform the request.
+
+## Simple Usage
+
+The `permit.AllTenantsCheck` function accepts an [individual check requests](./check) as input.
+The tenant key isn't required and will be ignored if provided:
+
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+)
+import "github.com/permitio/permit-golang/pkg/permit"
+import "github.com/permitio/permit-golang/pkg/config"
+import "github.com/permitio/permit-golang/pkg/enforcement"
+
+func main() {
+	// Create permit client
+	permitConfig := config.NewConfigBuilder("<YOUR_API_TOKEN>").Build()
+	permit := p.New(permitConfig)
+
+	// Create user and resource variables
+	user := enforcement.UserBuilder("john@doe.com").Build()
+	resource := enforcement.ResourceBuilder("document").Build()
+
+	var allowedTenants []enforcement.TenantDetails
+	// Check a user's permissions for a specified action on a resource across all tenants
+	allowedTenants, err := permit.AllTenantsCheck(user, "read", resource)
+	if err != nil {
+		fmt.Printf("Error enforcing permissions: %s", err)
+	} else if len(allowedTenants) > 0 {
+		fmt.Println("John is PERMITTED to create a document in some tenant in the environment")
+		for i, tenant := range allowedTenants {
+			attributes, _ := json.MarshalIndent(tenant.Attributes, "", "\t")
+			fmt.Printf("%d. Allowed Tenant is '%s', attributes are:\n%s",
+				i, tenant.Key, attributes,
+			)
+		}
+	} else {
+		fmt.Println("John is NOT PERMITTED to create a document in any tenant in the environment")
+	}
+}
+```
+
+The result will be an array containing the details about the request for each allowed tenant,
+including the allowed tenant's attributes.
+
+## Enforce with attributes
+
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+)
+import p "github.com/permitio/permit-golang/pkg/permit"
+import "github.com/permitio/permit-golang/pkg/config"
+import "github.com/permitio/permit-golang/pkg/enforcement"
+
+func main() {
+	// Create permit client
+	permitConfig := config.NewConfigBuilder("<YOUR_API_TOKEN>").Build()
+	permit := p.New(permitConfig)
+
+	// Create user and resource variables with attributes
+	user := enforcement.UserBuilder("john@doe.com").WithAttributes(map[string]string{
+        "location": "England",
+        "department": "Engineering",
+    }).Build()
+    resource := enforcement.ResourceBuilder("document").WithAttributes(map[string]string{
+        "hasApproval": "true",
+    }).Build()
+
+	var allowedTenants []enforcement.TenantDetails
+	// Check a user's permissions for a specified action on a resource across all tenants
+	allowedTenants, err := permit.AllTenantsCheck(user, "read", resource);
+    if err != nil {
+		fmt.Printf("Error enforcing permissions: %s", err)
+	} else if len(allowedTenants) > 0 {
+		fmt.Println("John is PERMITTED to create a document in some tenant in the environment")
+		for i, tenant := range allowedTenants {
+			attributes, _ := json.MarshalIndent(tenant.Attributes, "", "\t")
+			fmt.Printf("%d. Allowed Tenant is '%s', attributes are:\n%s",
+				i, tenant.Key, attributes,
+			)
+		}
+	} else {
+		fmt.Println("John is NOT PERMITTED to create a document in any tenant in the environment")
+	}
+}
+```
+
+:::note
+Currently, using relationship-based access control (ReBAC) doesn't work for the "All Tenants Check".
+This is because ReBAC checks are done on a specific resource that is tied to only one tenant at a time.
+
+If the check isn't allowed for that tenant, the result will be an empty list. If it is allowed,
+you'll get a list with one item. To avoid this and make things run more smoothly,
+it's better to stick with a simpler check method.
+:::
+
+:::warning
+Please note that the "All Tenants Check" feature might not work correctly if you're using [PDP Sharding](/how-to/manage-data/pdp-sharding).
+This is because it only runs on one PDP instance at a time,
+and that instance only contains data for a few tenants, not all of them in the setup.
+:::
