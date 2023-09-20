@@ -197,6 +197,14 @@ const config = {
 						to: "/how-to/use-audit-logs/filtering",
 					},
 					{
+						from: "/how-to/use-audit-logs/types",
+						to: "/how-to/use-audit-logs/types-and-filtering",
+					},
+					{
+						from: "/how-to/use-audit-logs/filtering",
+						to: "/how-to/use-audit-logs/types-and-filtering",
+					},
+					{
 						from: "/features/audit-logs/troubleshooting",
 						to: "/how-to/use-audit-logs/troubleshooting",
 					},
