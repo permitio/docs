@@ -11,7 +11,11 @@ module.exports = {
   plugins: ["react", "spellcheck"],
   rules: {
     "react/prop-types": "off",
+<<<<<<< HEAD
     "no-unused-vars": ["warn", { vars: "all", args: "after-used", ignoreRestSiblings: false }],
+=======
+    "no-unused-vars": ["error", { vars: "all", args: "after-used", ignoreRestSiblings: false }],
+>>>>>>> a3fa717 (Removed yarn lock file)
     "spellcheck/spell-checker": [
       "error",
       {
@@ -21,6 +25,7 @@ module.exports = {
         templates: true,
         lang: "en_US",
         skipWords: [
+<<<<<<< HEAD
           // lang or framework or cs specific words
           "nodejs",
           "axios",
@@ -37,6 +42,9 @@ module.exports = {
           "hotjar",
           "netlify",
 
+=======
+          "nodejs",
+>>>>>>> a3fa717 (Removed yarn lock file)
           "faq",
           "sdk",
           "unassign",
@@ -44,10 +52,20 @@ module.exports = {
           "Frontend",
           "onboarding",
           "Workspace",
+<<<<<<< HEAD
+=======
+          "axios",
+          "dotnet",
+          "golang",
+          "erlang",
+          "kotlin",
+          "cpp",
+>>>>>>> a3fa717 (Removed yarn lock file)
           "pho",
           "integrations",
           "href",
           "dropdown",
+<<<<<<< HEAD
           "docusaurus",
           "Fullstack",
           "autocompletion",
@@ -62,11 +80,23 @@ module.exports = {
           "Prefixer",
           "io",
           "Closeable",
+=======
+          "csharp",
+          "docusaurus",
+          "Fullstack",
+          "algolia",
+          "ecma",
+          "lang",
+>>>>>>> a3fa717 (Removed yarn lock file)
         ],
       },
     ],
     "prettier/prettier": [
+<<<<<<< HEAD
       "error",
+=======
+      "off",
+>>>>>>> a3fa717 (Removed yarn lock file)
       {
         endOfLine: "auto",
       },
