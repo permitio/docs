@@ -5,11 +5,9 @@ const path = require("path");
 const lightCodeTheme = require("./src/css/prism-theme");
 const darkCodeTheme = require("prism-react-renderer/themes/dracula");
 
-const companyWebsiteUrl =
-	process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
+const companyWebsiteUrl = process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
 
-const apiReferenceUrl =
-	process.env.API_REFERENCE_URL ?? "https://api.permit.io/v2/redoc";
+const apiReferenceUrl = process.env.API_REFERENCE_URL ?? "https://api.permit.io/v2/redoc";
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
