@@ -11,22 +11,7 @@ module.exports = {
   plugins: ["react", "spellcheck"],
   rules: {
     "react/prop-types": "off",
-<<<<<<< HEAD
     "no-unused-vars": ["warn", { vars: "all", args: "after-used", ignoreRestSiblings: false }],
-=======
-    "no-unused-vars": ["error", { vars: "all", args: "after-used", ignoreRestSiblings: false }],
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> a3fa717 (Removed yarn lock file)
-=======
->>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
->>>>>>> 7895135 (Added eslint, prettier, husky packages. Installed eslint plugins)
-=======
->>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
-=======
->>>>>>> a3fa717 (Removed yarn lock file)
->>>>>>> 18dcec2 (Cherry pick rebase)
->>>>>>> bbfb8c1 (Cherry pick rebase)
     "spellcheck/spell-checker": [
       "error",
       {
@@ -36,7 +21,6 @@ module.exports = {
         templates: true,
         lang: "en_US",
         skipWords: [
-<<<<<<< HEAD
           // lang or framework or cs specific words
           "nodejs",
           "axios",
@@ -53,20 +37,6 @@ module.exports = {
           "hotjar",
           "netlify",
 
-=======
-          "nodejs",
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> a3fa717 (Removed yarn lock file)
-=======
->>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
->>>>>>> 7895135 (Added eslint, prettier, husky packages. Installed eslint plugins)
-=======
->>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
-=======
->>>>>>> a3fa717 (Removed yarn lock file)
->>>>>>> 18dcec2 (Cherry pick rebase)
->>>>>>> bbfb8c1 (Cherry pick rebase)
           "faq",
           "sdk",
           "unassign",
@@ -74,31 +44,10 @@ module.exports = {
           "Frontend",
           "onboarding",
           "Workspace",
-<<<<<<< HEAD
-=======
-          "axios",
-          "dotnet",
-          "golang",
-          "erlang",
-          "kotlin",
-          "cpp",
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> a3fa717 (Removed yarn lock file)
-=======
->>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
->>>>>>> 7895135 (Added eslint, prettier, husky packages. Installed eslint plugins)
-=======
->>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
-=======
->>>>>>> a3fa717 (Removed yarn lock file)
->>>>>>> 18dcec2 (Cherry pick rebase)
->>>>>>> bbfb8c1 (Cherry pick rebase)
           "pho",
           "integrations",
           "href",
           "dropdown",
-<<<<<<< HEAD
           "docusaurus",
           "Fullstack",
           "autocompletion",
@@ -113,45 +62,11 @@ module.exports = {
           "Prefixer",
           "io",
           "Closeable",
-=======
-          "csharp",
-          "docusaurus",
-          "Fullstack",
-          "algolia",
-          "ecma",
-          "lang",
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> a3fa717 (Removed yarn lock file)
-=======
->>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
->>>>>>> 7895135 (Added eslint, prettier, husky packages. Installed eslint plugins)
-=======
->>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
-=======
->>>>>>> a3fa717 (Removed yarn lock file)
->>>>>>> 18dcec2 (Cherry pick rebase)
->>>>>>> bbfb8c1 (Cherry pick rebase)
         ],
       },
     ],
     "prettier/prettier": [
-<<<<<<< HEAD
       "error",
-=======
-      "off",
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> a3fa717 (Removed yarn lock file)
-=======
->>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
->>>>>>> 7895135 (Added eslint, prettier, husky packages. Installed eslint plugins)
-=======
->>>>>>> 6daa436 (Added eslint, prettier, husky packages. Installed eslint plugins)
-=======
->>>>>>> a3fa717 (Removed yarn lock file)
->>>>>>> 18dcec2 (Cherry pick rebase)
->>>>>>> bbfb8c1 (Cherry pick rebase)
       {
         endOfLine: "auto",
       },
