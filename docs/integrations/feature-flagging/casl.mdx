@@ -1,0 +1,253 @@
+---
+sidebar_position: 1
+title: CASL
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+CASL is a versatile, open-source JavaScript library widely used for managing Access Control Lists (ACLs)
+and implementing Role-Based Access Control (RBAC) in JavaScript applications. It allows developers to
+enforce granular permissions within applications, ensuring that resources and actions are accessible
+only to authorized users or roles across various technology stacks.
+
+## Permit.io & CASL
+
+Leveraging CASL and Permit.io together, developers can create a refined system where frontend feature
+flags are controlled based on user permissions and roles. This synergy not only facilitates a secure and
+tailored user experience but also empowers development teams to manage and roll out new features effectively
+and safely across diverse user bases.
+
+## Our frontend SDK
+
+In our dedicated pursuit to enhance developer experience and streamline frontend feature management, we
+crafted a specialized package at Permit.io, encapsulating the prowess of both Permit and CASL. The
+**[permit-fe-sdk](https://github.com/permitio/permit-fe-sdk)** enables developers to integrate sophisticated
+permission-based feature toggling seamlessly across various frontend frameworks.
+
+## React/NextJS Implementation
+
+In order to start using the `permit-fe-sdk`, below is a step-by-step guide on how to incorporate it into your
+React or NextJS app.
+
+### Installing the relevant packages
+
+<Tabs groupId="install">
+<TabItem value="npm" label="npm" default>
+
+```bash
+npm install @casl/ability @casl/react permit-fe-sdk permitio
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn add @casl/ability @casl/react permit-fe-sdk permitio
+```
+
+</TabItem>
+</Tabs>
+
+### Create an API route to handle the permissions checks
+
+As part of the CASL component that we will be creating later in this guide, we will need to specify an API
+route that we can call, which will perform bulk `permit.check()` operations for us, returning the result for
+each.
+
+Here is a basic implementation of such endpoint, which we have under `/api/something`. You can name the file
+as you wish.
+
+```js
+import { Permit } from "permitio";
+
+const permit = new Permit({
+  token: "YOUR_PERMIT_API_KEY",
+  pdp: "http://localhost:7766",
+});
+
+export default async function handler(req, res) {
+  try {
+    const { user: userId, action, resource } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "No User Id" });
+    }
+
+    if (!action || !resource) {
+      return res.status(400).json({ error: "Missing action or resource" });
+    }
+
+    const allowed = await permit.check(userId, action, resource);
+
+    if (!allowed) {
+      return res.status(403).json({ error: "Not allowed" });
+    }
+
+    return res.json({ permitted: allowed });
+  } catch (error) {
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+```
+
+Pay attention that we have imported the Permit library and we initialized the Permit object. You can follow
+this [guide](/getting-started/quickstart#get-your-permitio-environment-api-key) to understand where to fetch your API key from.
+
+Once we are done with this step, we need to make sure pull and launch our PDP - you can also find the steps on
+how to do this [here](/getting-started/quickstart#setup-your-pdp-policy-decision-point-container).
+
+### Creating the `AbilityLoader`
+
+The AbilityLoader component is integral to this setup, diligently working to asynchronously retrieve and
+establish user-specific permissions, particularly upon user sign-in.
+
+In this scenario, we're employing Clerk.com as our authentication provider to obtain the userId, which we have
+synchronized with Permit. This allows us to identify the currently logged-in user and correlate them with the
+associated policy for their role. It's crucial to highlight that you can choose any authentication provider
+that best fits your needs—Permit is designed to integrate seamlessly with all of them.
+
+```js
+import React, { createContext, useEffect, useState } from "react";
+import { useUser } from "@clerk/nextjs";
+import { Ability } from "@casl/ability";
+import { Permit, permitState } from "permit-fe-sdk";
+
+// Create Context
+export const AbilityContext = createContext();
+
+export const AbilityLoader = ({ children }) => {
+  const { isSignedIn, user } = useUser();
+  const [ability, setAbility] = useState(undefined);
+
+  useEffect(() => {
+    const getAbility = async (loggedInUser) => {
+      const permit = Permit({
+        loggedInUser: loggedInUser,
+        backendUrl: "/api/something",
+      });
+
+      await permit.loadLocalState([
+        { action: "view", resource: "Products" },
+        { action: "view", resource: "document" },
+        { action: "view", resource: "file" },
+        { action: "view", resource: "component" },
+      ]);
+
+      const caslConfig = permitState.getCaslJson();
+
+      return caslConfig && caslConfig.length ? new Ability(caslConfig) : undefined;
+    };
+
+    if (isSignedIn) {
+      getAbility(user.id).then((caslAbility) => {
+        setAbility(caslAbility);
+      });
+    }
+  }, [isSignedIn, user]);
+
+  return <AbilityContext.Provider value={ability}>{children}</AbilityContext.Provider>;
+};
+```
+
+:::note
+In this guide, we do not cover how you should sync your user into Permit, nor how to setup your policy.
+:::
+
+Let's break the above code down into smaller chunks so we know exactly what is happening.
+
+#### Creating a Context
+
+The `AbilityContext` is crafted to share the user's permissions (or "abilities"), which are managed and
+determined by CASL, across different components.
+
+When AbilityContext is employed, it allows the permissions (or "abilities") data to be accessible and
+utilized by any component that consumes this context, without the need to prop-drill the data through
+numerous component layers.
+
+```js
+// Create Context
+export const AbilityContext = createContext();
+```
+
+#### Getting abilities
+
+This step uses the `id` of the presently logged-in user from the session, transmitting a request to the
+previously defined API endpoint, and subsequently loading each of the **actions** and **resources** into the
+local state.
+
+It executes permit checks against the established policy to ascertain whether the current user is
+authorized to execute the specified actions on the defined resources. Subsequently, the outcome is stored
+in `permitState`, from which the results of the permission checks are returned.
+
+```js
+const getAbility = async (loggedInUser) => {
+  const permit = Permit({
+    loggedInUser: loggedInUser,
+    backendUrl: "/api/dashboard",
+  });
+
+  await permit.loadLocalState([
+    { action: "view", resource: "Products" },
+    { action: "view", resource: "Product_Configurators" },
+    { action: "view", resource: "Project_Builder" },
+    { action: "view", resource: "Topics_for_you" },
+  ]);
+
+  const caslConfig = permitState.getCaslJson();
+
+  return caslConfig && caslConfig.length ? new Ability(caslConfig) : undefined;
+};
+```
+
+#### Returning the `AbilityContext.Provider`
+
+The last step in the `AbilityLoader` is to enable this component to be a wrapper for the whole app, so that the
+abilities are globally accessible.
+
+```js
+<AbilityContext.Provider value={ability}>{children}</AbilityContext.Provider>
+```
+
+### Wrapping our App with the `AbilityLoader`
+
+Once we are ready to utilize the abilities to render parts of the UI based on the users permissions,
+we need to wrap our whole application in the `<AbilityLoader>` component, getting access to the `permitState`
+globally.
+
+```js
+import { ClerkProvider } from "@clerk/nextjs";
+import { AbilityLoader } from "../utils/AbilityLoader";
+import "../styles/global.css";
+
+function MyApp({ Component, pageProps }) {
+  return (
+    <ClerkProvider {...pageProps}>
+      <AbilityLoader>
+        <Component {...pageProps} />
+      </AbilityLoader>
+    </ClerkProvider>
+  );
+}
+
+export default MyApp;
+```
+
+### Conditionally rendering components with `permitState`
+
+First of all, in the file where you want to render part of the UI based on a condition, make sure you import
+`permitState`.
+
+```js
+import { permitState } from "permit-fe-sdk";
+```
+
+Then, utilize permitState to render parts of the HTML.
+
+```js
+<div>
+  {permitState?.check("view", "document") && (
+    <div className="bg-white m-4 p-4 h-full">Document</div>
+  )}
+</div>
+```
