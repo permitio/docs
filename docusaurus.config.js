@@ -119,7 +119,7 @@ const config = {
           },
           {
             from: "/features/coming_soon/",
-            to: "/coming-soon",
+            to: "/updates-and-feedback/roadmap",
           },
 
           // Backward compatability links for side-navigation (full rewrite).
