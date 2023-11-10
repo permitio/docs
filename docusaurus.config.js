@@ -90,16 +90,12 @@ const config = {
             to: "/sdk/dotnet/user/SyncUser",
           },
           {
-            from: ["/tutorials/connect_your_app/", "/tutorials/connecting_to_authentication"],
-            to: "/getting-started/create-your-account",
+            from: ["/getting-started/create-your-account", "/tutorials/connect_your_app/", "/tutorials/connecting_to_authentication", "/tutorials/demo", "/tutorials/configuration", "/tutorials/healthchecks"],
+            to: "/getting-started/quickstart",
           },
           {
             from: "/features/policy_editor/",
             to: "/how-to/build-policies/policy-basics",
-          },
-          {
-            from: ["/tutorials/demo", "/tutorials/configuration", "/tutorials/healthchecks"],
-            to: "/getting-started/create-your-account",
           },
           {
             from: "/concepts/projects_and_environments",
@@ -132,27 +128,27 @@ const config = {
               "/tutorials/onboarding/roles-and-permissions",
               "/tutorials/onboarding/connect-your-app",
             ],
-            to: "/getting-started/create-your-account",
+            to: "/getting-started/quickstart",
           },
           {
             from: "/tutorials/onboarding/deploying-to-production",
             to: "/how-to/deploy/deploy-to-production",
           },
           {
-            from: "/tutorials/quickstart",
-            to: "/getting-started/quickstart",
+            from: ["/tutorials/quickstart", "/getting-started/quickstart"],
+            to: "/getting-started/connecting-your-app"
           },
           {
-            from: "/tutorials/introduction/what-is-permit",
-            to: "/overview/what-is-permit",
+            from: ["/tutorials/introduction/what-is-permit", "/overview/what-is-permit"],
+            to: "/overview/why-permit",
           },
           {
-            from: "/security/connectivity",
-            to: "/overview/how-permit-works",
+            from: ["/security/connectivity", "/overview/how-permit-works"],
+            to: "/overview/how-does-it-work",
           },
           {
-            from: ["/concepts/authorization-concepts", "/concepts/glossary"],
-            to: "/overview/permit-basics",
+            from: ["/concepts/authorization-concepts", "/concepts/glossary", "/overview/permit-basics"],
+            to: "/overview/glossary",
           },
           {
             from: "/tutorials/deploying/on-prem",
