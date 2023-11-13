@@ -364,8 +364,8 @@ const config = {
         hideOnScroll: true,
         logo: {
           alt: "Permit.io logo",
-          src: "logo/new-logo-1.svg",
-          srcDark: "logo/new-logo-1.svg",
+          src: "logo/new-logo-light.svg",
+          srcDark: "logo/new-logo-dark.svg",
           href: "/",
           target: "_self",
           width: 260,
