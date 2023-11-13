@@ -368,7 +368,7 @@ const config = {
           srcDark: "logo/new-logo-dark.svg",
           href: "/",
           target: "_self",
-          width: 260,
+          width: 230,
         },
         items: [
           {
