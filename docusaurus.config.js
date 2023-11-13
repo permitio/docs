@@ -18,7 +18,7 @@ const config = {
   baseUrl: "/",
   onBrokenLinks: "throw",
   onBrokenMarkdownLinks: "throw",
-  favicon: "img/favicon.ico",
+  favicon: "logo/favicon.ico",
   organizationName: "permitio", // Usually your GitHub org/user name.
   projectName: "docs", // Usually your repo name.
   markdown: { mermaid: true },
@@ -90,7 +90,14 @@ const config = {
             to: "/sdk/dotnet/user/SyncUser",
           },
           {
-            from: ["/getting-started/create-your-account", "/tutorials/connect_your_app/", "/tutorials/connecting_to_authentication", "/tutorials/demo", "/tutorials/configuration", "/tutorials/healthchecks"],
+            from: [
+              "/getting-started/create-your-account",
+              "/tutorials/connect_your_app/",
+              "/tutorials/connecting_to_authentication",
+              "/tutorials/demo",
+              "/tutorials/configuration",
+              "/tutorials/healthchecks",
+            ],
             to: "/getting-started/quickstart",
           },
           {
@@ -136,7 +143,7 @@ const config = {
           },
           {
             from: ["/tutorials/quickstart", "/getting-started/quickstart"],
-            to: "/getting-started/connecting-your-app"
+            to: "/getting-started/connecting-your-app",
           },
           {
             from: ["/tutorials/introduction/what-is-permit", "/overview/what-is-permit"],
@@ -147,7 +154,11 @@ const config = {
             to: "/overview/how-does-it-work",
           },
           {
-            from: ["/concepts/authorization-concepts", "/concepts/glossary", "/overview/permit-basics"],
+            from: [
+              "/concepts/authorization-concepts",
+              "/concepts/glossary",
+              "/overview/permit-basics",
+            ],
             to: "/overview/glossary",
           },
           {
@@ -353,11 +364,11 @@ const config = {
         hideOnScroll: true,
         logo: {
           alt: "Permit.io logo",
-          src: "logo/logo-light.png",
-          srcDark: "logo/logo-dark.png",
+          src: "logo/new-logo-light.svg",
+          srcDark: "logo/new-logo-dark.svg",
           href: "/",
           target: "_self",
-          width: 170,
+          width: 230,
         },
         items: [
           {
