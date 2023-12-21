@@ -207,47 +207,56 @@ const config = {
             to: "/how-to/use-audit-logs/troubleshooting",
           },
           {
-            from: "/features/audit-logs/errors/cloud_pdp_not_supporting_abac",
+            from: [
+              "/errors/cloud_pdp_not_supporting_abac",
+              "/features/audit-logs/errors/cloud_pdp_not_supporting_abac",
+            ],
             to: "/how-to/use-audit-logs/errors/cloud_pdp_not_supporting_abac",
           },
           {
-            from: "/features/audit-logs/errors/no_matching_resourcesets",
+            from: [
+              "/errors/no_matching_resourcesets",
+              "/features/audit-logs/errors/no_matching_resourcesets",
+            ],
             to: "/how-to/use-audit-logs/errors/no_matching_resourcesets",
           },
           {
-            from: "/features/audit-logs/errors/no_matching_rules",
+            from: ["/errors/no_matching_rules", "/features/audit-logs/errors/no_matching_rules"],
             to: "/how-to/use-audit-logs/errors/no_matching_rules",
           },
           {
-            from: "/features/audit-logs/errors/no_matching_usersets",
+            from: [
+              "/errors/no_matching_usersets",
+              "/features/audit-logs/errors/no_matching_usersets",
+            ],
             to: "/how-to/use-audit-logs/errors/no_matching_usersets",
           },
           {
-            from: "/features/audit-logs/errors/no_permission",
+            from: ["/errors/no_permission", "/features/audit-logs/errors/no_permission"],
             to: "/how-to/use-audit-logs/errors/no_permission",
           },
           {
-            from: "/features/audit-logs/errors/no_role_in_tenant",
+            from: ["/errors/no_role_in_tenant", "/features/audit-logs/errors/no_role_in_tenant"],
             to: "/how-to/use-audit-logs/errors/no_role_in_tenant",
           },
           {
-            from: "/features/audit-logs/errors/no_such_action",
+            from: ["/errors/no_such_action", "/features/audit-logs/errors/no_such_action"],
             to: "/how-to/use-audit-logs/errors/no_such_action",
           },
           {
-            from: "/features/audit-logs/errors/no_such_resource",
+            from: ["/errors/no_such_resource", "/features/audit-logs/errors/no_such_resource"],
             to: "/how-to/use-audit-logs/errors/no_such_resource",
           },
           {
-            from: "/features/audit-logs/errors/no_such_tenant",
+            from: ["/errors/no_such_tenant", "/features/audit-logs/errors/no_such_tenant"],
             to: "/how-to/use-audit-logs/errors/no_such_tenant",
           },
           {
-            from: "/features/audit-logs/errors/no_user_roles",
+            from: ["/errors/no_user_roles", "/features/audit-logs/errors/no_user_roles"],
             to: "/how-to/use-audit-logs/errors/no_user_roles",
           },
           {
-            from: "/features/audit-logs/errors/user_not_synced",
+            from: ["/errors/user_not_synced", "/features/audit-logs/errors/user_not_synced"],
             to: "/how-to/use-audit-logs/errors/user_not_synced",
           },
           {
