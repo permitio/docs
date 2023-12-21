@@ -18,7 +18,7 @@ const config = {
   baseUrl: "/",
   onBrokenLinks: "throw",
   onBrokenMarkdownLinks: "throw",
-  favicon: "img/favicon.ico",
+  favicon: "logo/favicon.ico",
   organizationName: "permitio", // Usually your GitHub org/user name.
   projectName: "docs", // Usually your repo name.
   markdown: { mermaid: true },
@@ -90,7 +90,14 @@ const config = {
             to: "/sdk/dotnet/user/SyncUser",
           },
           {
-            from: ["/getting-started/create-your-account", "/tutorials/connect_your_app/", "/tutorials/connecting_to_authentication", "/tutorials/demo", "/tutorials/configuration", "/tutorials/healthchecks"],
+            from: [
+              "/getting-started/create-your-account",
+              "/tutorials/connect_your_app/",
+              "/tutorials/connecting_to_authentication",
+              "/tutorials/demo",
+              "/tutorials/configuration",
+              "/tutorials/healthchecks",
+            ],
             to: "/getting-started/quickstart",
           },
           {
@@ -136,7 +143,7 @@ const config = {
           },
           {
             from: ["/tutorials/quickstart", "/getting-started/quickstart"],
-            to: "/getting-started/connecting-your-app"
+            to: "/getting-started/connecting-your-app",
           },
           {
             from: ["/tutorials/introduction/what-is-permit", "/overview/what-is-permit"],
@@ -147,7 +154,11 @@ const config = {
             to: "/overview/how-does-it-work",
           },
           {
-            from: ["/concepts/authorization-concepts", "/concepts/glossary", "/overview/permit-basics"],
+            from: [
+              "/concepts/authorization-concepts",
+              "/concepts/glossary",
+              "/overview/permit-basics",
+            ],
             to: "/overview/glossary",
           },
           {
@@ -196,47 +207,56 @@ const config = {
             to: "/how-to/use-audit-logs/troubleshooting",
           },
           {
-            from: "/features/audit-logs/errors/cloud_pdp_not_supporting_abac",
+            from: [
+              "/errors/cloud_pdp_not_supporting_abac",
+              "/features/audit-logs/errors/cloud_pdp_not_supporting_abac",
+            ],
             to: "/how-to/use-audit-logs/errors/cloud_pdp_not_supporting_abac",
           },
           {
-            from: "/features/audit-logs/errors/no_matching_resourcesets",
+            from: [
+              "/errors/no_matching_resourcesets",
+              "/features/audit-logs/errors/no_matching_resourcesets",
+            ],
             to: "/how-to/use-audit-logs/errors/no_matching_resourcesets",
           },
           {
-            from: "/features/audit-logs/errors/no_matching_rules",
+            from: ["/errors/no_matching_rules", "/features/audit-logs/errors/no_matching_rules"],
             to: "/how-to/use-audit-logs/errors/no_matching_rules",
           },
           {
-            from: "/features/audit-logs/errors/no_matching_usersets",
+            from: [
+              "/errors/no_matching_usersets",
+              "/features/audit-logs/errors/no_matching_usersets",
+            ],
             to: "/how-to/use-audit-logs/errors/no_matching_usersets",
           },
           {
-            from: "/features/audit-logs/errors/no_permission",
+            from: ["/errors/no_permission", "/features/audit-logs/errors/no_permission"],
             to: "/how-to/use-audit-logs/errors/no_permission",
           },
           {
-            from: "/features/audit-logs/errors/no_role_in_tenant",
+            from: ["/errors/no_role_in_tenant", "/features/audit-logs/errors/no_role_in_tenant"],
             to: "/how-to/use-audit-logs/errors/no_role_in_tenant",
           },
           {
-            from: "/features/audit-logs/errors/no_such_action",
+            from: ["/errors/no_such_action", "/features/audit-logs/errors/no_such_action"],
             to: "/how-to/use-audit-logs/errors/no_such_action",
           },
           {
-            from: "/features/audit-logs/errors/no_such_resource",
+            from: ["/errors/no_such_resource", "/features/audit-logs/errors/no_such_resource"],
             to: "/how-to/use-audit-logs/errors/no_such_resource",
           },
           {
-            from: "/features/audit-logs/errors/no_such_tenant",
+            from: ["/errors/no_such_tenant", "/features/audit-logs/errors/no_such_tenant"],
             to: "/how-to/use-audit-logs/errors/no_such_tenant",
           },
           {
-            from: "/features/audit-logs/errors/no_user_roles",
+            from: ["/errors/no_user_roles", "/features/audit-logs/errors/no_user_roles"],
             to: "/how-to/use-audit-logs/errors/no_user_roles",
           },
           {
-            from: "/features/audit-logs/errors/user_not_synced",
+            from: ["/errors/user_not_synced", "/features/audit-logs/errors/user_not_synced"],
             to: "/how-to/use-audit-logs/errors/user_not_synced",
           },
           {
@@ -353,11 +373,11 @@ const config = {
         hideOnScroll: true,
         logo: {
           alt: "Permit.io logo",
-          src: "logo/logo-light.png",
-          srcDark: "logo/logo-dark.png",
+          src: "logo/new-logo-light.svg",
+          srcDark: "logo/new-logo-dark.svg",
           href: "/",
           target: "_self",
-          width: 170,
+          width: 230,
         },
         items: [
           {
