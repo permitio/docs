@@ -3,12 +3,113 @@ sidebar_position: 1
 title: Proxies & Gateways Overview
 ---
 
-Permit.io provides **multiple ways** to **set access-control enforcement points** in your software.
+Explore the best practices for implementing Permit's fine-grained authorization as part of your API Gateway or Reverse Proxy services.
 
-While the classic approach is to embed enforcement points in the code via the use of our SDK's;
-per a specific line of code, a route, or inside a middleware - you can also easily use Permit to enforce access inside your code
-**using reverse-proxies** - (e.g. Envoy, Traefik) - and **API Gateways** - (e.g. Kong, AWS API Gateway).
+---
 
-:::tip
-Most of these integrations can easily be done using **OPA's plugin system** with **very little configuration**.
+Besides of using the Permit.io `check` function to enforce permissions in the application code, another approach is create authorization layer on top of **reverse-proxies** - (e.g. Envoy, Traefik) - and **API Gateways** - (e.g. Kong, AWS API Gateway).
+
+While this approach can be implemented easily with plugins from the OPA Plugin System with very little configuration, there are some things to consider if you are willing to enforce permissions in the gatway layer.
+
+The following document will guide you with the right decision -
+
+## Endpoint Policy Modeling
+The level of granulaity in atomic HTTP/RPC endpoint, simplify the way of enforce authorization in Gatways as it make the decision straight forward to the endpoint proccssed.
+With the mind that we can (and should) always check of more fine-grained decision in the application code itself, the modeling of resources and actions in the API layer can be done in two primary ways.
+
+:::info
+In both methods, the user that authenticated with the request is the user we will check permissions for.
 :::
+
+### URL Mapping
+In this method, we will use the existing policy and let Permit.io service map between resources/actions and the endpoints/methods.
+
+Using URL mapping let you streamline the policy model across the applications and the gateway layer as you do not need to configure every endpoint in the system as part of the policy. For example, a combination of a resource `Document` and the method `Write` can be mapped to both `POST /blogs` and `POST /articles` endpoints.
+
+URL mapping is especially efficient for API Gatway where all the endpoints are structured anyway and the ability to create mapping is easier.
+
+### URL Check
+In this method, we are creating a dedicated policy for the API/Gateway endpoints, and act the endpoint URL as the resources and the method as the action.
+Policy that is based on the endpoint name convention, could improve the way you authorize atomic function check, but also create redundnat configuration of policy rules.
+
+## Use Infrastructure as code
+With the most modern gateways/proxies being configured via infrastructure as code files, the most efficient way to declare policies for them is to use infrastructure as code too.
+By using the Permit terraform provider you can leverage the existing usage of infrastructure as code API or gateway configuration to configure the policy itself.
+
+Here's an example of configuration of Permit.io resource as code, declaring this code in the same method you are configuring the gateway/proxy, can create more stable SDLC and authorization consistency.
+```hcl
+resource "permitio_resource" "document" {
+  key         = "document"
+  name        = "document"
+  description = "doucments endpoint"
+  actions = {
+    "GET" = {
+      "name" = "read"
+    }
+    "POST" = {
+      "name" = "write"
+    }
+    "PUT" = {
+      "name"        = "update"
+    }
+    "DELETE" = {
+      "name"        = "delete"
+      "description" = "delete a document"
+    }
+  }
+  attributes = {
+    "title" = {
+      "description" = "the title of the document"
+      "type"        = "string"
+    }
+  }
+}
+```
+
+## Policy Decision Point
+To enforce the permissions in the gateway/proxy layer, you'd need to call a policy decision point (PDP) that will perform the decision.
+The most efficient way to do that is to deploy the policy decision point close to the gateway/proxy, that will insure data conistency, safety, and low-latency.
+
+Deploying the decision point in the same network with the gateway/proxy can be done easily with the Permit.io PDP image, that can be deployed with docker configuration or helm chart.
+
+Since Permit is by default based on OPA, an easy way to call it, is by configuring OPA plugin in your gateway/proxy and use the exposed PDP OPA HTTP API to perform the decision.
+OPA Plugins are small pieces of gateway/proxy compoents that are avbailable for mostly every cloud-native gateway/proxy out there.
+Here's an example of utilizing OPA Kong plugin to authorize requests - [Kong API Gateway x Permit](/integrations/gateways/kong)
+
+If you'd like to call the PDP directly, or you are using a custom gateway/proxy, you can still use the Permit.io PDP HTTP API to perform the decision.
+The cloud-native architecture of Permit.io PDP, will ensure that the decision is performed in a low-latency and do not leave your ingress network.
+
+:::info
+If you are using AWS Cedar as your policy engine in Permit, you'll have to configure the HTTP filtering with the PDP manually, as there are no cloud-native proxy/gateway plugins available yet.
+:::
+
+## Decision Request Convention
+As described in the previous sections, a common way to model the policy for gateways/proxies is to map the following:
+- URL/endpoint -> resource
+- Method -> action
+- Token -> User
+
+Modeling the policy this way, will keep the reuqest convention to the authorization service simple.
+All what you need to do is to map the relevant convention from the proxy/gateway to the decision engine.
+
+While this is a simple way of configuring policy, it can lack in case we need to be more granular with the decision.
+For example, if we are using Attribute Based Access Control, we would like to calculate some attributes in the request as part of the authorization decision.
+To deal with that, we would like to have the option to create transformers from the request to the decision request.
+We can create this transformers as part of our gateway/proxy configuration, to all or to set of particular endpoints.
+
+### RBAC, ReBAC, ABAC
+Another angle of considering when authorizing in the gateway/proxy layer, is the policy model we would like to use.
+While RBAC can be efficient in modeling, as we can simplify the mapping to resources and use user roles for decisions, it lacks in the granularity.
+ABAC on the other hand, can cost in the transforming of the request body into the desired form of attributes we want to authorize.
+ReBAC, will require us to find a streamlined and efficient way to "fetch" the particular instance from the request to perform the decision.
+
+While there is no single rule of thumb of how to model policy, you should always keep the complexity caveats in mind and model the policy wisely.
+
+## Partial Evaluation
+In contrast to the binary enforcement (`allow`/`deny`) of the authorization decision, the partial evaluation is the ability to filter the data based on the particular authorization state.
+In the gateway/proxy layer, the partial evaluation can be used to filter the data that is being returned to the user, based on the authorization decision.
+For example, if the user is not authorized to see the particular document, we can filter the document from the response.
+
+The best approach to run partial evaluation in the gateway/proxy is to use OPA AST feature and generate the filter query based on the decision.
+Partial evaluation is still in private beta in Permit.io, but you can [contact us to get access to this feature](https://io.permit.io/blog-slack).
+Another option is to use the the Permit [GitOps feature](/integrations/gitops/custom_policy) and write the rego code that will use OPA AST feature directly.
