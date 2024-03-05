@@ -6,12 +6,14 @@ title: Bulk Check
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-To perform bulk permission checks, the `permit.BulkCheck` function can be leveraged.
-This allows you to validate multiple permission requests in a single call.
+The permit bulk `check()` function allows you to validate multiple permission requests in a single call.
 
-## Basic Usage
+---
 
-The `permit.BulkCheck` function accepts an array of [individual check requests](./check) as input:
+For some use cases, you might need to perform multiple `check()` calls at once.
+To support that, Permit provides a `bulkCheck` function that allows you to validate multiple permission requests in a single call.
+In its basic form, the bulk `check()` function accepts the same parameters as the `check()` function, but in an array.
+
 
 <Tabs groupId="language">
 <TabItem value="nodejs" label="Node.js">
@@ -115,9 +117,53 @@ func main() {
 </TabItem>
 </Tabs>
 
+## Use Cases
+Below are some examples of the use cases that require the use of the `bulkCheck()` function:
+
+### Latency Sensitive Applications
+The most basic usage of a `bulkCheck` is to save time when multiple checks calls are needed in one scope.
+For example, assuming we have an API endpoint that perform multiple actions on a resource, we can use the `bulkCheck` function to check all the permissions at once.
+
+```js
+const permitted = await permit.bulkCheck([
+    { user, "create", "document" },
+    { user, "edit", "profile"}
+]);
+```
+
+
+### Multiple Policy Models
+In some cases, we want to perform ReBAC and ABAC checks for the same operations.
+For example, if `edit` is a premium feature in our application (with ABAC) and we also wants to check if the user has access to `edit` a document (with ReBAC), we can use the `bulkCheck` function to check both permissions at once.
+
+```js
+const {key, tier} = getUser(token);
+const permissions = await permit.bulk([
+    // Checking for relationship to the particular document
+    { user: key, "edit", `document:${document.id}` },
+    // Checking for the user's tier by user attributes
+    { user: {key , attributes: {tier}}, "edit", `document:${document.id}` }
+]);
+const permitted = permissions[0] || permissions[1];
+```
+
+### Data Filtering
+Data filtering is where we have a collection of data and we want to filter it based on the permissions of the user.
+While there are more efficient ways to perform data filtering with Permit, mapping mutliple permissions checks to a single `bulkCheck` call can be useful in some cases.
+
+```js
+const resources = getResources();
+const permitted = await permit.bulkCheck(
+    resources.map(resource => ({ user, "read", resource })
+));
+const permittedResources = resources.filter(
+    (resource, index) => permitted[index]
+);
+```
+
+---
+
 :::note
-Please note that the "Bulk Check" feature might have degraded performance if you're
-checking permissions for different tenants. This is because we split the requests by tenant in order for the request
-to reach the relevant PDP instance. This is done for it to be compatible with the current [PDP Sharding](/how-to/manage-data/pdp-sharding) setup,
-in which that instance only contains data for a few tenants, not all of them.
+While `bulkCheck` will save you time in latency, it could have degraded performance if you're checking permissions for different tenants.
+This is because we split the requests by tenant in order for the request to reach the relevant PDP instance. This is done for it to be compatible with the current [PDP Sharding](/how-to/manage-data/pdp-sharding) setup, in which that instance only contains data for a few tenants, not all of them.
 :::
