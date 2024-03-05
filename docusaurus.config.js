@@ -97,8 +97,10 @@ const config = {
               "/tutorials/demo",
               "/tutorials/configuration",
               "/tutorials/healthchecks",
+              "/getting-started/quickstart",
+              "/overview/permit-demo",
             ],
-            to: "/getting-started/quickstart",
+            to: "/overview/quickstart",
           },
           {
             from: "/features/policy_editor/",
@@ -135,7 +137,7 @@ const config = {
               "/tutorials/onboarding/roles-and-permissions",
               "/tutorials/onboarding/connect-your-app",
             ],
-            to: "/getting-started/quickstart",
+            to: "/overview/quickstart",
           },
           {
             from: "/tutorials/onboarding/deploying-to-production",
@@ -143,7 +145,7 @@ const config = {
           },
           {
             from: ["/tutorials/quickstart", "/getting-started/quickstart"],
-            to: "/getting-started/connecting-your-app",
+            to: "/overview/quickstart",
           },
           {
             from: ["/tutorials/introduction/what-is-permit", "/overview/what-is-permit"],
@@ -340,19 +342,15 @@ const config = {
             from: "/concepts/pdp-sharding",
             to: "/how-to/manage-data/pdp-sharding",
           },
-        // Docs restructure iteration 1 - 5th March 2024
+          // Docs restructure iteration 1 - 5th March 2024
           {
-            from: "/getting-started/quickstart",
-            to: "/overview/quickstart"
+            from: ["/getting-started/quickstart", "/overview/permit-demo"],
+            to: "/overview/quickstart",
           },
           {
             from: "/getting-started/connecting-your-app",
-            to: "/overview/running-a-demo"
+            to: "/overview/connecting-your-app",
           },
-          {
-            from: "/overview/permit-demo",
-            to: "/overview/running-a-demo"
-          }
         ],
       },
     ],
