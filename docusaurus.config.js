@@ -14,7 +14,7 @@ const config = {
   title: "Permit.io Documentation",
   tagline:
     "Permit is a Fullstack Authorization as a Service, allowing you to configure policies with a no-code UI and bake in enforcement points into your application, never having to write permissions again.",
-  url: "https://permit.io",
+  url: "https://docs.permit.io",
   baseUrl: "/",
   onBrokenLinks: "throw",
   onBrokenMarkdownLinks: "throw",
@@ -97,8 +97,6 @@ const config = {
               "/tutorials/demo",
               "/tutorials/configuration",
               "/tutorials/healthchecks",
-              "/getting-started/quickstart",
-              "/overview/permit-demo",
             ],
             to: "/quickstart",
           },
@@ -144,7 +142,7 @@ const config = {
             to: "/how-to/deploy/deploy-to-production",
           },
           {
-            from: ["/tutorials/quickstart", "/getting-started/quickstart"],
+            from: ["/tutorials/quickstart"],
             to: "/quickstart",
           },
           {
