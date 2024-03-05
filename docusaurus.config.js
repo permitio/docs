@@ -340,6 +340,19 @@ const config = {
             from: "/concepts/pdp-sharding",
             to: "/how-to/manage-data/pdp-sharding",
           },
+        // Docs restructure iteration 1 - 5th March 2024
+          {
+            from: "/getting-started/quickstart",
+            to: "/overview/quickstart"
+          },
+          {
+            from: "/getting-started/connecting-your-app",
+            to: "/overview/running-a-demo"
+          },
+          {
+            from: "/overview/permit-demo",
+            to: "/overview/running-a-demo"
+          }
         ],
       },
     ],
