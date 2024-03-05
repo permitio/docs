@@ -100,7 +100,7 @@ const config = {
               "/getting-started/quickstart",
               "/overview/permit-demo",
             ],
-            to: "/overview/quickstart",
+            to: "/quickstart",
           },
           {
             from: "/features/policy_editor/",
@@ -137,7 +137,7 @@ const config = {
               "/tutorials/onboarding/roles-and-permissions",
               "/tutorials/onboarding/connect-your-app",
             ],
-            to: "/overview/quickstart",
+            to: "/quickstart",
           },
           {
             from: "/tutorials/onboarding/deploying-to-production",
@@ -145,7 +145,7 @@ const config = {
           },
           {
             from: ["/tutorials/quickstart", "/getting-started/quickstart"],
-            to: "/overview/quickstart",
+            to: "/quickstart",
           },
           {
             from: ["/tutorials/introduction/what-is-permit", "/overview/what-is-permit"],
@@ -345,7 +345,7 @@ const config = {
           // Docs restructure iteration 1 - 5th March 2024
           {
             from: ["/getting-started/quickstart", "/overview/permit-demo"],
-            to: "/overview/quickstart",
+            to: "/quickstart",
           },
           {
             from: "/getting-started/connecting-your-app",
