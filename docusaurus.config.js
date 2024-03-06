@@ -14,7 +14,7 @@ const config = {
   title: "Permit.io Documentation",
   tagline:
     "Permit is a Fullstack Authorization as a Service, allowing you to configure policies with a no-code UI and bake in enforcement points into your application, never having to write permissions again.",
-  url: "https://permit.io",
+  url: "https://docs.permit.io",
   baseUrl: "/",
   onBrokenLinks: "throw",
   onBrokenMarkdownLinks: "throw",
@@ -98,7 +98,7 @@ const config = {
               "/tutorials/configuration",
               "/tutorials/healthchecks",
             ],
-            to: "/getting-started/quickstart",
+            to: "/quickstart",
           },
           {
             from: "/features/policy_editor/",
@@ -135,15 +135,15 @@ const config = {
               "/tutorials/onboarding/roles-and-permissions",
               "/tutorials/onboarding/connect-your-app",
             ],
-            to: "/getting-started/quickstart",
+            to: "/quickstart",
           },
           {
             from: "/tutorials/onboarding/deploying-to-production",
             to: "/how-to/deploy/deploy-to-production",
           },
           {
-            from: ["/tutorials/quickstart", "/getting-started/quickstart"],
-            to: "/getting-started/connecting-your-app",
+            from: ["/tutorials/quickstart"],
+            to: "/quickstart",
           },
           {
             from: ["/tutorials/introduction/what-is-permit", "/overview/what-is-permit"],
@@ -339,6 +339,15 @@ const config = {
           {
             from: "/concepts/pdp-sharding",
             to: "/how-to/manage-data/pdp-sharding",
+          },
+          // Docs restructure iteration 1 - 5th March 2024
+          {
+            from: ["/getting-started/quickstart", "/overview/permit-demo"],
+            to: "/quickstart",
+          },
+          {
+            from: "/getting-started/connecting-your-app",
+            to: "/overview/connecting-your-app",
           },
         ],
       },
