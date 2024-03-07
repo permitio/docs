@@ -57,16 +57,6 @@ const config = {
     [
       "@docusaurus/plugin-client-redirects",
       {
-        createRedirects(existingPath) {
-          if (existingPath.includes("/integrations/authentication")) {
-            // Redirect from /integrations/authentication" to /authentication
-            return [
-              existingPath.replace("/integrations/authentication", "/authentication"),
-              existingPath.replace("/integrations/authentication", "/authentication"),
-            ];
-          }
-          return undefined; // Return a falsy value: no redirect created
-        },
         redirects: [
           // Backwards support - We moved multitenancy into features
           {
@@ -369,6 +359,42 @@ const config = {
           },
           { from: "/category/integrations", to: "/category/-integrate-to-applications" },
           { from: "/category/modeling-examples", to: "/category/-learn-by-example" },
+          {
+            from: "/integrations/authentication/auth0/auth0-demo-app",
+            to: "/authentication/auth0/auth0-demo-app",
+          },
+          {
+            from: "/integrations/authentication/auth0/auth0-sync-script",
+            to: "/authentication/auth0/auth0-sync-script",
+          },
+          {
+            from: "/integrations/authentication/auth0/permit-integration",
+            to: "/authentication/auth0/permit-integration",
+          },
+          {
+            from: "/integrations/authentication/cognito/cognito-demo-app",
+            to: "/authentication/cognito/cognito-demo-app",
+          },
+          {
+            from: "/integrations/authentication/cognito/permit-integration",
+            to: "/authentication/cognito/permit-integration",
+          },
+          {
+            from: "/integrations/authentication/fusionauth",
+            to: "/authentication/fusionauth",
+          },
+          {
+            from: "/integrations/authentication/hankopermit",
+            to: "/authentication/hankopermit",
+          },
+          {
+            from: "/integrations/authentication/supertokens",
+            to: "/authentication/supertokens",
+          },
+          {
+            from: "/integrations/authentication/your-authentication",
+            to: "/authentication/your-authentication",
+          },
         ],
       },
     ],
