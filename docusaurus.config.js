@@ -57,6 +57,16 @@ const config = {
     [
       "@docusaurus/plugin-client-redirects",
       {
+        createRedirects(existingPath) {
+          if (existingPath.includes("/integrations/authentication")) {
+            // Redirect from /integrations/authentication" to /authentication
+            return [
+              existingPath.replace("/integrations/authentication", "/authentication"),
+              existingPath.replace("/integrations/authentication", "/authentication"),
+            ];
+          }
+          return undefined; // Return a falsy value: no redirect created
+        },
         redirects: [
           // Backwards support - We moved multitenancy into features
           {
@@ -349,6 +359,16 @@ const config = {
             from: "/getting-started/connecting-your-app",
             to: "/overview/connecting-your-app",
           },
+          {
+            from: "/category/supported-sdks",
+            to: "/category/-sdks",
+          },
+          {
+            from: "/category/how-to",
+            to: "/category/-guides--tutorials",
+          },
+          { from: "/category/integrations", to: "/category/-integrate-to-applications" },
+          { from: "/category/modeling-examples", to: "/category/-learn-by-example" },
         ],
       },
     ],
