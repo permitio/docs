@@ -349,6 +349,52 @@ const config = {
             from: "/getting-started/connecting-your-app",
             to: "/overview/connecting-your-app",
           },
+          {
+            from: "/category/supported-sdks",
+            to: "/sdk/sdks-overview",
+          },
+          {
+            from: "/category/how-to",
+            to: "/category/-guides--tutorials",
+          },
+          { from: "/category/integrations", to: "/category/-integrate-to-applications" },
+          { from: "/category/modeling-examples", to: "/category/-learn-by-example" },
+          {
+            from: "/integrations/authentication/auth0/auth0-demo-app",
+            to: "/authentication/auth0/auth0-demo-app",
+          },
+          {
+            from: "/integrations/authentication/auth0/auth0-sync-script",
+            to: "/authentication/auth0/auth0-sync-script",
+          },
+          {
+            from: "/integrations/authentication/auth0/permit-integration",
+            to: "/authentication/auth0/permit-integration",
+          },
+          {
+            from: "/integrations/authentication/cognito/cognito-demo-app",
+            to: "/authentication/cognito/cognito-demo-app",
+          },
+          {
+            from: "/integrations/authentication/cognito/permit-integration",
+            to: "/authentication/cognito/permit-integration",
+          },
+          {
+            from: "/integrations/authentication/fusionauth",
+            to: "/authentication/fusionauth",
+          },
+          {
+            from: "/integrations/authentication/hankopermit",
+            to: "/authentication/hankopermit",
+          },
+          {
+            from: "/integrations/authentication/supertokens",
+            to: "/authentication/supertokens",
+          },
+          {
+            from: "/integrations/authentication/your-authentication",
+            to: "/authentication/your-authentication",
+          },
         ],
       },
     ],
