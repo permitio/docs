@@ -351,7 +351,7 @@ const config = {
           },
           {
             from: "/category/supported-sdks",
-            to: "/category/-sdks",
+            to: "/sdk/sdks-overview",
           },
           {
             from: "/category/how-to",
