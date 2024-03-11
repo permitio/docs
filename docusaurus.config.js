@@ -14,11 +14,11 @@ const config = {
   title: "Permit.io Documentation",
   tagline:
     "Permit is a Fullstack Authorization as a Service, allowing you to configure policies with a no-code UI and bake in enforcement points into your application, never having to write permissions again.",
-  url: "https://permit.io",
+  url: "https://docs.permit.io",
   baseUrl: "/",
   onBrokenLinks: "throw",
   onBrokenMarkdownLinks: "throw",
-  favicon: "img/favicon.ico",
+  favicon: "logo/favicon.ico",
   organizationName: "permitio", // Usually your GitHub org/user name.
   projectName: "docs", // Usually your repo name.
   markdown: { mermaid: true },
@@ -90,8 +90,15 @@ const config = {
             to: "/sdk/dotnet/user/SyncUser",
           },
           {
-            from: ["/getting-started/create-your-account", "/tutorials/connect_your_app/", "/tutorials/connecting_to_authentication", "/tutorials/demo", "/tutorials/configuration", "/tutorials/healthchecks"],
-            to: "/getting-started/quickstart",
+            from: [
+              "/getting-started/create-your-account",
+              "/tutorials/connect_your_app/",
+              "/tutorials/connecting_to_authentication",
+              "/tutorials/demo",
+              "/tutorials/configuration",
+              "/tutorials/healthchecks",
+            ],
+            to: "/quickstart",
           },
           {
             from: "/features/policy_editor/",
@@ -128,15 +135,15 @@ const config = {
               "/tutorials/onboarding/roles-and-permissions",
               "/tutorials/onboarding/connect-your-app",
             ],
-            to: "/getting-started/quickstart",
+            to: "/quickstart",
           },
           {
             from: "/tutorials/onboarding/deploying-to-production",
             to: "/how-to/deploy/deploy-to-production",
           },
           {
-            from: ["/tutorials/quickstart", "/getting-started/quickstart"],
-            to: "/getting-started/connecting-your-app"
+            from: ["/tutorials/quickstart"],
+            to: "/quickstart",
           },
           {
             from: ["/tutorials/introduction/what-is-permit", "/overview/what-is-permit"],
@@ -147,7 +154,11 @@ const config = {
             to: "/overview/how-does-it-work",
           },
           {
-            from: ["/concepts/authorization-concepts", "/concepts/glossary", "/overview/permit-basics"],
+            from: [
+              "/concepts/authorization-concepts",
+              "/concepts/glossary",
+              "/overview/permit-basics",
+            ],
             to: "/overview/glossary",
           },
           {
@@ -196,47 +207,56 @@ const config = {
             to: "/how-to/use-audit-logs/troubleshooting",
           },
           {
-            from: "/features/audit-logs/errors/cloud_pdp_not_supporting_abac",
+            from: [
+              "/errors/cloud_pdp_not_supporting_abac",
+              "/features/audit-logs/errors/cloud_pdp_not_supporting_abac",
+            ],
             to: "/how-to/use-audit-logs/errors/cloud_pdp_not_supporting_abac",
           },
           {
-            from: "/features/audit-logs/errors/no_matching_resourcesets",
+            from: [
+              "/errors/no_matching_resourcesets",
+              "/features/audit-logs/errors/no_matching_resourcesets",
+            ],
             to: "/how-to/use-audit-logs/errors/no_matching_resourcesets",
           },
           {
-            from: "/features/audit-logs/errors/no_matching_rules",
+            from: ["/errors/no_matching_rules", "/features/audit-logs/errors/no_matching_rules"],
             to: "/how-to/use-audit-logs/errors/no_matching_rules",
           },
           {
-            from: "/features/audit-logs/errors/no_matching_usersets",
+            from: [
+              "/errors/no_matching_usersets",
+              "/features/audit-logs/errors/no_matching_usersets",
+            ],
             to: "/how-to/use-audit-logs/errors/no_matching_usersets",
           },
           {
-            from: "/features/audit-logs/errors/no_permission",
+            from: ["/errors/no_permission", "/features/audit-logs/errors/no_permission"],
             to: "/how-to/use-audit-logs/errors/no_permission",
           },
           {
-            from: "/features/audit-logs/errors/no_role_in_tenant",
+            from: ["/errors/no_role_in_tenant", "/features/audit-logs/errors/no_role_in_tenant"],
             to: "/how-to/use-audit-logs/errors/no_role_in_tenant",
           },
           {
-            from: "/features/audit-logs/errors/no_such_action",
+            from: ["/errors/no_such_action", "/features/audit-logs/errors/no_such_action"],
             to: "/how-to/use-audit-logs/errors/no_such_action",
           },
           {
-            from: "/features/audit-logs/errors/no_such_resource",
+            from: ["/errors/no_such_resource", "/features/audit-logs/errors/no_such_resource"],
             to: "/how-to/use-audit-logs/errors/no_such_resource",
           },
           {
-            from: "/features/audit-logs/errors/no_such_tenant",
+            from: ["/errors/no_such_tenant", "/features/audit-logs/errors/no_such_tenant"],
             to: "/how-to/use-audit-logs/errors/no_such_tenant",
           },
           {
-            from: "/features/audit-logs/errors/no_user_roles",
+            from: ["/errors/no_user_roles", "/features/audit-logs/errors/no_user_roles"],
             to: "/how-to/use-audit-logs/errors/no_user_roles",
           },
           {
-            from: "/features/audit-logs/errors/user_not_synced",
+            from: ["/errors/user_not_synced", "/features/audit-logs/errors/user_not_synced"],
             to: "/how-to/use-audit-logs/errors/user_not_synced",
           },
           {
@@ -320,6 +340,61 @@ const config = {
             from: "/concepts/pdp-sharding",
             to: "/how-to/manage-data/pdp-sharding",
           },
+          // Docs restructure iteration 1 - 5th March 2024
+          {
+            from: ["/getting-started/quickstart", "/overview/permit-demo"],
+            to: "/quickstart",
+          },
+          {
+            from: "/getting-started/connecting-your-app",
+            to: "/overview/connecting-your-app",
+          },
+          {
+            from: "/category/supported-sdks",
+            to: "/sdk/sdks-overview",
+          },
+          {
+            from: "/category/how-to",
+            to: "/category/-guides--tutorials",
+          },
+          { from: "/category/integrations", to: "/category/-integrate-to-applications" },
+          { from: "/category/modeling-examples", to: "/category/-learn-by-example" },
+          {
+            from: "/integrations/authentication/auth0/auth0-demo-app",
+            to: "/authentication/auth0/auth0-demo-app",
+          },
+          {
+            from: "/integrations/authentication/auth0/auth0-sync-script",
+            to: "/authentication/auth0/auth0-sync-script",
+          },
+          {
+            from: "/integrations/authentication/auth0/permit-integration",
+            to: "/authentication/auth0/permit-integration",
+          },
+          {
+            from: "/integrations/authentication/cognito/cognito-demo-app",
+            to: "/authentication/cognito/cognito-demo-app",
+          },
+          {
+            from: "/integrations/authentication/cognito/permit-integration",
+            to: "/authentication/cognito/permit-integration",
+          },
+          {
+            from: "/integrations/authentication/fusionauth",
+            to: "/authentication/fusionauth",
+          },
+          {
+            from: "/integrations/authentication/hankopermit",
+            to: "/authentication/hankopermit",
+          },
+          {
+            from: "/integrations/authentication/supertokens",
+            to: "/authentication/supertokens",
+          },
+          {
+            from: "/integrations/authentication/your-authentication",
+            to: "/authentication/your-authentication",
+          },
         ],
       },
     ],
@@ -353,11 +428,11 @@ const config = {
         hideOnScroll: true,
         logo: {
           alt: "Permit.io logo",
-          src: "logo/logo-light.png",
-          srcDark: "logo/logo-dark.png",
+          src: "logo/new-logo-light.svg",
+          srcDark: "logo/new-logo-dark.svg",
           href: "/",
           target: "_self",
-          width: 170,
+          width: 230,
         },
         items: [
           {
@@ -400,7 +475,7 @@ const config = {
       },
       prism: {
         theme: require("prism-react-renderer/themes/dracula"),
-        additionalLanguages: ["java", "ruby", "csharp", "groovy", "go"],
+        additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl"],
       },
       colorMode: {
         defaultMode: "light",
