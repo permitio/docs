@@ -21,7 +21,7 @@ and safely across diverse user bases.
 ## Our frontend SDK
 
 In our dedicated pursuit to enhance developer experience and streamline frontend feature management, we
-crafted a specialized package at Permit.io, encapsulating the prowess of both Permit and CASL. The
+crafted a specialized package at Permit.io, encapsulating both Permit and CASL. The
 **[permit-fe-sdk](https://github.com/permitio/permit-fe-sdk)** enables developers to integrate sophisticated
 permission-based feature toggling seamlessly across various frontend frameworks.
 
@@ -55,6 +55,11 @@ As part of the CASL component that we will be creating later in this guide, we w
 route that we can call, which will perform bulk `permit.check()` operations for us, returning the result for
 each.
 
+:::tip
+The bulk `permit.check()` allows us to send over multiple permit check queries to run against the policy engine at once.
+This allows us to get all the answers, before we start to render the app and it's UI. q1 1§1
+:::
+
 Here is a basic implementation of such endpoint, which we have under `/api/something`. You can name the file
 as you wish.
 
@@ -68,24 +73,39 @@ const permit = new Permit({
 
 export default async function handler(req, res) {
   try {
-    const { user: userId, action, resource } = req.query;
+    const { resourcesAndActions } = req.body;
+    const { user: userId } = req.query;
 
     if (!userId) {
-      return res.status(400).json({ error: "No User Id" });
+      return res.status(400).json({ error: "No userId provided." });
     }
 
-    if (!action || !resource) {
-      return res.status(400).json({ error: "Missing action or resource" });
-    }
+    const checkPermissions = async (resourceAndAction) => {
+      const { resource, action, userAttributes, resourceAttributes } = resourceAndAction;
 
-    const allowed = await permit.check(userId, action, resource);
+      const allowed = permit.check(
+        {
+          key: userId,
+          attributes: userAttributes,
+        },
+        action,
+        {
+          type: resource,
+          attributes: resourceAttributes,
+          tenant: "default",
+        }
+      );
 
-    if (!allowed) {
-      return res.status(403).json({ error: "Not allowed" });
-    }
+      return allowed;
+    };
 
-    return res.json({ permitted: allowed });
+    const permittedList = await Promise.all(resourcesAndActions.map(checkPermissions));
+
+    console.log(permittedList); // Printing the result of the checks
+
+    return res.status(200).json({ permittedList });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }
@@ -94,17 +114,20 @@ export default async function handler(req, res) {
 Pay attention that we have imported the Permit library and we initialized the Permit object. You can follow
 this [guide](/getting-started/quickstart#get-your-permitio-environment-api-key) to understand where to fetch your API key from.
 
+This handler also allows you to deal with two policy models: **RBAC** & **ABAC**. As part of the bulk check, you can pass
+`userAttributes` and `resourceAttributes` - but they are **optional**.
+
 Once we are done with this step, we need to make sure pull and launch our PDP - you can also find the steps on
 how to do this [here](/getting-started/quickstart#setup-your-pdp-policy-decision-point-container).
 
-### Creating the `AbilityLoader`
+### Creating the `AbilityLoader` Component
 
 The AbilityLoader component is integral to this setup, diligently working to asynchronously retrieve and
 establish user-specific permissions, particularly upon user sign-in.
 
 In this scenario, we're employing Clerk.com as our authentication provider to obtain the userId, which we have
 synchronized with Permit. This allows us to identify the currently logged-in user and correlate them with the
-associated policy for their role. It's crucial to highlight that you can choose any authentication provider
+associated policy for their role. It's crucial to highlight that **you can choose any authentication provider**
 that best fits your needs—Permit is designed to integrate seamlessly with all of them.
 
 ```js
@@ -127,7 +150,7 @@ export const AbilityLoader = ({ children }) => {
         backendUrl: "/api/something",
       });
 
-      await permit.loadLocalState([
+      await permit.loadLocalStateBulk([
         { action: "view", resource: "Products" },
         { action: "view", resource: "document" },
         { action: "view", resource: "file" },
@@ -187,7 +210,7 @@ const getAbility = async (loggedInUser) => {
     backendUrl: "/api/dashboard",
   });
 
-  await permit.loadLocalState([
+  await permit.loadLocalStateBulk([
     { action: "view", resource: "Products" },
     { action: "view", resource: "Product_Configurators" },
     { action: "view", resource: "Project_Builder" },
@@ -202,10 +225,15 @@ const getAbility = async (loggedInUser) => {
 
 ### Working with RBAC & ABAC
 
+:::warning be careful
+If your are using the cloud PDP for running your permit checks, please be aware that the cloud PDP only supports RBAC for the
+time being. ABAC policies (adding extra user and resource attributes) will fail.
+:::
+
 The `AbilityLoader` supports both basic RBAC policies and ABAC policies, where you can check a users permissions not just based on
 their role, but also `extra conditions` on the role, or the resource.
 
-You can simply just pass them into the loadLocalState or loadLocalStateBulk function as `userAttributes` and `resourceAttributes`.
+You can simply just pass them into the `loadLocalStateBulk` function as `userAttributes` and `resourceAttributes`.
 The conditions will be evaluated in the same `permit.check` function and the result will be returned.
 
 ```js
