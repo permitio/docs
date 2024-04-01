@@ -35,21 +35,30 @@ export default function DocItemLayout({ children }) {
   const windowSize = useWindowSize();
 
   // Check if window size is 'desktop' or 'ssr' and full_width is true
-  const isFullWidthDesktop =
-    (windowSize === "desktop" || windowSize === "ssr") && doc.frontMatter.full_width;
+  const isDesktopAndSSR = windowSize === "desktop" || windowSize === "ssr";
+  const isFullWidthDesktop = isDesktopAndSSR && doc.frontMatter.full_width;
+  const isFullWidthContainer = isDesktopAndSSR && doc.frontMatter.full_width_container;
+
+  const hideBreadcrumbs = doc.frontMatter.hide_breadcrumbs;
 
   return (
     <div className="row">
-      <div className={clsx("col", !docTOC.hidden && styles.docItemCol)}>
+      <div
+        className={clsx(
+          `col ${isFullWidthContainer && "!p-0"}`,
+          !docTOC.hidden && styles.docItemCol
+        )}
+      >
         <DocVersionBanner />
         <div
           className={clsx({
+            [styles.fullWidthContainer]: isFullWidthContainer,
             [styles.docItemContainerFull]: isFullWidthDesktop, // Apply full width only if on desktop and full_width is true
             [styles.docItemContainer]: !isFullWidthDesktop, // Otherwise, apply the standard width
           })}
         >
           <article>
-            <DocBreadcrumbs />
+            {!hideBreadcrumbs && <DocBreadcrumbs />}
             <DocVersionBadge />
             {docTOC.mobile}
             <DocItemContent>{children}</DocItemContent>
