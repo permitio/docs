@@ -355,11 +355,17 @@ const config = {
             to: "/sdk/sdks-overview",
           },
           {
-            from: "/category/how-to",
-            to: "/category/-guides--tutorials",
+            from: ["/category/how-to", "/category/-guides--tutorials"],
+            to: "/category/guides--tutorials",
           },
-          { from: "/category/integrations", to: "/category/-integrate-to-applications" },
-          { from: "/category/modeling-examples", to: "/category/-learn-by-example" },
+          {
+            from: ["/category/integrations", "/category/-integrate-to-applications"],
+            to: "/category/integrate-to-applications",
+          },
+          {
+            from: ["/category/modeling-examples", "/category/-learn-by-example"],
+            to: "/category/learn-by-example",
+          },
           {
             from: "/integrations/authentication/auth0/auth0-demo-app",
             to: "/authentication/auth0/auth0-demo-app",
