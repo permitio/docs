@@ -93,14 +93,12 @@ export const fourthRow = [
     type: "link",
     href: "https://permit-io.slack.com/join/shared_invite/zt-nz6yjgnp-RlP9rtOPwO0n0aH_vLbmBQ#/shared-invite/email",
     label: "Permit.io Slack Community",
-    svgIcon: <i className="ri-slack-line ri-xl sm_icons"></i>,
+    svgIcon: <i className="ri-slack-line ri-xl !text-[#846358]"></i>,
   },
   {
     type: "link",
     href: "https://github.com/permitio",
     label: "Github",
-    svgIcon: <i className="ri-github-line ri-xl sm_icons"></i>,
+    svgIcon: <i className="ri-github-line ri-xl !text-[#846358]"></i>,
   },
 ];
-
-// href, title, description, icon
