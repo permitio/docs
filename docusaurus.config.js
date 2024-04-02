@@ -12,6 +12,7 @@ const apiReferenceUrl = process.env.API_REFERENCE_URL ?? "https://api.permit.io/
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "Permit.io Documentation",
+  stylesheets: ["https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css"],
   tagline:
     "Permit is a Fullstack Authorization as a Service, allowing you to configure policies with a no-code UI and bake in enforcement points into your application, never having to write permissions again.",
   url: "https://docs.permit.io",
@@ -354,11 +355,17 @@ const config = {
             to: "/sdk/sdks-overview",
           },
           {
-            from: "/category/how-to",
-            to: "/category/-guides--tutorials",
+            from: ["/category/how-to", "/category/-guides--tutorials"],
+            to: "/category/guides--tutorials",
           },
-          { from: "/category/integrations", to: "/category/-integrate-to-applications" },
-          { from: "/category/modeling-examples", to: "/category/-learn-by-example" },
+          {
+            from: ["/category/integrations", "/category/-integrate-to-applications"],
+            to: "/category/integrate-to-applications",
+          },
+          {
+            from: ["/category/modeling-examples", "/category/-learn-by-example"],
+            to: "/category/learn-by-example",
+          },
           {
             from: "/integrations/authentication/auth0/auth0-demo-app",
             to: "/authentication/auth0/auth0-demo-app",
