@@ -6,9 +6,10 @@ export default function Layout(props) {
   return (
     <>
       <Head>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
         <link
+          href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css"
           rel="stylesheet"
-          href="https://fonts.googleapis.com/icon?family=Material+Icons"
         />
       </Head>
       <OriginalLayout {...props} />
