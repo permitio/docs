@@ -7,7 +7,7 @@ import cloud from "./assets/cloud.png";
 
 const SectionHero = () => (
   <div className="min-h-[260px] relative p-6 md:p-12 !-mt-[2.2rem] overflow-hidden ">
-    <div className="flex flex-col xl:flex-row items-center justify-between gap-10 container max-w-6xl">
+    <div className="flex flex-col xl:flex-row items-center justify-between gap-10 mx-auto w-full px-0 lg:px-5 max-w-6xl">
       <div className="flex flex-col gap-3 shrink-0 relative z-20">
         <h1 className={`!m-0 text-[28px] ${styles.title}`}>Welcome to Permit.io</h1>
         <p className={`text-sm !leading-5 ${styles.text}`}>
