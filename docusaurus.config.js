@@ -12,6 +12,7 @@ const apiReferenceUrl = process.env.API_REFERENCE_URL ?? "https://api.permit.io/
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "Permit.io Documentation",
+  stylesheets: ["https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css"],
   tagline:
     "Permit is a Fullstack Authorization as a Service, allowing you to configure policies with a no-code UI and bake in enforcement points into your application, never having to write permissions again.",
   url: "https://docs.permit.io",
