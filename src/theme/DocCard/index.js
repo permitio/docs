@@ -16,7 +16,7 @@ function CardContainer({ href, children }) {
         styles.cardContainer
       )}
     >
-      <div className="flex flex-col relative z-20">{children}</div>
+      <div className="flex flex-col relative z-20 gap-[14px]">{children}</div>
       <div
         style={{ border: "1px solid #D1B9B0" }}
         className="absolute z-10 pointer-events-none rounded-lg inset-0 opacity-100 group-hover:opacity-0 transition"
@@ -39,7 +39,10 @@ function CardLayout({ href, title, description, svgIcon }) {
         </h2>
       </div>
       {description && (
-        <p className={clsx("text--truncate", styles.cardDescription)} title={description}>
+        <p
+          className={clsx("text--truncate !leading-normal", styles.cardDescription)}
+          title={description}
+        >
           {description}
         </p>
       )}

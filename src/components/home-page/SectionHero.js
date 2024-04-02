@@ -1,5 +1,6 @@
 /* eslint-disable spellcheck/spell-checker */
 import React from "react";
+import styles from "./styles.module.css";
 
 import hero_image from "./assets/hero.png";
 import cloud from "./assets/cloud.png";
@@ -7,9 +8,9 @@ import cloud from "./assets/cloud.png";
 const SectionHero = () => (
   <div className="min-h-[260px] relative p-6 md:p-12 !-mt-[2.2rem] overflow-hidden ">
     <div className="flex flex-col xl:flex-row items-center justify-between gap-10 container max-w-6xl">
-      <div className="flex flex-col gap-3 text-[var(--ifm-heading-color)] shrink-0 relative z-20">
-        <h1 className="!m-0 text-[28px] ">Welcome to Permit.io</h1>
-        <p className="text-sm !leading-5">
+      <div className="flex flex-col gap-3 shrink-0 relative z-20">
+        <h1 className={`!m-0 text-[28px] ${styles.title}`}>Welcome to Permit.io</h1>
+        <p className={`text-sm !leading-5 ${styles.text}`}>
           <span className="lg:block">
             Here you&apos;ll find comprehensive guides and resources to help{" "}
           </span>{" "}
