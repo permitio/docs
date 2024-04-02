@@ -1,3 +1,4 @@
+/* eslint-disable spellcheck/spell-checker */
 import React from "react";
 
 import hero_image from "./assets/hero.png";
