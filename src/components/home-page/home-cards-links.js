@@ -11,7 +11,7 @@ export const firstRow = [
   },
   {
     type: "link",
-    href: "category/-guides--tutorials",
+    href: "category/guides--tutorials",
     label: "Tutorials",
     svgIcon: <i className="ri-book-open-line ri-xl"></i>,
     description: "Best practices and how-to guides",
@@ -25,7 +25,7 @@ export const firstRow = [
   },
   {
     type: "link",
-    href: "category/-integrate-to-applications",
+    href: "/category/integrate-to-applications",
     label: "Integrations",
     svgIcon: <i className="ri-suitcase-line ri-xl"></i>,
     description: "Integrate Permit with your favorite tools",

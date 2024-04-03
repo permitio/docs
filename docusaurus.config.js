@@ -402,6 +402,7 @@ const config = {
             from: "/integrations/authentication/your-authentication",
             to: "/authentication/your-authentication",
           },
+          { from: "/category/-work-with-authentication", to: "/category/work-with-authentication" }
         ],
       },
     ],
