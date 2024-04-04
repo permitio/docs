@@ -34,7 +34,7 @@ function CardLayout({ href, title, description, svgIcon }) {
     <CardContainer href={href}>
       <div className="flex flex-col">
         {svgIcon ? svgIcon : null}
-        <h2 className={clsx("text--truncate", styles.cardTitle)} title={title}>
+        <h2 className={clsx("text--truncate !text-base", styles.cardTitle)} title={title}>
           {title}
         </h2>
       </div>
