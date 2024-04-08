@@ -26,23 +26,31 @@ const sidebars = {
 
                 <div class='sidebar_bottom'>
                   <a href="/">
-                    <img src="/sidebar-top-icons/normal-icons/docs-home.svg" alt='' />
-                    <img src="/sidebar-top-icons/hover-icons/docs-home.svg" alt='' />
+                    <div>
+                      <img src="/sidebar-top-icons/normal-icons/docs-home.svg" alt='' />
+                      <img src="/sidebar-top-icons/hover-icons/docs-home.svg" alt='' />
+                    </div>
                     Docs Home
                   </a>
                   <a target="_blank" rel="noopener noreferrer" href="https://www.permit.io/">
-                    <img src="/sidebar-top-icons/normal-icons/marketing-home.svg" alt='' />
-                    <img src="/sidebar-top-icons/hover-icons/marketing-home.svg" alt='' />
+                    <div>
+                      <img src="/sidebar-top-icons/normal-icons/marketing-home.svg" alt='' />
+                      <img src="/sidebar-top-icons/hover-icons/marketing-home.svg" alt='' />
+                    </div>
                     Permit Homepage
                   </a>
                   <a target="_blank" rel="noopener noreferrer" href="https://permit-io.slack.com/join/shared_invite/zt-nz6yjgnp-RlP9rtOPwO0n0aH_vLbmBQ#/shared-invite/email">
-                    <img src="/sidebar-top-icons/normal-icons/slack.svg" alt='' />
-                    <img src="/sidebar-top-icons/hover-icons/slack.svg" alt='' />
+                    <div>
+                      <img src="/sidebar-top-icons/normal-icons/slack.svg" alt='' />
+                      <img src="/sidebar-top-icons/hover-icons/slack.svg" alt='' />
+                    </div>
                     Slack Community
                   </a>
                   <a target="_blank" rel="noopener noreferrer" href="https://github.com/permitio">
-                    <img src="/sidebar-top-icons/normal-icons/github.svg" alt='' />
-                    <img src="/sidebar-top-icons/hover-icons/github.svg" alt='' />
+                    <div>
+                      <img src="/sidebar-top-icons/normal-icons/github.svg" alt='' />
+                      <img src="/sidebar-top-icons/hover-icons/github.svg" alt='' />
+                    </div>
                     GitHub
                   </a>
                 </div>

@@ -36,7 +36,8 @@ const SectionHero = () => (
         />
       </figure>
     </div>
-    <div className="absolute inset-0 top-auto w-full h-px bg-[#D1B9B0]"></div>
+    <div className="absolute inset-0 top-auto w-full h-px bg-[#D1B9B0] section_hero_hr"></div>
+    <style>{`html[data-theme="dark"] .section_hero_hr { background-color: rgba(209, 185, 176, 0.5); }`}</style>
   </div>
 );
 
