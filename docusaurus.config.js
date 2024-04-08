@@ -453,7 +453,6 @@ const config = {
             type: "docsVersionDropdown",
             position: "right",
           },
-
           {
             alt: "twitter logo",
             className: "github-icon nav-icon",
@@ -479,7 +478,7 @@ const config = {
             type: "html",
             position: "right",
             className: "dashboard",
-            value: "<a target='_blank' href='https://io.permit.io/QoPSfh'>Dashboard</a>",
+            value: "<a target='_blank' href='https://io.permit.io/QoPSfh'>Go to dashboard</a>",
           },
         ],
       },
