@@ -435,14 +435,14 @@ const config = {
       },
       navbar: {
         hideOnScroll: true,
-        logo: {
-          alt: "Permit.io logo",
-          src: "logo/new-logo-light.svg",
-          srcDark: "logo/new-logo-dark.svg",
-          href: "/",
-          target: "_self",
-          width: 230,
-        },
+        // logo: {
+        //   alt: "Permit.io logo",
+        //   src: "logo/new-logo-light.svg",
+        //   srcDark: "logo/new-logo-dark.svg",
+        //   href: "/",
+        //   target: "_self",
+        //   width: 230,
+        // },
         items: [
           {
             type: "search",
