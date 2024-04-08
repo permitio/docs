@@ -1,3 +1,4 @@
+/* eslint-disable spellcheck/spell-checker */
 // @ts-check
 // Note: type annotations allow type checking and IDEs autocompletion
 const path = require("path");
@@ -402,7 +403,7 @@ const config = {
             from: "/integrations/authentication/your-authentication",
             to: "/authentication/your-authentication",
           },
-          { from: "/category/-work-with-authentication", to: "/category/work-with-authentication" }
+          { from: "/category/-work-with-authentication", to: "/category/work-with-authentication" },
         ],
       },
     ],
@@ -449,15 +450,10 @@ const config = {
             className: "algolia-search",
           },
           {
-            type: "html",
-            position: "left",
-            className: "dashboard",
-            value: "<a target='_blank' href='https://io.permit.io/QoPSfh'>Dashboard</a>",
-          },
-          {
             type: "docsVersionDropdown",
             position: "right",
           },
+
           {
             alt: "twitter logo",
             className: "github-icon nav-icon",
@@ -478,6 +474,12 @@ const config = {
             href: "https://io.permit.io/docs-to-slack",
             target: "_blank",
             position: "right",
+          },
+          {
+            type: "html",
+            position: "right",
+            className: "dashboard",
+            value: "<a target='_blank' href='https://io.permit.io/QoPSfh'>Dashboard</a>",
           },
         ],
       },
