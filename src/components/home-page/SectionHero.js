@@ -36,7 +36,7 @@ const SectionHero = () => (
         />
       </figure>
     </div>
-    <div className="absolute inset-0 top-auto w-full h-px bg-[#D1B9B0]"></div>
+    <div className={`${styles.section_hero_hr}`}></div>
   </div>
 );
 

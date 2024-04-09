@@ -1,3 +1,4 @@
+/* eslint-disable spellcheck/spell-checker */
 // @ts-check
 // Note: type annotations allow type checking and IDEs autocompletion
 const path = require("path");
@@ -402,7 +403,7 @@ const config = {
             from: "/integrations/authentication/your-authentication",
             to: "/authentication/your-authentication",
           },
-          { from: "/category/-work-with-authentication", to: "/category/work-with-authentication" }
+          { from: "/category/-work-with-authentication", to: "/category/work-with-authentication" },
         ],
       },
     ],
@@ -434,25 +435,19 @@ const config = {
       },
       navbar: {
         hideOnScroll: true,
-        logo: {
-          alt: "Permit.io logo",
-          src: "logo/new-logo-light.svg",
-          srcDark: "logo/new-logo-dark.svg",
-          href: "/",
-          target: "_self",
-          width: 230,
-        },
+        // logo: {
+        //   alt: "Permit.io logo",
+        //   src: "logo/new-logo-light.svg",
+        //   srcDark: "logo/new-logo-dark.svg",
+        //   href: "/",
+        //   target: "_self",
+        //   width: 230,
+        // },
         items: [
           {
             type: "search",
             position: "left",
             className: "algolia-search",
-          },
-          {
-            type: "html",
-            position: "left",
-            className: "dashboard",
-            value: "<a target='_blank' href='https://io.permit.io/QoPSfh'>Dashboard</a>",
           },
           {
             type: "docsVersionDropdown",
@@ -478,6 +473,12 @@ const config = {
             href: "https://io.permit.io/docs-to-slack",
             target: "_blank",
             position: "right",
+          },
+          {
+            type: "html",
+            position: "right",
+            className: "dashboard",
+            value: "<a target='_blank' href='https://io.permit.io/QoPSfh'>Go to dashboard</a>",
           },
         ],
       },
