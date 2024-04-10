@@ -434,7 +434,7 @@ const config = {
         applicationId: process.env.HOTJAR_ID || "1234567890",
       },
       navbar: {
-        hideOnScroll: true,
+        hideOnScroll: false,
         // logo: {
         //   alt: "Permit.io logo",
         //   src: "logo/new-logo-light.svg",
