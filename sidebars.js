@@ -54,8 +54,6 @@ const sidebars = {
                     GitHub
                   </a>
                 </div>
-
-                <hr />
               </div>`, // The HTML to be rendered
       defaultStyle: true, // Use the default menu item styling
     },
