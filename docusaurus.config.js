@@ -1,3 +1,4 @@
+/* eslint-disable spellcheck/spell-checker */
 // @ts-check
 // Note: type annotations allow type checking and IDEs autocompletion
 const path = require("path");
@@ -12,6 +13,7 @@ const apiReferenceUrl = process.env.API_REFERENCE_URL ?? "https://api.permit.io/
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "Permit.io Documentation",
+  stylesheets: ["https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css"],
   tagline:
     "Permit is a Fullstack Authorization as a Service, allowing you to configure policies with a no-code UI and bake in enforcement points into your application, never having to write permissions again.",
   url: "https://docs.permit.io",
@@ -354,11 +356,17 @@ const config = {
             to: "/sdk/sdks-overview",
           },
           {
-            from: "/category/how-to",
-            to: "/category/-guides--tutorials",
+            from: ["/category/how-to", "/category/-guides--tutorials"],
+            to: "/category/guides--tutorials",
           },
-          { from: "/category/integrations", to: "/category/-integrate-to-applications" },
-          { from: "/category/modeling-examples", to: "/category/-learn-by-example" },
+          {
+            from: ["/category/integrations", "/category/-integrate-to-applications"],
+            to: "/category/integrate-to-applications",
+          },
+          {
+            from: ["/category/modeling-examples", "/category/-learn-by-example"],
+            to: "/category/learn-by-example",
+          },
           {
             from: "/integrations/authentication/auth0/auth0-demo-app",
             to: "/authentication/auth0/auth0-demo-app",
@@ -395,6 +403,7 @@ const config = {
             from: "/integrations/authentication/your-authentication",
             to: "/authentication/your-authentication",
           },
+          { from: "/category/-work-with-authentication", to: "/category/work-with-authentication" },
         ],
       },
     ],
@@ -425,26 +434,20 @@ const config = {
         applicationId: process.env.HOTJAR_ID || "1234567890",
       },
       navbar: {
-        hideOnScroll: true,
-        logo: {
-          alt: "Permit.io logo",
-          src: "logo/new-logo-light.svg",
-          srcDark: "logo/new-logo-dark.svg",
-          href: "/",
-          target: "_self",
-          width: 230,
-        },
+        hideOnScroll: false,
+        // logo: {
+        //   alt: "Permit.io logo",
+        //   src: "logo/new-logo-light.svg",
+        //   srcDark: "logo/new-logo-dark.svg",
+        //   href: "/",
+        //   target: "_self",
+        //   width: 230,
+        // },
         items: [
           {
             type: "search",
             position: "left",
             className: "algolia-search",
-          },
-          {
-            type: "html",
-            position: "left",
-            className: "dashboard",
-            value: "<a target='_blank' href='https://io.permit.io/QoPSfh'>Dashboard</a>",
           },
           {
             type: "docsVersionDropdown",
@@ -470,6 +473,12 @@ const config = {
             href: "https://io.permit.io/docs-to-slack",
             target: "_blank",
             position: "right",
+          },
+          {
+            type: "html",
+            position: "right",
+            className: "dashboard",
+            value: "<a target='_blank' href='https://io.permit.io/QoPSfh'>Go to dashboard</a>",
           },
         ],
       },

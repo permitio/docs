@@ -59,7 +59,7 @@ export const JavaLabel = () => (
   <span>
     <img
       className="langLabelImage"
-      src={"/img/languages/Java.svg"}
+      src={"/img/languages/java.svg"}
       style={{ width: 22 }}
     />{" "}
     Java

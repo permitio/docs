@@ -1,0 +1,154 @@
+---
+sidebar_position: 2
+title: Use External Data Source
+---
+
+Using the OPAL Scope Config API, you can set your own data sources to be fetched and loaded into your PDPs using OPAL.
+This allows using data without needing to share it with Permit's control plane.
+
+To make changes to the OPAL Scope, use the
+[OPAL Scope API](https://api.permit.io/v2/redoc#tag/Scope-Configurations). Simply include the
+project and environment IDs in the API endpoint URL - don't worry, our guide can show you where to find them.
+
+Out of the box, Permit automatically pulls in details about users, roles, and more from its cloud database to the PDP's policy engine, 
+setting a solid foundation for your policy.<br />
+
+To view the the data structure loaded into PDPs used by default check out the API reference and the example [here](https://api.permit.io/v2/redoc#tag/OPAL-Data-(-EAP-)).
+Notice that this API is in EAP stage might be subject to changes !
+
+
+:::warning EAP
+
+Notice that this API is in EAP stage might be subject to changes !
+
+:::
+
+
+## How to use External Data Sources in Permit
+
+To manage attributes from an external data-source and use them with Permit's Auto-Generated Rego Policies, you will need
+to set up small bindings beside the Scope configuration, this guide will also show you how to do that.<br/>
+*Any attributes in following rules will be merged with the attributes you store in Permit & the attributes you provide in the input.*
+*The merge is done with the following rules input > custom > stored.*<br/>
+The currently supported external attributes are:<br/>
+1. `custom_user_attributes` - User attributes to be merged with the stored & input attributes.
+2. `custom_tenant_attributes` - Tenant attributes to be merged with the stored & input attributes.
+3. `custom_resource_attributes` - Resource attributes to be merged with the stored & input attributes.
+4. `custom_context_attributes` - Context attributes to be merged with the input attributes.
+
+For instance, in this guide, we'll show you how to add information from around the world using data
+from [https://restcountries.com](https://restcountries.com).
+
+We will get the data from the [Rest Countries API](https://restcountries.com) and set it as a
+under `countries` key in the data object using custom data source in the OPAL Scope.
+This will allow us to use the data in our Rego policies.
+
+1. Configure custom data sources using Permit API
+    You can specify the path in the json in which the fetched data will be stored using the `dst_path` attribute.
+
+    ```
+    curl --location --request PUT 'https://api.permit.io/v2/projects/{project_id}/{env_id}/opal_scope' \
+
+    --header 'Content-Type: application/json' \
+
+    --header 'Accept: application/json' \
+
+    --header 'Authorization: Bearer permit_key_***' \
+
+    --data '{
+
+      "data": {
+
+           "entries": [
+
+                {
+
+                     "url": "https://restcountries.com/v3.1/all",
+
+                     "dst_path": "/countries",
+
+                     "config": {
+
+                          "headers": {
+
+                               "Accept": "application/json"
+
+                          }
+
+                     }
+
+                }
+
+           ]
+
+      }
+
+    }'
+    ```
+
+    :::note
+    You can see the data stored inside OPA by running the following command:
+    ```bash
+     curl --location --request GET 'http://localhost:8181/v1/data' \
+     --header 'Authorization: Bearer permit*key* {{secret}}'
+    ```
+    :::
+
+2. You can define custom attributes in your rego policies,
+    to do so we need to add something similar to the following code in the `custom` directory in your [gitops](/integrations/gitops/overview) repo:
+
+    ```rego
+    package permit.custom
+    import future.keywords.in
+
+    region_by_common_name[name] := region {
+     some _,country in data.countries
+     name := country.name.common
+     region := country.region
+    }
+
+    custom_user_attributes["region"] := region_by_common_name[data.users[input.user.key].attributes.country]
+    ```
+
+    By adding this we can now know the region of the user based on the country they are in using the attributes we've loaded
+    from the external data source.
+    Similar to this you can add any custom attributes you want to use in your policies from any external data source.
+    For example, you can load data from stripe and add billing attributes for your users to use in your policies.
+3. Define ABAC conditions using by following this [guide](/how-to/build-policies/abac/building-abac-policy#define-a-user-set).
+4. That's it! The custom attributes are now used in your policies.
+
+
+[API Docs](https://api.permit.io/v2/redoc#tag/Scope-Configurations) for Scope Request (API still in beta):
+
+![](/img/features/projects-and-env/scope-api.png)
+
+You can view the full OPAL Scope documentation **[here](https://docs.opal.ac/getting-started/running-opal/run-opal-server/data-sources)**.
+
+:::info
+**Custom scopes are supported from PDP v0.2.15**
+:::
+
+Make sure you have pulled the latest PDP container.
+
+```bash
+docker pull permitio/pdp-v2:latest
+```
+
+Make sure you have enabled the _`OPAL_SPLIT_ROOT_DATA`_ flag when running the container.
+
+```bash
+OPAL_SPLIT_ROOT_DATA=1
+```
+
+For example, if you are running it with docker, it will look like the example below:
+
+```bash
+docker run -e PDP_API_KEY=<YOUR-PERMIT-API-KEY> -e OPAL_SPLIT_ROOT_DATA=1 permitio/pdp-v2:latest
+```
+
+If the GitOps feature is activated in your account, you can enhance your Rego policies by integrating data from the custom
+data source as illustrated below:
+
+```json
+data.countries[0].capital == "Bridgetown"
+```
