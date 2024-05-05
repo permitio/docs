@@ -312,7 +312,7 @@ const config = {
           },
           {
             from: "/features/permit-elements/element/approval-flows",
-            to: "/embeddable-uis/element/approval-flows",
+            to: "/embeddable-uis/element/access-request",
           },
           {
             from: "/features/permit-elements/email-configuration-and-templates",
