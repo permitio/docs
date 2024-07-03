@@ -1,0 +1,349 @@
+---
+sidebar_position: 1
+title: Stytch & Permit Integration
+---
+
+Stytch is one of the leading authentication platforms for developers, offering robust and scalable authentication solutions.
+Permit.io is a leading authorization platform, providing easily manageable and secure authorization capabilities. By integrating
+Stytch with Permit.io, you can enhance your application with both strong authentication and dynamic authorization.
+
+In this guide, you'll learn how to add Stytch-powered authentication to your Next.js application using their **frontend JavaScript
+SDK** and their **backend Node SDK**, along with their pre-built login UI component.
+We'll cover a similar implementation to that used in this Next.js example app, which we'll reference throughout this guide.
+
+There are many different ways to implement Stytch, and the specific strategy you choose will depend on your use case and preferences.
+This guide is intended to demonstrate one way of implementing Stytch in order to get you up and running as quickly as possible.
+
+## What you will build
+
+In this tutorial, you’ll learn how to integrate Stytch for secure authentication and Permit.io for easily manageable authorization,
+allowing us to change our application's permissions on the fly.
+
+:::note
+This guide provides a basic introduction to integrating Stytch with Permit.io for authentication and authorization.
+**The authorization functionality demonstrated will be quite simple.** For a more comprehensive example focused on complex
+authorization with Stytch, explore the detailed modeling example here.
+:::
+
+## Prerequisites
+
+- Stytch account with a Stytch Consumer project via the Stytch Dashboard. You can read more about doing
+  so [here](https://stytch.com/docs/guides/quickstarts/nextjs#before-you-start).
+- Permit account
+- Basic understanding of Next.js App Router
+
+## Stytch Step-by-Step Guide
+
+### Step 1: Install Stytch SDKs and Configure Your API Keys
+
+First, add our frontend JavaScript SDK and backend Node SDK packages to your Next.js application:
+
+```bash
+npm install @stytch/nextjs @stytch/vanilla-js stytch --save
+```
+
+Next, add your Stytch project's API keys to your application as environment variables:
+
+```
+STYTCH_PROJECT_ENV=test
+STYTCH_PROJECT_ID="YOUR_STYTCH_PROJECT_ID"
+STYTCH_PUBLIC_TOKEN="YOUR_STYTCH_PUBLIC_TOKEN"
+STYTCH_SECRET="YOUR_STYTCH_SECRET"
+```
+
+### Step 2: Wrap Your Application in a StytchProvider
+
+Initialize the Stytch client and add a StytchProvider component to the root of your application so that the frontend JavaScript
+SDK is available to child components:
+
+```javascript
+import { StytchProvider, createStytchUIClient } from "@stytch/nextjs";
+import Head from "next/head";
+
+const stytch = createStytchUIClient(process.env.STYTCH_PUBLIC_TOKEN);
+
+export default function App({ Component, pageProps }) {
+  return (
+    <>
+      <Head>{/* Truncated */}</Head>
+      <StytchProvider stytch={stytch}>
+        <Component {...pageProps} />
+      </StytchProvider>
+    </>
+  );
+}
+```
+
+### Step 3: Add a StytchLogin Component
+
+Create a StytchLogin component. You can configure which authentication methods you'd like to offer by modifying the products array
+in your config object. Here's an example that includes Email Magic Links and OAuth products:
+
+```javascript
+import { StytchLogin, Products } from "@stytch/vanilla-js";
+
+const Login = () => {
+  const REDIRECT_URL = "SEE_STEP_5";
+
+  const config = {
+    products: [Products.emailMagicLinks, Products.oauth],
+    emailMagicLinksOptions: {
+      loginRedirectURL: REDIRECT_URL,
+      loginExpirationMinutes: 60,
+      signupRedirectURL: REDIRECT_URL,
+      signupExpirationMinutes: 60,
+    },
+    oauthOptions: {
+      providers: [{ type: "google" }],
+      loginRedirectURL: REDIRECT_URL,
+      signupRedirectURL: REDIRECT_URL,
+    },
+  };
+
+  return <StytchLogin config={config} styles={{}} />;
+};
+```
+
+Next, add the StytchLogin component to your application's login page. You'll notice that we check for a logged-in user
+before displaying the StytchLogin component:
+
+```javascript
+import { useStytchUser } from "@stytch/nextjs";
+import { useRouter } from "next/router";
+import { useEffect } from "react";
+
+export default function LoginPage() {
+  const { user, isInitialized } = useStytchUser();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isInitialized && user) {
+      router.replace("/profile");
+    }
+  }, [user, isInitialized, router]);
+
+  return <Login />;
+}
+```
+
+### Step 4: Handle Redirects and Complete the Authentication Flow
+
+Specify the URL that users should be redirected back to by setting the REDIRECT_URL parameter used in your StytchLogin component
+config from Step 3. Be sure to add that URL to the Redirect URLs tab in the Stytch Dashboard.
+
+Implement logic on the page that users are redirected to, retrieving the token value that Stytch adds to the redirect URL query
+parameters. Pass that token to the appropriate Stytch authenticate method:
+
+```javascript
+import { useRouter } from "next/router";
+import { useEffect } from "react";
+import stytch from "stytch";
+
+export default function RedirectPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const stytch_token_type = router?.query?.stytch_token_type?.toString();
+    const token = router?.query?.token?.toString();
+
+    if (token && stytch_token_type === "oauth") {
+      stytch.oauth.authenticate(token, {
+        session_duration_minutes: 60,
+      });
+    } else if (token && stytch_token_type === "magic_links") {
+      stytch.magicLinks.authenticate(token, {
+        session_duration_minutes: 60,
+      });
+    }
+  }, [router]);
+
+  return <div>Loading...</div>;
+}
+```
+
+### Step 5: Grant Access to Protected Frontend Content
+
+Upon successful authentication, our frontend JavaScript SDK will automatically populate the session and user objects. Use the
+useStytchSession and useStytchUser hooks to listen for changes:
+
+```javascript
+import { useStytchUser, useStytchSession } from "@stytch/nextjs";
+import { useEffect } from "react";
+import { useRouter } from "next/router";
+
+export default function ProfilePage() {
+  const { user, isInitialized } = useStytchUser();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isInitialized && !user) {
+      router.replace("/");
+    }
+  }, [user, isInitialized, router]);
+
+  return <div>Profile Page Content</div>;
+}
+```
+
+### Step 6: Grant Access to Protected Server-side Routes
+
+Load our backend Node SDK, retrieve the Stytch session_token or session_jwt from the request cookies, and then call the
+`sessions.authenticate` or `sessions.authenticateJwt` methods:
+
+```javascript
+import stytch from "stytch";
+
+let client;
+
+const loadStytch = () => {
+  if (!client) {
+    client = new stytch.Client({
+      project_id: process.env.STYTCH_PROJECT_ID || "",
+      secret: process.env.STYTCH_SECRET || "",
+      env: process.env.STYTCH_PROJECT_ENV === "live" ? stytch.envs.live : stytch.envs.test,
+    });
+  }
+  return client;
+};
+
+export async function getServerSideProps({ req }) {
+  const redirectRes = {
+    redirect: {
+      destination: "/",
+      permanent: false,
+    },
+  };
+
+  const sessionJWT = req.cookies["stytch_session_jwt"];
+
+  if (!sessionJWT) {
+    return redirectRes;
+  }
+
+  const stytchClient = loadStytch();
+
+  try {
+    await stytchClient.sessions.authenticateJwt(sessionJWT);
+    return { props: {} };
+  } catch (e) {
+    return redirectRes;
+  }
+}
+```
+
+As you saw in the above step, we are fetching a `sessionJWT` directly form the cookies. As we are also able to authenticate the session
+with the `.authenticateJwt()` function, we therefore know the `user id` will also be available to us, so we can proceed to sync the user
+inside of Permit. This is part of the **handoff point**.
+
+Before we move to utilize the syncUser function, we need to do a basic Permit setup in the UI.
+
+## Permit Pre-sync setup guide
+
+For the initial setup guide with Permit, please follow the [Quickstart guide](quickstart). It will give you an outline how to
+create a basic `workspace` with permit, create roles, resources, and assign permissions to the roles.
+
+Below is an example of the policy we will be working with. The only think we are missing is syncing a user into Permit, and assigning
+them the appropriate role.
+
+![Basic Policy](/ui-videos/authentication/stytch/account-owner-role.png)
+
+### Importing and initializing the Permit object
+
+Inside of your backend file, we need to import the Permit package and initialize the Permit instance object.
+
+```javascript
+import { Permit } from "permitio";
+
+const permit = new Permit({
+  // The Environment API Key
+  token: process.env.PERMIT_API_KEY,
+  // The URL for the deployed PDP. Usually runs on port 7766.
+  pdp: process.env.PERMIT_PDP_HOSTNAME,
+});
+```
+
+### Creating a handoff-point check
+
+Once the session is created, we need to immediately fetch the userId and add the user to Permit, before we show the end-user any of
+our UI.
+
+#### Fetching the stytch `userId`
+
+```javascript
+const { user } = useStytchUser();
+
+const userId = user.user_id;
+```
+
+#### Performing the authentication check
+
+```javascript
+const isAutenticated = await stytchClient.sessions.authenticateJwt(sessionJWT);
+if (isAutenticated) {
+  // perform all SDK function calls here, passing in the userId.
+}
+```
+
+As part of user synchronization, we use 3 functions from the SDK:
+
+1. Creating a new Tenant
+2. Adding a user to the new Tenant
+3. Assigning the user with a new Role
+
+Let's break it down to each individual function:
+
+### Creating a new Tenant
+
+```javascript
+await permit.api.tenants.create({
+  key: userEmailId,
+  name: userEmail,
+});
+```
+
+### Adding a user to the Tenant
+
+```javascript
+await permit.api.syncUser({
+  key: userId,
+  email: userEmail,
+});
+```
+
+### Assigning a role to the user
+
+Here we are assigning a role of Account Owner, using the role key `AccountOwner`.
+
+```javascript
+await permit.api.assignRole({
+  role: "AccountOwner",
+  tenant: tenantId,
+  user: userId,
+});
+```
+
+Once these SDK calls are complete, we will see a user created inside of a new tenant, and assigned a new role.
+
+![Basic Policy](/ui-videos/authentication/stytch/user-synced.png)
+
+### Wrapping-up
+
+You are all done! You have successfully set-up Stytch as your authentication solution, and combined it with Permit
+to enforce your authorization by syncing these users into Permit and assigning them a role.
+
+Now you are ready to enforce different parts of your application level code. As an example, we have created a simple enforcement below
+that checks if the `AccountOwner` has the ability to `view all the information for his account`.
+
+```javascript
+const isPermitted = await permit.check(id, "view-all", {
+  type: "Account",
+  tenant: currentTenant,
+});
+```
+
+If we look back into the Policy Editor, and the `Account Owner` role, we can see that for the `Current Account` we have the ability to
+`view-all` as it has been checked.
+
+![Basic Policy](/ui-videos/authentication/stytch/account-owner-role.png)
+
+If you need further help with this tutorial, or have any questions, please feel free to reach out to us on [Slack](https://io.permit.io/docs-to-slack).
