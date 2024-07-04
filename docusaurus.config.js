@@ -413,11 +413,13 @@ const config = {
           },
           { from: "/category/-work-with-authentication", to: "/category/work-with-authentication" },
           {
-            from: [
-              "/overview/permit-sdlc",
-              "/how-to/manage-policy-lifecycle",
-            ],
+            from: ["/overview/permit-sdlc", "/how-to/manage-policy-lifecycle"],
             to: "/category/policy-lifecycle",
+          },
+          // SDK changes
+          {
+            from: "/sdk/nodejs/usage-example",
+            to: "/sdk/nodejs/quickstart-nodejs",
           },
         ],
       },
