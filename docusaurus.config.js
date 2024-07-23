@@ -320,7 +320,7 @@ const config = {
           },
           {
             from: "/embeddable-uis/element/access-requests",
-            to: "/api/examples/access-requests",
+            to: "/api/elements/access-requests",
           },
           {
             from: "/features/permit-elements/email-configuration-and-templates",
