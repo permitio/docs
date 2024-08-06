@@ -1,0 +1,138 @@
+---
+sidebar_position: 1
+title: NGINX x Permit
+---
+
+# Integration Guide: Permit.io with Nginx using ngx_http_auth_request_module
+
+## 1. Introduction
+This guide outlines the steps to integrate Permit.io with Nginx using the ngx_http_auth_request_module.
+This integration allows you to implement external authorization checks for your Nginx-served applications using Permit.io's Policy Decision Point (PDP).
+
+## 2. Prerequisites
+- Nginx installed with ngx_http_auth_request_module support
+- Permit.io account and PDP set up
+- Basic understanding of Nginx configuration
+
+## 3. Configuration Steps
+
+### 3.1 Enable ngx_http_auth_request_module
+Ensure that the ngx_http_auth_request_module is enabled in your Nginx build. You can check this by running:
+
+```
+nginx -V
+```
+
+Look for `--with-http_auth_request_module` in the output.
+
+### 3.2 Set up Permit.io PDP
+Ensure your Permit.io PDP is running and accessible at http://localhost:7766. This is the authorization endpoint that Nginx will query for each request to check permissions.
+
+### 3.3 Configure Nginx
+
+Edit your Nginx configuration file (usually `/etc/nginx/nginx.conf` or a site-specific configuration in `/etc/nginx/sites-available/`):
+
+```nginx
+http {
+    # ... other configurations ...
+
+    server {
+        listen 80;
+        server_name example.com;
+
+        location / {
+            auth_request /auth;
+            auth_request_set $auth_status $upstream_status;
+
+            # Set the required Permit.io headers
+            auth_request_set $permit_user_key $upstream_http_permit_user_key;
+            auth_request_set $permit_action $upstream_http_permit_action;
+            auth_request_set $permit_resource_type $upstream_http_permit_resource_type;
+            auth_request_set $permit_tenant_id $upstream_http_permit_tenant_id;
+
+            # Pass the Permit.io headers to the application
+            proxy_set_header permit-user-key $permit_user_key;
+            proxy_set_header permit-action $permit_action;
+            proxy_set_header permit-resource-type $permit_resource_type;
+            proxy_set_header permit-tenant-id $permit_tenant_id;
+
+            # ... your existing location configuration ...
+        }
+
+        location = /auth {
+            internal;
+            # Forward the request to your deployed PDP
+            proxy_pass http://localhost:7766/nginx_allowed;
+            proxy_pass_request_body off;
+            proxy_set_header Content-Length "";
+            proxy_set_header X-Original-URI $request_uri;
+
+            # Pass the required Permit.io headers
+            proxy_set_header permit-user-key $http_permit_user_key;
+            proxy_set_header permit-action $http_permit_action;
+            proxy_set_header permit-resource-type $http_permit_resource_type;
+            proxy_set_header permit-tenant-id $http_permit_tenant_id;
+        }
+    }
+}
+```
+
+### 3.4 Configure Error Handling
+Add error handling for unauthorized requests:
+
+```nginx
+error_page 401 = @error401;
+
+location @error401 {
+    return 401 "Unauthorized";
+    # Or redirect to a login page:
+    # return 302 /login;
+}
+```
+And for Forbidden requests:
+```nginx
+error_page 403 = @error403;
+
+location @error403 {
+    return 403 "Forbidden";
+    # Or redirect to a custom error page:
+    # return 302 /error403;
+}
+```
+
+
+### 3.5 Restart Nginx
+After making changes, restart Nginx - depends on your deployment method, but typically you can run the following command to restart Nginx:
+
+```
+sudo systemctl restart nginx
+```
+
+## 4. Testing the Integration
+- Make requests to your Nginx server, ensuring you include the required Permit.io headers:
+* permit-user-key
+* permit-action
+* permit-resource-type
+* permit-tenant-id
+
+Verify that requests are being authorized correctly through the Permit.io PDP:
+- You can check out "Audit Logs" in Permit.io Application (https://app.permit.io/audit) to see the audit logs from the PDP.
+- Check Nginx error logs (`/var/log/nginx/error.log`) for any issues.
+
+## 5. Troubleshooting
+- Ensure all Nginx locations that need authorization have the `auth_request` directive.
+- Verify that the Permit.io PDP is running and accessible at http://localhost:7766 or in any other URL you have configured.
+- Check that the required headers (`permit-user-key`, `permit-action`, `permit-resource-type`, `permit-tenant-id`) are being passed correctly.
+- Examine Nginx and Permit.io PDP logs for any error messages.
+
+## 6. Security Considerations
+- Use HTTPS for all communications between Nginx, clients, and the Permit.io PDP.
+- Ensure the PDP is only accessible from trusted sources, preferably only from the Nginx server.
+- Regularly update Nginx and Permit.io components to the latest versions.
+- Implement proper rate limiting and DDoS protection.
+
+## 7. Performance Optimization
+- Consider caching authorization results to reduce load on the Permit.io PDP.
+- Monitor the performance impact of the additional authorization requests.
+
+For any questions or issues, don't hesitate to reach out to [Our Slack Community](https://permit-io.slack.com/join/shared_invite/zt-nz6yjgnp-RlP9rtOPwO0n0aH_vLbmBQ#/shared-invite/email).
