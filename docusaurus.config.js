@@ -421,6 +421,10 @@ const config = {
             from: "/sdk/nodejs/usage-example",
             to: "/sdk/nodejs/quickstart-nodejs",
           },
+          {
+            from: "/concepts/pdp",
+            to: "/concepts/pdp/overview",
+          },
         ],
       },
     ],
