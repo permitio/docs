@@ -425,6 +425,19 @@ const config = {
             from: "/concepts/pdp",
             to: "/concepts/pdp/overview",
           },
+          // Moz report
+          {
+            from: "/features/policy-editor/abac/overview",
+            to: "/how-to/build-policies/abac/overview",
+          },
+          {
+            from: "/features/policy-editor/rbac/overview",
+            to: "/how-to/build-policies/rbac/overview",
+          },
+          {
+            from: "/category/sdk",
+            to: "/sdk/sdks-overview",
+          },
         ],
       },
     ],
