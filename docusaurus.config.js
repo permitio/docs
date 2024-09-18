@@ -438,6 +438,10 @@ const config = {
             from: "/category/sdk",
             to: "/sdk/sdks-overview",
           },
+          {
+            from: "/api/examples/manage-env",
+            to: "/manage-your-account/creating-environments",
+          },
         ],
       },
     ],
