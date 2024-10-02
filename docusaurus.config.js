@@ -42,9 +42,6 @@ const config = {
               label: "2.0.0",
               path: "/",
             },
-            "1.0.0": {
-              banner: "none",
-            },
           },
         },
         blog: false, // disables docusaurus blog
