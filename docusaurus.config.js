@@ -42,9 +42,6 @@ const config = {
               label: "2.0.0",
               path: "/",
             },
-            "1.0.0": {
-              banner: "none",
-            },
           },
         },
         blog: false, // disables docusaurus blog
@@ -530,9 +527,9 @@ const config = {
         respectPrefersColorScheme: false,
       },
       algolia: {
-        appId: "5XEC02AV6V",
-        apiKey: "468aa3509ee97f55ff3c6dcff73c61c4",
-        indexName: "docs",
+        appId: "MVBO9ANY91",
+        apiKey: "cce9564dd44f4505a37949e7ba1593e0",
+        indexName: "permit",
         contextualSearch: true,
       },
       announcementBar: {
