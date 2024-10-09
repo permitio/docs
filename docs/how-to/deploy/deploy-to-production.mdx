@@ -132,3 +132,47 @@ To achieve high throughput and low latency:
 - **Disable Decision Debug Info**: In production, you can turn off decision debug information to enhance performance. Disable debug logging by adding `--env PDP_DEBUG=False` to the PDP command line.
 - **Optimize Base Policy**: Tailor the base policy to your specific use case. For example, disabling ReBAC checks (if not used) can speed up policy execution (this requires our tech support).
   With these optimizations, you can expect several thousand RPS with less than 10ms latency per request.
+
+
+## PDP Offline Mode
+
+The PDP relies on Permit's cloud for fetching configuration, loading policies, and keeping those up to date.
+Despite the high availability of Permit's cloud, there still might be cases when the PDP can't reach it.
+For extra resilience, the PDP can be configured to work in offline mode, where it will use a local backup of the configuration and policies.
+
+### How it works
+When the PDP is started in offline mode, it will try to fetch the configuration from Permit's cloud as usual.
+After `PDP_CONFIG_FETCH_MAX_RETRIES` failed attempts, the PDP will switch to offline mode and use the backup configuration file if present.
+Once PDP is up and running - it won't try to fetch the configuration again from cloud, unless it's restarted.
+
+For backing up the policies (both data & rules loaded to policy store), PDP internally uses [OPAL's offline mode](https://docs.opal.ac/getting-started/running-opal/run-opal-client/opa-runner-parameters/#policy-store-backup) 
+(no need to explicitly enable OPAL's offline mode, PDP would do it automatically).
+OPAL uses policy data from the backup file to initialy load the policy store, but it never gives up on syncing with cloud - so once Permit cloud is reachable again, the most updated policy data could be fetched.
+Policy data backup is done periodically (to the same directory as the configuration backup file), and also on a graceful shutdown of the PDP.
+
+
+### Configuring Offline Mode
+
+To enable the PDP offline mode, use the `PDP_ENABLE_OFFLINE_MODE` environment variable.
+You would also have to mount a volume or a host directory to the PDP container at `/app/backup`, where the backup files will be persisted.
+When PDP offline mode is enabled, the PDP will automatically enable OPAL's offline mode, and will use the backup files from the mounted volume.
+
+```sh
+docker run -it -p 7766:7000 -p 8181:8181 
+  --env PDP_API_KEY=<YOUR_API_KEY> \
+  --env PDP_ENABLE_OFFLINE_MODE=true \
+  -v <HOST_BACKUP_DIR_OR_NAMED_VOLUME>:/app/backup
+  permitio/pdp-v2:latest
+```
+
+There are serverl other advanced configuration options you can use:
+* `PDP_OFFLINE_MODE_BACKUP_DIR` Sets the directory path of the PDP's configuration backup file (default "/app/backup")
+* `PDP_OFFLINE_MODE_BACKUP_FILENAME` Sets the file name of the PDP's configuration backup file (default "pdp_cloud_config_backup.json")
+* `PDP_OFFLINE_MODE_POLICY_BACKUP_FILENAME` Sets the file name of the PDP's policy store backup file within the backup dir. This replaces OPAL's `OPAL_STORE_BACKUP_PATH`. (default "policy_store_backup.json")
+* `PDP_CONFIG_FETCH_MAX_RETRIES` - Would determine after how many retries (to fetch cloud configuration) the PDP should switch to offline mode (default: 6)
+* `OPAL_STORE_BACKUP_INTERVAL` - Determines how often would the policy store backup be saved. (default: 1m)
+
+### Security Considerations
+
+PDP's configuration backup file is securely encrypted on disk using a key derived from your secret `PDP_API_KEY` token.
+Currently OPAL's backup file of the policy store is not encrypted, so make sure to secure the mounted host directory / volume where the backup files are stored. (let us know if that's something you need).
