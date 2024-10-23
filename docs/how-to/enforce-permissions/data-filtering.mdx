@@ -7,7 +7,31 @@ Implementing data filtering within access control represents a different approac
 Instead of merely granting or denying access, it curates what users see, tailoring the data to their individual permissions.
 This method ensures not only secure access but also optimized data delivery.
 
-## Simple usage
+## Use case: data filtering based on access control
+A typical use case in permission enforcement is checking access on a single resource.
+Can a specific user perform an action on a specific resource?
+![](/img/data_filtering/permitcheck.png)
+
+But sometimes we are interested to filter a dataset based on permissions.
+For example, we want to know what are all the resources a specific user can access.
+
+![](/img/data_filtering/filterobjects.png)
+
+There are 2 approaches we can take to solve this problem:
+
+**Running the policy engine on each record:** If there are not many resources, we could simply prefetch all of them and run a `permit.check()` query on each one of them to filter
+only the authorized resources. For that, we have a [shortcut method](#filtering-prefetched-records) called `permit.filterObjects()`. However, Running a `permit.check()` query on all the folders in the database is not an efficient way to answer this question.
+What if there are a million folders and John can only read 5 of them?
+
+**Running an efficient db query:** A better way would be to simply run an SQL query on the database. Databases are build for efficient filtering.
+However with modern authorization, the logic of access control is often expressed in a policy language (i.e: Rego)
+and is run by the policy engine (i.e: OPA). In that case we need to somehow **translate** the access-control logic
+from policy engine language back into SQL filters. That is exactly how [partial evaluation](#advanced-using-partial-evaluation) works.
+
+
+## Filtering prefetched records
+If you already queried the database and have a list of all the records, 
+you can use `permit.filterObjects()` to filter these records according to permissions.
 
 ```go
 package main
@@ -53,14 +77,259 @@ func main() {
 
 ```
 
-## Advanced Usage
+## Advanced: Using partial evaluation
 
-:::tip STAY TUNED!
-In the near future, you'll be able to seamlessly integrate permission enforcement directly into your database queries
-using **partial evaluation**.
-
-This advanced integration will analyze your policies,
-formulate optimized query filter conditions,
-and facilitate the incorporation of these conditions into your database queries.
-This ensures that the data retrieved is strictly confined to what the user is authorized to view.
+:::info Early access
+This is an early-access feature. We would love your support and feedback as we iterate and expand its capabilties.
+Please be advised all partial eval APIs are still subject to change based on user feedback.
 :::
+
+### Prerequisites
+
+* Partial evaluation currently is only supported for **RBAC** based policies. We are working to expand support to ReBAC and ABAC as well.
+* You'd need to run at least version 0.6.0 of the PDP
+* Currently only the python SDK support partial evaluation, starting at version 2.7.0.
+* We currently only support translation of the compiled policies to SQLAlchemy ORM queries.
+	* More SDKs will be supported in the future as well as more ORMs.
+	* The source code for the data filtering library is here, we would love to accept community contributions to support more ORMs or direct SQL plugins.
+
+### How does partial evaluation work?
+
+Partial Evaluation is the process of reducing a policy to a smaller policy (called the **residual policy**) based on some known partial context on the input query.
+
+For example, if we know the user is an admin - all policies that are only relevant to non-admins can be skipped, and therefore only
+a smaller subset of policies is relevant.
+
+For the data filtering use case we presented above, we know:
+- who the user is (e.g: john)
+- what action we are trying to do (e.g: read)
+- what is the resource type (e.g: folder)
+
+That information can help us remove non relevant rules and return a smaller policy.
+
+![](/img/data_filtering/partialeval.png)
+
+The returned policy is expressed as Rego AST, the Permit PDP is then translating the AST into a boolean expression format.
+
+![](/img/data_filtering/compileapi.png)
+
+This boolean expression can be then be expressed as SQL filters that we can use to run an efficient query against the database.
+
+Each database or ORM have a different way to represent queries, so we use different plugins to translate the generic format (boolean expression) returned by the PDP into a DB/ORM specific query.
+
+![](/img/data_filtering/querybuilder.png)
+
+### Using partial evaluation to filter resources
+
+The following tutorial uses the Python SDK, we will add support to different SDKs in the near future.
+
+#### 1) Run the PDP
+
+First, run the Permit.io PDP (must at least be version 0.6.0 or above):
+
+```
+docker run -it -p 7766:7000 -p 8181:8181 --env PDP_API_KEY=<api key> permitio/pdp-v2:0.6.0
+```
+
+#### 2) Call permit.filter_resources() to get a residual policy
+
+Init the permit SDK and use the `permit.filter_resources()` method:
+```py
+from permit import Permit
+
+permit = Permit(token='<api key>')
+authz_filter = await permit.filter_resources(
+	"8de78329-de7d-4e57-89d1-ca609b2f3782", # user
+	"list", # action
+	"task" # resource type
+)
+```
+
+You would get back a `ResidualPolicyResponse` object, here is an example object to showcase how it looks like:
+```json
+{
+  "type": "conditional",
+  "condition": {
+    "expression": {
+      "operator": "or",
+      "operands": [
+        {
+          "expression": {
+            "operator": "eq",
+            "operands": [
+              { "variable": "input.resource.tenant" },
+              { "value": "082f6978-6424-4e05-a706-1ab6f26c3768" }
+            ]
+          }
+        },
+        {
+          "expression": {
+            "operator": "eq",
+            "operands": [
+              { "variable": "input.resource.tenant" },
+              { "value": "12346978-6424-4e05-bbbb-1ab6f26a1234" }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+You can see that a boolean expression essentially encodes a simple condition or filter:
+```py
+(
+	input.resource.tenant == "082f6978-6424-4e05-a706-1ab6f26c3768"
+	or
+	input.resource.tenant == "12346978-6424-4e05-bbbb-1ab6f26a1234"
+)
+```
+
+This could easily become a *WHERE* expression in an SQL statement.
+
+#### 3) Translate the residual policy into an SQL query
+
+We will show how to do this with the SQLAlchemy ORM
+(we will expand to more plugins and examples in the future).
+
+Assuming we have the following SQLAlchemy db models:
+
+```py
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, ForeignKey, String
+from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.dialects import postgresql
+
+# assuming we have the following SQL tables:
+Base = declarative_base()
+
+class Tenant(Base):
+    __tablename__ = "tenant"
+
+    id = Column(String, primary_key=True)
+    key = Column(String(255))
+
+class Task(Base):
+    __tablename__ = "task"
+
+    id = Column(String, primary_key=True)
+    created_at = Column(DateTime, default=datetime.utcnow())
+    updated_at = Column(DateTime)
+    description = Column(String(255))
+    tenant_id = Column(String, ForeignKey("tenant.id"))
+    tenant = relationship("Tenant", backref="tasks")
+```
+
+We can build a SQLAlchemy query object like this:
+```py
+from permit import Permit
+from permit_datafilter.plugins.sqlalchemy import QueryBuilder
+from sqlalchemy.dialects import postgresql
+
+permit = Permit(token='<api key>')
+authz_filter = await permit.filter_resources(
+	"8de78329-de7d-4e57-89d1-ca609b2f3782",
+	"list",
+	"task"
+)
+
+query = (
+	QueryBuilder()
+		.select(Task)
+		.filter_by(authz_filter)
+		.map_references({
+			# if mapping a reference to a field on a related table
+			"input.resource.tenant": Tenant.key,
+		})
+		# you must specify how to perform a join against that table
+		.join(Tenant, Task.tenant_id == Tenant.id)
+		.build()
+)
+```
+
+This query can then be run against the database:
+```
+result = await session.execute(query)
+```
+
+If you print the resulting SQL you will get something like this:
+```py
+print(str(
+	query.compile(
+		dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+	)
+))
+
+# example output:
+# SELECT task.id, task.created_at, task.updated_at, task.description, task.tenant_id 
+# FROM task JOIN tenant ON task.tenant_id = tenant.id 
+# WHERE tenant.key = '082f6978-6424-4e05-a706-1ab6f26c3768'
+```
+
+#### Full example
+```py
+import asyncio
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, ForeignKey, String
+from sqlalchemy.orm import declarative_base, relationship
+from permit import Permit
+from permit_datafilter.plugins.sqlalchemy import QueryBuilder
+from sqlalchemy.dialects import postgresql
+
+# assuming we have the following SQL tables:
+Base = declarative_base()
+
+class Tenant(Base):
+    __tablename__ = "tenant"
+
+    id = Column(String, primary_key=True)
+    key = Column(String(255))
+
+class Task(Base):
+    __tablename__ = "task"
+
+    id = Column(String, primary_key=True)
+    created_at = Column(DateTime, default=datetime.utcnow())
+    updated_at = Column(DateTime)
+    description = Column(String(255))
+    tenant_id = Column(String, ForeignKey("tenant.id"))
+    tenant = relationship("Tenant", backref="tasks")
+
+
+async def get_readable_tasks():
+	# this is how we can filter all the task records in the database
+	# that are readable by the user according to the authz policy
+	# (i.e: that user have the `task:read` permission on them)
+	permit = Permit(token='<api key>')
+	authz_filter = await permit.filter_resources(
+		"8de78329-de7d-4e57-89d1-ca609b2f3782",
+		"list",
+		"task"
+	)
+	query = (
+		QueryBuilder()
+			.select(Task)
+			.filter_by(authz_filter)
+			.map_references({
+				# if mapping a reference to a field on a related table
+				"input.resource.tenant": Tenant.key,
+			})
+			# you must specify how to perform a join against that table
+			.join(Tenant, Task.tenant_id == Tenant.id)
+			.build()
+	)
+
+	print(str(
+	query.compile(
+		dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+	)
+	))
+
+	# example output:
+	# SELECT task.id, task.created_at, task.updated_at, task.description, task.tenant_id 
+	# FROM task JOIN tenant ON task.tenant_id = tenant.id 
+	# WHERE tenant.key = '082f6978-6424-4e05-a706-1ab6f26c3768'
+```
