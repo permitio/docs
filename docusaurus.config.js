@@ -361,12 +361,8 @@ const config = {
             to: "/sdk/sdks-overview",
           },
           {
-            from: ["/category/how-to", "/category/-guides--tutorials"],
-            to: "/category/guides--tutorials",
-          },
-          {
             from: ["/category/integrations", "/category/-integrate-to-applications"],
-            to: "/category/integrate-to-applications",
+            to: "/quickstart",
           },
           {
             from: ["/category/modeling-examples", "/category/-learn-by-example"],
@@ -408,11 +404,6 @@ const config = {
             from: "/integrations/authentication/your-authentication",
             to: "/authentication/your-authentication",
           },
-          { from: "/category/-work-with-authentication", to: "/category/work-with-authentication" },
-          {
-            from: ["/overview/permit-sdlc", "/how-to/manage-policy-lifecycle"],
-            to: "/category/policy-lifecycle",
-          },
           // SDK changes
           {
             from: "/sdk/nodejs/usage-example",
@@ -447,6 +438,112 @@ const config = {
           {
             from: "/api/rbac/overview",
             to: "/how-to/build-policies/rbac/overview",
+          },
+          {
+            from: [
+              "/category/integrate-to-applications",
+              "/category/guides--tutorials",
+              "/category/-work-with-authentication",
+              "/category/how-to",
+              "/category/-guides--tutorials",
+              "/overview/permit-sdlc",
+              "/category/policy-lifecycle",
+              "/category/build-policies",
+            ],
+            to: "/quickstart",
+          },
+          {
+            from: ["/category/policy-lifecycle", "/how-to/manage-policy-lifecycle"],
+            to: "/how-to/SDLC/CI-CD",
+          },
+          {
+            from: "/category/golang",
+            to: "/sdk/golang/quickstart-golang",
+          },
+          {
+            from: "/category/nodejs",
+            to: "/sdk/nodejs/quickstart-nodejs",
+          },
+          {
+            from: "/category/python",
+            to: "/sdk/python/quickstart_python_sync",
+          },
+          {
+            from: "/category/ruby",
+            to: "/sdk/ruby/quickstart-ruby",
+          },
+          {
+            from: "/category/java",
+            to: "/sdk/java/quickstart-java",
+          },
+          {
+            from: "/category/dotnet",
+            to: "/sdk/dotnet/quickstart-dotnet",
+          },
+          {
+            from: "/category/rbac",
+            to: "/how-to/build-policies/rbac/overview",
+          },
+          {
+            from: "/category/abac",
+            to: "/how-to/build-policies/abac/overview",
+          },
+          {
+            from: "/category/rebac",
+            to: "/how-to/build-policies/rebac/overview",
+          },
+          {
+            from: "/category/enforce-permissions",
+            to: "/how-to/enforce-permissions/check",
+          },
+          {
+            from: "/category/audit-logs",
+            to: "/how-to/use-audit-logs/types-and-filtering",
+          },
+          {
+            from: "/category/deploy",
+            to: "/how-to/deploy/deploy-to-production",
+          },
+          {
+            from: ["/category/abac", "/category/abac-1"],
+            to: "/how-to/build-policies/abac/overview",
+          },
+          { from: "/category/api-examples", to: "/api/api-with-cli" },
+          { from: "/category/audit-logs", to: "/how-to/use-audit-logs/types-and-filtering" },
+          {
+            from: "/category/auth0",
+            to: "/authentication/auth0/permit-integration",
+          },
+          { from: "/category/c-beta", to: "/sdk/cpp/quickstart-cpp" },
+          {
+            from: "/category/cognito",
+            to: "/authentication/cognito/permit-integration",
+          },
+          { from: "/category/elements", to: "/embeddable-uis/overview" },
+          { from: "/category/erlang-beta", to: "/sdk/erlang/quickstart-erlang" },
+          { from: "/category/php-beta", to: "/sdk/php/quickstart-php" },
+          { from: "/category/rust-coming-soon", to: "/sdk/rust/quickstart-rust" },
+          {
+            from: "/category/kotlin-beta",
+            to: "/sdk/kotlin/quickstart-kotlin",
+          },
+          { from: "/category/policy-decision-point-pdp", to: "/concepts/pdp/overview" },
+          { from: "/category/policy-lifecycle", to: "/how-to/SDLC/CI-CD" },
+          {
+            from: ["/category/rbac", "/category/rbac-1"],
+            to: "/how-to/build-policies/rbac/overview",
+          },
+          {
+            from: "/category/rebac",
+            to: "/how-to/build-policies/rebac/overview",
+          },
+          {
+            from: "/category/understanding-errors",
+            to: "/category/errors",
+          },
+          {
+            from: "/category/work-with-authentication",
+            to: "/how-to/sync-users",
           },
         ],
       },
