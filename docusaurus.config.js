@@ -443,7 +443,11 @@ const config = {
           {
             from: "/api/examples/bulk-operations",
             to: "/how-to/bulk-operations",
-          }
+          },
+          {
+            from: "/api/rbac/overview",
+            to: "/how-to/build-policies/rbac/overview",
+          },
         ],
       },
     ],
