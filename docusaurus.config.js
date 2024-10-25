@@ -439,6 +439,11 @@ const config = {
             from: "/api/examples/manage-env",
             to: "/manage-your-account/creating-environments",
           },
+          // Sidebar Restructure
+          {
+            from: "/api/examples/bulk-operations",
+            to: "/how-to/bulk-operations",
+          }
         ],
       },
     ],
