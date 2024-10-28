@@ -232,6 +232,7 @@ const sidebars = {
         "how-to/enforce-permissions/check",
         "how-to/enforce-permissions/bulk-check",
         "how-to/enforce-permissions/data-filtering",
+        "foaz/url-mapping-check",
         {
           type: "category",
           label: "Permission Queries",
