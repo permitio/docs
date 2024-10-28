@@ -78,15 +78,15 @@ export const secondRow = [
 export const thirdRow = [
   {
     type: "link",
-    href: "category/golang",
+    href: "sdk/golang/quickstart-golang",
     label: "Golang",
     icon: " ",
   },
-  { type: "link", href: "category/nodejs", label: "Node.js", icon: " " },
-  { type: "link", href: "category/python", label: "Python", icon: " " },
-  { type: "link", href: "category/ruby", label: "Ruby", icon: " " },
-  { type: "link", href: "category/java", label: "Java", icon: " " },
-  { type: "link", href: "category/dotnet", label: ".NET", icon: " " },
+  { type: "link", href: "sdk/nodejs/quickstart-nodejs", label: "Node.js", icon: " " },
+  { type: "link", href: "sdk/python/quickstart_python_sync", label: "Python", icon: " " },
+  { type: "link", href: "sdk/ruby/quickstart-ruby", label: "Ruby", icon: " " },
+  { type: "link", href: "sdk/java/quickstart-java", label: "Java", icon: " " },
+  { type: "link", href: "sdk/dotnet/quickstart-dotnet", label: ".NET", icon: " " },
 ];
 export const fourthRow = [
   {
