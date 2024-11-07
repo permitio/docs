@@ -3,6 +3,11 @@ sidebar_position: 3
 title: Write Custom Policies
 ---
 
+:::tip
+This guide assumes you have a [basic Git setup with Permit. Follow the Git integration guide before starting with this one](/integrations/gitops/github).
+:::
+
+
 While the Permit.io platform offers support to the majority of policy configurations, sometimes developers are required to extend their policies with functionalities currently unsupported by Permit's UI.
 Since Permit.io's cloud configuration generates Policy as Code for each user configuration, you can easily extend it by writing custom policy code.
 
