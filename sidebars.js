@@ -557,6 +557,7 @@ const sidebars = {
         "authentication/supertokens",
         "authentication/hankopermit",
         "integrations/SCIM/OKTA",
+        "integrations/SCIM/EntraID",
       ],
     },
     {
