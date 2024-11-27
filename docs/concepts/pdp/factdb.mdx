@@ -19,37 +19,209 @@ Otherwise, some features might not work as expected.
 
 ## Enabling FactDB
 
-To enable the FactDB on your environment there are two configurations that you need to set:
-### Set the FactDB configuration on Permit.io environment settings
-1. Copy your environment API Key
-2. Perform the following GET request to get your current environment settings
-```bash
-curl --request GET 'https://api.permit.io/v2/projects/{proj_id}/envs/{env_id}' \
---header 'Accept: application/json' \
---header 'Authorization: Bearer {api_key}'
-```
-3. If you already have some settings in place, merge the current settings with the ones, given in the next step.
-4. Perform the following PATCH request to update your environment settings and enable FactDB
-```bash
-curl --location --request PATCH 'https://api.permit.io/v2/projects/{proj_id}/envs/{env_id}' \
---header 'Content-Type: application/json' \
---header 'Accept: application/json' \
---header 'Authorization: Bearer {api_key}' \
---data-raw '{
-  "settings": {
-        "factdb_enabled":true,
-        "allow_legacy_data_store":true
-    }
-}'
-```
+The FactDB can be enabled per Permit Environment, allowing PDPs in that environment to use the FactDB.
+Optionally, you can have both legacy PDPs and FactDB enabled PDPs in the same environment.
 
-### Enable FactDB on your PDP
-After you have enabled the FactDB on your environment, you need to enable it on your PDPs as well.
-This is done be setting the following environment variable on your PDPs
-- `PDP_FACTDB_ENABLED=true`
+To enable FactDB on a Permit Environment, you'll need an [API Key](manage-your-account/workspace-settings#api-keys),
+then follow the steps below:
+
+#### 1. Allow FactDB on Permit.io Environment Settings
+
+Update your environment settings to enable FactDB.
+```bash
+curl -X PATCH 'https://api.permit.io/v2/projects/{proj_id}/envs/{env_id}' \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H 'Authorization : Bearer {api_key}' \
+  --data-raw '{
+      "settings": {
+            "factdb_enabled":true
+      }
+    }'
+```
+:::info
+If you have existing settings in your environment, you may want to include them in the PATCH request.
+Check it using the following request:
+```bash
+curl -X GET 'https://api.permit.io/v2/projects/{proj_id}/envs/{env_id}' \
+  -H 'Accept: application/json' -H 'Authorization : Bearer {api_key}'
+```
+:::
+
+
+#### 2. Enable FactDB on your PDPs
+
+Set the `PDP_FACTDB_ENABLED=true` environment variable to enable FactDB on your all PDPs connected to the environment.
+
+```bash
+docker run -it -p 7766:7000 \
+  --name pdp-online \
+  --env PDP_API_KEY=<YOUR_API_KEY> \
+  --env PDP_FACTDB_ENABLED=true \
+  permitio/pdp-v2:latest
+```
 
 :::info
-If you have multiple PDPs, you need to set this environment variable on all of them.
-The reason that the flag is also required on the PDP side is
-to allow environments to run both with FactDB and without it.
+FactDB is currently an opt-in feature, requiring you to explicitly enable it on all PDPs in the environment.
+This is to allow environments to run both with FactDB and without it.
+:::
+
+### Running both FactDB and Legacy PDPs in the same environment
+
+For simplifying migration plan, it is possible to run both FactDB enabled PDPs and Legacy PDPs in the same environment.
+To do this, you need to enable the following setting on the environment.
+
+```bash
+curl -X PATCH 'https://api.permit.io/v2/projects/{proj_id}/envs/{env_id}' \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H 'Authorization : Bearer {api_key}' \
+  --data-raw '{
+      "settings": {
+            "factdb_enabled":true,
+            "allow_legacy_data_store":true
+      }
+    }'
+```
+
+With this setting enabled, you can run both FactDB PDPs with `PDP_FACTDB_ENABLED=true` and Legacy PDPs in the same environment.
+
+:::info
+We recommend you to migrate all your PDPs to FactDB.
+:::
+
+## FactDB Architecture
+
+When the PDP boots, the FactDB download the latest snapshot from the Permit Cloud and stores it in the `/app/backup/` directory.
+After the file is downloaded, the FactDB will resume data updates from the Permit Cloud since the given snapshot.
+
+```mermaid
+sequenceDiagram
+    participant cloud as Permit Cloud
+    participant pdp as PDP
+    participant factdb as FactDB
+    participant opa as OPA
+    cloud  ->> pdp: Download Snapshot
+    pdp ->> factdb: Load Snapshot
+    cloud ->> factdb: Send Updates since Snapshot
+    pdp ->> factdb: Query Data
+    pdp ->> opa: Evaluate Policy using the Data
+```
+
+Using the stored data, when the PDP receive a query, it first checks the FactDB for the relevant data, then passes it to the OPA engine for policy evaluation.
+
+
+## FactDB + Offline Mode
+
+FactDB can be used in conjunction with the [PDP Offline Mode](/how-to/deploy/deploy-to-production/#pdp-offline-mode) feature.
+When the PDP is in Offline Mode, the FactDB will boot from the locally stored disk volume, preserved from previous runs.
+
+### Example
+Here is an example of how to start the PDP in Offline Mode with FactDB enabled
+
+Create a volume for the PDP backup
+```bash
+docker volume create pdp-offline-backup
+```
+
+Start a new PDP container with the volume attached at `/app/backup`
+```bash
+docker run -it -p 7766:7000 \
+  --name pdp-online \
+  --env PDP_API_KEY=<YOUR_API_KEY> \
+  --env PDP_FACTDB_ENABLED=true \
+  --env PDP_ENABLE_OFFLINE_MODE=true \
+  -v pdp-offline-backup:/app/backup:rw \
+  permitio/pdp-v2:latest
+```
+
+With the backup volume attached, even when the PDP is unable to connect to the Permit API,
+it can still boot up with the FactDB, policies and configurations from the previous run.
+
+```bash
+docker run -it -p 7766:7000 \
+  --name pdp-offline \
+  --network none \
+  --env PDP_API_KEY=<YOUR_API_KEY> \
+  --env PDP_FACTDB_ENABLED=true \
+  --env PDP_ENABLE_OFFLINE_MODE=true \
+  -v pdp-offline-backup:/app/backup:rw \
+  permitio/pdp-v2:latest
+```
+
+## Troubleshooting & Debugging
+
+### Refreshing Data
+Every time the PDP boots, it downloads the latest snapshot from the Permit Cloud and stores it in the `/app/backup/` directory.
+
+By restarting the PDP, you can refresh the FactDB data with the most up-to-date data from the Permit Cloud.
+
+### Extracting Data
+PDP with FactDB stores data in the `/app/backup/` directory. You can inspect the data by mounting the volume to your local machine.
+
+```bash
+docker run -it -p 7766:7000 \
+  --env PDP_API_KEY=<YOUR_API_KEY> \
+  --env PDP_FACTDB_ENABLED=true \
+  --env PDP_ENABLE_OFFLINE_MODE=true \
+  -v ./pdp-backup:/app/backup:rw \
+  permitio/pdp-v2:latest
+```
+
+Inside you can observe the data stored in the FactDB. Each database snapshot is stored in a dedicated SQLite `fact.[id].db` file.
+```text
+./pdp-backup
+|-- policy_store_backup.json  // When Offline Mode enabled
+|-- pdp_cloud_config_backup.json  // When Offline Mode enabled
+|-- factdb
+|   |-- fact.[id].db
+|   |-- fact.[id].db-shm
+|   |-- fact.[id].db-wal
+```
+
+:::info
+This file structure is internal and may be changed in the future.
+:::
+
+### Inspecting Data
+
+Using SQLite3 CLI, you can inspect the data stored in the FactDB.
+
+```bash
+sqlite3 ./pdp-backup/factdb/fact.[id].db
+```
+
+:::warning
+We recommend you to not modify the data stored in the FactDB directly.
+:::
+
+The available tables schema inside
+```bash
+> .tables
+# instances relationship_tuples user_tenant_assoc offsets role_assignments users
+```
+
+Inspecting the data inside. For example, query the `role_assignment` table:
+```bash
+> .mode column
+> .headers on
+> SELECT id, actor, role, tenant, resource FROM role_assignments LIMIT 10;
+```
+
+The output will be similar to:
+```text
+id                                           actor         role    tenant   resource
+-------------------------------------------  ------------  ------  -------  ---------------------
+user:alice-admin-Blog:how-to-code            user:alice    admin   default  Blog:how-to-code
+user:bob-editor-Blog:react-tutorial          user:bob      editor  default  Blog:react-tutorial
+user:charlie-viewer-Comment:great-post       user:charlie  viewer  default  Comment:great-post
+user:dan-admin-Blog:javascript-tips          user:dan      admin   default  Blog:javascript-tips
+user:eve-editor-Blog:css-tricks              user:eve      editor  default  Blog:css-tricks
+user:frank-viewer-Comment:very-helpful       user:frank    viewer  default  Comment:very-helpful
+user:grace-admin-Blog:nodejs-guide           user:grace    admin   default  Blog:nodejs-guide
+user:heidi-editor-Blog:html-basics           user:heidi    editor  default  Blog:html-basics
+user:ivan-viewer-Comment:thanks-for-sharing  user:ivan     viewer  default  Comment:thanks-for-sharing
+user:judy-admin-Blog:testing-in-js           user:judy     admin   default  Blog:testing-in-js
+```
+
+:::info
+This table schema is internal and may be changed in the future.
 :::
