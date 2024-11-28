@@ -1,6 +1,12 @@
 /* eslint-disable spellcheck/spell-checker */
 // @ts-check
 // Note: type annotations allow type checking and IDEs autocompletion
+require("@babel/register")({
+  extensions: [".js", ".jsx"],
+  presets: ["@babel/preset-env", "@babel/preset-react"],
+  plugins: ["@babel/plugin-transform-modules-commonjs"],
+});
+
 const path = require("path");
 
 const lightCodeTheme = require("./src/css/prism-theme");
@@ -625,7 +631,7 @@ const config = {
       },
       prism: {
         theme: require("prism-react-renderer/themes/dracula"),
-        additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl","php"],
+        additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl", "php"],
       },
       colorMode: {
         defaultMode: "light",

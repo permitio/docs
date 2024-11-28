@@ -76,8 +76,18 @@ const sidebars = {
         {
           type: "category",
           label: "Walkthroughs",
+          link: {
+            type: "doc",
+            id: "overview/walkthroughs-intro",
+          },
           items: [
-            "overview/connecting-your-app",
+            // "overview/connecting-your-app",
+            "overview/basics-of-authz",
+            "overview/get-api-key",
+            "overview/run-pdp",
+            "overview/first-api-call",
+            "overview/simple-rbac-rule",
+            "overview/testing-permissions",
             {
               type: "category",
               label: "Manage Your Account",
