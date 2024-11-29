@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import PropTypes from "prop-types";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { foundation } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism";
 import "./CodeBlock.css";
 import codeFiles from "../../codeFiles.json"; // Import pre-generated JSON
 
@@ -55,7 +55,7 @@ function CodeBlock({ folderPath }) {
       <div className={"codeContent noHorizontalScroll"}>
         <SyntaxHighlighter
           language={selectedFile.name.split(".").pop()}
-          style={foundation}
+          style={dracula}
           wrapLongLines
           showLineNumbers
         >
