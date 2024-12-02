@@ -30,18 +30,23 @@ function CodeBlock({ folderPath, maxDepth = 2 }) {
   });
 
   const [selectedFile, setSelectedFile] = useState(filteredFiles[0]);
+  const [copyStatus, setCopyStatus] = useState("Copy Code");
 
   const handleTabClick = (file) => {
     setSelectedFile(file);
   };
 
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(selectedFile.content).then(
-      () => {},
-      (err) => {
+    navigator.clipboard
+      .writeText(selectedFile.content)
+      .then(() => {
+        setCopyStatus("Woohoo!");
+        // Reset the text to "Copy Code" after 3 seconds
+        setTimeout(() => setCopyStatus("Copy Code"), 3000);
+      })
+      .catch((err) => {
         console.error("Failed to copy code: ", err);
-      }
-    );
+      });
   };
 
   if (filteredFiles.length === 0) {
@@ -66,8 +71,11 @@ function CodeBlock({ folderPath, maxDepth = 2 }) {
             </button>
           );
         })}
-        <button onClick={handleCopyCode} className={"copyButtonInline"}>
-          Copy Code
+        <button
+          onClick={handleCopyCode}
+          className={`copyButtonInline ${copyStatus === "Woohoo!" ? "copiedAnimation" : ""}`}
+        >
+          {copyStatus}
         </button>
       </div>
       <div className={"codeContent noHorizontalScroll"}>
