@@ -40,7 +40,7 @@ function CodeBlock({ folderPath, maxDepth = 2 }) {
     navigator.clipboard
       .writeText(selectedFile.content)
       .then(() => {
-        setCopyStatus("Woohoo!");
+        setCopyStatus("Woof!");
         // Reset the text to "Copy Code" after 3 seconds
         setTimeout(() => setCopyStatus("Copy Code"), 3000);
       })
@@ -73,7 +73,7 @@ function CodeBlock({ folderPath, maxDepth = 2 }) {
         })}
         <button
           onClick={handleCopyCode}
-          className={`copyButtonInline ${copyStatus === "Woohoo!" ? "copiedAnimation" : ""}`}
+          className={`copyButtonInline ${copyStatus === "Woof!" ? "copiedAnimation" : ""}`}
         >
           {copyStatus}
         </button>
