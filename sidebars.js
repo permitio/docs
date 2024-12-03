@@ -76,8 +76,21 @@ const sidebars = {
         {
           type: "category",
           label: "Walkthroughs",
+          link: {
+            type: "doc",
+            id: "overview/walkthroughs-intro",
+          },
           items: [
-            "overview/connecting-your-app",
+            // "overview/connecting-your-app",
+            "overview/configure-your-first-rbac-policy",
+            "overview/sync-your-first-user-with-api",
+            "overview/perform-policy-check-with-cloud-pdp",
+            "overview/setup-attribute-based-access-control",
+            "overview/setup-relationship-based-access-control",
+            "overview/sync-application-data-into-permit",
+            "overview/perform-a-local-policy-check",
+            // "overview/run-pdp",
+            // "overview/first-api-call",
             {
               type: "category",
               label: "Manage Your Account",
