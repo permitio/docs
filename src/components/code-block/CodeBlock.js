@@ -1,9 +1,25 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism";
 import "./CodeBlock.css";
-import codeFiles from "../../codeFiles.json"; // Import pre-generated JSON
+
+const context = require.context("!raw-loader!../../sdks", true);
+
+const filesTree = context
+  .keys()
+  .map((path) => path.substring(1))
+  .filter((path) => path.indexOf(".") !== -1)
+  .reduce((acc, path) => {
+    const arr = path.split("/");
+    const file = arr.pop();
+    const folder = arr.join("/");
+    if (!acc[folder]) {
+      acc[folder] = [];
+    }
+    acc[folder].push(file);
+    return acc;
+  }, {});
 
 function CodeBlock({ folderPath, maxDepth = 2 }) {
   // Map extensions to full language names
@@ -22,14 +38,8 @@ function CodeBlock({ folderPath, maxDepth = 2 }) {
     rs: "Rust",
   };
 
-  // Filter files based on the folderPath prop and depth
-  const filteredFiles = codeFiles.filter((file) => {
-    const isInFolder = file.name.startsWith(folderPath.replace(/^\//, ""));
-    const isWithinDepth = file.depth <= maxDepth;
-    return isInFolder && isWithinDepth;
-  });
-
-  const [selectedFile, setSelectedFile] = useState(filteredFiles[0]);
+  const [filteredFiles, setFilteredFiles] = useState([]);
+  const [selectedFile, setSelectedFile] = useState({ name: "", content: "" });
   const [copyStatus, setCopyStatus] = useState("Copy Code");
 
   const handleTabClick = (file) => {
@@ -48,6 +58,25 @@ function CodeBlock({ folderPath, maxDepth = 2 }) {
         console.error("Failed to copy code: ", err);
       });
   };
+
+  useEffect(() => {
+    const fetchFiles = async () => {
+      const files = await Promise.all(
+        filesTree[folderPath].map((key) => import(`!raw-loader!../../sdks${folderPath}/${key}`))
+      );
+      setFilteredFiles(
+        files.map((file, index) => ({
+          name: filesTree[folderPath][index],
+          content: file.default,
+        }))
+      );
+      setSelectedFile({
+        name: filesTree[folderPath][0],
+        content: files[0].default,
+      });
+    };
+    fetchFiles();
+  }, []);
 
   if (filteredFiles.length === 0) {
     return <div>No files found in the specified folder path.</div>;
