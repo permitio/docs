@@ -2,6 +2,9 @@ import React, { useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 import "./CodeBlock.css";
 
 const context = require.context("!raw-loader!../../sdks", true);
@@ -21,7 +24,40 @@ const filesTree = context
     return acc;
   }, {});
 
-function CodeBlock({ folderPath, maxDepth = 2 }) {
+function CodeTabItem({ file }) {
+  const [copyStatus, setCopyStatus] = useState("Copy Code");
+
+  const handleCopyCode = () => {
+    navigator.clipboard
+      .writeText(file.content)
+      .then(() => {
+        setCopyStatus("Woof!");
+        // Reset the text to "Copy Code" after 3 seconds
+        setTimeout(() => setCopyStatus("Copy Code"), 3000);
+      })
+      .catch((err) => {
+        console.error("Failed to copy code: ", err);
+      });
+  };
+
+  return (
+    <div className={"tabContent"}>
+      <button
+        onClick={handleCopyCode}
+        className={`copyButtonInline ${copyStatus === "Woof!" ? "copiedAnimation" : ""}`}
+      >
+        {copyStatus}
+      </button>
+      <div className={"codeContent noHorizontalScroll"}>
+        <SyntaxHighlighter language={file.name.split(".").pop()} style={dracula} showLineNumbers>
+          {file.content}
+        </SyntaxHighlighter>
+      </div>
+    </div>
+  );
+}
+
+function CodeBlock({ folderPath }) {
   // Map extensions to full language names
   const languageNames = {
     js: "Node.js",
@@ -39,25 +75,6 @@ function CodeBlock({ folderPath, maxDepth = 2 }) {
   };
 
   const [filteredFiles, setFilteredFiles] = useState([]);
-  const [selectedFile, setSelectedFile] = useState({ name: "", content: "" });
-  const [copyStatus, setCopyStatus] = useState("Copy Code");
-
-  const handleTabClick = (file) => {
-    setSelectedFile(file);
-  };
-
-  const handleCopyCode = () => {
-    navigator.clipboard
-      .writeText(selectedFile.content)
-      .then(() => {
-        setCopyStatus("Woof!");
-        // Reset the text to "Copy Code" after 3 seconds
-        setTimeout(() => setCopyStatus("Copy Code"), 3000);
-      })
-      .catch((err) => {
-        console.error("Failed to copy code: ", err);
-      });
-  };
 
   useEffect(() => {
     const fetchFiles = async () => {
@@ -70,13 +87,9 @@ function CodeBlock({ folderPath, maxDepth = 2 }) {
           content: file.default,
         }))
       );
-      setSelectedFile({
-        name: filesTree[folderPath][0],
-        content: files[0].default,
-      });
     };
     fetchFiles();
-  }, []);
+  }, [folderPath]);
 
   if (filteredFiles.length === 0) {
     return <div>No files found in the specified folder path.</div>;
@@ -84,45 +97,28 @@ function CodeBlock({ folderPath, maxDepth = 2 }) {
 
   return (
     <div className={"codeBlock"}>
-      <div className={"tabBar leftAlignTabs"}>
-        {filteredFiles.map((file) => {
+      <Tabs
+        className="customTabs"
+        groupId="code-snippets"
+        defaultValue={filteredFiles[0].name}
+        values={filteredFiles.map((file) => {
           const fileExtension = file.name.split(".").pop();
           const language = languageNames[fileExtension] || fileExtension.toUpperCase();
-          return (
-            <button
-              key={file.name}
-              onClick={() => handleTabClick(file)}
-              className={`${"tabButton smallTabButton"} ${
-                file.name === selectedFile.name ? "activeTab" : ""
-              }`}
-            >
-              {language}
-            </button>
-          );
+          return { label: language, value: file.name };
         })}
-        <button
-          onClick={handleCopyCode}
-          className={`copyButtonInline ${copyStatus === "Woof!" ? "copiedAnimation" : ""}`}
-        >
-          {copyStatus}
-        </button>
-      </div>
-      <div className={"codeContent noHorizontalScroll"}>
-        <SyntaxHighlighter
-          language={selectedFile.name.split(".").pop()}
-          style={dracula}
-          showLineNumbers
-        >
-          {selectedFile.content}
-        </SyntaxHighlighter>
-      </div>
+      >
+        {filteredFiles.map((file) => (
+          <TabItem key={file.name} value={file.name}>
+            <CodeTabItem file={file} />
+          </TabItem>
+        ))}
+      </Tabs>
     </div>
   );
 }
 
 CodeBlock.propTypes = {
   folderPath: PropTypes.string.isRequired,
-  maxDepth: PropTypes.number, // Optional, default to 1
 };
 
 export default CodeBlock;
