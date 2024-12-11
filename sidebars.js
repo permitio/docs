@@ -240,7 +240,10 @@ const sidebars = {
             type: "doc",
             id: "concepts/pdp/overview",
           },
-          items: ["concepts/pdp/configuration"],
+          items: [
+              "concepts/pdp/configuration",
+              "concepts/pdp/factdb"
+          ],
         },
         "how-to/enforce-permissions/check",
         "how-to/enforce-permissions/bulk-check",
