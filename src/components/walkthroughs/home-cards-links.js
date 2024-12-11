@@ -1,33 +1,47 @@
-/* eslint-disable spellcheck/spell-checker */
 import React from "react";
 
 export const firstRow = [
   {
     type: "link",
-    href: "/overview/basics-of-authz",
-    label: "Understand the basics of Authorization",
+    href: "/overview/configure-your-first-rbac-policy",
+    label: "Configure your first RBAC Policy",
     svgIcon: <i className="ri-earth-line ri-xl !text-[#974ef2]"></i>,
-    description: "Brief introduction to core concepts - RBAC, ABAC, and ReBAC.",
+    description:
+      "Learn how to assign user roles and permissions to secure your resources efficiently.",
   },
   {
     type: "link",
-    href: "category/guides--tutorials",
-    label: "Tutorials",
+    href: "/overview/sync-your-first-user-with-sdk",
+    label: "Sync your first user with the SDK",
     svgIcon: <i className="ri-book-open-line ri-xl !text-[#974ef2]"></i>,
-    description: "Best practices and how-to guides",
+    description: "Connect your user management system to Permit with a simple SDK sync.",
   },
   {
     type: "link",
-    href: "sdk/sdks-overview",
-    label: "SDKs",
+    href: "/overview/perform-policy-check-with-cloud-pdp",
+    label: "Run your first Policy Check",
     svgIcon: <i className="ri-tools-line ri-xl !text-[#974ef2]"></i>,
-    description: "Explore the supported SDKs and frameworks",
+    description: "Validate your access control by testing your first policy decision.",
   },
   {
     type: "link",
-    href: "/category/integrate-to-applications",
-    label: "Integrations",
+    href: "overview/setup-attribute-based-access-control",
+    label: "Create an ABAC Policy",
     svgIcon: <i className="ri-suitcase-line ri-xl !text-[#974ef2]"></i>,
-    description: "Integrate Permit with your favorite tools",
+    description: "Define flexible access rules using attributes for fine-grained control.",
+  },
+  {
+    type: "link",
+    href: "/overview/sync-application-data-into-permit",
+    label: "Sync your Application Data",
+    svgIcon: <i className="ri-suitcase-line ri-xl !text-[#974ef2]"></i>,
+    description: "Integrate roles, tenants, and permissions into Permit using the SDK or SCIM.",
+  },
+  {
+    type: "link",
+    href: "/overview/perform-a-local-policy-check",
+    label: "Run a Local Policy Check using the PDP",
+    svgIcon: <i className="ri-suitcase-line ri-xl !text-[#974ef2]"></i>,
+    description: "Run authorization checks locally for faster and more secure decisions.",
   },
 ];
