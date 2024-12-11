@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import PropTypes from "prop-types";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -27,7 +27,7 @@ const filesTree = context
 function CodeTabItem({ file }) {
   const [copyStatus, setCopyStatus] = useState("Copy Code");
 
-  const handleCopyCode = () => {
+  const handleCopyCode = useCallback(() => {
     navigator.clipboard
       .writeText(file.content)
       .then(() => {
@@ -38,7 +38,7 @@ function CodeTabItem({ file }) {
       .catch((err) => {
         console.error("Failed to copy code: ", err);
       });
-  };
+  }, [file.content]);
 
   return (
     <div className={"tabContent"}>
