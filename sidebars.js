@@ -85,12 +85,13 @@ const sidebars = {
             // "overview/run-pdp",
             // "overview/first-api-call",
             "overview/configure-your-first-rbac-policy",
+            "overview/use-the-permit-api-and-sdk",
             "overview/sync-your-first-user-with-sdk",
             "overview/perform-policy-check-with-cloud-pdp",
             "overview/setup-attribute-based-access-control",
             // "overview/setup-relationship-based-access-control",
-            "overview/sync-application-data-into-permit",
-            "overview/perform-a-local-policy-check",
+            // "overview/sync-application-data-into-permit",
+            // "overview/perform-a-local-policy-check",
             {
               type: "category",
               label: "Manage Your Account",
@@ -240,10 +241,7 @@ const sidebars = {
             type: "doc",
             id: "concepts/pdp/overview",
           },
-          items: [
-              "concepts/pdp/configuration",
-              "concepts/pdp/factdb"
-          ],
+          items: ["concepts/pdp/configuration", "concepts/pdp/factdb"],
         },
         "how-to/enforce-permissions/check",
         "how-to/enforce-permissions/bulk-check",
