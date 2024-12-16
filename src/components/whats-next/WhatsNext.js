@@ -3,9 +3,10 @@ import LinearProgress from "@mui/material/LinearProgress"; // Import the Materia
 import PropTypes from "prop-types";
 import "./WhatsNext.css";
 
-function WhatsNext({ progress, customText }) {
+function WhatsNext({ progress, customText, children }) {
   return (
-    <div className={"container"}>
+    <div className={"container-whats-next"}>
+      <div className={"mdxContent"}>{children}</div>
       <LinearProgress variant="determinate" value={progress} className={"progressBar"} />
       <p className={"progressText"}>{customText}</p>
     </div>
@@ -15,6 +16,7 @@ function WhatsNext({ progress, customText }) {
 WhatsNext.propTypes = {
   progress: PropTypes.number.isRequired, // Progress percentage
   customText: PropTypes.string, // Optional custom text
+  children: PropTypes.node, // MDX or other React elements to render
 };
 
 WhatsNext.defaultProps = {

@@ -11,9 +11,17 @@ export const firstRow = [
   },
   {
     type: "link",
-    href: "/overview/sync-your-first-user-with-sdk",
-    label: "Sync your first user with the SDK",
+    href: "/overview/use-the-permit-api-and-sdk",
+    label: "Use the Permit API & SDK",
     svgIcon: <i className="ri-book-open-line ri-xl !text-[#974ef2]"></i>,
+    description:
+      "Learn how to leverage the Permit API and SDK to integrate robust access control into your application.",
+  },
+  {
+    type: "link",
+    href: "/overview/sync-your-first-user-with-sdk",
+    label: "Sync your first user using the SDK",
+    svgIcon: <i className="ri-user-line ri-xl !text-[#974ef2]"></i>,
     description: "Connect your user management system to Permit with a simple SDK sync.",
   },
   {
@@ -30,18 +38,18 @@ export const firstRow = [
     svgIcon: <i className="ri-suitcase-line ri-xl !text-[#974ef2]"></i>,
     description: "Define flexible access rules using attributes for fine-grained control.",
   },
-  {
-    type: "link",
-    href: "/overview/sync-application-data-into-permit",
-    label: "Sync your Application Data",
-    svgIcon: <i className="ri-suitcase-line ri-xl !text-[#974ef2]"></i>,
-    description: "Integrate roles, tenants, and permissions into Permit using the SDK or SCIM.",
-  },
-  {
-    type: "link",
-    href: "/overview/perform-a-local-policy-check",
-    label: "Run a Local Policy Check using the PDP",
-    svgIcon: <i className="ri-suitcase-line ri-xl !text-[#974ef2]"></i>,
-    description: "Run authorization checks locally for faster and more secure decisions.",
-  },
+  // {
+  //   type: "link",
+  //   href: "/overview/sync-application-data-into-permit",
+  //   label: "Sync your Application Data",
+  //   svgIcon: <i className="ri-suitcase-line ri-xl !text-[#974ef2]"></i>,
+  //   description: "Integrate roles, tenants, and permissions into Permit using the SDK or SCIM.",
+  // },
+  // {
+  //   type: "link",
+  //   href: "/overview/perform-a-local-policy-check",
+  //   label: "Run a Local Policy Check using the PDP",
+  //   svgIcon: <i className="ri-suitcase-line ri-xl !text-[#974ef2]"></i>,
+  //   description: "Run authorization checks locally for faster and more secure decisions.",
+  // },
 ];
