@@ -40,6 +40,9 @@ function CodeTabItem({ file }) {
       });
   }, [file.content]);
 
+  const language = file.name.split(".").pop();
+  const showLineNumbers = !["npm", "yarn"].includes(language);
+
   return (
     <div className={"tabContent"}>
       <button
@@ -49,7 +52,7 @@ function CodeTabItem({ file }) {
         {copyStatus}
       </button>
       <div className={"codeContent noHorizontalScroll"}>
-        <SyntaxHighlighter language={file.name.split(".").pop()} style={dracula} showLineNumbers>
+        <SyntaxHighlighter language={language} style={dracula} showLineNumbers={showLineNumbers}>
           {file.content}
         </SyntaxHighlighter>
       </div>
@@ -72,6 +75,9 @@ function CodeBlock({ folderPath }) {
     kt: "Kotlin",
     erl: "Erlang",
     rs: "Rust",
+    yarn: "yarn",
+    npm: "npm",
+    bash: "cURL",
   };
 
   const [filteredFiles, setFilteredFiles] = useState([]);

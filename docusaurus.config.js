@@ -1,6 +1,12 @@
 /* eslint-disable spellcheck/spell-checker */
 // @ts-check
 // Note: type annotations allow type checking and IDEs autocompletion
+// require("@babel/register")({
+//   extensions: [".js", ".jsx"],
+//   presets: ["@babel/preset-env", "@babel/preset-react"],
+//   plugins: ["@babel/plugin-transform-modules-commonjs"],
+// });
+
 const path = require("path");
 
 const lightCodeTheme = require("./src/css/prism-theme");
@@ -447,7 +453,6 @@ const config = {
               "/category/how-to",
               "/category/-guides--tutorials",
               "/overview/permit-sdlc",
-              "/category/policy-lifecycle",
               "/category/build-policies",
             ],
             to: "/quickstart",
@@ -481,14 +486,6 @@ const config = {
             to: "/sdk/dotnet/quickstart-dotnet",
           },
           {
-            from: "/category/rbac",
-            to: "/how-to/build-policies/rbac/overview",
-          },
-          {
-            from: "/category/abac",
-            to: "/how-to/build-policies/abac/overview",
-          },
-          {
             from: "/category/rebac",
             to: "/how-to/build-policies/rebac/overview",
           },
@@ -509,7 +506,6 @@ const config = {
             to: "/how-to/build-policies/abac/overview",
           },
           { from: "/category/api-examples", to: "/api/api-with-cli" },
-          { from: "/category/audit-logs", to: "/how-to/use-audit-logs/types-and-filtering" },
           {
             from: "/category/auth0",
             to: "/authentication/auth0/permit-integration",
@@ -528,14 +524,9 @@ const config = {
             to: "/sdk/kotlin/quickstart-kotlin",
           },
           { from: "/category/policy-decision-point-pdp", to: "/concepts/pdp/overview" },
-          { from: "/category/policy-lifecycle", to: "/how-to/SDLC/CI-CD" },
           {
             from: ["/category/rbac", "/category/rbac-1"],
             to: "/how-to/build-policies/rbac/overview",
-          },
-          {
-            from: "/category/rebac",
-            to: "/how-to/build-policies/rebac/overview",
           },
           {
             from: "/category/understanding-errors",
@@ -625,7 +616,7 @@ const config = {
       },
       prism: {
         theme: require("prism-react-renderer/themes/dracula"),
-        additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl","php"],
+        additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl", "php"],
       },
       colorMode: {
         defaultMode: "light",
