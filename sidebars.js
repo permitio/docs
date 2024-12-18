@@ -365,6 +365,14 @@ const sidebars = {
             "api/pdp-webhooks",
           ],
         },
+        {
+            type: "category",
+            label: "Policy Guard",
+            items: [
+              "how-to/policy-guard/policy_guard",
+                "how-to/policy-guard/policy_guard_api",
+              ],
+        }
       ],
     },
     {
