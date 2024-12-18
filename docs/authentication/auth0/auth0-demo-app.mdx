@@ -8,7 +8,7 @@ title: Demo Application
 ### 1.1. The application
 
 The demo application is a simple task management application.
-To demonstrate the relationship between authentication and authorization, we created a simple to-do application, with authentication already implemented into it based on the [Auth0 Next.JS getting started guide](https://auth0.com/docs/quickstart/webapp/nextjs/interactive). Let’s clone it and run it on your local environment.
+To demonstrate the relationship between authentication and authorization, we created a simple to-do application, with authentication already implemented into it based on the [Auth0 Next.JS getting started guide](https://auth0.com/docs/quickstart/webapp/nextjs/interactive). Let's clone it and run it on your local environment.
 
 **Note:** While this article does not require you to have [Next.JS knowledge](https://nextjs.org/), it requires an Auth0 account with a basic configuration, and Node.JS installed in your [local](https://nodejs.org/en/download) or [remote](https://codesandbox.io/signin?continue=/dashboard?import_repo=true) environment.
 
@@ -195,38 +195,35 @@ export async function getServerSideProps({ req, res }: any) {
 ```
 
 This will sync the user with Permit, but we must still assign users the right roles.
-This can be done using this [Auth0 guide](https://auth0.com/docs/manage-users/access-control/sample-use-cases-rules-with-authorization#add-user-roles-to-tokens), which explains how to add roles to a user's token.
+This can be done by configuring Auth0 Actions with a Post-Login trigger to add roles to the user's tokens. Here's how:
 
-Here's a quick recap on how this can be done (Please use the Auth0 guide for a more detailed description):
+1. Go to your Auth0 dashboard > Actions > Triggers
+2. Click on "post-login" under "Sign Up & Login" 
+3. Click the "+" button to add a new action
+4. Select "Build from scratch"
+5. Name your action (e.g., "Add Roles to Tokens")
+6. Replace the default code with the following Action code:
 
-- Go to your Auth0 dashboard > Applications > API.
-- Create an API if you don't have one.
-- Click on the three dots on the right of your API and click on settings.
-- Scroll down to `RBAC Settings` and enable `Add Permissions in the Access Token`.
-- Click on `Save Changes`.
-
-In short, you need to navigate to the Auth0 dashboard and create a new rule https://manage.auth0.com/dashboard/[your-region]/[your-tenant-name]/rules.
-The Auth0 rule that you need to add will look like this:
-
-```ts
-function (user, context, callback) {
+```javascript
+/**
+ * @param {Event} event - Details about the user and the context in which they are logging in.
+ * @param {PostLoginAPI} api - Interface whose methods can be used to change the behavior of the login.
+ */
+exports.onExecutePostLogin = async (event, api) => {
   const namespace = 'my_app_name';
-  const assignedRoles = (context.authorization || {}).roles;
-
-  let idTokenClaims = context.idToken || {};
-  let accessTokenClaims = context.accessToken || {};
-
-  idTokenClaims[`${namespace}/roles`] = assignedRoles;
-  accessTokenClaims[`${namespace}/roles`] = assignedRoles;
-
-  context.idToken = idTokenClaims;
-  context.accessToken = accessTokenClaims;
-
-  callback(null, user, context);
-}
+  if (event.authorization) {
+    api.idToken.setCustomClaim(`${namespace}/roles`, event.authorization.roles);
+    api.accessToken.setCustomClaim(`${namespace}/roles`, event.authorization.roles);
+  }
+};
 ```
 
-Now you can see that the session.user object from Auth0 has `my_app_name/roles` section with our roles (of course, you can set <my_app_name> to whatever you want):
+7. Click "Deploy"
+8. Click "Back to triggers arrow" and in the Post Login flow, drag your new action into the flow where you want it to execute
+9. Click "Apply"
+
+
+Now your user's session object will include the roles in the following format:
 
 ```js
 auth0User {
@@ -242,7 +239,7 @@ auth0User {
 }
 ```
 
-Then when a user logs into our app, we can also sync their roles with Permit by adding the following code just below the `permit.api.syncUser` function:
+Then when a user logs into our app, we can sync their roles with Permit by adding the following code just below the `permit.api.syncUser` function:
 
 ```tsx
     if (session?.user['my_app_name/roles']) {
@@ -261,7 +258,7 @@ Then when a user logs into our app, we can also sync their roles with Permit by 
 }
 ```
 
-Now if you assign a role to a user (Either in Auth0 or in Permit), the user will have the correct roles and permissions.
+Now if you assign a role to a user (either in Auth0 or in Permit), the user will have the correct roles and permissions.
 (Make sure you use the exact same role names in both Auth0 and Permit - they are case-sensitive!)
 
 [Check out the postLogin page in this example to see the full code.](https://github.com/permitio/permit-next-todo-starter/blob/auth0-integration/pages/postLogin/index.tsx)
