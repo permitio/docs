@@ -32,7 +32,6 @@ function CodeTabItem({ file }) {
       .writeText(file.content)
       .then(() => {
         setCopyStatus("Woof!");
-        // Reset the text to "Copy Code" after 3 seconds
         setTimeout(() => setCopyStatus("Copy Code"), 3000);
       })
       .catch((err) => {
@@ -44,14 +43,14 @@ function CodeTabItem({ file }) {
   const showLineNumbers = !["npm", "yarn"].includes(language);
 
   return (
-    <div className={"tabContent"}>
+    <div className="tabContent">
       <button
         onClick={handleCopyCode}
         className={`copyButtonInline ${copyStatus === "Woof!" ? "copiedAnimation" : ""}`}
       >
         {copyStatus}
       </button>
-      <div className={"codeContent noHorizontalScroll"}>
+      <div className="codeContent noHorizontalScroll">
         <SyntaxHighlighter language={language} style={dracula} showLineNumbers={showLineNumbers}>
           {file.content}
         </SyntaxHighlighter>
@@ -61,7 +60,6 @@ function CodeTabItem({ file }) {
 }
 
 function CodeBlock({ folderPath }) {
-  // Map extensions to full language names
   const languageNames = {
     js: "Node.js",
     ts: "TypeScript",
@@ -102,23 +100,25 @@ function CodeBlock({ folderPath }) {
   }
 
   return (
-    <div className={"codeBlock"}>
-      <Tabs
-        className="customTabs"
-        groupId="code-snippets"
-        defaultValue={filteredFiles[0].name}
-        values={filteredFiles.map((file) => {
-          const fileExtension = file.name.split(".").pop();
-          const language = languageNames[fileExtension] || fileExtension.toUpperCase();
-          return { label: language, value: file.name };
-        })}
-      >
-        {filteredFiles.map((file) => (
-          <TabItem key={file.name} value={file.name}>
-            <CodeTabItem file={file} />
-          </TabItem>
-        ))}
-      </Tabs>
+    <div className="customCodeBlockWrapper">
+      <div className="codeBlock">
+        <Tabs
+          className="customTabs"
+          groupId="code-snippets"
+          defaultValue={filteredFiles[0].name}
+          values={filteredFiles.map((file) => {
+            const fileExtension = file.name.split(".").pop();
+            const language = languageNames[fileExtension] || fileExtension.toUpperCase();
+            return { label: language, value: file.name };
+          })}
+        >
+          {filteredFiles.map((file) => (
+            <TabItem key={file.name} value={file.name}>
+              <CodeTabItem file={file} />
+            </TabItem>
+          ))}
+        </Tabs>
+      </div>
     </div>
   );
 }
