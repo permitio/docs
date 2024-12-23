@@ -126,7 +126,7 @@ const sidebars = {
             type: "doc",
             id: "overview/best-practices",
           },
-          items: ["how-to/ownership", "overview/how-does-it-work", "concepts/multitenancy"],
+          items: ["how-to/ownership", "overview/how-does-it-work", "concepts/multitenancy", "how-to/build-policies/abac/time-based-role"],
         },
       ],
     },
