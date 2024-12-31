@@ -1,31 +1,11 @@
 import React from "react";
 
 const TimelineStep = ({ stepNumber, children }) => (
-  <div
-    style={{
-      marginBottom: "50px",
-      position: "relative",
-    }}
-  >
-    <div
-      style={{
-        width: "30px",
-        height: "30px",
-        borderRadius: "50%",
-        backgroundColor: "#FA934E",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        color: "white",
-        fontWeight: "bold",
-        position: "absolute",
-        left: "0",
-        marginLeft: "-16px",
-      }}
-    >
+  <div className="mb-12 relative">
+    <div className="w-8 h-8 rounded-full bg-orange-500 flex justify-center items-center text-white font-bold absolute left-0 -ml-4">
       {stepNumber}
     </div>
-    <div style={{ marginLeft: "40px" }}>{children}</div>
+    <div className="ml-10">{children}</div>
   </div>
 );
 

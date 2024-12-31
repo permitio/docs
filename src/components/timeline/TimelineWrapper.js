@@ -8,9 +8,9 @@ const TimelineWrapper = ({ children }) => {
 
   return (
     <div
+      className="ml-4 border-purple-500" // border-l-2 not working
       style={{
         borderLeft: "2px solid #A666F4",
-        marginLeft: "15px",
       }}
     >
       {steps}
