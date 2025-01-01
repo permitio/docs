@@ -60,6 +60,19 @@ const config = {
 
   plugins: [
     [
+      "@scalar/docusaurus",
+      {
+        label: "Scalar",
+        route: "/scalar",
+        configuration: {
+          spec: {
+            // Put the URL to your OpenAPI document here:
+            url: "https://api.permit.io/v2/openapi.json",
+          },
+        },
+      },
+    ],
+    [
       "@docusaurus/plugin-client-redirects",
       {
         redirects: [
