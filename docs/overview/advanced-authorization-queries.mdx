@@ -11,15 +11,79 @@ import WhatsNext from "../../src/components/whats-next/WhatsNext";
 import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
 import Video from "../../src/components/video/Video";
+import CodeBlock from "../../src/components/code-block/CodeBlock";
+
+---
+
+To better understand the principles of the advanced authorization queries below, let's base all these below principles on an example.
+
+Alice and Bob are users in a blogging application. Here’s how they interact with the blog posts:
+
+1. Alice is the **author** of Blog Post 1 and Blog Post 2. She has full **edit** and **read** permissions for these posts.
+2. Bob is the **author** of Blog Post 3, with full **edit** and **read** permissions for that post.
+3. Alice and Bob can both view each other’s blog posts but cannot edit them.
+
+### **The Challenge**
+
+Alice and Bob need to query the system to:
+
+- Determine what permissions they have for specific blog posts.
+- Retrieve blog posts they are allowed to view or edit.
+- List the users who can perform actions on a given blog post.
+
+### **Why Single Checks Aren't Enough**
+
+While a single `check()` call can determine whether Alice or Bob has permission to perform one action on one blog post, more
+advanced use cases like filtering multiple blog posts or listing authorized users require **bulk checks** and other advanced
+queries.
 
 <TimelineWrapper>
 <TimelineStep>
 
-## Get User Permissions
+## Bulk Check
 
-Use the `permit.GetUserPermissions` function to retrieve all user permissions across all registered resources and tenants.
-Simply provide a "User" as input, optionally filter by a list of tenants, and receive an object detailing the permissions
-and attributes for each assigned tenant.
+The `permit.bulkCheck` function allows validating multiple permissions in a single call, ideal for situations where Alice or
+Bob needs to check permissions for multiple blog posts at once.
+
+### Example: Alice Checks Read Permissions
+
+Alice wants to know which blog posts she can read.
+
+<CodeBlock folderPath="/bulk-check" />
+
+Alice can read Blog Post 1, Blog Post 2, and Blog Post 3. The system returns this in one call, saving time and improving
+efficiency.
+
+You can read more about the bulk check [here](/how-to/enforce-permissions/bulk-check/).
+
+</TimelineStep>
+<TimelineStep>
+
+## FilterObjects
+
+Use the `permit.filterObjects` function to perform PDP-level filtering.
+
+In this method, the data is fetched from the DB, and then use the filterObjects function, which returns a subset of the objects
+passed to it based on the policy.
+
+The `permit.filterObjects` function retrieves only the blog posts that Alice or Bob is permitted to access. This is useful when fetching all posts from the database but only displaying the ones a user is authorized to see.
+
+### Example: Alice Filters Blog Posts
+
+Alice wants to retrieve the blog posts she can edit.
+
+```go
+resourcesToCheck := []enforcement.ResourceI{
+    enforcement.ResourceBuilder("blog_post").WithID("1"),
+    enforcement.ResourceBuilder("blog_post").WithID("2"),
+    enforcement.ResourceBuilder("blog_post").WithID("3"),
+}
+allowedResources, err = permit.FilterObjects(
+    user, "edit", requestContext, resourcesToCheck...
+)
+```
+
+The function returns Blog Post 1 and Blog Post 2, as Alice has edit permissions for these posts.
 
 </TimelineStep>
 <TimelineStep>
@@ -30,31 +94,54 @@ Use the `permit.authorized_users` function to retrieve a list of users authorize
 This function takes an action and resource as inputs and returns the authorized users along with their role assignments that
 granted access.
 
+### Example: Retrieve Authorized Users
+
+Bob wants to know who can read Blog Post 3.
+
+```bash
+POST /v2/schema/{proj_id}/{env_id}/resources/{resource_id}/authorized_users
+
+# Example Request
+curl https://api.permit.io/v2/schema/my_project/my_environment/resources/blog_post:3/authorized_users \
+  --request POST \
+  --header 'Authorization: Bearer YOUR_SECRET_TOKEN' \
+  --data '{"action": "read"}'
+```
+
+The system responds with:
+
+- Alice (has read permissions).
+- Bob (has edit and read permissions).
+
+You can read more about getting resource authorized users [here](/how-to/enforce-permissions/authorized-users).
+
 </TimelineStep>
 <TimelineStep>
 
-## Bulk User Synchronization
+## Get User Permissions
 
-If you need to migrate an entire database of users to Permit, there are two primary approaches to achieve this.
+Use the `permit.GetUserPermissions` function to retrieve all user permissions across all registered resources and tenants.
+Simply provide a "User" as input, optionally filter by a list of tenants, and receive an object detailing the permissions
+and attributes for each assigned tenant.
 
-### Script-Based Bulk Syncing
+### Example: Bob’s Permissions
 
-Create a script that leverages the Permit API or SDK to iterate through your user dataset and push all users into Permit. This
-approach allows you to transfer your existing database in one go, ensuring all users are immediately available in Permit. However,
-it may require additional effort for scripting and execution, and you’ll need to handle any potential errors or data inconsistencies
-during the process.
+```bash
+POST /v2/schema/{proj_id}/{env_id}/users/{user_id}/permissions
 
-### Incremental Syncing at Login (Recommended)
+# Example Request
+curl https://api.permit.io/v2/schema/my_project/my_environment/users/bob@example.com/permissions \
+  --request POST \
+  --header 'Authorization: Bearer YOUR_SECRET_TOKEN'
+```
 
-A more efficient and seamless method is to sync users incrementally at the handoff point—the moment users interact with your system.
-Specifically, during the login process, as soon as a user's identity is verified, they are synced into Permit.
+The system returns a list of Bob’s permissions:
 
-This approach eliminates the need for pre-loading an entire dataset, reducing upfront work and ensuring only active users are synced.
-Over time, as users log in, the entire user base will naturally sync into Permit, aligning with real-world activity in your system.
+- Blog Post 1: Read
+- Blog Post 2: Read
+- Blog Post 3: Read, Edit
 
-:::tip KEY ADVANTAGE
-Incremental syncing aligns with user behavior, ensuring your database stays current and avoids syncing inactive or outdated users.
-:::
+You can read more about getting user permissions [here](/how-to/enforce-permissions/user-permissions).
 
 </TimelineStep>
 </TimelineWrapper>
