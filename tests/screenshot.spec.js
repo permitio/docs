@@ -69,8 +69,15 @@ function screenshotPathname(pathname) {
   });
 }
 
+const IGNORED_PATHS = [
+  // outdated version 1.0.0
+  "/1.0.0",
+];
+
 test.describe("Docusaurus site screenshots", () => {
-  const pathnames = extractSitemapPathnames(sitemapPath);
+  const pathnames = extractSitemapPathnames(sitemapPath).filter(
+    (pathname) => !pathname.startsWith(IGNORED_PATHS)
+  );
   console.log("Pathnames to screenshot:", pathnames);
   pathnames.forEach(screenshotPathname);
 });
