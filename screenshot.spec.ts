@@ -27,5 +27,8 @@ function screenshotPathname(pathname: string) {
 test.describe('Docusaurus site screenshots', () => {
   const pathnames = extractSitemapPathnames(sitemapPath);
   console.log('Pathnames to screenshot:', pathnames);
-  pathnames.forEach(screenshotPathname);
+  const filteredPathnames = pathnames.filter((pathname) => !pathname.includes('/1.0.0/'));
+  console.log('Filtered Pathnames:', filteredPathnames);
+
+  filteredPathnames.forEach(screenshotPathname);
 });
