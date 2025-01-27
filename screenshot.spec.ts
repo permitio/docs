@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import { test } from '@playwright/test';
 import { argosScreenshot } from '@argos-ci/playwright';
-import { extractSitemapPathnames, pathnameToArgosName } from './utils';
+import { extractSitemapPathnames, pathnameToArgosName } from './docs/utils/argo_utils';
 
 // Constants
 const siteUrl = 'http://localhost:3000';
