@@ -89,9 +89,10 @@ const sidebars = {
             "overview/sync-your-first-user-with-sdk",
             "overview/perform-policy-check-with-cloud-pdp",
             "overview/setup-attribute-based-access-control",
-            // "overview/setup-relationship-based-access-control",
-            // "overview/sync-application-data-into-permit",
             // "overview/perform-a-local-policy-check",
+            "overview/create-a-rebac-policy",
+            "overview/sync-applications-data",
+            "overview/advanced-authorization-queries",
             {
               type: "category",
               label: "Manage Your Account",
@@ -126,7 +127,12 @@ const sidebars = {
             type: "doc",
             id: "overview/best-practices",
           },
-          items: ["how-to/ownership", "overview/how-does-it-work", "concepts/multitenancy", "how-to/build-policies/abac/time-based-role"],
+          items: [
+            "how-to/ownership",
+            "overview/how-does-it-work",
+            "concepts/multitenancy",
+            "how-to/build-policies/abac/time-based-role",
+          ],
         },
       ],
     },
@@ -366,13 +372,10 @@ const sidebars = {
           ],
         },
         {
-            type: "category",
-            label: "Policy Guard",
-            items: [
-              "how-to/policy-guard/policy_guard",
-                "how-to/policy-guard/policy_guard_api",
-              ],
-        }
+          type: "category",
+          label: "Policy Guard",
+          items: ["how-to/policy-guard/policy_guard", "how-to/policy-guard/policy_guard_api"],
+        },
       ],
     },
     {
