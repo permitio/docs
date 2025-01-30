@@ -126,7 +126,12 @@ const sidebars = {
             type: "doc",
             id: "overview/best-practices",
           },
-          items: ["how-to/ownership", "overview/how-does-it-work", "concepts/multitenancy", "how-to/build-policies/abac/time-based-role"],
+          items: [
+            "how-to/ownership",
+            "overview/how-does-it-work",
+            "concepts/multi-tenant-authorization",
+            "how-to/build-policies/abac/time-based-role",
+          ],
         },
       ],
     },
@@ -366,13 +371,10 @@ const sidebars = {
           ],
         },
         {
-            type: "category",
-            label: "Policy Guard",
-            items: [
-              "how-to/policy-guard/policy_guard",
-                "how-to/policy-guard/policy_guard_api",
-              ],
-        }
+          type: "category",
+          label: "Policy Guard",
+          items: ["how-to/policy-guard/policy_guard", "how-to/policy-guard/policy_guard_api"],
+        },
       ],
     },
     {
