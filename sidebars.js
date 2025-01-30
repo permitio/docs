@@ -92,6 +92,7 @@ const sidebars = {
             // "overview/setup-relationship-based-access-control",
             // "overview/sync-application-data-into-permit",
             // "overview/perform-a-local-policy-check",
+            "overview/access-requests-and-approvals",
             {
               type: "category",
               label: "Manage Your Account",
