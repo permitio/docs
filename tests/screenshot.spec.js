@@ -30,27 +30,6 @@ const siteUrl = "http://localhost:3000";
 const sitemapPath = "./build/sitemap.xml";
 const stylesheetPath = join(__dirname, "screenshot.css");
 const stylesheet = readFileSync(stylesheetPath).toString();
-// const stylesheet = `
-// /* Iframes can load lazily */
-// iframe,
-// /* Avatars can be flaky due to using external sources: GitHub/Unavatar */
-// .avatar__photo,
-// /* Gifs load lazily and are animated */
-// img[src$='.gif'],
-// /* Algolia keyboard shortcuts appear with a little delay */
-// .DocSearch-Button-Keys > kbd,
-// /* The live playground preview can often display dates/counters */
-// [class*='playgroundPreview'] {
-//   visibility: hidden;
-// }
-
-// /* Different docs last-update dates can alter layout */
-// .theme-last-updated,
-// /* Mermaid diagrams are rendered client-side and produce layout shifts */
-// .docusaurus-mermaid-container {
-//   display: none;
-// }
-// `;
 
 // Wait for hydration, requires Docusaurus v2.4.3+
 // Docusaurus adds a <html data-has-hydrated="true"> once hydrated
