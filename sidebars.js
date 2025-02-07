@@ -93,6 +93,7 @@ const sidebars = {
             "overview/create-a-rebac-policy",
             "overview/sync-applications-data",
             "overview/advanced-authorization-queries",
+            "overview/access-requests-and-approvals",
             {
               type: "category",
               label: "Manage Your Account",
@@ -130,7 +131,7 @@ const sidebars = {
           items: [
             "how-to/ownership",
             "overview/how-does-it-work",
-            "concepts/multitenancy",
+            "concepts/multi-tenant-authorization",
             "how-to/build-policies/abac/time-based-role",
           ],
         },
