@@ -7,10 +7,12 @@
 //   plugins: ["@babel/plugin-transform-modules-commonjs"],
 // });
 
-const path = require("path");
-
-const lightCodeTheme = require("./src/css/prism-theme");
-const darkCodeTheme = require("prism-react-renderer/themes/dracula");
+import path from "path";
+import tailwindcss from "tailwindcss";
+import autoprefixer from "autoprefixer";
+import draculaTheme from "prism-react-renderer/themes/dracula.js";
+import lightCodeTheme from "./src/css/prism-theme.js";
+import darkCodeTheme from "prism-react-renderer/themes/dracula";
 
 const companyWebsiteUrl = process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
 
@@ -40,7 +42,7 @@ const config = {
           anonymizeIP: true,
         },
         docs: {
-          sidebarPath: require.resolve("./sidebars.js"),
+          sidebarPath: path.resolve("./sidebars.js"),
           routeBasePath: "/",
           lastVersion: "current",
           versions: {
@@ -52,7 +54,7 @@ const config = {
         },
         blog: false, // disables docusaurus blog
         theme: {
-          customCss: require.resolve("./src/css/custom.scss"),
+          customCss: path.resolve("./src/css/custom.scss"),
         },
       },
     ],
@@ -547,8 +549,8 @@ const config = {
         name: "docusaurus-tailwindcss",
         configurePostCss(postcssOptions) {
           // Appends TailwindCSS and AutoPrefixer.
-          postcssOptions.plugins.push(require("tailwindcss"));
-          postcssOptions.plugins.push(require("autoprefixer"));
+          postcssOptions.plugins.push(tailwindcss);
+          postcssOptions.plugins.push(autoprefixer);
           return postcssOptions;
         },
       };
@@ -615,7 +617,7 @@ const config = {
         ],
       },
       prism: {
-        theme: require("prism-react-renderer/themes/dracula"),
+        theme: draculaTheme,
         additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl", "php"],
       },
       colorMode: {
