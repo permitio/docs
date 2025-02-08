@@ -10,9 +10,9 @@
 import path from "path";
 import tailwindcss from "tailwindcss";
 import autoprefixer from "autoprefixer";
-import draculaTheme from "prism-react-renderer/themes/dracula.js";
+import { themes } from "prism-react-renderer";
 import lightCodeTheme from "./src/css/prism-theme.js";
-import darkCodeTheme from "prism-react-renderer/themes/dracula";
+import darkCodeTheme from themes.dracula;
 
 const companyWebsiteUrl = process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
 
@@ -617,7 +617,7 @@ const config = {
         ],
       },
       prism: {
-        theme: draculaTheme,
+        theme:  themes.dracula,
         additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl", "php"],
       },
       colorMode: {
