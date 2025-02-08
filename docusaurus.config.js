@@ -65,7 +65,6 @@ const config = {
       "@docusaurus/plugin-client-redirects",
       {
         redirects: [
-          // Backwards support - We moved multitenancy into features
           {
             from: "/concepts/multi-tenancy",
             to: "/how-to/build-policies/policy-basics",
@@ -340,8 +339,8 @@ const config = {
             to: "/embeddable-uis/user-preview",
           },
           {
-            from: "/features/multitenancy",
-            to: "/concepts/multitenancy",
+            from: ["/features/multitenancy", "/concepts/multitenancy"],
+            to: "/concepts/multi-tenant-authorization",
           },
           {
             from: "/features/loading-data/via-api",

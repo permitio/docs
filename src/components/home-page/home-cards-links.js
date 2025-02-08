@@ -34,7 +34,7 @@ export const firstRow = [
 export const secondRow = [
   {
     type: "link",
-    href: "concepts/multitenancy",
+    href: "concepts/multi-tenant-authorization",
     label: "Multi-Tenancy",
     svgIcon: <i className="ri-hotel-line ri-xl !text-[#974ef2]"></i>,
     description: "Learn how to manage multi-tenancy with Permit",

@@ -130,7 +130,7 @@ const sidebars = {
           items: [
             "how-to/ownership",
             "overview/how-does-it-work",
-            "concepts/multitenancy",
+            "concepts/multi-tenant-authorization",
             "how-to/build-policies/abac/time-based-role",
           ],
         },
