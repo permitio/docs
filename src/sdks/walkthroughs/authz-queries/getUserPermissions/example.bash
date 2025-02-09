@@ -1,4 +1,4 @@
-curl https://api.permit.io/v2/schema/demo_project/demo_env/users/bob@example.com/user-permissions \
+curl https://pdp-api.permit.io/user-permissions \
   --request POST \
   --header "Authorization: Bearer YOUR_SECRET_TOKEN" \
   --header "Content-Type: application/json" \
