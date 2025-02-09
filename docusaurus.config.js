@@ -7,14 +7,12 @@
 //   plugins: ["@babel/plugin-transform-modules-commonjs"],
 // });
 
-import path from "path";
-import tailwindcss from "tailwindcss";
-import autoprefixer from "autoprefixer";
-import { themes } from "prism-react-renderer";
-import lightCodeTheme from "./src/css/prism-theme.js";
-import darkCodeTheme from themes.dracula;
+const path = require("path");
+const {themes} = require('prism-react-renderer');
+const lightCodeTheme = require("./src/css/prism-theme");
+const darkCodeTheme = themes.dracula;;
 
-const companyWebsiteUrl = process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
+const companyWebsiteUrl = process.env.COMPANY_WEBSITE_URL || "https://permit.io";
 
 const apiReferenceUrl = process.env.API_REFERENCE_URL ?? "https://api.permit.io/v2/redoc";
 
@@ -42,7 +40,7 @@ const config = {
           anonymizeIP: true,
         },
         docs: {
-          sidebarPath: path.resolve("./sidebars.js"),
+          sidebarPath: require.resolve("./sidebars.js"),
           routeBasePath: "/",
           lastVersion: "current",
           versions: {
@@ -54,7 +52,7 @@ const config = {
         },
         blog: false, // disables docusaurus blog
         theme: {
-          customCss: path.resolve("./src/css/custom.scss"),
+          customCss: require.resolve("./src/css/custom.scss"),
         },
       },
     ],
@@ -548,8 +546,8 @@ const config = {
         name: "docusaurus-tailwindcss",
         configurePostCss(postcssOptions) {
           // Appends TailwindCSS and AutoPrefixer.
-          postcssOptions.plugins.push(tailwindcss);
-          postcssOptions.plugins.push(autoprefixer);
+          postcssOptions.plugins.push(require("tailwindcss"));
+          postcssOptions.plugins.push(require("autoprefixer"));
           return postcssOptions;
         },
       };
@@ -616,7 +614,7 @@ const config = {
         ],
       },
       prism: {
-        theme:  themes.dracula,
+        theme: themes.dracula,
         additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl", "php"],
       },
       colorMode: {
