@@ -11,7 +11,7 @@ export const firstRow = [
   },
   {
     type: "link",
-    href: "category/guides--tutorials",
+    href: "walkthroughs",
     label: "Tutorials",
     svgIcon: <i className="ri-book-open-line ri-xl !text-[#974ef2]"></i>,
     description: "Best practices and how-to guides",
@@ -25,10 +25,10 @@ export const firstRow = [
   },
   {
     type: "link",
-    href: "/category/integrate-to-applications",
-    label: "Integrations",
+    href: "category/learn-by-example",
+    label: "Examples",
     svgIcon: <i className="ri-suitcase-line ri-xl !text-[#974ef2]"></i>,
-    description: "Integrate Permit with your favorite tools",
+    description: "View real-life Permit integration examples",
   },
 ];
 export const secondRow = [

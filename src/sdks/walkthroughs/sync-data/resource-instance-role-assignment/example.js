@@ -1,4 +1,6 @@
-roles: [
+// Visualization of above explanation
+
+user_A_roles: [
   {
     role: "admin",
     tenant: "company A",
