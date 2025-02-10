@@ -5,146 +5,150 @@ title: Temporary Role Example
 
 One of the basic requirements for proper fine-grained authorization is time-based conditions.
 
-On this page, we will learn how to implement temporary role assignments using ABAC Condition Sets in Permit.io, with a step-by-step implementation guide.
+On this page, we will learn how to implement temporary role assignments using ABAC Condition Sets in Permit.io, with a
+step-by-step implementation guide.
 
 ## Prerequisites
 
-The following guide uses the following conventions to set the time-based rule:
-- A Permit.io account
-- Default tenant (exists by default) and another tenant - `coke`
-- A [tenant attribute](https://api.permit.io/v2/redoc#tag/Tenants/operation/create_tenant) - `key`
-- A role - `admin` 
-- A resource - `internal_api`
-- A user with an `admin` role assigned in the `default` and `coke` tenants
+Before proceeding, ensure you have the following:
 
-## Implementation Steps
+- A [Permit.io](https://permit.io) account.
+- A **default tenant** (exists by default) and another tenant called `coke`.
+- A [tenant attribute](https://api.permit.io/v2/redoc#tag/Tenants/operation/create_tenant) called `key`.
+- A **role** called `admin`.
+- A **resource** called `internal_api`.
+- A user assigned the `admin` role in both the `default` and `coke` tenants.
 
-There are several key steps to implement temporary role assignments in Permit.io - all are necessary and should be completed in order.
+## Step 1: Configure Schema & Policy
 
-- ### Add the Tenant attribute "key"
+---
 
-  The first step involves setting up a tenant attribute called "key" and configuring its value.
-  You'll need to access your Permit.io dashboard and navigate through the [Tenant Attributes](https://app.permit.io/user-management/tenant-settings/tenant-attributes).
-  1. [Create Tenant Attributes](https://app.permit.io/user-management/tenant-settings/tenant-attributes)
-      <img src="/img/abac/tenant_key.png" style={{ maxHeight: "45vh" }} />
-  1. [Add key to specific tenant](https://app.permit.io/user-management/tenant-settings/manage-tenants)
-    <img src="/img/abac/add_tenant_key.png" style={{ maxHeight: "45vh" }} />
-  
-  Example for Coke Tenant:
-  ```javascript
-  // Example tenant key attribute value
-  {"key": "coke"}
-  ```
+### 1.1 Configure Tenant Attribute Key
 
-- ### Configure time-based groups
+1. Navigate to [Tenant Attributes](https://app.permit.io/user-management/tenant-settings/tenant-attributes) in the Permit.io
+   dashboard.
+2. Create a new **Tenant Attribute** named `key`.
+3. **Do not assign it to a tenant yet.**
 
-  1. Add the time_based_groups attribute to your user object through the [User Attributes](https://app.permit.io/user-management/tenant-settings/user-attributes) section.
-    <img src="/img/abac/time_based_groups.png" style={{ maxHeight: "45vh" }} />
-  2. Add `time_based_groups` to specific users.
-    <img src="/img/abac/time_based_groups_user.png" style={{ maxHeight: "45vh" }} />
-  3. Make sure the user is [assigned the Top Level Role in the Directory](https://app.permit.io/user-management) as well:
-    <img src="/img/abac/time_based_user_assignment.png" style={{ maxHeight: "45vh" }} />
+![Tenant Key Attribute](/img/abac/tenant_key.png)
 
+### 1.2 Configure `time_based_groups` User Attribute
 
-  ```javascript
-  "time_based_groups": [
-    {
-      "role": "admin",
-      "tenant": "default",
-      "expires": 1733256879832
-    },
-    {
-      "role": "admin",
-      "tenant": "coke",
-      "expires": 1733861761081
-    }
-  ]
-  ```
+1. Go to [User Attributes](https://app.permit.io/user-management/tenant-settings/user-attributes).
+2. Create the `time_based_groups` attribute.
+3. **Do not assign it to a user yet.**
+
+![Time-Based Groups](/img/abac/time_based_groups.png)
+
+## Step 2: Create Condition Set
+
+---
+
+A condition set ensures temporary permissions based on:
+
+- User role (`admin`)
+- Expiration time
+- Tenant key match
+
+Use the following API request to create the condition set:
+
+```bash
+curl --location 'https://api.permit.io/v2/schema/default/production/condition_sets' \
+--header 'Content-Type: application/json' \
+--header 'Accept: application/json' \
+--header 'Authorization: Bearer permit_key_' \
+--data '{
+  "key": "temp-admin",
+  "name": "Temporary Admin",
+  "type": "userset",
+  "conditions": {
+    "allOf": [
+      {
+        "allOf": [
+          { "user.roles": { "array_contains": "admin" } },
+          { "user.time_based_groups": { "any_match": { "match": {
+            "expires": { "greater-than-equals": { "ref": "user.current_time" } },
+            "tenant": { "equals": { "ref": "tenant.key" } }
+          }}}}
+        ]
+      }
+    ]
+  }
+}'
+```
+
+## Step 3: Assign Permissions to the Condition Set
+
+---
+
+1. Navigate to the [Policy Editor](https://app.permit.io/policy-editor).
+2. Assign the necessary resource actions to the `temp-admin` condition set.
+   ![Permit UI Temp Admin](/img/abac/permit_ui_temp_admin.png)
+
+## Step 4: Test the Configuration
+
+---
+
+### 4.1 Create a Tenant with the Key `coke`
+
+Use the following JSON format:
+
+```json
+{
+  "key": "coke"
+}
+```
+
+### 4.2 Create a User with Role & `time_based_groups` Value
+
+Assign the `admin` role and set `time_based_groups`:
+
+```json
+"time_based_groups": [
+  {
+    "role": "admin",
+    "tenant": "default",
+    "expires": 1733256879832
+  },
+  {
+    "role": "admin",
+    "tenant": "coke",
+    "expires": 1733861761081
+  }
+]
+```
+
 :::info
-The `expires` value above is the Unix timestamp in milliseconds. This requires that the `current_time` value be passed in the `permit.check()` as a user attribute. An example of such a `check` function will follow.
+The `expires` value is a Unix timestamp in milliseconds. The `current_time` value must be passed in `permit.check()` as a user
+attribute.
 :::
 
+### 4.3 Run Permit Check
 
-- ### Create condition set
+Use the following code snippet to verify permissions:
 
-  The condition set checks three key elements:
-  - If the user has the admin role
-  - If the expiration time hasn't passed
-  - If the tenant key matches
-
-  Here's an example API call to create the condition set:
-  ```bash
-  curl --location 'https://api.permit.io/v2/schema/default/production/condition_sets' \
-  --header 'Content-Type: application/json' \
-  --header 'Accept: application/json' \
-  --header 'Authorization: Bearer permit_key_' \
-  --data '{
-    "key": "temp-admin",
-    "name": "Temporary Admin",
-    "type": "userset",
-    "conditions": {
-      "allOf": [
-        {
-          "allOf": [
-            {
-              "user.roles": {
-                "array_contains": "admin"
-              }
-            },
-            {
-              "user.time_based_groups": {
-                "any_match": {
-                  "match": {
-                    "expires": {
-                      "greater-than-equals": {
-                        "ref": "user.current_time"
-                      }
-                    },
-                    "tenant":{
-                      "equals": {
-                        "ref": "tenant.key"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        }
-      ]
-    }
-  }'
-  ```
-
-- ### Create condition set
-    1. Assign the appropriate resource actions to the new "temp-admin" user set through the [Policy Editor](https://app.permit.io/policy-editor) after creating the condition set.
-        <img src="/img/abac/permit_ui_temp_admin.png" style={{ maxHeight: "45vh" }} />
-
-- ### Test the user using `permit.check()`
-    ```javascript
-    const permitted = await permit.check(
-    // the user object
-    {
-        // the user key
-        key: "george@test.com",
-        // just-in-time attributes on the user
-        attributes: {
-            current_time: new Date().getTime()
-        },
+```javascript
+const permitted = await permit.check(
+  // User object
+  {
+    key: "george@test.com",
+    attributes: {
+      current_time: new Date().getTime(),
     },
-    // the action the user is trying to do
-    "patch",
-    // Resource
-    {
-        // the type of the resource and tenant
-        type: "_internal_api",
-        tenant: "coke"
-    }
-    );
-    ```
-    
-    Play around with user.time_based_groups to set the expiration time of specific groups in specific tenants to see how the time passed in `user.current_time` effects the allow value. This example also supports multi-tenancy.
-    
-    :::info Tip
-    In a production scenario, your code would update the `User.time_based_groups[]` via the Permit.io API with the `time.now() + expiration_amount`.
-    :::
+  },
+  // Action
+  "patch",
+  // Resource
+  {
+    type: "_internal_api",
+    tenant: "coke",
+  }
+);
+```
+
+Modify `user.time_based_groups` expiration times to test different scenarios.
+
+:::info Tip
+In a production environment, update `User.time_based_groups[]` via the Permit.io API dynamically with `time.now() + 
+expiration_amount`.
+:::
