@@ -93,7 +93,6 @@ const sidebars = {
             // "overview/sync-application-data-into-permit",
             // "overview/perform-a-local-policy-check",
             "overview/access-requests-and-approvals",
-            "overview/aws-marketplace",
             {
               type: "category",
               label: "Manage Your Account",
