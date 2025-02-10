@@ -89,9 +89,10 @@ const sidebars = {
             "overview/sync-your-first-user-with-sdk",
             "overview/perform-policy-check-with-cloud-pdp",
             "overview/setup-attribute-based-access-control",
-            // "overview/setup-relationship-based-access-control",
-            // "overview/sync-application-data-into-permit",
             // "overview/perform-a-local-policy-check",
+            "overview/create-a-rebac-policy",
+            "overview/sync-applications-data",
+            "overview/advanced-authorization-queries",
             "overview/access-requests-and-approvals",
             {
               type: "category",
