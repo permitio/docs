@@ -121,33 +121,37 @@ export const enforcementRow = [
   },
   {
     type: "link",
-    href: "",
+    href: "/how-to/bulk-operations",
     label: "Bulk Operations",
     svgIcon: <i className="ri-stack-line ri-xl !text-[#E67E22]"></i>,
     description: "Efficiently manage permissions in bulk",
   },
   {
     type: "link",
+    href: "/foaz/url-mapping-check/",
     label: "URL Mapping",
-    svgIcon: <i className="ri-link-line ri-xl !text-[#E67E22]"></i>,
+    svgIcon: <i className="ri-map-pin-line ri-xl !text-[#E67E22]"></i>,
     description: "Map and secure routes with access control",
   },
 ];
 export const devOpsRow = [
   {
     type: "link",
+    href: "/how-to/sdlc/ci-cd/",
     label: "Policy CI/CD",
     svgIcon: <i className="ri-git-branch-line ri-xl !text-[#16A085]"></i>,
     description: "Automate policy deployment with CI/CD",
   },
   {
     type: "link",
+    href: "/how-to/manage-data/loading-data",
     label: "Custom Data Loading",
     svgIcon: <i className="ri-database-2-line ri-xl !text-[#16A085]"></i>,
     description: "Load external data into your access logic",
   },
   {
     type: "link",
+    href: "/how-to/use-audit-logs/types-and-filtering/",
     label: "Auditing & Logs",
     svgIcon: <i className="ri-file-list-line ri-xl !text-[#16A085]"></i>,
     description: "Track and monitor permission changes",
