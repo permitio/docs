@@ -641,6 +641,7 @@ const sidebars = {
           label: "Conceptual Guides",
           items: [
             "overview/why-permit",
+            "concepts/differentiator-checklist",
             "how-to/build-policies/policy-basics",
             "overview/glossary",
             "how-to/SDLC/modeling-implementation-components",
