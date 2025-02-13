@@ -137,7 +137,7 @@ export const enforcementRow = [
 export const devOpsRow = [
   {
     type: "link",
-    href: "/how-to/sdlc/ci-cd/",
+    href: "/how-to/sdlc/ci-cd",
     label: "Policy CI/CD",
     svgIcon: <i className="ri-git-branch-line ri-xl !text-[#16A085]"></i>,
     description: "Automate policy deployment with CI/CD",
