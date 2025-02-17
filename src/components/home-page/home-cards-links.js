@@ -77,6 +77,17 @@ export const sdkRow = [
     svgIcon: <i className="ri-cloud-line ri-xl !text-[#16A085]"></i>,
     description: "Manage policy as code with Terraform",
   },
+  {
+    type: "link",
+    href: "sdk/golang/quickstart-golang",
+    label: "Golang",
+    icon: " ",
+  },
+  { type: "link", href: "sdk/nodejs/quickstart-nodejs", label: "Node.js", icon: " " },
+  { type: "link", href: "sdk/python/quickstart_python_sync", label: "Python", icon: " " },
+  { type: "link", href: "sdk/ruby/quickstart-ruby", label: "Ruby", icon: " " },
+  { type: "link", href: "sdk/java/quickstart-java", label: "Java", icon: " " },
+  { type: "link", href: "sdk/dotnet/quickstart-dotnet", label: ".NET", icon: " " },
 ];
 
 export const integrationsRow = [
