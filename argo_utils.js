@@ -1,10 +1,10 @@
-import * as cheerio from "cheerio";
-import * as fs from "fs";
+const cheerio = require("cheerio");
+const fs = require("fs");
 
-export function extractSitemapPathnames(sitemapPath: string): string[] {
+function extractSitemapPathnames(sitemapPath) {
   const sitemap = fs.readFileSync(sitemapPath).toString();
   const $ = cheerio.load(sitemap, { xmlMode: true });
-  const urls: string[] = [];
+  const urls = [];
   $("loc").each(function handleLoc() {
     urls.push($(this).text());
   });
@@ -12,6 +12,11 @@ export function extractSitemapPathnames(sitemapPath: string): string[] {
 }
 
 // Converts a pathname to a decent screenshot name
-export function pathnameToArgosName(pathname: string): string {
+function pathnameToArgosName(pathname) {
   return pathname.replace(/^\/|\/$/g, "") || "index";
 }
+
+module.exports = {
+  extractSitemapPathnames,
+  pathnameToArgosName,
+};

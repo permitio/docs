@@ -1,7 +1,7 @@
-import * as fs from 'fs';
-import { test } from '@playwright/test';
-import { argosScreenshot } from '@argos-ci/playwright';
-import { extractSitemapPathnames, pathnameToArgosName } from './docs/utils/argo_utils';
+const fs = require("fs");
+const { test } = require("@playwright/test");
+const { argosScreenshot } = require("@argos-ci/playwright");
+const { extractSitemapPathnames, pathnameToArgosName } = require("./argo_utils");
 
 // Constants
 const siteUrl = 'http://localhost:3000';
@@ -14,7 +14,7 @@ function waitForDocusaurusHydration() {
   return document.documentElement.dataset.hasHydrated === 'true';
 }
 
-function screenshotPathname(pathname: string) {
+function screenshotPathname(pathname) {
   test(`pathname ${pathname}`, async ({ page }) => {
     const url = siteUrl + pathname;
     await page.goto(url);
