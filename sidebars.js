@@ -622,7 +622,7 @@ const sidebars = {
                 type: "doc",
                 id: "api/elements/overview",
               },
-              items: ["api/elements/operation_approval", "api/elements/access-requests"],
+              items: ["api/elements/operation_approval", "api/elements/access-requests", "api/elements/access-request-api"],
             },
           ],
         },
