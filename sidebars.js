@@ -594,10 +594,10 @@ const sidebars = {
             "authentication/fusionauth",
             "authentication/supertokens",
             "authentication/hankopermit",
-            "integrations/SCIM/OKTA",
-            "integrations/SCIM/EntraID",
           ],
-        }
+        },
+        "integrations/SCIM/OKTA",
+        "integrations/SCIM/EntraID"
       ],
     },
     {
