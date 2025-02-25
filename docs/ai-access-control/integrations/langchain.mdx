@@ -1,3 +1,284 @@
 ---
-title: LangChain
+title: Permit.io LangChain Integration
 ---
+
+Permit.io's LangChain integrations, is set of tools and retrievals that will help you to implement fine-graiend access control in your LangChain-based agents.
+
+In the following guide, we will walk you through the various integrations, shows how they incorporate with the four perimeters framework.
+
+
+Integrating **LangChain** with **Permit.io** provides a structured way to enforce access control in applications using large language models (LLMs). The integration consists of several components that help you:
+
+- `JWT Validation Tool` - Authenticate users with **JWT validation**.
+- `Permissions Check Tool` - Verify permissions for prompt, response, and executing AI operations.
+- `Protect RAG Resources` - Secure access to RAG resources based on user permissions.
+- `Filter Objects` - Filter knowledge base retrievals based on access control policies.
+
+By following this guide, you will learn how to integrate Permit.io's policy-based access control into LangChain applications to ensure secure AI interactions.
+
+## Setup
+
+Before using the LangChain-Permit.io integration, ensure that your environment meets the following requirements:
+
+### Prerequisites
+
+- **Python 3.8+**
+- **Permit.io account** (for policy management)
+- **LangChain** application
+
+### Installation
+
+In your LangChain project, install the LangChain-Permit package:
+
+```bash
+pip install langchain-permit
+```
+
+### Configuration
+
+Set up environment variables for the LangChain application:
+
+- **`PERMIT_API_KEY`** - Your Permit.io API key. If you don't have one, you can get one for free [here](https://app.permit.io/settings/api-keys).
+- **`PERMIT_PDP_URL`** - The URL of the Permit Decision Point (PDP) service. To use advanced policies, you should run the local PDP in environment where the LangChain has access to it.
+- **`JWKS_URL`** - The URL of the JSON Web Key Set (JWKS) endpoint for validating JWT tokens. You can get it from your authentication provider.
+
+Here's an example of setting these environment variables:
+```bash
+export PERMIT_API_KEY="your_permit_api_key"
+export PERMIT_PDP_URL="http://localhost:7766"
+export JWKS_URL="http://localhost:3458/.well-known/jwks.json"
+```
+
+## JWT Validator Tool
+
+The **JWT Validator Tool** verifies user authentication by validating JWT tokens, ensuring only authenticated users can interact with the system.
+The validator extracts user claims so you can use them after for authorization entitlments.
+
+### Import and Configure JWT Validator
+
+```python
+from LangChain_permit.tools import LangChainJWTValidationTool
+
+jwt_validator = LangChainJWTValidationTool(jwks_url="http://localhost:3458/.well-known/jwks.json")
+```
+
+### Validate a JWT token:
+
+With the tools instance, we can use it in our prompt processing pipeline to validate the token and extract the claims.
+
+```python
+from LangChain.tools import BaseTool
+
+class JWTValidationTool(BaseTool):
+    name = "jwt_validation"
+    description = "Validates JWT tokens as part of prompt processing."
+
+    async def _arun(self, token: str):
+        """
+        Validates the JWT token, extracts claims, and ensures user authentication before proceeding.
+        """
+        claims = await jwt_validator._arun(token)
+        print("Decoded Claims:", claims)
+        return claims
+
+# Using the tool within a prompt processing pipeline
+async def process_query(
+        self,
+        token: str,
+        question: str,
+        prompt_type: str = "general"
+    ) -> str:
+        """
+        Process a medical query with security checks.
+        """
+        try:
+            jwt_validation = JWTValidationTool()
+            # 1. Validate JWT and get user claims
+            user = await jwt_validation.validate_token(token)
+            print("====> User <====", user)
+            
+            if not user:
+                raise ValueError("User does not have permission to use the AI")
+            
+            # 2. Process the query
+            chain = self.prompt | self.llm
+            response = await chain.ainvoke({"question": question})
+            
+            return response.content
+            
+        except Exception as e:
+            raise ValueError(f"Query processing failed: {str(e)}")
+```
+
+If the token is valid, the extracted claims can be used for authorization.
+
+## Permissions Check Tool
+
+The **Permissions Check Tool** determines whether a user can perform an action on a resource, using Permit.io’s policy engine.
+
+### Configure the Permission Checker
+
+To check the user's permissions, set up a PermissionsManager class with the Permit client and the LangchainPermissionsCheckTool.
+
+```python
+from permit import Permit
+from langchain_permit.tools import LangchainPermissionsCheckTool
+from src.config.settings import get_settings
+
+settings = get_settings()
+
+class PermissionsManager:
+    def __init__(self):
+        self.permit_client = Permit(
+            token=settings.permit_api_key,
+            pdp=settings.permit_pdp_url
+        )
+        self.permissions_checker = LangchainPermissionsCheckTool(
+            permit=self.permit_client
+        )
+    
+    async def check_prompt_permissions(
+        self,
+        user: dict,
+        prompt_type: str = "general"
+    ) -> bool:
+        """Check if user has permission to use AI prompts."""
+        result = await self.permissions_checker._arun(
+            user=user,
+            action="ask",
+            resource={
+                "type": "healthcare_prompt",
+            }
+        )
+        print("====> Result <====", result)
+        return result.get("allowed", False)
+
+permissions_manager = PermissionsManager()
+```
+
+### Check User Permissions
+
+Now, as part of your prompt proccessing, you can use this tool to check if the user has permission to use the AI.
+
+```python
+class PromptGuard:
+    def __init__(self):
+        self.llm = ChatOpenAI()
+        self.prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are a helpful medical assistant. Provide general health information only."),
+            ("human", "{question}")
+        ])
+    
+    async def process_query(
+        self,
+        token: str,
+        question: str,
+        prompt_type: str = "general"
+    ) -> str:
+        """
+        Process a query with security checks.
+        """
+        try:
+            # 1. Validate JWT and get user claims
+            user = await security_manager.validate_token(token)
+            print("====> User <====", user)
+            
+            # 1. Check permissions with Permit.io
+            allowed = await permissions_manager.check_prompt_permissions(
+                user=user,
+                prompt_type=prompt_type
+            )
+            print("====> Allowed <====", allowed)
+            if not allowed:
+                raise ValueError("User does not have permission to use the AI")
+            
+            # 3. Process the query
+            chain = self.prompt | self.llm
+            response = await chain.ainvoke({"question": question})
+            
+            return response.content
+            
+        except Exception as e:
+            raise ValueError(f"Query processing failed: {str(e)}")
+```
+
+## Data Filtering SelfQueryRetriever
+
+The **SelfQueryRetriever** allows users to perform natural language queries while ensuring that only authorized data is retrieved.
+
+### Implementing SelfQueryRetriever
+
+First, set up the retriever with the relevant filtering attributes from the Permit.io policy.
+
+```python
+[from LangChain_openai import OpenAIEmbeddings
+from LangChain_community.vectorstores import FAISS
+from LangChain_permit.retrievers import PermitSelfQueryRetriever
+
+embeddings = OpenAIEmbeddings()
+vectorstore = FAISS.from_documents(docs, embeddings)
+
+retriever = PermitSelfQueryRetriever(
+api_key="your_permit_api_key",
+pdp_url="http://localhost:7766",
+user={"key": "user_123"},
+resource_type="document",
+action="view",
+llm=embeddings,
+vectorstore=vectorstore
+)]
+```
+
+### Use the SelfQueryRetriever in LangChain
+
+Now, we can use the retirever in our LangChain-based application to retrieve only the documents that the user has access to.
+
+```python
+async def get_filtered_documents(query: str):
+    docs = await retriever._aget_relevant_documents(query)
+    for doc in docs:
+        print(doc.metadata.get("id"), doc.page_content)
+```
+
+## Data Filtering EnsembleRetriever
+
+The **EnsembleRetriever** combines multiple retrieval methods and applies access control, ensuring that only permitted data is returned.
+
+### Implementing EnsembleRetriever
+
+First, let set up the retriever with the reelvant filtering attributes from the Permit.io policy
+
+```python
+from LangChain_permit.retrievers import PermitEnsembleRetriever
+
+ensemble_retriever = PermitEnsembleRetriever(
+    api_key="your_permit_api_key",
+    pdp_url="http://localhost:7766",
+    user="user_abc",
+    action="view",
+    resource_type="document",
+    retrievers=[vector_retriever]
+)
+```
+
+### Retrieve Authorized Documents 
+
+Based on the following query, you can now retrieve in the flow only the documents that the user has access to.
+
+```python
+async def get_permitted_documents(query: str):
+    results = await ensemble_retriever._aget_relevant_documents(query)
+    for doc in results:
+        print(f"{doc.metadata.get('id')}: {doc.page_content}")
+```
+
+## LangChain and the Four-Perimeter Framework
+
+The **Four-Perimeter Framework** provides a structured security model for AI-driven applications:
+
+1. **Prompt Filtering** – Validates user authentication before processing queries, and use the check function to filter the prompt attribution.
+2. **Data Protection** – Restricts knowledge base access using **SelfQueryRetriever** and **EnsembleRetriever**.
+3. **Secure External Access** – Controls AI interactions with external APIs based on user permissions.
+4. **Response Enforcement** – Ensures AI-generated responses comply with security policies.
+
+LangChain, combined with Permit.io, enables a secure workflow for AI applications, ensuring that every request follows a structured access control mechanism.

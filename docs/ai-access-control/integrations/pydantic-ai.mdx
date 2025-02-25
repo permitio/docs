@@ -1,3 +1,104 @@
 ---
-title: PydanticAI
+title: PydanticAI Implementation
 ---
+
+Permit's PydanticAI integration leverages the structured AI framework into access control tools that can help you implementing the four permieters framework with your PydanticAI-Based agent.
+
+In this guide, we will go over the various Permit.io tools for PydanticAI, from idea to implementation.
+
+---
+
+The integration of Permit.io with PydanticAI provides fine-grained access control for AI agents, ensuring compliance and security at every stage of AI interaction. This integration aligns with the **Four-Perimeter Framework**, a structured security approach that applies access control across four critical layers:
+
+1. **Prompt Filtering** – Validates and sanitizes AI inputs before processing.
+2. **Data Protection** – Governs AI access to external knowledge sources.
+3. **Secure External Access** – Enforces permission checks for AI interactions with external APIs and services.
+4. **Response Enforcement** – Ensures compliance and security in AI-generated outputs.
+
+
+## Prompt Filtering
+
+AI models should only process validated prompts to prevent unauthorized or harmful queries. Using PydanticAI and Permit.io, we enforce structured prompt validation through access policies.
+
+#### Example: Secure Prompt Validation
+```python
+@financial_agent.tool
+async def validate_financial_query(
+    ctx: RunContext[PermitDeps],
+    query: FinancialQuery,
+) -> bool:
+    """Ensure the user has consented to AI financial advice."""
+    try:
+        is_seeking_advice = classify_prompt_for_advice(query.question)
+        permitted = await ctx.deps.permit.check(
+            {"key": ctx.deps.user_id},
+            "receive",
+            {"type": "financial_advice", "attributes": {"is_ai_generated": is_seeking_advice}},
+        )
+        return permitted
+    except PermitApiError as e:
+        raise SecurityError(f"Permission check failed: {str(e)}")
+```
+
+## Data Protection
+AI agents need controlled access to sensitive data sources. Using Permit.io’s **filter_objects**, we ensure that AI can only retrieve authorized data.
+
+#### Example: Secure RAG Data Filtering
+```python
+@financial_agent.tool
+async def access_financial_knowledge(
+    ctx: RunContext[PermitDeps], usr: UserContext, documents: list[FinancialDocument]
+) -> list[FinancialDocument]:
+    """Filter access to financial documents based on permissions."""
+    try:
+        resources = [{"id": doc.id, "type": "financial_document", "attributes": {"classification": doc.classification}} for doc in documents]
+        allowed_docs = await ctx.deps.permit.filter_objects(ctx.deps.user_id, "read", {}, resources)
+        allowed_ids = {str(doc.get("id", "")) for doc in allowed_docs}
+        return [doc for doc in documents if doc.id in allowed_ids]
+    except PermitApiError as e:
+        raise SecurityError(f"Failed to filter documents: {str(e)}")
+```
+
+## Secure External Access
+
+AI-driven operations should be restricted based on machine identity policies. Using Permit.io, we verify AI permissions before allowing external actions.
+
+#### Example: Secure API Calls
+```python
+@financial_agent.tool
+async def check_action_permissions(
+    ctx: RunContext[PermitDeps], action: str, context: UserContext, portfolio_id: str
+) -> bool:
+    """Validate permissions for portfolio modifications."""
+    try:
+        return await ctx.deps.permit.check(ctx.deps.user_id, "update", {"type": "portfolio"})
+    except PermitApiError as e:
+        raise SecurityError(f"Failed to check permissions: {str(e)}")
+```
+
+## Response Enforcement
+AI responses must be validated for security and compliance before reaching users. Permit.io enforces policies that prevent unauthorized disclosures.
+
+#### Example: Secure AI Response Filtering
+```python
+@financial_agent.tool
+async def validate_financial_response(ctx: RunContext[PermitDeps], response: FinancialResponse) -> FinancialResponse:
+    """Ensure financial responses comply with regulations."""
+    try:
+        contains_advice = classify_response_for_advice(response.answer)
+        permitted = await ctx.deps.permit.check(ctx.deps.user_id, "requires_disclaimer", {"type": "financial_response", "attributes": {"contains_advice": contains_advice}})
+        if contains_advice and permitted:
+            response.answer += "\n\nIMPORTANT DISCLAIMER: AI-generated financial advice should not be considered professional financial advice."
+            response.disclaimer_added = True
+            response.includes_advice = True
+        return response
+    except PermitApiError as e:
+        raise SecurityError(f"Failed to check response content: {str(e)}")
+```
+
+---
+
+By integrating **Permit.io** with **PydanticAI**, organizations can implement a comprehensive security framework that ensures AI agents operate within defined access control policies.
+The **Four-Perimeter Framework** provides structured security across **inputs, data access, external interactions, and responses**, reducing risk and ensuring compliance in AI applications.
+
+For a complete implementation, visit: [GitHub Repository](https://github.com/permitio/permit-pydanticai).

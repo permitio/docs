@@ -1,20 +1,241 @@
 ---
 title: Prompt Filtering
+sidebar_position: 1
 ---
 
-# Prompt Filtering
+import TimelineStep from "../../../src/components/timeline/TimelineStep";
+import TimelineWrapper from "../../../src/components/timeline/TimelineWrapper";
+
+
+Prompt Filtering is the process of filtering prompts based on the context, pattern, and length of the prompt.
+
+In the following guide, we will go over the various types of Prompt Filtering, from idea to implementation.
 
 ## Basic Input Validation
-1. Setup RBAC policy
-2. Analyze prompt length
-3. Filter prompt
+
+The most basic filtering capability is input validation. This is the process of ensuring that the input is of the correct type and length.
+
+Here's a guide to set basic input validation to limit the length of the prompt for free users:
+
+<TimelineWrapper>
+<TimelineStep>
+
+### Setup Policy
+
+For this policy, we will use RBAC capabilities in Permit.io
+
+1. Go to Permit.io dashboard at [app.permit.io](https://app.permit.io)
+2. In the [Resources](https://app.permit.io/policy-editor/resources) screen, create the following resources with a `run` action:
+    - `prompt
+    - `long_prompt`
+3. In the [Roles](https://app.permit.io/policy-editor/roles) screen, create the following roles:
+    - `free_user`
+    - `premium_user`
+4. In the [Policy](https://app.permit.io/policy-editor) screen, check the following boxes:
+    - `free_user` can `run` `prompt`
+    - `premium_user` can `run` `prompt` and `long_prompt`
+
+At this point, we have a basic policy that allows free users to run the `prompt` action and premium users to run both `prompt` and `long_prompt` actions.
+
+</TimelineStep>
+<TimelineStep>
+
+### Filter By Prompt Length
+For the purpose of this tutorial, we will use Permit's LangChain integration to enforce the policy.
+The first step will be to analyze the prompt length with a single line of code:
+
+```python
+from permit import Permit
+from langchain_permit.tools import LangchainPermissionsCheckTool
+
+permit_client = Permit(
+    token="permit_api_key_here",
+    pdp="http://localhost:7766" # or your real deployment url
+)
+
+permissions_checker = LangchainPermissionsCheckTool(
+    name="permission_check",
+    permit=permit_client,
+)
+
+prompt_type = "prompt" if len(prompt) < 100 else "long_prompt"
+
+result = await permissions_checker._arun(
+    user={"key": "user123"},
+    action="read",
+    resource={"type": prompt_type, "key": "doc123", "tenant": "default"}
+)
+print("Permission check result:", result)
+```
+
+This code snippet will check the length of the prompt and return the appropriate prompt type based on the length.
+You can integrate this tool with your LangChain agent to enforce the policy.
+
+</TimelineStep>
+</TimelineWrapper>
 
 ## Pattern Matching Prompt
-1. Setup ABAC policy
-2. Analyze prompt pattern
-3. Filter prompt
+In the context of AI-based Prompt Filtering, we can use AI to analyze the pattern of the prompt and filter it based on the pattern.
+For example, we would like to limit some user from submitting prompts that contain code or SQL queries that might be harmful to the agent operations.
+
+Here's a guide to set up pattern matching prompt filtering that filters prompts with code only for trusted users:
+
+<TimelineWrapper>
+<TimelineStep>
+
+### Setup ABAC Policy
+In this policy, we will use Permit ABAC capabiltities to filter the prompt based on the pattern.
+
+1. Go to Permit.io dashboard at [app.permit.io](https://app.permit.io)
+2. In the [Resources](https://app.permit.io/policy-editor/resources) screen, create the following resources with a `run` action:
+    - `prompt`
+3. To the resource you just created, add the following attributes:
+    - `prompt_text`: `string`
+3. In the [Roles](https://app.permit.io/policy-editor/roles) screen, create the following roles:
+    - `user`
+    - `trusted user`
+4. Got to the [ABAC](https://app.permit.io/policy-editor/rules) screen and click `Create New` resource set
+5. Configure and save the following set:
+    - `Name`: `code_prompt`
+    - `Resource`: `prompt`
+    - `Codition`: `resource.prompt_text contains "```"`
+6. In the same screen, create another set:
+    - `Name`: `standard_prompt`
+    - `Resource`: `prompt`
+    - `Codition`: `resource.prompt_text not contains "```"`
+7. In the [Policy](https://app.permit.io/policy-editor) screen, check the following boxes:
+    - `user` can `run` `standard_prompt`
+    - `trusted user` can `run` `code_prompt`
+
+</TimelineStep>
+<TimelineStep>
+
+### Filter Prompt by Pattern
+The following code snippet, will use a PydanticAI tool to check if a prompt is allowed based on the pattern:
+
+```python
+@financial_agent.tool
+async def validate_code_query(
+    ctx: RunContext[PermitDeps],
+    query: CodeQuery,
+) -> bool | str:
+    try:
+        permitted = await ctx.deps.permit.check(  # type: ignore
+            user=ctx.deps.user_id,
+            action='receive',
+            resource={
+                'type': 'financial_advice',
+                'attributes': {'prompt_text': CodeQuery.question},
+            },
+        )
+
+        if not permitted:
+            return 'User has not opted in to run code queries'
+
+        return True
+
+    except PermitApiError as e:
+        raise SecurityError(f'Permission check failed: {str(e)}')
+```
+
+</TimelineStep>
+</TimelineWrapper>
 
 ## AI-Based Prompt Filtering
-1. Setup ReBAC policy
-2. Analyze prompt context
-3. Filter prompt
+The most advanced option to filter queries is to use AI to analyze the prompt and filter it based on the context and intent of the prompt.
+
+Here's a guide to set up AI-based prompt filtering that filters prompts that contains financial advice requests only for opted-in users:
+
+<TimelineWrapper>
+<TimelineStep>
+
+### Setup Policy in Permit.io
+For the sake of the simplicity, we will use Permit.io to setup a simple policy that allows only opted-in users to get financial advice.
+
+1. Go to Permit.io dashboard at [app.permit.io](https://app.permit.io)
+2. In the [Resources](https://app.permit.io/policy-editor/resources) screen, create the following resources with a `get` action:
+    - `ai_financial_advice`
+    - `ai_financial_data`
+3. In the [Roles](https://app.permit.io/policy-editor/roles) screen, create the following roles:
+    - `user`
+    - `opted-in user`
+4. In the [Policy](https://app.permit.io/policy-editor) screen, check the following boxes:
+    - `opted-in user` can `get` `ai_financial_advice` and `ai_financial_data`
+    - `user` can `get` `ai_financial_data`
+
+</TimelineStep>
+<TimelineStep>
+
+### Analyze prompt context
+In the following code, we are demonstrating how our application utilize OpenAI to classify the prompt and then query Permit.io to check if the user is allowed to get financial advice:
+
+```js
+let systemPrompt = `You are a request classifier that understands user intent.
+Your job is to analyze requests and determine:
+1. The type of resource being requested
+2. Any relevant attributes of that resource
+3. The intent behind the request (data access vs advisory)
+
+Output format:
+{
+    "resourceType": "determined from context",
+    "resourceKey": "specific identifier",
+    "attributes": "relevant attributes if any",
+    "action": "usually read"
+}\\n\\nExample classifications:
+[Request]: "Show me the data"
+[Output]: {
+    "resourceType": "determined by context",
+    "resourceKey": "data",
+    "attributes": {},
+    "action": "read"
+}
+
+[Request]: "I need access to X with Y permission"
+[Output]: {
+    "resourceType": "X",
+    "resourceKey": "identifier",
+    "attributes": {"permission": "Y"},
+    "action": "read"
+}`;
+
+const promptClassification = async classify(userPrompt) {
+    try {
+        const response = await this.openai.chat.completions.create({
+            model: "gpt-4",
+            messages: [
+                {
+                    role: "system",
+                    content: this.systemPrompt
+                },
+                {
+                    role: "user",
+                    content: userPrompt
+                }
+            ],
+            temperature: 0
+        });
+
+        return JSON.parse(response.choices[0].message.content.trim());
+    } catch (error) {
+        console.error("Classification failed:", error);
+        throw error;
+    }
+}
+
+const isPromptAllowed = await permit.check({
+    user,
+    promptClassification.action,
+    resource: {
+        type: promptClassification.resourceType,
+        key: promptClassification.resourceKey,
+        attributes: promptClassification.attributes
+    }
+});
+```
+
+Using a code similar to this, you can analyze the prompt and filter it based on the context and intent of the prompt.
+To find a whole working project for prompt filtering, visit our [GitHub repository](https://github.com/permitio/permit-prompt-filtering/tree/main).
+
+</TimelineStep>
+</TimelineWrapper>
