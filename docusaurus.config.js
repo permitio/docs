@@ -8,11 +8,11 @@
 // });
 
 const path = require("path");
-
+const {themes} = require('prism-react-renderer');
 const lightCodeTheme = require("./src/css/prism-theme");
-const darkCodeTheme = require("prism-react-renderer/themes/dracula");
+const darkCodeTheme = themes.dracula;;
 
-const companyWebsiteUrl = process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
+const companyWebsiteUrl = process.env.COMPANY_WEBSITE_URL || "https://permit.io";
 
 const apiReferenceUrl = process.env.API_REFERENCE_URL ?? "https://api.permit.io/v2/redoc";
 
@@ -42,13 +42,7 @@ const config = {
         docs: {
           sidebarPath: require.resolve("./sidebars.js"),
           routeBasePath: "/",
-          lastVersion: "current",
-          versions: {
-            current: {
-              label: "2.0.0",
-              path: "/",
-            },
-          },
+          lastVersion : "current",
         },
         blog: false, // disables docusaurus blog
         theme: {
@@ -614,7 +608,7 @@ const config = {
         ],
       },
       prism: {
-        theme: require("prism-react-renderer/themes/dracula"),
+        theme: themes.dracula,
         additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl", "php"],
       },
       colorMode: {
