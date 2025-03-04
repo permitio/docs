@@ -280,7 +280,7 @@ const sidebars = {
             {
               type: "doc",
               label: "SCIM",
-              id: "integrations/SCIM/SCIM overview",
+              id: "integrations/SCIM/SCIM_overview",
             },
           ],
         },
