@@ -309,11 +309,11 @@ The delete method is also available.
 
 FDS syncs users with the Permit project in the handlers of the `/users` endpoints as follows:
 
-```ts 
+```ts
 // For creating / updating user
 permit.api.users.sync({
-  key: userId, 
-  attributes: { no_of_rides: noOfRides }
+  key: userId,
+  attributes: { no_of_rides: noOfRides },
 });
 
 // For deleting a user
@@ -321,6 +321,7 @@ permit.api.users.delete(userId);
 ```
 
 In addition to users, you can also sync resources and role assignments. You can:
+
 - Use `permit.api.resources` methods for top-level resource management,
 - Use `permit.api.resourceInstances` methods for managing specific instances of resources, or
 - Use `permit.api.roleAssignments` methods for handling roles at both top-level (for RBAC) and at instance-level (for ReBAC).
@@ -333,24 +334,102 @@ In the FDS code, we are syncing orders with the Permit project. We also assign t
 // Sync a new order with Permit
 permit.api.resourceInstances.create({
   key: id,
-  resource: 'Order',
+  resource: "Order",
   attributes: { cost: totalPrice },
-  tenant: 'california'
+  tenant: "california",
 });
 
 // Set the Order's Vendor with Permit
 permit.api.roleAssignments.assign({
   user: vendor,
-  role: 'Vendor',
+  role: "Vendor",
   resource_instance: `Order:${id}`,
-  tenant: 'california'
+  tenant: "california",
 });
 
 // Sync a deleted order with Permit
 permit.api.resourceInstances.delete(`Order:${id}`);
 ```
 
-
 ## Enforce Permissions
 
-...
+Enforcing permissions is making sure that authorization policies always get applied. You usually do these enforcements as a gate-keeping mechanism. Think of a lock for system resources that whose key is the policy. In our context, you open the key by **checking** for permissions.
+
+You can check permissions in server middleware and in UI parts. In middleware, you use `permit.check` function that is available in all Permit's SDKs. In frontend code, you use [CASL](/integrations/feature-flagging/casl) together with Permit.
+
+The `permit.check` takes a user, an action, and a resource. It works for all policies that are involved between its 3 arguments. It dynamically uses everything defined in the policy editor for to either return `true` or `false` (whether permitted or not).
+
+When checking, provide the user, action, and resource in the context of your app's features. Also provide tenants when dealing with multitenancy or ReBAC policies.
+
+In the FDS, we use Permit checks in middleware for RBAC, ABAC, and ReBAC policies auto-combined. For example, the `permit.check` call for permitting a rider to deliver is as follows:
+
+```ts
+const canRiderDeliver = await permit.check(
+  userId, // user 
+  "deliver", // action
+  { type: "Order", key: orderId, tenant: "california" }, // resource
+);
+
+// Prevent the rider from doing the delivery if not authorised
+if (!canRiderDeliver) {
+  return {
+    success: false,
+    message: "You are not permitted to perform this action",
+  };
+}
+```
+
+You should use the result of the check function to either allow or deny access for the target action. In the example above, we simply reject the HTTP call we an appropriate message.
+
+In the Vue frontend, you can bulk load permissions for a given user and toggle parts of the UI based on permissions or "abilities". Though not used directly in this guide's repo, [you can find an example here](https://github.com/permitio/permit-vue-example/blob/casl/src/components/OrdersDisplay.vue).
+
+```ts
+<script setup lang="ts">
+// ...
+
+const fulfill = async (orderId: number) => {
+  if (permit.value.check('fulfill', 'Order', {})) {
+    // ...
+  }
+};
+
+const assignRider = async (e: FormSubmitEvent, orderId: number) => {
+  if (e.valid && permit.value.check('assign-rider', 'Order', {})) {
+    // ...
+  }
+};
+
+const deliver = async (orderId: number) => {
+  if (permit.value.check('deliver', 'Order', {})) {
+    // ...
+  }
+};
+</script>
+
+<template>
+  <!-- ... --->
+
+  <Button 
+    label="Fulfill"
+    v-if="!order.fulfilledTime && permit.check('fulfill', 'Order', {})"
+    @click="fulfill(order.id)"
+  />
+  <Button 
+    label="Deliver"
+    v-if="!order.deliveredTime && permit.check('deliver', 'Order', {})"
+    @click="deliver(order.id)"
+  />
+  <Form 
+    @submit="(e) => assignRider(e, order.id)"
+    v-if="
+      permit.check('assign-rider', 'Order', {}) &&
+      !order.riderAssignedTime
+    "
+    class="flex gap-4 items-end"
+  >
+    <!-- ... --->
+  </Form>
+
+  <!-- ... --->
+</template>
+```
