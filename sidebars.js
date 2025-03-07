@@ -561,43 +561,31 @@ const sidebars = {
       collapsible: false,
       className: "category-as-header",
       items: [
+        "authentication/permit-and-authentication",
         {
           type: "category",
-          label: "Permit.io and Authentication",
           link: {
             type: "doc",
-            id: "authentication/permit-and-authentication",
+            id: "authentication/auth0/permit-integration",
           },
-          collapsed: true,
-          items: [
-            {
-              type: "category",
-              link: {
-                type: "doc",
-                id: "authentication/auth0/permit-integration",
-              },
-              label: "Auth0",
-              collapsed: true,
-              items: ["authentication/auth0/auth0-demo-app", "authentication/auth0/auth0-sync-script"],
-            },
-            {
-              type: "category",
-              label: "AWS Cognito",
-              link: {
-                type: "doc",
-                id: "authentication/cognito/permit-integration",
-              },
-              collapsed: true,
-              items: ["authentication/cognito/cognito-demo-app"],
-            },
-            "authentication/stytch/permit-integration",
-            "authentication/fusionauth",
-            "authentication/supertokens",
-            "authentication/hankopermit",
-          ],
+          label: "Auth0",
+          items: ["authentication/auth0/auth0-demo-app", "authentication/auth0/auth0-sync-script"],
         },
+        {
+          type: "category",
+          label: "AWS Cognito",
+          link: {
+            type: "doc",
+            id: "authentication/cognito/permit-integration",
+          },
+          items: ["authentication/cognito/cognito-demo-app"],
+        },
+        "authentication/stytch/permit-integration",
+        "authentication/fusionauth",
+        "authentication/supertokens",
+        "authentication/hankopermit",
         "integrations/SCIM/OKTA",
-        "integrations/SCIM/EntraID"
+        "integrations/SCIM/EntraID",
       ],
     },
     {
