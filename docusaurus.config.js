@@ -7,17 +7,20 @@
 //   plugins: ["@babel/plugin-transform-modules-commonjs"],
 // });
 
-const path = require("path");
+import path from "path";
+import { fileURLToPath } from "url";
+import tailwindcss from "tailwindcss";
+import autoprefixer from "autoprefixer";
+import lightCodeTheme from "./src/css/prism-theme.js";
+import { themes }from "prism-react-renderer";
 
-const lightCodeTheme = require("./src/css/prism-theme");
-const darkCodeTheme = require("prism-react-renderer/themes/dracula");
-
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const companyWebsiteUrl = process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
 
 const apiReferenceUrl = process.env.API_REFERENCE_URL ?? "https://api.permit.io/v2/redoc";
 
 /** @type {import('@docusaurus/types').Config} */
-const config = {
+export default {
   title: "Permit.io Documentation",
   stylesheets: ["https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css"],
   tagline:
@@ -40,7 +43,7 @@ const config = {
           anonymizeIP: true,
         },
         docs: {
-          sidebarPath: require.resolve("./sidebars.js"),
+          sidebarPath: path.resolve(__dirname, "./sidebars.js"),
           routeBasePath: "/",
           lastVersion: "current",
           versions: {
@@ -52,7 +55,7 @@ const config = {
         },
         blog: false, // disables docusaurus blog
         theme: {
-          customCss: require.resolve("./src/css/custom.scss"),
+          customCss: path.resolve(__dirname, "./src/css/custom.scss"),
         },
       },
     ],
@@ -546,8 +549,8 @@ const config = {
         name: "docusaurus-tailwindcss",
         configurePostCss(postcssOptions) {
           // Appends TailwindCSS and AutoPrefixer.
-          postcssOptions.plugins.push(require("tailwindcss"));
-          postcssOptions.plugins.push(require("autoprefixer"));
+          postcssOptions.plugins.push(tailwindcss);
+          postcssOptions.plugins.push(autoprefixer);
           return postcssOptions;
         },
       };
@@ -614,7 +617,7 @@ const config = {
         ],
       },
       prism: {
-        theme: require("prism-react-renderer/themes/dracula"),
+        theme: themes.dracula,
         additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl", "php"],
       },
       colorMode: {
@@ -638,5 +641,3 @@ const config = {
       },
     }),
 };
-
-module.exports = config;

@@ -1,5 +1,5 @@
 import React from "react";
-import LinearProgress from "@mui/material/LinearProgress"; // Import the Material UI progress bar
+import LinearProgress from "@mui/material/LinearProgress/index.js"; // Import the Material UI progress bar
 import PropTypes from "prop-types";
 import "./WhatsNext.css";
 

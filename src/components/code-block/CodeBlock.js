@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import PropTypes from "prop-types";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism/index.js";
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 

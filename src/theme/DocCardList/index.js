@@ -2,7 +2,8 @@
 import React from "react";
 import clsx from "clsx";
 import { useCurrentSidebarCategory, filterDocCardListItems } from "@docusaurus/theme-common";
-import DocCard from "../DocCard";
+import DocCard from "../DocCard/index.js";
+
 function DocCardListForCurrentSidebarCategory({ className }) {
   const category = useCurrentSidebarCategory();
   return <DocCardList items={category.items} className={className} />;

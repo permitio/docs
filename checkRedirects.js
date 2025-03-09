@@ -1,8 +1,8 @@
-const config = require("./docusaurus.config");
-const fs = require("fs").promises;
-const path = require("path");
-const folderPath = "./docs";
+import config from "./docusaurus.config.js";
+import fs from "fs/promises";
+import path from "path";
 
+const folderPath = "./docs";
 const files = [];
 
 // Recursively search for links in files

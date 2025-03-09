@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-module.exports = {
+const config = {
   corePlugins: {
     preflight: false, // disable Tailwind's reset
   },
@@ -14,3 +14,5 @@ module.exports = {
   },
   plugins: [],
 };
+
+export default config;
