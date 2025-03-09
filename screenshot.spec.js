@@ -1,8 +1,7 @@
-const fs = require("fs");
-const { test } = require("@playwright/test");
-const { argosScreenshot } = require("@argos-ci/playwright");
-const { extractSitemapPathnames, pathnameToArgosName } = require("./argo_utils");
-
+import fs from "fs";
+import { test } from "@playwright/test";
+import { argosScreenshot } from "@argos-ci/playwright";
+import { extractSitemapPathnames, pathnameToArgosName } from "./argo_utils.js";
 // Constants
 const siteUrl = 'http://localhost:3000';
 const sitemapPath = './build/sitemap.xml';
