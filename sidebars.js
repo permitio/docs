@@ -287,7 +287,7 @@ const sidebars = {
             {
               type: "doc",
               label: "SCIM",
-              id: "integrations/SCIM/SCIM overview",
+              id: "integrations/SCIM/SCIM_overview",
             },
           ],
         },
@@ -566,6 +566,7 @@ const sidebars = {
       collapsible: false,
       className: "category-as-header",
       items: [
+        "authentication/permit-and-authentication",
         {
           type: "category",
           link: {
