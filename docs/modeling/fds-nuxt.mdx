@@ -6,41 +6,46 @@ title: SaaS and B2C Applications
 import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
 
-Consumer apps require fine-grained authorization that performs at scale. Unlike B2B, which could thrive with relatively fewer users and roles, SAAS applications need more advanced access control mechanisms. They grow so fast and demand extra app security and permissions.
+Unlike B2B SaaS applications that sometimes go all the way with fewer users and roles, consumer applications always grow fast in users and permissions. They also require fine-grained authorization that performs at scale.
 
 This guide uses a food ordering system to demonstrate how to combine RBAC, ABAC, and ReBAC policies to build robust and granular-level authorization policies. With a minimal code footprint in the application, we'll leverage Permit’s policy editor, SDKs, and APIs to implement flexible and scalable access control.
 
 ## Food Delivery System
 
-The Food Delivery System (FDS) of this guide was built with [Nuxt](https://nuxt.com) / [Vue](https://vuejs.org). It has 4-pages, one for each role: `customer`, `rider`, `vendor`, and `admin`. Actions on orders are buttons that record occurrence times. We will look at FDS features, authorization policies, and enforcing its permissions.
+For this guide's demo, we will use a food delivery system (FDS). It brings together various user types that co-interact on demo meals and orders to simulate real-life ordering. The core functionalities are as follows:
+
+- Customers can add meals to carts and place an order.
+- Vendors can prepare (or fulfill) the order.
+- Admins can assign riders to orders.
+- Riders can deliver the orders to the customer.
+
+In this tutorial, the FDS was built with [Nuxt](https://nuxt.com) / [Vue](https://vuejs.org). It has 4-pages, one for each role: `customer`, `rider`, `vendor`, and `admin`. We will look at FDS features, authorization policies, and enforcing its permissions.
 
 ## FDS Core Features
 
-### 1. Meal Management
+### Order Management
 
-Vendors (and admins) can create and delete meals. Every other person can see meals. These meal management actions are secured with authorization policies.
+Users can act on orders depending on the roles they hold. For example, if a user has the `customer` role, then they can create orders. If holding the `admin` role, they can assign riders, and so on. In later sections, we will configure authorization policies that govern a user's permissions on meals and orders.
 
-### 2. Order Management
+### Composite Permissions
 
-When a customer adds meals to their cart and places an order, the vendor can prepare (or fulfill) it, the admin can assign a rider for it, and the rider can deliver it to the customer. For every action, we define policies to allow or deny access to the acting user.
+Primarily, the FDS uses roles ([RBAC](/how-to/build-policies/rbac/overview/)) to allow permissions on meals and orders. In addition, it combines [ABAC](/how-to/build-policies/abac/overview/) and [ReBAC](/how-to/build-policies/rebac/overview/) in places where we need granular permissions.
 
-### 3. Composite Permissions
+For example, for a user to _deliver_ orders, we apply all 3 authorization models when checking permissions:
 
-In the FDS, where possible, we combine separate authorization models for the same action. Primarily, we use roles ([RBAC](/how-to/build-policies/rbac/overview/)) to allow permissions on meals and orders. On top of that, where obtainable, we also check if users meet some conditions ([ABAC](/how-to/build-policies/abac/overview/)) or have a link to the target entity ([ReBAC](/how-to/build-policies/rebac/overview/)) before allowing permissions.
+- The user needs to have the `rider` role to make a delivery (RBAC).
+- We only allow riders to deliver orders that were assigned to them (ReBAC).
+- If the involved order has free delivery, we also check the rider’s number of rides (ABAC).
 
-For example, for a user to _deliver_ orders, we apply all 3 models when checking permissions:
+### Multitenant Authorization
 
-- The user needs to have the `rider` role to make a delivery (RBAC).  
-- We only allows riders to deliver orders that were assigned to them (ReBAC).  
-- If the involved order has a free delivery, we also check the rider’s number of rides (ABAC).
+At the authorization layer, [multitenancy](/concepts/multi-tenant-authorization) is built into the food delivery service with Permit. Tenants isolate permissions. Permissions granted to a user for a specific action in one tenant is not auto-granted in another.
 
-### 4. Multitenant Authorization
+The FDS uses cities (`california` and `washington`) to denote tenants. Using cities here simulates the food ordering system to work simultaneously in separate locations. Hence, scoping authorization policies into a logical group.
 
-At the authorization layer, [multitenancy](/concepts/multi-tenant-authorization) is built into the food delivery service with Permit. FDS has two tenants which represent cities (`california` and `washington`). Permissions granted to a user for a specific action in `california` is not auto-granted in `washington`.
+### Continuous Data-Syncing
 
-### 5. Continuous Data-Syncing
-
-FDS keeps on updating Permit with changes in data as they happen in real-time. For example, when a customer creates a new order, we record it with Permit. Syncing data this way is for always enforcing policies in realtime.
+FDS keeps on updating Permit with changes in data as they happen in real time. For example, when a customer creates a new order, we record it with Permit. When an admin assigns a rider to an order, we also record the data update with Permit.
 
 ### Server Endpoints
 
@@ -61,21 +66,17 @@ The Nuxt server exposes endpoints for meal, order, and user management. All the 
 
 ## Prerequisites, Setup, and Configuration
 
+Before diving into the implementation, you'll need to set up your environment and ensure dependencies are in place. Let's look at the requirements and setup to get started.
+
 ### Prerequisites
 
-#### 1. A Permit Project
+**A Permit Project: ** Use an existing project or create a new one at [https://app.permit.io](https://app.permit.io). You will get a Permit token for the Permit project to use in the code.
 
-Use an existing project or create a new one at [https://app.permit.io](https://app.permit.io). You will get a Permit token for the Permit project to use in the code.
+**Docker: ** You need a valid [Docker](https://www.docker.com/) installation to run the [Policy Decision Point (PDP)](/concepts/pdp/overview) permission checks.
 
-#### 2. Docker
+**NodeJS: ** Nuxt and Vue are JavaScript frameworks that work with [NodeJS](https://nodejs.org/). To continue, you also need a working Node installation.
 
-You need a valid [Docker](https://www.docker.com/) installation to run the [Policy Decision Point (PDP)](/concepts/pdp/overview) permission checks.
-
-#### 3. NodeJS
-
-Nuxt and Vue are JavaScript frameworks that work with [NodeJS](https://nodejs.org/). To continue, you also need a working Node installation.
-
-### b. Setup and Configuration
+### Setup and Configuration
 
 <TimelineWrapper>
 <TimelineStep>
@@ -115,7 +116,7 @@ PERMIT_PDP=http://localhost:7766
 
 #### Start a Local PDP
 
-Run the following command to start up a local PDP. Also, put your permit token in the slated place.
+Run the following command to start up a local [PDP](/concepts/pdp/overview). Also, put your permit token in the slated place.
 
 ```bash
   docker run -it \
@@ -139,28 +140,22 @@ npm run dev
 
 #### Access the App
 
-Open http://localhost:3000 in your browser
+Open http://localhost:3000 in your browser. You will see the app with pages for each role's actions.
+
+The sidebar allows you to set arbitrary user IDs as current users. You can also set roles or delete users from there.
 
 ![FDS App View](/img/modeling/fds-nuxt/app-view.png)
 
 :::info
-At this point, the actions you take will not be authorized. To complete the tutorial, you should follow the next step to configure the necessary policies and create, delete, assign, or unassign roles to test user IDs from the app.
+At this point, the actions you take will not be authorized. To complete the tutorial, you should follow the next step to configure the necessary policies that will authorize actions.
 :::
-
-
-</TimelineStep>
-<TimelineStep>
-
-#### Configure Authorization Policies
-
-Setting up policies involves creating resources, actions on them, top-level roles, user and resource sets, and instance roles. On top of that, we need to use the Permit.io policy editor to allow permissions for desired app behavior. Each of the following sections highlights on how to define authorization policies.
 
 </TimelineStep>
 </TimelineWrapper>
 
 ## Configure Basic RBAC
 
-Role-Based Access Control (RBAC) is usually the first line of authorization strategy to implement. FDS uses RBAC first for all actions. In the context of resources, we enforce the following policies.
+[Role-Based Access Control (RBAC)](/how-to/build-policies/rbac/overview/) is usually the first line of authorization strategy to implement. FDS uses RBAC first for all actions. In the context of resources, we enforce the following policies.
 
 **For Meals:**
 
@@ -181,6 +176,8 @@ To enforce the above RBAC policies:
 <TimelineWrapper>
 <TimelineStep>
 
+#### Create Resources
+
 In the Resources tab of the policy section of the Permit UI, create the "Meal" and "Order" resources with their involved actions.
 
 ![Creating RBAC Resources](/img/modeling/fds-nuxt/rbac-creating-resources.gif)
@@ -188,12 +185,18 @@ In the Resources tab of the policy section of the Permit UI, create the "Meal" a
 </TimelineStep>
 <TimelineStep>
 
-In the Roles tab, create the 4 roles.
+#### Create Roles
+
+In the Roles tab, create the 4 roles: `customer`, `rider`, `vendor`, and `admin`. We will use them in the policy editor to allow permissions based on the policy above.
+
+![FDS Roles](/img/modeling/fds-nuxt/rbac-roles.png)
 
 </TimelineStep>
 <TimelineStep>
 
-In the policy editor, grant the appropriate permission for each role. When you refresh and test the running app, you can now carry out some actions.
+#### Grant Permissions
+
+In the policy editor, in line with the RBAC policies defined above, toggle the matching action of a resource on a role. This grants the involved permission for a role. Refresh and test the running app, you can now carry out some actions.
 
 ![Viewing RBAC Policies](/img/modeling/fds-nuxt/rbac-viewing-policies.gif)
 
@@ -202,84 +205,106 @@ In the policy editor, grant the appropriate permission for each role. When you r
 
 ## Configure ABAC
 
-Attribute-Based Access Control (ABAC) makes permissions more granular and fine-grained. In ABAC, we check for specific condition sets on user and/or resource attributes before allowing or denying permissions. When using ABAC, you group the attributes into conditions and create a set. So you can have multiple user sets and/or resource sets.
+[Attribute-Based Access Control (ABAC)](/how-to/build-policies/abac/overview/) makes permissions more granular and fine-grained. In ABAC, we check for specific condition sets on user and/or resource attributes to grant permissions. When using ABAC, you group the attributes into conditions and create a set. So you can have multiple user sets and/or resource sets.
 
 The FDS app uses promotional offers to show how to use ABAC. Orders with at least 500 costs are eligible for free delivery. Also, only riders with at least 500 number of rides can deliver these promotional orders. We can rephrase these ABAC policies as follows:
 
 - A `customer` can _create a free delivery_ order **if** the order’s cost is greater than or equal to 500.
 - A `rider` can _deliver_ a free delivery order **if** the rider’s number of rides is greater than or equal to 500.
 
-Notice how these ABAC policies are built on top of the pre-defined RBAC ones. The ABAC policies use the roles and actions but add conditions to allow permissions.
+Notice how these ABAC policies are built on top of the pre-defined RBAC ones. The ABAC policies use the roles and actions and add conditions to allow permissions.
 
-To see this in action,
+To see this in action:
 
 <TimelineWrapper>
 <TimelineStep>
 
-Edit the "Order" resource to
+#### Add Resource Attribute and Action
 
-a. Create a numeric `cost` attribute in it, and
-
-b. Add a _create-with-free-delivery_ action in it.
-
-</TimelineStep>
-<TimelineStep>
-
-Create the resource set for the ABAC condition.
+- Go to the "Order" resource and edit it.
+- In the list of actions, add a new _create-with-free-delivery_ action. The app uses this for issuing free deliveries.
+- Scroll down to the ABAC section and add a new `cost` attribute with type "Number"
+- Save the changes.
 
 ![ABAC Resource Set](/img/modeling/fds-nuxt/abac-resource-set.gif)
 
 </TimelineStep>
 <TimelineStep>
 
-[In the tenant settings](https://app.permit.io/user-management/tenant-settings/user-attributes), also create a `number_of_rides` attribute on users.
+#### Create a Resource Set
+
+- In the ABAC Rules tab, create a new Resource Set.
+- Add the condition for `cost` being greater than or equal to 500. This will auto-add any resource that matches this condition to this set.
 
 </TimelineStep>
 <TimelineStep>
 
-Create the respective user set for the ABAC conditions.
+#### Add User Attribute
+
+[In the tenant settings](https://app.permit.io/user-management/tenant-settings/user-attributes) of the dashboard, update user attributes to add a `number_of_rides` attribute on users. It should be of type "Number".
 
 ![ABAC User Set](/img/modeling/fds-nuxt/abac-user-set.gif)
 
 </TimelineStep>
 <TimelineStep>
 
-In the policy editor, grant permissions for actions and test “allow”s in the running app.
+#### Create a User Set
+
+- In the ABAC Sets tab, create a new User Set.
+- Add the condition for `number_of_rides` being greater than or equal to 500. As with the resource set above, any user that matches this condition will automatically be part of this set.
+
+</TimelineStep>
+<TimelineStep>
+
+#### Grant Permissions
+
+The newly created ABAC Sets will now be part of the policy editor. With that, we can now set ABAC-related permissions.
+
+- In the policy editor, toggle the `create-with-free-delivery` action on "Order" by customers.
+- Then for the Order ABAC resource set, also toggle the `deliver` action for the ABAC User set.
+- Refresh the running app and test that you can now create free delivery orders with meals above 500 cost.
 
 ![Policy Table for ABAC](/img/modeling/fds-nuxt/abac-policy-table.gif)
+
+:::info
+Fulfilling and Delivering orders won't yet work till you configure ReBAC policies.
+:::
 
 </TimelineStep>
 </TimelineWrapper>
 
 ## Configure ReBAC
 
-Relationship-Based Access Control (ReBAC) uses associations or links between users and resources to grant or deny permissions. ReBAC leverages relationships in the overall system for access control. The FDS application uses ReBAC to enforce the following policies:
+[Relationship-Based Access Control (ReBAC)](/how-to/build-policies/rebac/overview/) uses associations or links between users and resources to grant or deny permissions. ReBAC leverages relationships in the overall system for access control. The FDS application uses ReBAC to enforce the following policies:
 
 - A `vendor` can only _fulfill_ an order **if** the vendor created the meals in that order.
 - A `rider` can only _deliver_ an order **if** that order was assigned to the rider by the admin.
 
-To fulfill an order, vendors use two policy checks: having the `vendor` role and having a relationship with meals. To deliver an order, a user needs the `rider` role, a relationship with the order, and the number of their rides to exceed a minimum.
+To fulfill an order, vendors use two policy checks: having the `vendor` role and having a relationship with meals. To deliver an order, a user needs the `rider` role, a relationship with the order, and their number of rides to exceed a minimum.
 
-To see ReBAC in action with FDS,
+To see ReBAC in action with FDS:
 
 <TimelineWrapper>
 <TimelineStep>
 
-Create `Vendor` and `Rider` instance roles on the “Order” resource.
+#### Create Instance Roles
+
+- Go to the "Order" resource and edit it.
+- Scroll down to the ReBAC section and create 2 instance roles: `Vendor` and `Rider`. They will become `Order#Vendor` and `Order#Rider`.
+
+![Order#Vendor Instance Role and fulfill action in Policy Table](/img/modeling/fds-nuxt/rebac-vendor.gif)
 
 </TimelineStep>
 <TimelineStep>
 
-Update the policy editor to allow “fulfill” and “deliver” actions for these new roles on orders. Refresh the app and test extensively.
+#### Grant Permissions
 
-![Order#Vendor Instance Role and fulfill action in Policy Table](/img/modeling/fds-nuxt/rebac-vendor.gif)
+Update the policy editor to allow “fulfill” and “deliver” actions for these new roles on orders. Refresh the app. You can now mark orders as delivered or fulfilled with the right user.
 
 </TimelineStep>
 </TimelineWrapper>
 
 ## Syncing App Data
-
-In server code, continuously synchronize app data with Permit. This ensures that authorization policies are always applied to new users and resources.
 
 Permit SDKs provide several methods for programmatic synchronization. In Nuxt, you can use methods on `permit.api` to sync data as needed. For users, create or update them with the `permit.api.users.sync` method in the same call.
 The delete method is also available.
@@ -287,7 +312,7 @@ The delete method is also available.
 FDS syncs users with the Permit project in the handlers of the `/users` endpoints as follows:
 
 ```ts
-// For creating / updating user
+// For creating/updating user
 permit.api.users.sync({
   key: userId,
   attributes: { number_of_rides: noOfRides },
@@ -303,7 +328,7 @@ In addition to users, you can also sync resources and role assignments. You can:
 - Use `permit.api.resourceInstances` methods for managing specific instances of resources, or
 - Use `permit.api.roleAssignments` methods for handling roles at both top-level (for RBAC) and at instance-level (for ReBAC).
 
-These methods are multitenant-aware. If you are building with multitenancy, provide the tenant of context. Otherwise, set `"default"` as the tenant. Permit also let's you sync condition sets. See more about that [in the API docs](https://api.permit.io/v2/redoc#tag/Condition-Sets).
+These methods are multitenant-aware. If you are building with multitenancy, provide the tenant of context. Otherwise, set `"default"` as the tenant. Permit also lets you sync condition sets. See more about that [in the API docs](https://api.permit.io/v2/redoc#tag/Condition-Sets).
 
 In the FDS code, we sync orders with the Permit project. We also assign the related instance role on the "Order" resource where appropriate.
 
@@ -332,9 +357,10 @@ permit.api.resourceInstances.delete(`Order:${id}`);
 
 You can check permissions in server middleware and UI parts. In middleware, you use [`permit.check`](/how-to/enforce-permissions/check) function that is available in all Permit's SDKs. In frontend code, you use [CASL](/integrations/feature-flagging/casl) together with Permit.
 
-In the FDS, we use Permit checks in middleware for RBAC, ABAC, and ReBAC policies auto-combined. For example, the `permit.check` call for permitting a rider to deliver is as follows:
+In the FDS, we use Permit in the middleware for combined checks of RBAC, ABAC, and ReBAC policies at once. For example, the `permit.check` call for permitting a rider to deliver is as follows:
 
 ```ts
+// This auto-checks all policies applying to the "deliver" action
 const canRiderDeliver = await permit.check(
   userId, // user
   "deliver", // action
@@ -402,3 +428,9 @@ const deliver = async (orderId: number) => {
   <!-- ... --->
 </template>
 ```
+
+## Conclusion
+
+In this tutorial, we combined multiple policies for the same action in an example food delivery app. You should do the same in your apps as they grow. When building permissions in Nuxt / Vue, you can always reference [the code](https://github.com/permitio/permit-nuxt-example.git) as a guide.
+
+We are looking forward to hearing from you on our [Slack community](https://io.permit.io/slack). Feel free to ask questions and share what you are building with Permit.io.
