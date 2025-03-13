@@ -36,7 +36,7 @@ export default function GitHubExamples() {
   const [repos, setRepos] = useState([]);
 
   useEffect(() => {
-    fetch('https://api.github.com/search/repositories?q=org:permitio+example+in:name+archived:false&sort=updated&order=desc')
+    fetch('https://api.github.com/search/repositories?q=org:permitio+topic:example+archived:false&sort=updated&order=desc')
       .then(response => response.json())
       .then(data => {
         const filteredRepos = data.items.filter(repo => 
