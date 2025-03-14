@@ -2,7 +2,7 @@
 import React from "react";
 import clsx from "clsx";
 import Link from "@docusaurus/Link";
-import { findFirstCategoryLink, useDocById } from "@docusaurus/theme-common/internal";
+import { useDocById, findFirstSidebarItemLink } from "@docusaurus/plugin-content-docs/client";
 import isInternalUrl from "@docusaurus/isInternalUrl";
 import { translate } from "@docusaurus/Translate";
 import styles from "./styles.module.css";
@@ -51,7 +51,7 @@ function CardLayout({ href, title, description, svgIcon }) {
 }
 
 function CardCategory({ item }) {
-  const href = findFirstCategoryLink(item);
+  const href = findFirstSidebarItemLink(item);
   // Unexpected: categories that don't have a link have been filtered upfront
   if (!href) {
     return null;
