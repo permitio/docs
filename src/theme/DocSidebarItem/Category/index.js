@@ -7,10 +7,8 @@ import {
   Collapsible,
   useCollapsible,
 } from '@docusaurus/theme-common';
-import {
-  findFirstSidebarItemLink,
-  isSamePath,
-} from '@docusaurus/theme-common/internal';
+import { isSamePath } from '@docusaurus/theme-common/internal';
+import { findFirstSidebarItemLink } from "@docusaurus/plugin-content-docs/client";
 import { useDocSidebarItemsExpandedState } from '@docusaurus/plugin-content-docs/client';
 import {isActiveSidebarItem} from '@docusaurus/plugin-content-docs/client';
 import Link from '@docusaurus/Link';
