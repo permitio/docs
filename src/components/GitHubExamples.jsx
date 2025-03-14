@@ -34,16 +34,14 @@ const RepoCard = ({ repo }) => (
 
 export default function GitHubExamples() {
   const [repos, setRepos] = useState([]);
+  const perPage = 50;
 
   useEffect(() => {
-    fetch('https://api.github.com/search/repositories?q=org:permitio+example+in:name+archived:false&sort=updated&order=desc')
+    fetch(`https://api.github.com/search/repositories?q=org:permitio+topic:example+archived:false&sort=updated&order=desc&per_page=${perPage}`)
       .then(response => response.json())
       .then(data => {
-        const filteredRepos = data.items.filter(repo => 
-          repo.name.toLowerCase().includes('example') || 
-          repo.name.toLowerCase().includes('demo')
-        );
-        setRepos(filteredRepos);
+        setRepos(data.items);
+        setTotalCount(data.total_count);
       })
       .catch(error => console.error('Error fetching repos:', error));
   }, []);
