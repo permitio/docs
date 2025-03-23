@@ -38,6 +38,7 @@ export default {
     [
       "@docusaurus/preset-classic",
       {
+        svgr: false,
         gtag: {
           trackingID: "G-S2W3HZX9EZ",
           anonymizeIP: true,
