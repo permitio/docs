@@ -591,6 +591,7 @@ const sidebars = {
         "authentication/hankopermit",
         "integrations/SCIM/OKTA",
         "integrations/SCIM/EntraID",
+        "integrations/permit-mcp/overview",
       ],
     },
     {
