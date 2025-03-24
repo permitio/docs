@@ -1,0 +1,177 @@
+---
+# sidebar_position: 1
+title: Create and Manage Access with Natural Language using the Permit MCP server
+---
+The Permit MCP server provides tools to create and manage access and operation approval requests for a resource within a tenant. When connected with an AI assistant like Claude, it allows you to manage resource permissions using simple, plain English commands. Further more it can be seamlessly integrated into another MCP server to create custom workflows. 
+
+This tutorial walks you through setting up and running the Permit MCP server, beginning with modeling a family food ordering system in Permit to obtain the necessary environment variables. You'll then learn how to integrate it with an AI assistant for natural language permission management and, finally, learn how to build a custom MCP server from it.
+
+## Key Features 
+- **Request Access & Approvals**: Create access or operation approval requests for specific resources or resource instances.
+
+- **List Requests**: Retrieve and filter access or operation requests.
+
+- **Approve or Deny Requests**: Approve or deny requests with optional comments.
+
+## What Can You Do with It?
+When connected to a client like Claude Desktop or a custom MCP client, you can fire off queries like these. 
+
+- `My user id is dev, request an operation approval with reason 'scheduled maintenance update'`
+- **Approving Requests (Two-Step Process):**
+  1. `My user id is admin, list pending access requests`
+  2. `Approve access request 'req_123' with comment 'credentials verified'`
+- **Denying Requests (Two-Step Process):**
+  1. `My user id is security, list all panding access requests`
+  2. `Deny access request 'req_456' with the comment 'needs additional clearance'`
+
+
+## Prerequisite
+- Python >= 3.10
+- `uv` >= 0.6.1
+- Running instance of [Local Permit PDP](https://docs.permit.io/how-to/deploy/deploy-to-production/#installing-the-pdp)
+
+## Getting Started
+The family food ordering system will be modeled using ReBAC and ABAC authorization models. It will allow parents and children to order dishes from various restaurants, with restrictions on which restaurants children can order from. To access restricted restaurants, children must submit an access request. Additionally, certain dishes within a restaurant may be restricted, requiring children to request one-time approval before they can order them. 
+
+To implement this, we will define: 
+- A resource called "restaurants"
+- Two instance roles:
+  - **parent**:  Can read, create, update, and delete restaurants.
+  - **child-can-order**: Can only read.
+- A User Management element called "Restaurant Requests" to manage access requests from children for permission to access a restaurant.
+- An Approval Management element called "Dish Requests" to manage operation approval requests from children for permission to order a dish. 
+- A Operation Approval element called "Dish Approval" to make the "_Approved_" and "_Reviewer_" roles available in the restaurants resource.
+
+### Set up Permit
+In the Permit dashboard, navigate to the Policy page from the Permit's sidebar, click “Resources”, and then click “Create a Resource”.
+
+![Resource tab](/img/integrations/permit-mcp/resource-tab.png)
+
+Enter "restaurants" as the name of the resource, then scroll down to the "ReBAC Options" and define a "parent" and "child-can-order" role. Then click “Save”.
+
+![Create resource](/img/integrations/permit-mcp/create-resource.png)
+
+In the Policy Editor tab, give the added ReBAC roles the following permissions:
+
+![Resource actions](/img/integrations/permit-mcp/policy.png)
+
+To start creating the elements, navigate to the "Elements" tab from the sidebar. In the User Management section, click Create Element. 
+
+![Elements](/img/integrations/permit-mcp/elements.png)
+
+Create a User Management element with the following configurations, then click "Create". 
+  - Name: Restaurant Requests
+  - Configure elements based on: ReBAC Resource Roles
+  - Resource Type: restaurants
+  - Role permission levels: 
+    - Level 1 - Workspace Owner: parent
+    - Assignable Roles: child-can-order
+
+![Create user management element](/img/integrations/permit-mcp/restaurant-requests.png)
+
+In the newly created element card, click on **Get Code** and you will see the element config ID (restaurant-requests). Take note of it as we will use it later on as an environment variable.
+
+![User management element config](/img/integrations/permit-mcp/user-m-config.png)
+
+
+Create an Operation Approval element with the following configurations, then click "Create": 
+  - Name: Dish Approval
+  - Resource Type: restaurants
+
+![operation approval element](/img/integrations/permit-mcp/operation-approval.png)
+
+Create a Approval Management element with the name "Dish Requests", then in the newly created element card, click on **Get Code** and you will see the element config ID (dish-requests). Take not of the ID is we will use it later on.
+
+![Approval management config](/img/integrations/permit-mcp/approval-m-config.png)
+
+
+Next, let's add some users and a resource instance in Permit which will be used as dummy data for testing. 
+Navigate to the "Directory" page from the sidebar and switch to the “Instances” tab, then click on “Add Instance”. Fill the fields with the following values then click on Save.
+  - Resource Type: restaurants
+  - Instance Key: pizza-palace, 
+  - Tenant: Default Tenant. Or the tenant you are operating in.
+
+![Create resource instance](/img/integrations/permit-mcp/create-resource-instance.png)
+
+Switch to the "Users" tab, then click "Add User" and fill in the following fields to create a user, then click Save:
+
+- Key: joe
+- Instance Access: restaurants:pizza-palace#parent
+
+Create another user with the key "henry". Don't specify a role for it.
+
+### Clone the server and install dependencies
+```shell
+git clone https://github.com/permitio/permit-mcp
+cd permit-mcp
+
+# Create virtual environment, activate it and install dependencies
+uv venv
+source .venv/bin/activate # For Windows: .venv\Scripts\activate
+uv pip install -e .
+```
+
+### Supply environment variables
+To setup the server you need supply the environment variables in defined in the `.env.example` file. Create a `.env` file in the root directory and specify the following variables: 
+
+```shell
+RESOURCE_KEY=restaurants
+ACCESS_ELEMENTS_CONFIG_ID=restaurant-requests
+OPERATION_ELEMENTS_CONFIG_ID=dish-requests
+TENANT= # e.g default
+LOCAL_PDP_URL= 
+PERMIT_API_KEY=
+PROJECT_ID=
+ENV_ID=
+```
+You can use the following resources to help you with getting the rest of the environment variables: 
+- [LOCAL_PDP_URL](https://docs.permit.io/how-to/deploy/deploy-to-production/#installing-the-pdp)
+- [PERMIT_API_KEY](https://docs.permit.io/overview/use-the-permit-api-and-sdk#obtain-your-api-key)
+- [PROJECT_ID](https://docs.permit.io/api/examples/get-project-and-env#get-project-id-or-key)
+- [ENV_ID](https://docs.permit.io/api/examples/get-project-and-env#get-environment-id-or-key)
+
+After that, we can now run the server with the following command:
+
+```shell
+uv run -m src.permit_mcp
+```
+
+## Run the Permit MCP server with Claude Desktop
+First, install [Claude Desktop](https://claude.ai/download), then configure Claude to use the server with the following configurations: 
+
+```
+{
+    "mcpServers": {
+        "permit": {
+            "command": "uv",
+            "args": [
+                "--directory",
+                "/ABSOLUTE/PATH/TO/PARENT/FOLDER/src/permit_mcp",
+                "run",
+                "server.py"
+            ]
+        }
+    }
+}
+```
+
+With this, you can now specify queries like these:
+- `My user id is henry, request access to pizza palace with the reason: I am now 18, and the role child-can-order`
+- `My user id is joe, list pending access request for pizza palace`
+
+## Building Custom Server with Permit MCP Server
+The Permit MCP server provides an easy way to import and exclude its tools within your custom MCP server by using its class. 
+
+```python
+from permit_mcp import PermitServer
+
+# Initialize FastMCP instance
+mcp = FastMCP("food_ordering")
+permit_server = PermitServer(
+    mcp, exclude_tools=['create_access_request', 'create_operation_approval'])
+```
+With this, all other tools aside from `create_access_request` and `create_operation_approval` will be available.
+
+You can find a complete implementation in this [food-ordering-system](https://github.com/Tammibriggs/permit-mcp/tree/main/examples/food-ordering-system). 
+
+
