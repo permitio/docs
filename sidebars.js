@@ -248,7 +248,11 @@ const sidebars = {
             type: "doc",
             id: "concepts/pdp/overview",
           },
-          items: ["concepts/pdp/configuration", "concepts/pdp/factdb"],
+          items: [
+            "concepts/pdp/configuration",
+            "concepts/pdp/factdb",
+            "how-to/manage-data/local-facts-uploader",
+          ],
         },
         "how-to/enforce-permissions/check",
         "how-to/enforce-permissions/bulk-check",
