@@ -1,0 +1,483 @@
+---
+sidebar_position: 5
+title: Food Delivery System Example
+description: A complete example of implementing RBAC, ABAC, and ReBAC authorization in a Nuxt.js food delivery system
+---
+
+import TimelineStep from "../../src/components/timeline/TimelineStep";
+import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
+
+This guide shows you how to build a food delivery system with **Nuxt.js** and implement authorization using **Permit.io**. We'll demonstrate how to combine three authorization models - **Role-Based Access Control (RBAC)**, **Attribute-Based Access Control (ABAC)**, and **Relationship-Based Access Control (ReBAC)** - to create a secure and scalable application.
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- **A Permit Project:** Use an existing project or create a new one at [https://app.permit.io](https://app.permit.io). You will get a Permit token for the Permit project to use in the code.
+- **Docker:** You need a valid [Docker](https://www.docker.com/) installation to run the [Policy Decision Point (PDP)](/concepts/pdp/overview) permission checks.
+- **NodeJS:** Nuxt and Vue are JavaScript frameworks that work with [NodeJS](https://nodejs.org/). To continue, you also need a working Node installation.
+
+## System Components
+
+The Food Delivery System is a Nuxt.js application that demonstrates how to implement different types of authorization in a real-world scenario. The system includes:
+
+- A customer interface for browsing meals and placing orders
+- A vendor dashboard for managing meals and fulfilling orders
+- A rider portal for delivering orders
+- An admin panel for system management
+
+## What we will build
+
+In this guide, you'll build a food delivery system with:
+
+1. **Frontend**
+
+   - Nuxt.js application with Vue
+   - Pages for customers, riders, vendors, and admins
+   - Real-time UI updates
+
+2. **Authorization**
+
+   - `RBAC` for basic permissions
+   - `ABAC` for promotional offers
+   - `ReBAC` for order assignments
+   - Multi-tenant support
+
+3. **Backend**
+   - Server endpoints with authorization checks
+   - Real-time data sync with Permit.io
+   - Error handling
+
+The full code is available at: https://github.com/permitio/permit-nuxt-example
+
+## System Architecture and Core Features
+
+The Food Delivery System application combines three authorization models:
+
+1. **`RBAC`**: Basic role-based permissions for meals and orders
+2. **`ABAC`**: Promotional offers based on order cost and rider experience
+3. **`ReBAC`**: Order assignments between vendors, riders, and customers
+
+### Order Management
+
+Users can act on orders based on their roles:
+
+- Customers create orders
+- Vendors prepare orders
+- Admins assign riders
+- Riders deliver orders
+
+### Composite Permissions
+
+The system combines all three authorization models for granular control. For example, to deliver an order:
+
+- User must have the `rider` role (`RBAC`)
+- Order must be assigned to them (`ReBAC`)
+- For free delivery orders, rider must have 500+ rides (`ABAC`)
+
+### Multitenant Authorization
+
+The system uses cities (`california` and `washington`) as tenants to isolate permissions. Actions allowed in one city are not automatically allowed in another.
+
+### Continuous Data-Syncing
+
+All data changes are synced with Permit in real-time:
+
+- New orders from customers
+- Rider assignments from admins
+- Order status updates
+
+### Server Endpoints
+
+The Nuxt server exposes these endpoints with built-in authorization:
+
+| Method | Endpoint                  | Authorization             |
+| ------ | ------------------------- | ------------------------- |
+| GET    | `/meals`                  | `RBAC`                    |
+| POST   | `/meals`                  | `RBAC`                    |
+| DELETE | `/meal/:id/remove`        | `RBAC`                    |
+| GET    | `/orders`                 | `RBAC`                    |
+| POST   | `/orders`                 | `RBAC` & `ABAC`           |
+| POST   | `/order/:id/fulfill`      | `RBAC` & `ReBAC`          |
+| POST   | `/order/:id/assign-rider` | `RBAC`                    |
+| POST   | `/order/:id/deliver`      | `RBAC`, `ABAC`, & `ReBAC` |
+| POST   | `/users`                  | -                         |
+| DELETE | `/users`                  | -                         |
+
+## Setup and Configuration
+
+Let's get your development environment set up. We'll guide you through installing the necessary tools and configuring your project step by step.
+
+<TimelineWrapper>
+<TimelineStep>
+
+#### Clone the Repository and Install Dependencies
+
+```bash
+git clone https://github.com/permitio/permit-nuxt-example.git
+cd permit-nuxt-example
+git checkout all-features
+npm install
+```
+
+</TimelineStep>
+<TimelineStep>
+
+#### Provide Environment Variables
+
+- Obtain a Permit token from the [project settings in the Permit Console](https://app.permit.io/settings/api-keys).
+- Create a `.env` file at the root of the project with the following. Put the copied token instead of the placeholder value.
+
+```bash
+PERMIT_TOKEN=permit_key_XXXXXXXXXXXXXXXXXXXXXXXXX
+PERMIT_PDP=http://localhost:7766
+```
+
+</TimelineStep>
+<TimelineStep>
+
+#### Start a Local PDP
+
+Run the following command to start up a local [PDP](/concepts/pdp/overview). Also, put your permit token in the slated place.
+
+```bash
+  docker run -it \
+    -p 7766:7000 \
+    --env PDP_API_KEY=your-permit-api-key \
+    --env PDP_DEBUG=True \
+    permitio/pdp-v2:latest
+```
+
+</TimelineStep>
+<TimelineStep>
+
+#### Run the Development Server
+
+```bash
+npm run dev
+```
+
+</TimelineStep>
+<TimelineStep>
+
+#### Access the App
+
+Open http://localhost:3000 in your browser. You will see the app with pages for each role's actions.
+
+The sidebar allows you to set arbitrary user IDs as current users. You can also set roles or delete users from there.
+
+![Food Delivery System App View](/img/modeling/food-delivery-system-example-using-nuxt/app-view.png)
+
+:::info
+At this point, the actions you take will not be authorized. To complete the tutorial, you should follow the next step to configure the necessary policies that will authorize actions.
+:::
+
+</TimelineStep>
+</TimelineWrapper>
+
+## Configure Basic RBAC
+
+[Role-Based Access Control (RBAC)](/how-to/build-policies/rbac/overview/) is usually the first line of authorization strategy to implement. The Food Delivery System uses `RBAC` first for all actions. In the context of resources, we enforce the following policies.
+
+**For Meals:**
+
+- All roles (`customer`, `rider`, `vendor`, and `admin`) can view (_read_) meals.
+- Only `vendor`s and `admin`s can _create_, _update_, and _delete_ meals.
+
+**For Orders:**
+
+- All roles can view orders.
+- Only `customer`s can _create_ them.
+- Only `vendor`s can _fulfill_ them (marking the orders as ready to be delivered).
+- Only `admin`s can _assign riders_ to orders.
+- Only `rider`s can _deliver_ them.
+- `admin`s can also _create, fulfill,_ and _deliver_ orders.
+
+To enforce the above `RBAC` policies:
+
+<TimelineWrapper>
+<TimelineStep>
+
+#### Create Resources
+
+In the Resources tab of the policy section of the Permit UI, create the "Meal" and "Order" resources with their involved actions.
+
+![Creating RBAC Resources](/img/modeling/food-delivery-system-example-using-nuxt/rbac-creating-resources.gif)
+
+</TimelineStep>
+<TimelineStep>
+
+#### Create Roles
+
+In the Roles tab, create the 4 roles: `customer`, `rider`, `vendor`, and `admin`. We will use them in the policy editor to allow permissions based on the policy above.
+
+![Food Delivery System Roles](/img/modeling/food-delivery-system-example-using-nuxt/rbac-roles.png)
+
+</TimelineStep>
+<TimelineStep>
+
+#### Grant Permissions
+
+In the policy editor, in line with the `RBAC` policies defined above, toggle the matching action of a resource on a role. This grants the involved permission for a role. Refresh and test the running app, you can now carry out some actions.
+
+![Viewing RBAC Policies](/img/modeling/food-delivery-system-example-using-nuxt/rbac-viewing-policies.gif)
+
+</TimelineStep>
+</TimelineWrapper>
+
+## Configure ABAC
+
+[Attribute-Based Access Control (ABAC)](/how-to/build-policies/abac/overview/) makes permissions more granular and fine-grained. In `ABAC`, we check for specific condition sets on user and/or resource attributes to grant permissions. When using `ABAC`, you group the attributes into conditions and create a set. So you can have multiple user sets and/or resource sets.
+
+The Food Delivery System app uses promotional offers to show how to use `ABAC`. Orders with at least 500 costs are eligible for free delivery. Also, only riders with at least 500 number of rides can deliver these promotional orders. We can rephrase these `ABAC` policies as follows:
+
+- A `customer` can _create a free delivery_ order **if** the order's cost is greater than or equal to 500.
+- A `rider` can _deliver_ a free delivery order **if** the rider's number of rides is greater than or equal to 500.
+
+Notice how these `ABAC` policies are built on top of the pre-defined `RBAC` ones. The `ABAC` policies use the roles and actions and add conditions to allow permissions.
+
+To see this in action:
+
+<TimelineWrapper>
+<TimelineStep>
+
+#### Add Resource Attribute and Action
+
+- Go to the "Order" resource and edit it.
+- In the list of actions, add a new _create-with-free-delivery_ action. The app uses this for issuing free deliveries.
+- Scroll down to the `ABAC` section and add a new `cost` attribute with type "Number"
+- Save the changes.
+
+![ABAC Resource Set](/img/modeling/food-delivery-system-example-using-nuxt/abac-resource-set.gif)
+
+</TimelineStep>
+<TimelineStep>
+
+#### Create a Resource Set
+
+- In the `ABAC` Rules tab, create a new Resource Set.
+- Add the condition for `cost` being greater than or equal to 500. This will auto-add any resource that matches this condition to this set.
+
+</TimelineStep>
+<TimelineStep>
+
+#### Add User Attribute
+
+[In the tenant settings](https://app.permit.io/user-management/tenant-settings/user-attributes) of the dashboard, update user attributes to add a `number_of_rides` attribute on users. It should be of type "Number".
+
+![ABAC User Set](/img/modeling/food-delivery-system-example-using-nuxt/abac-user-set.gif)
+
+</TimelineStep>
+<TimelineStep>
+
+#### Create a User Set
+
+- In the `ABAC` Sets tab, create a new User Set.
+- Add the condition for `number_of_rides` being greater than or equal to 500. As with the resource set above, any user that matches this condition will automatically be part of this set.
+
+</TimelineStep>
+<TimelineStep>
+
+#### Grant Permissions
+
+The newly created `ABAC` Sets will now be part of the policy editor. With that, we can now set `ABAC`-related permissions.
+
+- In the policy editor, toggle the `create-with-free-delivery` action on "Order" by customers.
+- Then for the Order `ABAC` resource set, also toggle the `deliver` action for the `ABAC` User set.
+- Refresh the running app and test that you can now create free delivery orders with meals above 500 cost.
+
+![Policy Table for ABAC](/img/modeling/food-delivery-system-example-using-nuxt/abac-policy-table.gif)
+
+:::info
+Fulfilling and Delivering orders won't yet work till you configure `ReBAC` policies.
+:::
+
+</TimelineStep>
+</TimelineWrapper>
+
+## Configure ReBAC
+
+[Relationship-Based Access Control (ReBAC)](/how-to/build-policies/rebac/overview/) uses associations or links between users and resources to grant or deny permissions. `ReBAC` leverages relationships in the overall system for access control. The Food Delivery System application uses `ReBAC` to enforce the following policies:
+
+- A `vendor` can only _fulfill_ an order **if** the vendor created the meals in that order.
+- A `rider` can only _deliver_ an order **if** that order was assigned to the rider by the admin.
+
+To fulfill an order, vendors use two policy checks: having the `vendor` role and having a relationship with meals. To deliver an order, a user needs the `rider` role, a relationship with the order, and their number of rides to exceed a minimum.
+
+To see `ReBAC` in action with the Food Delivery System:
+
+<TimelineWrapper>
+<TimelineStep>
+
+#### Create Instance Roles
+
+- Go to the "Order" resource and edit it.
+- Scroll down to the `ReBAC` section and create 2 instance roles: `Vendor` and `Rider`. They will become `Order#Vendor` and `Order#Rider`.
+
+![Order#Vendor Instance Role and fulfill action in Policy Table](/img/modeling/food-delivery-system-example-using-nuxt/rebac-vendor.gif)
+
+</TimelineStep>
+<TimelineStep>
+
+#### Grant Permissions
+
+Update the policy editor to allow "fulfill" and "deliver" actions for these new roles on orders. Refresh the app. You can now mark orders as delivered or fulfilled with the right user.
+
+</TimelineStep>
+</TimelineWrapper>
+
+## Syncing App Data
+
+Permit SDKs provide several methods for programmatic synchronization. In Nuxt, you can use methods on `permit.api` to sync data as needed. For users, create or update them with the `permit.api.users.sync` method in the same call.
+The delete method is also available.
+
+The Food Delivery System syncs users with the Permit project in the handlers of the `/users` endpoints as follows:
+
+```ts
+// For creating/updating user
+permit.api.users.sync({
+  key: userId,
+  attributes: { number_of_rides: noOfRides },
+});
+
+// For deleting a user
+permit.api.users.delete(userId);
+```
+
+In addition to users, you can also sync resources and role assignments. You can:
+
+- Use `permit.api.resources` methods for top-level resource management,
+- Use `permit.api.resourceInstances` methods for managing specific instances of resources, or
+- Use `permit.api.roleAssignments` methods for handling roles at both top-level (for `RBAC`) and at instance-level (for `ReBAC`).
+
+These methods are multitenant-aware. If you are building with multitenancy, provide the tenant of context. Otherwise, set `"default"` as the tenant. Permit also lets you sync condition sets. See more about that [in the API docs](https://api.permit.io/v2/redoc#tag/Condition-Sets).
+
+In the Food Delivery System code, we sync orders with the Permit project. We also assign the related instance role on the "Order" resource where appropriate.
+
+```ts
+// Sync a new order with Permit
+permit.api.resourceInstances.create({
+  key: id,
+  resource: "Order",
+  attributes: { cost: totalPrice },
+  tenant: "california",
+});
+
+// Set the Order's Vendor with Permit
+permit.api.roleAssignments.assign({
+  user: vendor,
+  role: "Vendor",
+  resource_instance: `Order:${id}`,
+  tenant: "california",
+});
+
+// Sync a deleted order with Permit
+permit.api.resourceInstances.delete(`Order:${id}`);
+```
+
+## Enforce Permissions
+
+You can check permissions in server middleware and UI parts. In middleware, you use [`permit.check`](/how-to/enforce-permissions/check) function that is available in all Permit's SDKs. In frontend code, you use [CASL](/integrations/feature-flagging/casl) together with Permit.
+
+In the Food Delivery System, we use Permit in the middleware for combined checks of `RBAC`, `ABAC`, and `ReBAC` policies at once. For example, the `permit.check` call for permitting a rider to deliver is as follows:
+
+```ts
+// This auto-checks all policies applying to the "deliver" action
+const canRiderDeliver = await permit.check(
+  userId, // user
+  "deliver", // action
+  { type: "Order", key: orderId, tenant: "california" } // resource
+);
+
+// Prevent the rider from doing the delivery if not authorised
+if (!canRiderDeliver) {
+  return {
+    success: false,
+    message: "You are not permitted to perform this action",
+  };
+}
+```
+
+In the Vue frontend, you can bulk load permissions for a given user and toggle parts of the UI based on permissions or "abilities". Though not used in this guide's repo, [you can find an example with Vue here](https://github.com/permitio/permit-vue-example/blob/casl/src/components/OrdersDisplay.vue).
+
+```ts
+<script setup lang="ts">
+// ...
+
+const fulfill = async (orderId: number) => {
+  if (permit.value.check('fulfill', 'Order', {}) {
+    // ...
+  }
+};
+
+const assignRider = async (e: FormSubmitEvent, orderId: number) => {
+  if (e.valid && permit.value.check('assign-rider', 'Order', {}) {
+    // ...
+  }
+};
+
+const deliver = async (orderId: number) => {
+  if (permit.value.check('deliver', 'Order', {}) {
+    // ...
+  }
+};
+</script>
+
+<template>
+  <!-- ... --->
+
+  <Button
+    label="Fulfill"
+    v-if="!order.fulfilledTime && permit.check('fulfill', 'Order', {})"
+    @click="fulfill(order.id)"
+  />
+  <Button
+    label="Deliver"
+    v-if="!order.deliveredTime && permit.check('deliver', 'Order', {})"
+    @click="deliver(order.id)"
+  />
+  <Form
+    @submit="(e) => assignRider(e, order.id)"
+    v-if="
+      permit.check('assign-rider', 'Order', {}) &&
+      !order.riderAssignedTime
+    "
+    class="flex gap-4 items-end"
+  >
+    <!-- ... --->
+  </Form>
+
+  <!-- ... --->
+</template>
+```
+
+## Conclusion
+
+In this tutorial, we combined multiple policies for the same action in an example food delivery app. You should do the same in your apps as they grow. When building permissions in Nuxt / Vue, you can always reference [the code](https://github.com/permitio/permit-nuxt-example.git) as a guide.
+
+### Testing Your Implementation
+
+To verify everything works as expected:
+
+1. Start the PDP and application:
+
+   ```bash
+   docker run -it -p 7766:7000 --env PDP_API_KEY=your-permit-api-key --env PDP_DEBUG=True permitio/pdp-v2:latest
+   npm run dev
+   ```
+
+2. Test the authorization rules:
+
+   - Log in as a customer and try to create an order
+   - Switch to a vendor and verify you can fulfill orders
+   - Test as a rider to deliver orders
+   - Try creating a free delivery order (cost ≥ 500)
+   - Verify that riders with 500+ rides can deliver free delivery orders
+   - Check that vendors can only fulfill their own orders
+   - Confirm that riders can only deliver assigned orders
+
+3. Test multi-tenant isolation:
+   - Create orders in different cities
+   - Verify that permissions are isolated between cities
+
+We are looking forward to hearing from you on our [Slack community](https://io.permit.io/slack). Feel free to ask questions and share what you are building with Permit.io.
