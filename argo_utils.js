@@ -1,5 +1,5 @@
-const cheerio = require("cheerio");
-const fs = require("fs");
+import cheerio from "cheerio";
+import fs from "fs";
 
 function extractSitemapPathnames(sitemapPath) {
   const sitemap = fs.readFileSync(sitemapPath).toString();
@@ -16,7 +16,4 @@ function pathnameToArgosName(pathname) {
   return pathname.replace(/^\/|\/$/g, "") || "index";
 }
 
-module.exports = {
-  extractSitemapPathnames,
-  pathnameToArgosName,
-};
+export { extractSitemapPathnames, pathnameToArgosName };
