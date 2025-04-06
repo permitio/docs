@@ -600,6 +600,14 @@ const sidebars = {
     },
     {
       type: "category",
+      label: "AI Access Control",
+      collapsed: false,
+      collapsible: false,
+      className: "category-as-header",
+      items: ["ai-access-control/framework/index"],
+    },
+    {
+      type: "category",
       label: "Embed Frontend Components",
       collapsed: false,
       collapsible: false,
@@ -629,7 +637,11 @@ const sidebars = {
                 type: "doc",
                 id: "api/elements/overview",
               },
-              items: ["api/elements/operation_approval", "api/elements/access-requests", "api/elements/access-request-api"],
+              items: [
+                "api/elements/operation_approval",
+                "api/elements/access-requests",
+                "api/elements/access-request-api",
+              ],
             },
           ],
         },
