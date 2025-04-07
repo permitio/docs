@@ -33,6 +33,13 @@ export const firstRow = [
   },
   {
     type: "link",
+    href: "/overview/local-authorization-microservice",
+    label: "Run Local Authorization Microservice",
+    svgIcon: <i className="ri-server-line ri-xl !text-[#974ef2]"></i>,
+    description: "Set up and run a local PDP for enhanced performance and security.",
+  },
+  {
+    type: "link",
     href: "overview/setup-attribute-based-access-control",
     label: "Create a ABAC Policy",
     svgIcon: <i className="ri-suitcase-line ri-xl !text-[#974ef2]"></i>,
