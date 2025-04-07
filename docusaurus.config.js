@@ -29,7 +29,14 @@ const config = {
   favicon: "logo/favicon.ico",
   organizationName: "permitio", // Usually your GitHub org/user name.
   projectName: "docs", // Usually your repo name.
-  markdown: { mermaid: true },
+  markdown: {
+    mermaid: true,
+    mdx1Compat: {
+      comments: true,
+      admonitions: true,
+      headingIds: false
+    }
+  },
   themes: ["@docusaurus/theme-mermaid"],
   presets: [
     [
@@ -581,8 +588,9 @@ const config = {
             className: "algolia-search",
           },
           {
-            type: "docsVersionDropdown",
+            type: "docsVersion",
             position: "right",
+            className: "version"
           },
           {
             alt: "twitter logo",
