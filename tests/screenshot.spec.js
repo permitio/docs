@@ -35,8 +35,21 @@ function waitForDocusaurusHydration() {
   return document.documentElement.dataset.hasHydrated === "true";
 }
 
-function screenshotPathname(pathname) {
+// Calculate and display progress of the running tests
+function calculateProgress(index, total, pathname) {
+  const percentage = Math.floor((index / total) * 100);
+  const progressBarWidth = 30; // Width of the progress bar in characters
+  const filledSquares = Math.floor((percentage / 100) * progressBarWidth);
+  const emptySquares = progressBarWidth - filledSquares;
+  const progressBar = '█'.repeat(filledSquares) + '░'.repeat(emptySquares);
+
+  console.log(`Progress: [${progressBar}] ${percentage}% (${index + 1}/${total}) - Testing: ${pathname}`);
+}
+
+function screenshotPathname(pathname, index, total) {
   test(`pathname ${pathname}`, async ({ page }) => {
+    calculateProgress(index, total, pathname);
+
     const url = siteUrl + pathname;
     await page.goto(url);
     await page.waitForFunction(waitForDocusaurusHydration);
@@ -54,6 +67,12 @@ test.describe("Docusaurus site screenshots", () => {
   const pathnames = extractSitemapPathnames(sitemapPath).filter(
     (pathname) => !pathname.startsWith(IGNORED_PATHS)
   );
-  console.log("Pathnames to screenshot:", pathnames);
-  pathnames.forEach(screenshotPathname);
+
+  console.log(`Starting screenshot tests for ${pathnames.length} pages...`);
+  console.log(`Progress: [${('░').repeat(30)}] 0% (0/${pathnames.length})`);
+
+  // Pass the index and total count to screenshotPathname
+  pathnames.forEach((pathname, index) =>
+    screenshotPathname(pathname, index, pathnames.length)
+  );
 });
