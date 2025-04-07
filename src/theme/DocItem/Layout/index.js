@@ -2,7 +2,6 @@
 import React from "react";
 import clsx from "clsx";
 import { useWindowSize } from "@docusaurus/theme-common";
-import { useDoc } from "@docusaurus/theme-common/internal";
 import DocItemPaginator from "@theme/DocItem/Paginator";
 import DocVersionBanner from "@theme/DocVersionBanner";
 import DocVersionBadge from "@theme/DocVersionBadge";
@@ -12,6 +11,7 @@ import DocItemTOCDesktop from "@theme/DocItem/TOC/Desktop";
 import DocItemContent from "@theme/DocItem/Content";
 import DocBreadcrumbs from "@theme/DocBreadcrumbs";
 import styles from "./styles.module.css";
+import { useDoc } from "@docusaurus/plugin-content-docs/lib/client/doc.js";
 
 function useDocTOC() {
   const { frontMatter, toc } = useDoc();
