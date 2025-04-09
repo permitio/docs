@@ -581,8 +581,9 @@ const config = {
             className: "algolia-search",
           },
           {
-            type: "docsVersionDropdown",
+            type: "docsVersion",
             position: "right",
+            className: "version"
           },
           {
             alt: "twitter logo",
