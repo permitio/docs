@@ -7,6 +7,7 @@ const config = {
   webServer: {
     port: 3000,
     command: "npm run serve",
+    reuseExistingServer: true,
   },
   projects: [
     {
