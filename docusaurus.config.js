@@ -615,7 +615,7 @@ const config = {
       },
       prism: {
         theme: require("prism-react-renderer/themes/dracula"),
-        additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl", "php"],
+        additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl", "php", "bash"],
       },
       colorMode: {
         defaultMode: "light",
