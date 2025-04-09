@@ -65,7 +65,7 @@ const IGNORED_PATHS = [
 
 test.describe("Docusaurus site screenshots", () => {
   const pathnames = extractSitemapPathnames(sitemapPath).filter(
-    (pathname) => !pathname.startsWith(IGNORED_PATHS)
+    (pathname) => !IGNORED_PATHS.some((prefix) => pathname.startsWith(prefix))
   );
 
   console.log(`Starting screenshot tests for ${pathnames.length} pages...`);
