@@ -366,6 +366,11 @@ const sidebars = {
             },
             "how-to/use-audit-logs/logs-forwarder",
             {
+              type: "doc",
+              label: "Stress Test the PDP",
+              id: "how-to/use-audit-logs/audit-log-replay",
+            },
+            {
               type: "category",
               label: "Errors Guide",
               link: {
