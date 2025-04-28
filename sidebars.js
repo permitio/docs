@@ -599,6 +599,7 @@ const sidebars = {
         "authentication/fusionauth",
         "authentication/supertokens",
         "authentication/hankopermit",
+        "authentication/logto",
         "integrations/SCIM/OKTA",
         "integrations/SCIM/EntraID",
       ],
