@@ -602,6 +602,7 @@ const sidebars = {
         "authentication/logto",
         "integrations/SCIM/OKTA",
         "integrations/SCIM/EntraID",
+        "integrations/permit-mcp/overview",
       ],
     },
     {
