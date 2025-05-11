@@ -567,6 +567,11 @@ const sidebars = {
           id: "sdk/sdks-overview",
           label: "SDK Feature Parity",
         },
+        {
+          type: "doc",
+          id: "sdk/permit-prisma-extension",
+          label: "Prisma ORM",
+        }
       ],
     },
     {
