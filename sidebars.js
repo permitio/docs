@@ -571,6 +571,25 @@ const sidebars = {
     },
     {
       type: "category",
+      label: "Quick Start Guide",
+      collapsible: false,
+      collapsed: false,
+      className: "category-as-header",
+      items: [
+        "quick-start/fastapi",
+        "quick-start/django",
+        "quick-start/flask",
+        "quick-start/nextjs",
+        "quick-start/nest",
+        "quick-start/express",
+        "quick-start/gin",
+        "quick-start/spring-boot",
+        "quick-start/aspnet",
+        "quick-start/rails"
+      ]
+    },
+    {
+      type: "category",
       label: "Integrate with Authentication",
       collapsed: false,
       collapsible: false,
