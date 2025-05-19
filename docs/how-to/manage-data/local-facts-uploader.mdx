@@ -1,170 +1,48 @@
 ---
 sidebar_position: 3
-title: Send Critical Updates
+title: Send Consistent Updates
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-When checking permissions right after creating or syncing a user, there may be a delay in data syncing to the PDP.  To reduce this latency, we've implemented a mechanism that sends data updates directly to the PDP first, then distributes them through OPAL (including other PDPs if you operate in multi-PDP setup).
+# Send Consistent Updates (Read-Your-Own-Writes)
 
-The approach works by making calls directly to the PDP, which then forwards the facts to the connected OPAL Server. The OPAL Server will then distribute the facts to all the PDPs in the environment. The update has been added as a configuration option in the SDK which enables you to use the same favorite SDK to interact with Permit.io as you have previously without changing function calls. This approach will also ensure all other PDPs running in your environment receive those facts by forwarding the facts to the connected OPAL Server which then distributes the facts to all the PDPs in the environment.
+This feature enables immediate use of newly created data for permission checks. 
+It works by routing data changes requests through the PDP and waiting them to be applied before responding.
 
-
-
-:::warning EAP
-
-Notice that this API is in Early Access Program stage and might be subject to changes.
-
-:::
-:::warning Min. PDP version required
-
-Notice that this feature is available from PDP version `0.5.1` and above.
-
+:::info Min. PDP version required
+Requires PDP version `0.5.1` or above.
 :::
 
-
-## How to configure the SDK to upload facts via the PDP
-
-This will allow you to use the same SDK to upload facts via PDP.
+## Example: Create a User then Check Permissions
 
 <Tabs groupId="language">
 <TabItem value="python" label="Python">
 
 ```python
 from permit import Permit
-# This line initializes the SDK and connects your python app
-# to the Permit.io PDP container you've set up.
+
+# Initialize SDK with proxy_facts_via_pdp enabled
 permit = Permit(
-    # your secret API KEY
     token="<your-api-key>",
-    # In production, you might need to change this URL to fit your deployment
-    # This is the address where you can find the PDP container.
     pdp="http://localhost:7766",
-    # configure the SDK to upload facts via the PDP
-    proxy_facts_via_pdp=True,
-    # Add here any more configurations that you usually use
-)
-```
-
-</TabItem>
-
-<TabItem value="nodejs" label="Node.js">
-
-```typescript
-import { Permit } from "permit";
-
-const permit = new Permit({
-  // your secret API KEY
-  token: "<your-api-key>",
-  // In production, you might need to change this URL to fit your deployment
-  // This is the address where you can find the PDP container.
-  pdp: "http://localhost:7766",
-  // configure the SDK to upload facts via the PDP
-  proxyFactsViaPdp: true,
-  // Add here any more configurations that you usually use
-});
-```
-
-</TabItem>
-<TabItem value="go" label="Go">
-
-```go
-package main
-
-import "github.com/permitio/permit-golang/pkg/permit"
-import "github.com/permitio/permit-golang/pkg/config"
-
-func main() {
-    PermitConfig := config.NewConfigBuilder("<YOUR_API_TOKEN>").
-        WithPdpUrl("http://localhost:7766").
-        WithProxyFactsViaPdp().
-        Build()
-    Permit := permit.New(PermitConfig)
-}
-```
-
-</TabItem>
-
-<TabItem value="java" label="Java">
-
-```java
-import io.permit.sdk.Permit;
-import io.permit.sdk.PermitConfig;
-
-public class PermitExample {
-    public static void main(String[] args) {
-        // Initialize the SDK with your API key and PDP configuration
-        PermitConfig config = new PermitConfig.Builder("<your-api-key>")
-            // In production, you might need to change this URL to fit your deployment
-            // This is the address where you can find the PDP container
-            .withPdpAddress("http://localhost:7766")
-            // configure the SDK to upload facts via the PDP
-            .withProxyFactsViaPdp(true)
-            // Add here any more configurations that you usually use
-            .build();
-            
-        Permit permit = new Permit(config);
-    }
-}
-```
-
-</TabItem>
-</Tabs>
-
-After configuring you can use the normal SDK functions to
-upload facts and the SDK will take care of the rest.
-
-## Wait for the fact to be ready for permission check
-
-Using the following guide you will be able to wait for the PDP to be ready to enforce permission
-on the newly added facts.
-Timeout with value 0 will respond immediately without waiting.
-Timeout with a positive value will wait for the facts to be synced for the specified duration.
-Timeout with a negative value will wait forever for the facts to be synced.
-
-:::note Important Note
-
-Waiting for the facts to be synced is available only when proxy_facts_via_pdp is enabled
-
-:::
-
-<Tabs groupId="language">
-<TabItem value="python" label="Python">
-
-```python
-from permit import Permit
-# This line initializes the SDK and connects your python app
-# to the Permit.io PDP container you've set up.
-permit = Permit(
-    # your secret API KEY
-    token="<your-api-key>",
-    # In production, you might need to change this URL to fit your deployment
-    # This is the address where you can find the PDP container.
-    pdp="http://localhost:7766",
-    # configure the SDK to upload facts via the PDP
-    proxy_facts_via_pdp=True,
-    # you can set the timeout to wait for the facts to be synced,
-    # in the initialization of the client - will apply for all the supported SDK calls
-    # as an argument to the sync_function call - will apply only for the calls inside the context manager
-    facts_sync_timeout=10,
-    # Add here any more configurations that you usually use
+    proxy_facts_via_pdp=True
 )
 
-async with permit.wait_for_sync(timeout=15) as p:
-    user: UserRead = await p.api.users.sync(
-        {
-            "key": "auth0|elon",
-            "email": "elonmusk@tesla.com",
-            "first_name": "Elon",
-            "last_name": "Musk",
-            "attributes": {
-                "age": 50,
-                "favorite_color": "red",
-            },
-        }
-    )
+async def create_and_check():
+    # Create user
+    user = await permit.api.users.create({
+        "key": "user123",
+        "email": "user@example.com"
+    })
+    
+    # Check for permissions right after
+    allowed = await permit.check(user.key, "read", "document")
+    print(f"Permission granted: {allowed}")
 ```
+
+With `proxy_facts_via_pdp` enabled, the API call waits until the user data is fully synced to the PDP before returning, ensuring the permission check succeeds immediately after.
 
 </TabItem>
 <TabItem value="nodejs" label="Node.js">
@@ -172,58 +50,65 @@ async with permit.wait_for_sync(timeout=15) as p:
 ```typescript
 import { Permit } from "permit";
 
+// Initialize SDK with proxy_facts_via_pdp enabled
 const permit = new Permit({
-  // your secret API KEY
   token: "<your-api-key>",
-  // In production, you might need to change this URL to fit your deployment
-  // This is the address where you can find the PDP container.
   pdp: "http://localhost:7766",
-  // configure the SDK to upload facts via the PDP
-  proxyFactsViaPdp: true,
-  // configure the default time to wait for the facts to be synced
-  factsSyncTimeout: 10,
-  // Add here any more configurations that you usually use
+  proxyFactsViaPdp: true
 });
 
-await permit.api.users.sync({
-  key: "auth0|elon",
-  email: "elonmusk@tesla.com",
-  first_name: "Elon",
-  last_name: "Musk",
-  attributes: {
-    age: 50,
-    favorite_color: "red",
-  },
-});
-
-// or you can use the waitForSync function to customize the timeout for a specific call
-await permit.api.users.waitForSync(10).create({ key: "auth0|elon" });
+async function createAndCheck() {
+  // Create user
+  const user = await permit.api.users.create({
+    key: "user123",
+    email: "user@example.com"
+  });
+  
+  // Check for permissions right after
+  const allowed = await permit.check(user.key, "read", "document");
+  console.log(`Permission granted: ${allowed}`);
+}
 ```
+
+With `proxyFactsViaPdp` enabled, the API call waits until the user data is fully synced to the PDP before returning, allowing immediate permission checks.
+
 </TabItem>
 <TabItem value="go" label="Go">
 
 ```go
 package main
 
-import "github.com/permitio/permit-golang/pkg/permit"
-import "github.com/permitio/permit-golang/pkg/config"
+import (
+	"context"
+	"fmt"
+
+	"github.com/permitio/permit-golang/pkg/config"
+	"github.com/permitio/permit-golang/pkg/models"
+	"github.com/permitio/permit-golang/pkg/permit"
+)
 
 func main() {
-    PermitConfig := config.NewConfigBuilder("<YOUR_API_TOKEN>").
-        WithPdpUrl("http://localhost:7766").
-        WithProxyFactsViaPdp().
-        WithFactsSyncTimeout().
-        Build()
-    Permit := permit.New(PermitConfig)
+	ctx := context.Background()
+	
+	// Initialize SDK with proxy_facts_via_pdp enabled
+	permitConfig := config.NewConfigBuilder("<YOUR_API_KEY>").
+		WithPdpUrl("http://localhost:7766").
+		WithProxyFactsViaPdp().
+		Build()
+	permit := permit.New(permitConfig)
 
-    newUser := models.NewUserCreate("new_user")
-    user, _ := Permit.Api.Users.SyncUser(ctx, *newUser)
+	// Create user
+	newUser := models.NewUserCreate("user123")
+	newUser.Email = "user@example.com"
+	user, _ := permit.Api.Users.CreateUser(ctx, *newUser)
 
-    // or you can use the WaitForSync function to customize the timeout for a specific call
-    user, _ := Permit.Api.Users.WaitForSync(10).CreateUser(ctx, *newUser)
-
+    // Check for permissions right after
+	allowed, _ := permit.Check(user.Key, "read", "document")
+	fmt.Printf("Permission granted: %v\n", allowed)
 }
 ```
+
+By enabling `WithProxyFactsViaPdp`, the API call waits until the user data is fully synced to the PDP before returning, making the permission check reliable.
 
 </TabItem>
 
@@ -234,49 +119,262 @@ import io.permit.sdk.Permit;
 import io.permit.sdk.PermitConfig;
 import io.permit.sdk.api.models.UserCreate;
 
-public class PermitExample {
+public class Example {
     public static void main(String[] args) {
+        // Initialize SDK with proxy_facts_via_pdp enabled
         PermitConfig config = new PermitConfig.Builder("<your-api-key>")
             .withPdpAddress("http://localhost:7766")
             .withProxyFactsViaPdp(true)
-            // configure the default time to wait for the facts to be synced
-            .withFactsSyncTimeout(10)
             .build();
             
         Permit permit = new Permit(config);
 
-        // Create a new user and wait for sync
-        UserCreate user = new UserCreate.Builder("auth0|elon")
-            .withEmail("elonmusk@tesla.com")
-            .withFirstName("Elon")
-            .withLastName("Musk")
-            .withAttributes(Map.of(
-                "age", 50,
-                "favorite_color", "red"
-            ))
+        // Create user
+        UserCreate userCreate = new UserCreate.Builder("user123")
+            .withEmail("user@example.com")
             .build();
+        
+        permit.api.users.create(userCreate);
 
-        // Using the default timeout configured in PermitConfig
-        permit.api.users.sync(user);
+        // Check for permissions right after
+        boolean allowed = permit.check("user123", "read", "document");
+        System.out.println("Permission granted: " + allowed);
     }
 }
 ```
 
-</TabItem>
+With `withProxyFactsViaPdp` set to true, when creating or updating a user the API call waits until the data is available in the PDP, ensuring the permission check works correctly right away.
 
+</TabItem>
 </Tabs>
 
-:::note Supported APIs
+## Configuration Options
 
-Currently supported APIs for this feature are:
-- [Sync User](https://api.permit.io/v2/redoc#tag/Users/operation/replace_user)
-- [Create User](https://api.permit.io/v2/redoc#tag/Users/operation/create_user)
-- [Update User](https://api.permit.io/v2/redoc#tag/Users/operation/update_user)
-- [Assign Role To User](https://api.permit.io/v2/redoc#tag/Users/operation/assign_role_to_user)
-- [Assign Role](https://api.permit.io/v2/redoc#tag/Role-Assignments/operation/assign_role)
-- [Create Resource Instance](https://api.permit.io/v2/redoc#tag/Resource-Instances/operation/create_resource_instance)
-- [Update Resource Instance](https://api.permit.io/v2/redoc#tag/Resource-Instances/operation/update_resource_instance)
-- [Create Relationship Tuple](https://api.permit.io/v2/redoc#tag/Relationship-tuples/operation/create_relationship_tuple)
-- [Create Tenant](https://api.permit.io/v2/redoc#tag/Tenants/operation/create_tenant)
+The `timeout` parameter specifies the maximum waiting time for data synchronization:
+- `0`: No waiting - respond immediately
+- Positive value (e.g., `10`): Wait up to specified seconds
+- Negative value (e.g., `-1`): Wait indefinitely
 
+The `timeout_policy` parameter defines behavior when timeout occurs:
+- `ignore`: Respond immediately when data update did not apply within the timeout period
+- `fail`: Respond with 424 status code when data update did not apply within the timeout period
+
+:::info Min. PDP version required
+The `timeout_policy` parameter is available in PDP v0.8.0 and above.
 :::
+
+### PDP Configuration
+
+Default values for proxy facts can be set in the PDP using environment variables:
+
+- **`PDP_LOCAL_FACTS_WAIT_TIMEOUT`**: Default timeout in seconds to wait for facts to sync (default: `10`)
+- **`PDP_LOCAL_FACTS_TIMEOUT_POLICY`**: Default policy on timeout, either `ignore` or `fail` (default: `ignore`)
+
+### SDK Configuration
+
+<Tabs groupId="language">
+<TabItem value="python" label="Python">
+
+```python
+# SDK-level configuration (applies to all operations)
+permit = Permit(
+    token="<your-api-key>",
+    pdp="http://localhost:7766",
+    proxy_facts_via_pdp=True,
+    facts_sync_timeout=10,           # Optional: Uses PDP default if not specified
+    facts_sync_timeout_policy="ignore" # Optional: Uses PDP default if not specified
+)
+
+# All operations will use the SDK-level settings
+user = await permit.api.users.create({ /* user data */ })
+```
+
+</TabItem>
+<TabItem value="nodejs" label="Node.js">
+
+```typescript
+// SDK-level configuration (applies to all operations)
+const permit = new Permit({
+  token: "<your-api-key>",
+  pdp: "http://localhost:7766",
+  proxyFactsViaPdp: true,
+  factsSyncTimeout: 10,           // Optional: Uses PDP default if not specified
+  factsSyncTimeoutPolicy: "ignore" // Optional: Uses PDP default if not specified
+});
+
+// All operations will use the SDK-level settings
+const user = await permit.api.users.create({ /* user data */ });
+```
+</TabItem>
+<TabItem value="go" label="Go">
+
+```go
+// SDK-level configuration (applies to all operations)
+permitConfig := config.NewConfigBuilder("<YOUR_API_KEY>").
+    WithPdpUrl("http://localhost:7766").
+    WithProxyFactsViaPdp().
+    WithFactsSyncTimeout(10).             // Optional: Uses PDP default if not specified
+    WithFactsSyncTimeoutPolicy("ignore"). // Optional: Uses PDP default if not specified
+    Build()
+permit := permit.New(permitConfig)
+
+// All operations will use the SDK-level settings
+user, _ := permit.Api.Users.CreateUser(ctx, *newUser)
+```
+
+</TabItem>
+<TabItem value="java" label="Java">
+
+```java
+// SDK-level configuration (applies to all operations)
+PermitConfig config = new PermitConfig.Builder("<your-api-key>")
+    .withPdpAddress("http://localhost:7766")
+    .withProxyFactsViaPdp(true)
+    .withFactsSyncTimeout(10)           // Optional: Uses PDP default if not specified
+    .withFactsSyncTimeoutPolicy("ignore") // Optional: Uses PDP default if not specified
+    .build();
+Permit permit = new Permit(config);
+
+// All operations will use the SDK-level settings
+permit.api.users.create(userCreate);
+```
+
+</TabItem>
+</Tabs>
+
+### Operation-Specific Configuration
+
+<Tabs groupId="language">
+<TabItem value="python" label="Python">
+
+```python
+# SDK initialization with proxy_facts_via_pdp enabled
+permit = Permit(
+    token="<your-api-key>",
+    pdp="http://localhost:7766",
+    proxy_facts_via_pdp=True
+)
+
+# Override the default timeout for a specific operation
+with permit.wait_for_sync(timeout=15) as p:
+    user = await p.api.users.create({ /* user data */ })
+```
+
+</TabItem>
+<TabItem value="nodejs" label="Node.js">
+
+```typescript
+// SDK initialization with proxy_facts_via_pdp enabled
+const permit = new Permit({
+  token: "<your-api-key>",
+  pdp: "http://localhost:7766",
+  proxyFactsViaPdp: true
+});
+
+// Override the default timeout for a specific operation
+const user = await permit.api.users.waitForSync(15).create({ /* user data */ });
+```
+</TabItem>
+<TabItem value="go" label="Go">
+
+```go
+// SDK initialization with proxy_facts_via_pdp enabled
+permitConfig := config.NewConfigBuilder("<YOUR_API_KEY>").
+    WithPdpUrl("http://localhost:7766").
+    WithProxyFactsViaPdp().
+    Build()
+permit := permit.New(permitConfig)
+
+// Override the default timeout for a specific operation
+user, _ := permit.Api.Users.WaitForSync(15).CreateUser(ctx, *newUser)
+```
+
+</TabItem>
+</Tabs>
+
+## Direct API Usage
+
+To call the PDP's Local Facts API directly:
+
+```
+POST /facts/...
+Headers:
+X-Wait-timeout: 10
+X-Timeout-policy: ignore
+```
+
+You can use Proxy Facts to make requests to the Permit API by simply updating the URL path:
+Change:
+`https://api.permit.io/v2/facts/{proj}/{env}/...`
+To:
+`http://localhost:7766/facts/...`
+The routes and schema are the same as the Permit API facts routes.
+
+For example, the those routes are related and share the same schema:
+```bash
+curl -X POST http://localhost:7766/facts/users \
+     -H "Authorization: Bearer <your-api-key>" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "key": "user123",
+           "email": "user@example.com"
+         }'
+
+curl -X POST https://api.permit.io/v2/facts/default/prod/users \
+     -H "Authorization: Bearer <your-api-key>" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "key": "user123",
+           "email": "user@example.com"
+         }'
+```
+
+## Supported APIs
+```bash
+# Users
+POST /facts/users
+PUT /facts/users/{user_id}
+PATCH /facts/users/{user_id}
+
+# Tenants
+POST /facts/tenants
+
+# Role Assignments
+POST /facts/users/{user_id}/roles
+POST /facts/role_assignments
+
+# Resource Instances
+POST /facts/resource_instances
+PATCH /facts/resource_instances/{instance_id}
+
+# Relationship Tuples
+POST /facts/relationship_tuples
+```
+
+:::warning
+When using the User APIs (`POST /facts/users`, `PUT /facts/users/{user_id}`, `PATCH /facts/users/{user_id}`), the `role_assignments` attribute will not be awaited in the request. 
+To ensure role assignments are properly synchronized, we recommend using a separate Role Assignment API request after creating or updating the user.
+:::
+
+APIs not listed above are forwarded to the Permit API without waiting for synchronization. 
+
+Contact us in [our Slack community](https://io.permit.io/slack) for additional API or SDK support.
+
+## Best Practices
+
+### Performance Considerations
+
+When using proxy facts, be aware of these performance implications:
+
+- **Increased API Latency**: API requests will take longer then direct calls to the Permit API, as they wait for data synchronization
+- **Faster Sync Times**: Despite increased request latency, data updates are typically received faster compared to data updates via the Permit API
+- **CPU Usage**: PDP CPU usage may increase with high traffic to proxy facts endpoints
+- **Unsupported APIs**: Unsupported APIs are still routed through the PDP to the Permit API, which can result in higher latency
+
+### Deployment Recommendations
+
+This feature works best in the following deployment scenarios:
+
+**Recommended**: Deploy PDPs as a [Centralized PDP](/concepts/pdp/overview#centralized-pdp) or as a [PDP Sidecar](/concepts/pdp/overview#hosted-as-a-sidecar) to your application. This ensures the same PDP instance handles both data creation and permission checks.
+
+**Less Optimal**: Using a [PDP Cluster](/concepts/pdp/overview#cluster-of-pdps) with load balancing, permission checks may be routed to PDPs that haven't received the data update yet.
