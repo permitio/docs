@@ -53,14 +53,61 @@ import { createPermitClientExtension } from "@permitio/permit-prisma";
 const prisma = new PrismaClient().$extends(
   createPermitClientExtension({
     permitConfig: {
-      token: "<YOUR_PERMIT_API_KEY>", // Permit API Key
-      pdp: "http://localhost:7766",   // PDP address
+      token: "<YOUR_PERMIT_API_KEY>", // Permit API Key (required)
+      pdp: "http://localhost:7766",   // PDP address (required)
     },
-    accessControlModel: "RBAC",       // 'RBAC', 'ABAC', or 'ReBAC'
-    enableAutomaticChecks: true,      // Enable automatic permission enforcement
+    enableAutomaticChecks: true,      // Enable automatic permission checks
+    enableResourceSync: true,         // Sync resource instances with Permit.io
+    enableAttributeSync: true,        // Sync resource attributes with Permit.io
+    enableDataFiltering: true,        // Enable automatic query filtering by permissions
   })
 );
 ```
+
+## Access Control Models
+
+This extension supports three access control models from Permit.io:
+
+### Role-Based Access Control (RBAC)
+
+**What it is**: Users are assigned roles (Admin, Editor, Viewer) with predefined permissions to perform actions on resource types.
+
+**Example**: An "Editor" role can update any document in the system.
+
+**Best for**: Simple permission structures where access is determined by job function or user level.
+
+### Attribute-Based Access Control (ABAC)
+
+**What it is**: Access decisions based on attributes of users, resources, or environment.
+
+**Examples**:
+
+- Allow access if `user.department == document.department`
+- Allow updates if `document.status == "DRAFT"`
+
+**How it works with the extension**: When `enableAttributeSync` is on, resource attributes are automatically synced to Permit.io for policy evaluation.
+
+**Best for**: Dynamic rules that depend on context or data properties.
+
+### Relationship-Based Access Control (ReBAC)
+
+**What it is**: Permissions based on relationships between users and specific resource instances.
+
+**Example**: A user is an "Owner" of document-123 but just a "Viewer" of document-456.
+
+**How it works with the extension**:
+
+- Resource instances are synced to Permit.io (with `enableResourceSync: true`)
+- Permission checks include the specific resource instance ID
+
+**Best for**: Collaborative applications where users need different permissions on different instances of the same resource type.
+
+### Choosing the Right Model
+
+- **RBAC**: When you need simple, role-based access control
+- **ABAC**: When decisions depend on data properties or contextual information
+- **ReBAC**: When users need different permissions on different instances
+
 ## Permission Enforcement
 
 The Permit-Prisma extension implements fine-grained authorization checks on all Prisma operations. Here's how it works:
@@ -92,41 +139,37 @@ try {
     console.error("Permission denied");
   }
 }
+```
 
-## Support for All Access Control Models
+## Configuration Examples for Different Models
 
-The extension supports all three Permit.io access control models:
+Here are example configurations for each access control model:
 
-### Role-Based Access Control (RBAC)
-
-For RBAC, the extension performs simple checks based on the user's roles:
+### RBAC Example
 
 ```ts
 // Configure for RBAC
 const prisma = new PrismaClient().$extends(
   createPermitClientExtension({
     permitConfig: { token: "YOUR_API_KEY", pdp: "http://localhost:7766" },
-    accessControlModel: "rbac",
     enableAutomaticChecks: true
   })
 );
 
 // Simple role-based check
 prisma.$permit.setUser("admin@example.com");
-const documents = await prisma.document.findMany(); // Will succeed if admin role has
+const documents = await prisma.document.findMany(); // Will succeed if admin role has read permission
 ```
 
-### Attribute-Based Access Control (ABAC)
-
-For ABAC, the extension includes attribute information in permission checks:
+### ABAC Example
 
 ```ts
 // Configure for ABAC
 const prisma = new PrismaClient().$extends(
   createPermitClientExtension({
     permitConfig: { token: "YOUR_API_KEY", pdp: "http://localhost:7766" },
-    accessControlModel: "abac",
     enableAutomaticChecks: true,
+    enableAttributeSync: true
   })
 );
 
@@ -141,17 +184,17 @@ const records = await prisma.medicalRecord.findMany({
   where: { department: "cardiology" }
 });
 ```
-### Relationship-Based Access Control (ReBAC)
 
-For ReBAC, the extension performs instance-level permission checks:
+### ReBAC Example
 
 ```ts
 // Configure for ReBAC
 const prisma = new PrismaClient().$extends(
   createPermitClientExtension({
     permitConfig: { token: "YOUR_API_KEY", pdp: "http://localhost:7766" },
-    accessControlModel: "rebac",
     enableAutomaticChecks: true,
+    enableResourceSync: true,
+    enableDataFiltering: true
   })
 );
 
@@ -162,6 +205,21 @@ prisma.$permit.setUser("owner@example.com");
 const file = await prisma.file.findUnique({
   where: { id: "file-123" }
 });
+```
+
+### Combined Model Example
+
+```ts
+// Configure for combined models (RBAC + ABAC + ReBAC)
+const prisma = new PrismaClient().$extends(
+  createPermitClientExtension({
+    permitConfig: { token: "YOUR_API_KEY", pdp: "http://localhost:7766" },
+    enableAutomaticChecks: true,
+    enableResourceSync: true,
+    enableAttributeSync: true,
+    enableDataFiltering: true
+  })
+);
 ```
 
 ## Manual Permission Checks
@@ -190,3 +248,4 @@ await prisma.$permit.enforceCheck(
   { type: "document", key: "doc-123" }
 );
 await prisma.document.delete({ where: { id: "doc-123" } });
+```
