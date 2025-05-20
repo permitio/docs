@@ -249,12 +249,17 @@ const sidebars = {
             type: "doc",
             id: "concepts/pdp/overview",
           },
-          items: ["concepts/pdp/configuration", "concepts/pdp/factdb"],
+          items: [
+            "concepts/pdp/configuration",
+            "concepts/pdp/factdb",
+            "how-to/manage-data/local-facts-uploader",
+          ],
         },
         "how-to/enforce-permissions/check",
         "how-to/enforce-permissions/bulk-check",
         "how-to/enforce-permissions/data-filtering",
         "foaz/url-mapping-check",
+        "foaz/regex-url-mapping-check",
         {
           type: "category",
           label: "Permission Queries",
@@ -361,6 +366,11 @@ const sidebars = {
               items: ["how-to/use-audit-logs/debug-mode", "how-to/use-audit-logs/troubleshooting"],
             },
             "how-to/use-audit-logs/logs-forwarder",
+            {
+              type: "doc",
+              label: "Stress Test the PDP",
+              id: "how-to/use-audit-logs/audit-log-replay",
+            },
             {
               type: "category",
               label: "Errors Guide",
@@ -558,6 +568,11 @@ const sidebars = {
           id: "sdk/sdks-overview",
           label: "SDK Feature Parity",
         },
+        {
+          type: "doc",
+          id: "sdk/permit-prisma-extension",
+          label: "Prisma ORM",
+        },
       ],
     },
     {
@@ -590,8 +605,10 @@ const sidebars = {
         "authentication/fusionauth",
         "authentication/supertokens",
         "authentication/hankopermit",
+        "authentication/logto",
         "integrations/SCIM/OKTA",
         "integrations/SCIM/EntraID",
+        "integrations/permit-mcp/overview",
       ],
     },
     {
@@ -664,6 +681,38 @@ const sidebars = {
           type: "category",
           label: "Migrations",
           items: ["api/v2-migration-guide", "concepts/oss-fallback"],
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "AI Security",
+      collapsed: false,
+      collapsible: false,
+      className: "category-as-header",
+      items: [
+        {
+          type: "category",
+          label: "MCP Permissions",
+          collapsed: false,
+          collapsible: false,
+          items: [
+            {
+              type: "doc",
+              id: "mcp-permissions/overview",
+              label: "Overview",
+            },
+            {
+              type: "doc",
+              id: "mcp-permissions/architecture",
+              label: "Architecture",
+            },
+            {
+              type: "doc",
+              id: "mcp-permissions/guide",
+              label: "Guide",
+            },
+          ],
         },
       ],
     },

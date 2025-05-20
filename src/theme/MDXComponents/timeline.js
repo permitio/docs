@@ -1,6 +1,6 @@
 import React, { useContext, useRef } from "react";
 import TimelineTile from "../../components/timeline/TimelineTile";
-import { useDoc } from "@docusaurus/theme-common/internal";
+import { useDoc } from "@docusaurus/plugin-content-docs/lib/client/doc.js";
 
 // Context for holding front matter and active step
 const TimelineContext = React.createContext({ timeline: false });
