@@ -571,7 +571,7 @@ const sidebars = {
           type: "doc",
           id: "sdk/permit-prisma-extension",
           label: "Prisma ORM",
-        }
+        },
       ],
     },
     {
@@ -641,7 +641,11 @@ const sidebars = {
                 type: "doc",
                 id: "api/elements/overview",
               },
-              items: ["api/elements/operation_approval", "api/elements/access-requests", "api/elements/access-request-api"],
+              items: [
+                "api/elements/operation_approval",
+                "api/elements/access-requests",
+                "api/elements/access-request-api",
+              ],
             },
           ],
         },
@@ -676,6 +680,38 @@ const sidebars = {
           type: "category",
           label: "Migrations",
           items: ["api/v2-migration-guide", "concepts/oss-fallback"],
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "AI Security",
+      collapsed: false,
+      collapsible: false,
+      className: "category-as-header",
+      items: [
+        {
+          type: "category",
+          label: "MCP Permissions",
+          collapsed: false,
+          collapsible: false,
+          items: [
+            {
+              type: "doc",
+              id: "mcp-permissions/overview",
+              label: "Overview",
+            },
+            {
+              type: "doc",
+              id: "mcp-permissions/architecture",
+              label: "Architecture",
+            },
+            {
+              type: "doc",
+              id: "mcp-permissions/guide",
+              label: "Guide",
+            },
+          ],
         },
       ],
     },
