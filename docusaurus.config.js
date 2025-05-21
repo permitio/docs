@@ -564,7 +564,7 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
-      imageZoom: {
+      zoom: {
         selector: ".markdown :not(em) > img",
       },
       hotjar: {
