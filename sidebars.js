@@ -88,6 +88,7 @@ const sidebars = {
             "overview/use-the-permit-api-and-sdk",
             "overview/sync-your-first-user-with-sdk",
             "overview/perform-policy-check-with-cloud-pdp",
+            "overview/local-authorization-microservice",
             "overview/setup-attribute-based-access-control",
             // "overview/perform-a-local-policy-check",
             "overview/create-a-rebac-policy",
