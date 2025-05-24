@@ -1,0 +1,181 @@
+---
+title: Rails  
+sidebar_position: 10
+---
+
+# Rails Quick Start Guide
+
+## Overview
+
+Rails is a popular web framework for building applications with Ruby. In this guide, we will quickly go through the steps to integrate Permit.io with Rails. We will use the Permit CLI to create a new environment and a policy using a template. Then, we will use the Permit SDK to integrate it with our Rails application. We will also set up the PDP (Policy Decision Point) server locally using Docker.
+
+We will see how to sync users and tenants and assign roles easily using the Permit Dashboard. Then, we will demonstrate how to enforce policies using the Permit SDK in our Rails application.
+
+## Prerequisites
+
+- Docker (for running the PDP server)
+- Node.js (for running the Permit CLI)
+- Ruby & Rails installed
+- Permit.io account ([Follow this guide](/quickstart) to create an account)
+
+## Getting started
+
+To get started, we will first create a new policy using a template with the Permit CLI. This assumes you have already created an account with Permit.io.
+
+### Hands-on with Permit CLI
+
+To begin, install the Permit CLI. Execute the command below in your terminal. We will use the CLI to create policies, run the PDP server, and perform other tasks.
+
+```bash
+npm install -g @permitio/cli
+```
+
+Once the installation is complete, run `permit` to confirm it was installed. Then, to authenticate, run `permit login`. This will open a browser window and prompt you to log in with your Permit account. After logging in, the CLI will be authenticated and ready to use. This also logs you into the default environment (a project can have multiple environments). You can switch environments by executing `permit env select` and choosing the one you want.
+
+Now, let's create a policy using a template. The benefit of using a template is that it includes predefined roles and resources based on best practices, saving time and effort. To check available templates, run `permit template list`. Based on your needs, you can apply a template by executing `permit template apply <template-name>`.
+
+![cli template list](/img/quick-start-guide/env-template.png)
+
+We have used the **fga-tradeoffs** template to create a new policy.
+
+Now, let's visit the Permit Dashboard to view the created policy and get the API key we will use to authenticate our application with the Permit SDK.
+
+As shown in the image below, the CLI has created Resources, Roles, and Policies. Now, let's add **Read** permission to the **Viewer** role for the **Visit** resource. It is very easy to add permissions using the dashboard. You can also add more roles and resources as needed.
+
+![permit policy](/img/quick-start-guide/policy-editor-dash.png)
+
+To get the API key, click **Projects** in the left sidebar, then click the three dots next to the environment you want to use, and click **Copy API Key**. Store it in a safe place. We will use this key to authenticate our application with Permit.io. If you have difficulty getting the API key, follow this [guide](/overview/connecting-your-app/#1-get-your-permit-environment-api-key).
+
+Once done, let's proceed to integrate Permit.io with our Rails application.
+
+### Rails Integration
+
+Once your Rails application is ready (or you can create a new one for the sake of this guide) we can integrate Permit.io with it. First, install the Permit's Ruby on Rails SDK. 
+
+Read more about the Ruby on Rails SDK [here](/sdk/ruby/quickstart-ruby).
+
+Add the following to your `Gemfile`:
+
+```ruby
+gem 'permit-sdk'
+```
+
+Then run the following command to install the package:
+
+```bash
+bundle install
+```
+
+Next, add the API key to your Rails application. Do this by creating an initializer file in the `config/initializers` directory. Create a file named `permit.rb` and add the following code. It needs two environment variables `PERMIT_API_KEY` and `PDP_URL`. The `PERMIT_API_KEY` is the API key we copied from the Permit dashboard, and the `PDP_URL` is the URL of the PDP server. We will set this up later.
+
+```ruby
+# config/initializers/permit.rb
+require 'permit'
+
+# Optional safety checks
+raise "PERMIT_API_KEY is not set" unless ENV['PERMIT_API_KEY']
+raise "PDP_URL is not set" unless ENV['PDP_URL']
+
+# Initialize the Permit SDK
+PERMIT = Permit.new(
+  ENV['PERMIT_API_KEY'],
+  ENV['PDP_URL']
+)
+```
+
+Now, create a controller for syncing users, creating tenants, and checking access. Create a new file called `permit_controller.rb` in the `app/controllers` directory and add the following code:
+
+```ruby
+# app/controllers/permit_controller.rb
+class PermitController < ApplicationController
+  skip_before_action :verify_authenticity_token
+
+  def sync_user
+    user = PERMIT.api.users.sync(
+      key: params[:email],
+      email: params[:email],
+      first_name: params[:first_name],
+      last_name: params[:last_name]
+    )
+    render json: user, status: :created
+  rescue => e
+    render json: { error: e.message }, status: :internal_server_error
+  end
+
+  def create_tenant
+    tenant = PERMIT.api.tenants.create(
+      key: params[:key],
+      name: params[:name],
+      description: params[:description]
+    )
+    render json: tenant, status: :created
+  rescue => e
+    render json: { error: e.message }, status: :internal_server_error
+  end
+
+  def check_permission
+    permitted = PERMIT.check(
+      params[:user],
+      params[:action],
+      params[:resource]
+    )
+    if permitted
+      render json: { message: "User is permitted" }
+    else
+      render json: { message: "User is not permitted" }, status: :forbidden
+    end
+  rescue => e
+    render json: { error: e.message }, status: :internal_server_error
+  end
+end
+```
+
+Now, add the routes for the above controller. Open the `config/routes.rb` file and add the following code:
+
+```ruby
+Rails.application.routes.draw do
+  post '/sync-user', to: 'permit#sync_user'
+  post '/create-tenant', to: 'permit#create_tenant'
+  post '/check-permission', to: 'permit#check_permission'
+end
+```
+
+### Policy Check
+
+Before running the application and testing the routes and enforcement, we need to set up the PDP. The PDP (Policy Decision Point) is used to evaluate access requests and determine whether access should be permitted or denied, based on the policies defined in Permit.io.
+
+We can use the Permit CLI to start a PDP server locally, avoiding long Docker commands. The PDP server runs as a service that evaluates access requests. To start it, run the command below in your terminal. Ensure Docker is running on your machine, as this command starts a PDP container locally.
+
+```bash
+permit pdp run
+```
+
+After running the command, you will see output with container details such as the ID and name. The PDP server will be running locally, usually on port `7766`. You can check the logs to confirm it is running successfully or change the port if needed.
+
+![permit pdp run](/img/quick-start-guide/create-pdp.png)
+
+Once the PDP server is running, update the `PDP_URL` environment variable in your application. Now that everything is set up, let's run the application and make `curl` requests to test the sync user endpoint.
+
+![curl create user](/img/quick-start-guide/next-sync-user.png)
+
+As seen in the image above, the user is created successfully, and the response includes details like `id`, `project_id`, `key`, etc.
+
+Let's now head over to the Permit dashboard and check if the user is created successfully. To do that, select **Directory** from the left sidebar, and we can see the user we just created. Let's give this user access to the resource we created in the policy. To do that, select the user we just created. Then click on the **Add Role** button, select Tenant, and then select the **Viewer** role and save it. This will give the user access to the **Visit** resource we created in the policy. We will verify this later when we check the access. Also, we can give the access programmatically, it was a demo to show how easy it is to add access using the dashboard.
+
+![user access](/img/quick-start-guide/user-access.png)
+
+We can also add more roles and resources as per our needs.
+
+Now, let’s test policy enforcement. Since the user has been added to the **Viewer** role, we will verify access to the resource using a `curl` command to the `/api/protected/secret` route.
+
+![curl check access](/img/quick-start-guide/check-perm-next-pass.png)
+
+As seen in the image above, the user is permitted to access the resource. Let’s now remove access via the dashboard and test again.
+
+![curl check access](/img/quick-start-guide/check-perm-next-fail.png)
+
+This time, we can see that the user is not permitted to access the resource. This is how you can enforce policies using Permit.io with Rails.
+
+## Conclusion
+
+In this guide, we have learned how to integrate Permit.io with a Rails application. We created a new policy using a template with the Permit CLI, integrated the Permit SDK with our application, set up the PDP server locally using Docker, and verified user access. This guide provides a quick start to using Permit.io with Rails.
