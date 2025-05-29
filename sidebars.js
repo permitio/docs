@@ -338,6 +338,7 @@ const sidebars = {
               ],
             },
             "how-to/deploy/overview",
+            "how-to/deploy/on-prem",
             {
               type: "category",
               label: "On-Premises Deployment",
