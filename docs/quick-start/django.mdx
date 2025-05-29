@@ -1,0 +1,287 @@
+---
+title: Django
+sidebar_position: 2
+---
+
+import TimelineStep from "../../src/components/timeline/TimelineStep";
+import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
+
+# Django Quick Start Guide
+
+## Overview
+
+Django is a high-level Python web framework that encourages rapid development and clean, pragmatic design. It is built by experienced developers to help you build web applications quickly and efficiently. In this guide, we will quickly go through the steps to integrate Permit.io with Django. We will use the Permit CLI to create a new environment and a policy with a template. Then we will use the Permit SDK to integrate it with our Django application. We will also set up the PDP (Policy Decision Point) server locally using Docker.
+
+In the application code, we will look at how to sync users and tenants with Permit.io. We will also see how to check whether a user has access to a specific resource using the Permit SDK.
+
+## Prerequisites
+
+- Django application
+- Docker (for running the PDP server)
+- Node.js (for installing and running the Permit CLI)
+- Permit.io account (Follow [this](/quickstart) guide to create an account)
+
+## Getting started
+
+<TimelineWrapper>
+<TimelineStep>
+
+To get started, we will first create a new policy with a template using the Permit CLI. Assuming you have already created an account with Permit.io.
+
+### Hands-on with Permit CLI
+
+To get started, we will first install the Permit CLI. To install the CLI, execute the below command in your terminal. We will be using the CLI to create policies, run the PDP server, and perform other tasks.
+
+```bash
+npm install -g @permitio/cli
+```
+
+Once the installation is complete, execute `permit` to confirm the installation. Then to authenticate, execute `permit login`. This will open a browser window and ask you to log in with your Permit account. After logging in, the CLI will be authenticated and ready to use. This will also log into the default environment (a project can have multiple environments). We can change the environment by executing `permit env select` and then selecting the environment we want to use.
+
+Now, let's create a policy with a template. The benefit of using a template is that we can create a policy with pre-defined roles and resources with all the good practices. This will save us time and effort in creating a policy from scratch. To check the available templates, execute `permit template list`. Based on our need, we can apply the template to a new policy by executing `permit template apply <template-name>`.
+
+![cli template list](/img/quick-start-guide/env-template.png)
+
+We have used the **fga-tradeoffs** template to create a new policy.
+
+Now, let's visit the Permit dashboard to check the created policy and also get the API key that we will use to authenticate our application when using the Permit SDK.
+
+As we can see in the image below, the CLI has created Resources, Roles, and Policies. Now let's add **Read** permission to the **Viewer** for the **Visit** resource. It is very easy to add permissions using the dashboard. We can also add more roles and resources as per our need.
+
+![permit policy](/img/quick-start-guide/policy-editor-dash.png)
+
+To get the API key, click on **Projects** from the left sidebar, then click on the three dots on the environment we want to use and click on **Copy API Key** and store it in a safe place. We will be using this API key to authenticate our application with Permit.io. If you are having any difficulty in getting the API key, follow this [guide](/overview/connecting-your-app/#1-get-your-permit-environment-api-key).
+
+Once we are done, let's move toward the implementation part and integrate Permit.io with our Django application.
+
+</TimelineStep>
+<TimelineStep>
+
+### Django Integration
+
+Once you have a Django application ready (or you can create a new one for the sake of this guide), we will install the Permit's Python SDK. The Permit SDK is a Python library that allows us to interact with the Permit API. To install the Permit SDK, execute the below command in your terminal.
+
+```bash
+pip install permit
+```
+
+Read more about the Python SDK [here](/sdk/python/quickstart_python_sync).
+
+Depending on your application name, under the `settings.py` file, add the installed app and URL configurations. For this demo, it's `permit_demo`.
+
+```python
+# permit_demo/settings.py
+INSTALLED_APPS = [
+    'django.contrib.contenttypes',
+    'django.contrib.staticfiles',
+]
+
+# Allow all hosts for demo
+ALLOWED_HOSTS = ['*']
+ROOT_URLCONF = "permit_demo.urls"
+```
+
+Then under the `urls.py` file, we have to add the URL configurations. This is for the Django application to know which views to call when a specific URL is requested.
+
+```python
+# permit_demo/urls.py
+from django.urls import path
+from . import views  # views.py is in the same folder
+
+urlpatterns = [
+    path("", views.root),
+    path("sync-user", views.sync_user),
+    path("create-tenant", views.create_tenant),
+]
+```
+
+Then we need to create a new file called `views.py` under the same folder. This file contains the views for our application.
+
+```python
+import os
+import json
+from django.http import JsonResponse
+from permit import Permit
+from pydantic import BaseModel, EmailStr, ValidationError
+
+permit = Permit(
+    token=os.getenv("PERMIT_API_KEY"),
+    pdp=os.getenv("PDP_URL", ""),  # Update if your PDP URL differs
+)
+
+class UserIn(BaseModel):
+    email: EmailStr
+    first_name: str
+    last_name: str
+
+class TenantIn(BaseModel):
+    key: str
+    name: str
+    description: str | None = None
+
+async def root(request):
+    return JsonResponse({"message": "Hello, Permit-Django!"})
+
+async def sync_user(request):
+    try:
+        data = json.loads(request.body)
+        user = UserIn(**data)
+    except ValidationError as e:
+        return JsonResponse(e.errors(), status=422, safe=False)
+
+    synced = await permit.api.users.sync({
+        "key": user.email,
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+    })
+    return JsonResponse(synced.dict() if hasattr(synced, "dict") else vars(synced), status=201)
+
+async def create_tenant(request):
+    try:
+        data = json.loads(request.body)
+        tenant = TenantIn(**data)
+    except ValidationError as e:
+        return JsonResponse(e.errors(), status=422, safe=False)
+
+    created = await permit.api.tenants.create({
+        "key": tenant.key,
+        "name": tenant.name,
+        "description": tenant.description,
+    })
+    return JsonResponse(created.dict() if hasattr(created, "dict") else vars(created), status=201)
+```
+
+At the top of the file, we have imported the required libraries. We have imported `os` to access the environment variables, `json` to parse the request body, `JsonResponse` from Django to return JSON responses, `Permit` from the Permit SDK to interact with Permit.io, and `BaseModel`, `EmailStr`, and `ValidationError` from Pydantic to validate the request body. Then we have initialized the Permit SDK with the required two environment variables `PERMIT_API_KEY` and `PDP_URL`. The `PERMIT_API_KEY` is the API key we copied from the Permit dashboard, and the `PDP_URL` is the URL of the PDP server. We will set this up later.
+
+Then we have defined two models `UserIn` and `TenantIn` to validate the request body. The `UserIn` model contains the user details, and the `TenantIn` model contains the tenant details. We are using Pydantic to validate the request body and return errors if any.
+
+```python
+async def root(request):
+    return JsonResponse({"message": "Hello, Permit-Django!"})
+
+async def sync_user(request):
+    try:
+        data = json.loads(request.body)
+        user = UserIn(**data)
+    except ValidationError as e:
+        return JsonResponse(e.errors(), status=422, safe=False)
+
+    synced = await permit.api.users.sync({
+        "key": user.email,
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+    })
+    return JsonResponse(synced.dict() if hasattr(synced, "dict") else vars(synced), status=201)
+
+async def create_tenant(request):
+    try:
+        data = json.loads(request.body)
+        tenant = TenantIn(**data)
+    except ValidationError as e:
+        return JsonResponse(e.errors(), status=422, safe=False)
+
+    created = await permit.api.tenants.create({
+        "key": tenant.key,
+        "name": tenant.name,
+        "description": tenant.description,
+    })
+    return JsonResponse(created.dict() if hasattr(created, "dict") else vars(created), status=201)
+```
+
+In this above code, we have defined three endpoints. The first endpoint is the root endpoint which returns a simple message. The second endpoint is `/sync-user` which will sync the user with Permit.io. We are using the `sync` method to sync the user with Permit.io. The `sync` method takes a dictionary with the user details and returns a response. We are using Pydantic to validate the request body and return errors if any.
+
+The third endpoint is `/create-tenant` which will create a tenant in Permit.io. We are using the `create` method to create the tenant. The `create` method takes a dictionary with the tenant details and returns a response.
+
+Once we are done with the code, let's run the Django application and test the `sync-user` using `curl`.
+
+![curl create user](/img/quick-start-guide/sync-user.png)
+
+As we can see in the above image, the user is created successfully, and we get a lot of information about the user in the response like `id`, `project_id`, `key`, etc.
+
+Let's now head over to the Permit dashboard and check if the user is created successfully. To do that, select **Directory** from the left sidebar, and we can see the user we just created. Let's give this user access to the resource we created in the policy. To do that, select the user we just created. Then click on the **Add Role** button, select Tenant, and then select the **Viewer** role and save it. This will give the user access to the **Visit** resource we created in the policy. We will verify this later when we check the access. Also, we can give the access programmatically, it was a demo to show how easy it is to add access using the dashboard.
+
+![user access](/img/quick-start-guide/user-access.png)
+
+We can also add more roles and resources as per our need. Now, let's set up the PDP server and check the access.
+
+</TimelineStep>
+<TimelineStep>
+
+### Policy Check
+
+Now, our application is ready by syncing the user and we have a policy created. Let's enforce and check the policy. To enforce the policy, we use Permit's PDP (Policy Decision Point) to check if the user has access to the resource. So first, let's set up the PDP.
+
+We can leverage the Permit CLI to start a PDP server locally. Otherwise, we would need to run long Docker commands to start the PDP server. The PDP server is a service that evaluates access requests and returns a decision (permit or deny) based on the policies defined in Permit.io. To start it, execute the below command in your terminal. Make sure Docker is running on your machine, as this will start a PDP container locally.
+
+```bash
+permit pdp run
+```
+
+Once you execute the above command, you will see an output like below with information like container ID, name, etc. It will start a PDP server locally on your machine. You can check the logs to see if the PDP server is running successfully. The PDP server will be running on port `7766` by default. You can also change the port.
+
+![permit pdp run](/img/quick-start-guide/create-pdp.png)
+
+Once the PDP server is running, update the `PDP_URL` environment variable in your application. To check the access, we will create a new endpoint `/check-permission` in our Django application. This endpoint will check if the user has access to the resource. Below is the code for the new endpoint. We need to modify the existing code to add the new endpoint like below.
+
+```python
+# permit_demo/views.py
+.
+class PermissionCheck(BaseModel):
+    user: str
+    action: str
+    resource: str
+.
+.
+.
+async def check_permission(request):
+    try:
+        data = json.loads(request.body)
+        check = PermissionCheck(**data)
+    except ValidationError as e:
+        return JsonResponse(e.errors(), status=422, safe=False)
+
+    permitted = await permit.check(check.user, check.action, check.resource)
+    return JsonResponse(
+        {"message": "User is permitted"} if permitted else {"message": "User is not permitted"},
+        status=200 if permitted else 403
+    )
+```
+
+In this code, we are using the `check` method to check if the user has access to the resource. The `check` method takes three parameters: `user`, `action`, and `resource`. The `user` is the unique key of the user, `action` is the action that the user is trying to perform, and `resource` is the resource that the user is trying to access. If the user is permitted, it returns true, otherwise false. We are using the `check` method of the `Permit` class to check if the user has access to the resource.
+
+And then we need to add the new endpoint to the `urls.py` file.
+
+```python
+# permit_demo/urls.py
+.
+urlpatterns = [
+    .
+    .
+    path("check-permission", views.check_permission),  # New endpoint to check access
+]
+```
+
+Now, everything is ready, let's restart the FastAPI server and test and check the access using `curl`. As we have created a user and gave them access to the resource via the dashboard, it should be permitted to access the resource.
+
+![curl check access](/img/quick-start-guide/check-perm-pass.png)
+
+As we can see in the image above, the user is permitted to access the resource. To check it works the other way around, let's remove the access from the dashboard and check again.
+
+![curl check access](/img/quick-start-guide/check-perm-fail.png)
+
+Now this time, we can see that the user is not permitted to access the resource. This is how we can enforce policies using Permit.io with Django.
+
+</TimelineStep>
+</TimelineWrapper>
+
+## Conclusion
+
+In this guide, we have seen how to integrate Permit.io with Django. We have created a new policy with a template using the Permit CLI. We have also set up the PDP server locally using Docker. We have synced the user and tenant with Permit.io and checked the access using the Permit SDK. This is how easy it is to integrate Permit.io with Django and enforce policies in your application.
+
+## Further Reading
+
+- [Learn how you can do Frontend Authorization with CASL](/integrations/feature-flagging/casl)
+- [Manage your Policy Life Cycle - Ci/CD](/how-to/SDLC/CI-CD)
+- [GitOps and Custom Polices (PBAC)](/integrations/gitops/overview)

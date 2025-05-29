@@ -1,0 +1,270 @@
+---
+title: Express.js
+sidebar_position: 6
+---
+
+import TimelineStep from "../../src/components/timeline/TimelineStep";
+import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
+
+# Express.js Quick Start Guide
+
+## Overview
+
+Express.js is a minimal and flexible Node.js web application framework that provides a robust set of features for web and mobile applications. In this guide, we will quickly go through the steps to integrate Permit.io with Express.js. We will use the Permit CLI to create a new environment and a policy with a template. Then, we will use the Permit SDK to integrate it with our Express.js application. We will also set up the PDP (Policy Decision Point) server locally using Docker.
+
+We will create a simple Express.js application that will sync users and tenants with Permit.io. We will also create endpoints to check the access of the user to the resources. We will use the Permit SDK to enforce policies and check the user's access.
+
+## Prerequisites
+
+- Express application  
+- Docker (for running the PDP server)  
+- Node.js (for installing and running the Permit CLI)  
+- Permit.io account (Follow [this](/quickstart) guide to create an account)
+
+## Getting started
+
+<TimelineWrapper>
+<TimelineStep>
+
+To get started, we will first create a new policy with a template using the Permit CLI, assuming you have already created an account with Permit.io.
+
+### Hands-on with Permit CLI
+
+To get started, we will first install the Permit CLI. To install the CLI, execute the command below in your terminal. We will be using the CLI to create policies, run the PDP server, and perform other tasks.
+
+```bash
+npm install -g @permitio/cli
+```
+
+Once the installation is complete, execute `permit` to confirm the installation. Then, to authenticate, execute `permit login`. This will open a browser window and ask you to log in with your Permit account. After logging in, the CLI will be authenticated and ready to use. This will also log you into the default environment (a project can have multiple environments). We can change the environment by executing `permit env select` and then selecting the environment we want to use.
+
+Now, let's create a policy with a template. The benefit of using a template is that we can create a policy with predefined roles and resources using best practices. This will save us time and effort in creating a policy from scratch. To check the available templates, execute `permit template list`. Based on our needs, we can apply the template to a new policy by executing `permit template apply <template-name>`.
+
+![cli template list](/img/quick-start-guide/env-template.png)
+
+We have used the **fga-tradeoffs** template to create a new policy.
+
+Now, let's visit the Permit dashboard to check the created policy and also get the API key that we will use to authenticate our application when using the Permit SDK.
+
+As we can see in the image below, the CLI has created Resources, Roles, and Policies. Now, let's add **Read** permission to the **Viewer** for the **Visit** resource. It is very easy to add permissions using the dashboard. We can also add more roles and resources as per our needs.
+
+![permit policy](/img/quick-start-guide/policy-editor-dash.png)
+
+To get the API key, click on **Projects** from the left sidebar, then click on the three dots on the environment we want to use, and click on **Copy API Key** and store it in a safe place. We will be using this API key to authenticate our application with Permit.io. If you are having any difficulty getting the API key, follow this [guide](/overview/connecting-your-app/#1-get-your-permit-environment-api-key).
+
+Once we are done, let's move toward the implementation part and integrate Permit.io with our Express.js application.
+
+</TimelineStep>
+<TimelineStep>
+
+### Express.js Integration
+
+Once you have an Express.js application ready (or you can create a new one for the sake of this guide), we can integrate Permit.io with it. First, we need to install the Permit's Node.js SDK. To install the SDK, execute the command below in your terminal.
+
+```bash
+npm install permitio
+```
+
+Read more about the Node.js SDK [here](/sdk/nodejs/quickstart-nodejs).
+
+Below is a sample implementation of the Permit SDK in an Express.js application. We will understand each part of the code in detail below.
+
+```js
+const express = require('express');
+const bodyParser = require('body-parser');
+const { Permit } = require('permitio');
+
+const app = express();
+const port = 8000;
+
+app.use(bodyParser.json());
+
+const permit = new Permit({
+  token: process.env.PERMIT_API_KEY,
+  pdp: process.env.PDP_URL,
+});
+
+app.get('/', (req, res) => {
+  res.json({ message: 'Hello, Express with Permit!' });
+});
+
+app.post('/sync-user', async (req, res) => {
+  const { email, first_name, last_name } = req.body;
+
+  if (!email || !first_name || !last_name) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    const user = await permit.api.users.sync({
+      key: email,
+      email,
+      first_name,
+      last_name,
+    });
+
+    res.status(201).json(user);
+  } catch (err) {
+    console.error('Failed to sync user:', err);
+    res.status(500).json({ error: 'Failed to sync user' });
+  }
+});
+
+app.post('/create-tenant', async (req, res) => {
+  const { key, name, description } = req.body;
+
+  if (!key || !name) {
+    return res.status(400).json({ error: 'Missing key or name' });
+  }
+
+  try {
+    const tenant = await permit.api.tenants.create({
+      key,
+      name,
+      description,
+    });
+
+    res.status(201).json(tenant);
+  } catch (err) {
+    console.error('Failed to create tenant:', err);
+    res.status(500).json({ error: 'Failed to create tenant' });
+  }
+});
+
+app.listen(port, () => {
+  console.log(`Server running at http://localhost:${port}`);
+});
+```
+
+At the top, we have imported the required modules. We have imported `express` to create the server, `body-parser` to parse the request body, and `Permit` from `permitio` to use the Permit SDK.
+
+Then we have created an express server and set the port to `8000`. We have also used `body-parser` to parse the request body in JSON format. Then we have created an instance of the `Permit` class. It needs two environment variables `PERMIT_API_KEY` and `PDP_URL`. The `PERMIT_API_KEY` is the API key we copied from the Permit dashboard, and the `PDP_URL` is the URL of the PDP server. We will set this up later.
+
+```js
+app.get('/', (req, res) => {
+  res.json({ message: 'Hello, Express with Permit!' });
+});
+
+app.post('/sync-user', async (req, res) => {
+  const { email, first_name, last_name } = req.body;
+
+  if (!email || !first_name || !last_name) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    const user = await permit.api.users.sync({
+      key: email,
+      email,
+      first_name,
+      last_name,
+    });
+
+    res.status(201).json(user);
+  } catch (err) {
+    console.error('Failed to sync user:', err);
+    res.status(500).json({ error: 'Failed to sync user' });
+  }
+});
+
+app.post('/create-tenant', async (req, res) => {
+  const { key, name, description } = req.body;
+
+  if (!key || !name) {
+    return res.status(400).json({ error: 'Missing key or name' });
+  }
+
+  try {
+    const tenant = await permit.api.tenants.create({
+      key,
+      name,
+      description,
+    });
+
+    res.status(201).json(tenant);
+  } catch (err) {
+    console.error('Failed to create tenant:', err);
+    res.status(500).json({ error: 'Failed to create tenant' });
+  }
+});
+
+app.listen(port, () => {
+  console.log(`Server running at http://localhost:${port}`);
+});
+```
+
+In the above code, we have created two endpoints. The first endpoint is `/sync-user`, which will sync the user with Permit.io. The second endpoint is `/create-tenant`, which will create a tenant with Permit.io. We have used the `sync` method to sync the user and the `create` method to create the tenant. The `sync` method takes an object with the user details, and the `create` method takes an object with the tenant details. We have also added error handling to manage any errors that may occur while syncing the user or creating the tenant.
+
+Once everything is done and the server is running, we can test the endpoints using `curl`.
+
+![curl create user](/img/quick-start-guide/sync-user.png)
+
+As we can see in the image above, the user is created successfully and we get a lot of information about the user in the response, such as `id`, `project_id`, `key`, etc.
+
+Let's now head over to the Permit dashboard and check if the user is created successfully. To do that, select **Directory** from the left sidebar, and we can see the user we just created. Let's give this user access to the resource we created in the policy. To do that, select the user we just created. Then click on the **Add Role** button, select Tenant, and then select the **Viewer** role and save it. This will give the user access to the **Visit** resource we created in the policy. We will verify this later when we check the access. Also, we can give the access programmatically, it was a demo to show how easy it is to add access using the dashboard.
+
+![user access](/img/quick-start-guide/user-access.png)
+
+We can also add more roles and resources as per our needs. Now, let's set up the PDP server and check the access.
+
+</TimelineStep>
+<TimelineStep>
+
+### Policy Check
+Now, our application is ready by syncing the user and having a policy created. Let's enforce and check the policy. To enforce the policy, we use Permit's PDP (Policy Decision Point) to check if the user has access to the resource. So first, let's set up the PDP.
+
+We can leverage the Permit CLI to start a PDP server locally. Otherwise, we would need to run long Docker commands to start the PDP server. The PDP server is a service that evaluates access requests and returns a decision (permit or deny) based on the policies defined in Permit.io. To start it, execute the command below in your terminal. Make sure Docker is running on your machine, as this will start a PDP container locally.
+
+```bash
+permit pdp run
+```
+
+Once you execute the above command, you will see an output like the one below, with information such as container ID, name, etc. It will start a PDP server locally on your machine. You can check the logs to see if the PDP server is running successfully. The PDP server will be running on port `7766` by default. You can also change the port.
+
+Once the PDP server is running, update the `PDP_URL` environment variable in your application. To check the access, we will create a new endpoint `/check-permission` in our Express.js application. This endpoint will check if the user has access to the resource. Below is the code for the new endpoint. We need to modify the existing code to add the new endpoint like below.
+
+```js
+app.post('/check-permission', async (req, res) => {
+  const { user, action, resource } = req.body;
+
+  if (!user || !action || !resource) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    const permitted = await permit.check(user, action, resource);
+    if (permitted) {
+      res.json({ message: 'User is permitted' });
+    } else {
+      res.status(403).json({ message: 'User is not permitted' });
+    }
+  } catch (err) {
+    console.error('Permission check failed:', err);
+    res.status(500).json({ error: 'Permission check failed' });
+  }
+});
+```
+
+The endpoint takes three parameters: `user`, `action`, and `resource`. The `user` is the unique key of the user, `action` is the action that the user is trying to perform, and `resource` is the resource that the user is trying to access. The `check` method will check if the user has access to the resource and return a boolean value. If the user is permitted to access the resource, it returns `true`; otherwise, it returns `false`.
+
+Now, everything is ready. Let's restart the Express.js server and test the access using `curl`. As we have created a user and given them access to the resource via the dashboard, they should be permitted to access the resource.
+
+![curl check access](/img/quick-start-guide/check-perm-pass.png)
+
+As we can see in the image above, the user is permitted to access the resource. To verify it works the other way around, let's remove the access from the dashboard and check again.
+
+![curl check access](/img/quick-start-guide/check-perm-fail.png)
+
+Now, this time, we can see that the user is not permitted to access the resource. This is how we can enforce policies using Permit.io with Express.js.
+
+</TimelineStep>
+</TimelineWrapper>
+
+## Conclusion
+
+In this guide, we have learned how to integrate Permit.io with Express.js. We have created a simple Express.js application that syncs users and tenants with Permit.io. We have also created endpoints to check the user's access to the resources. We have used the Permit SDK to enforce policies and check access. We have also set up the PDP server locally using Docker.
+
+## Further Reading
+
+- [Learn how you can do Frontend Authorization with CASL](/integrations/feature-flagging/casl)
+
