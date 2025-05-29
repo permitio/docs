@@ -1,0 +1,422 @@
+---
+title: "Reference Documentation"
+description: "Detailed reference materials and advanced configurations"
+---
+
+# Reference Documentation
+
+Comprehensive reference materials for advanced configuration and administration.
+
+## Command Reference
+
+### Installation Commands
+
+```bash
+# Interactive installation
+sudo ./install.sh
+
+# Automated installation
+sudo ./install.sh \
+  --size {small|medium|large} \
+  --domain "permit.yourcompany.com" \
+  --git-repo "git@github.com:org/repo.git" \
+  --git-key "./private-key" \
+  [--ip-access] \
+  [--config config.yaml]
+
+# Multi-server installation
+sudo ./install.sh \
+  --mode {cluster|join} \
+  --server <ip> \
+  --token <token> \
+  [other options...]
+
+# Configuration file installation
+sudo ./install.sh --config permit-config.yaml
+```
+
+### Management Commands
+
+```bash
+# Status and monitoring
+./scripts/status.sh [--detailed|--resources|--version]
+./scripts/health-check.sh [--endpoints|--services]
+./scripts/metrics.sh [--performance|--resources]
+
+# Logging
+./scripts/logs.sh [service-name] [--follow|--since=24h]
+./scripts/collect-logs.sh [--include-system|--emergency]
+
+# Service management
+./scripts/restart.sh [service-name]
+./scripts/reload.sh [service-name]
+./scripts/stop.sh [service-name]
+./scripts/start.sh [service-name]
+
+# Scaling
+./scripts/scale.sh <service> --replicas <number>
+./scripts/scale.sh --auto-enable
+./scripts/resources.sh <service> --memory <size> --cpu <size>
+
+# Git management
+./scripts/policy-status.sh
+./scripts/policy-sync.sh [--force]
+./scripts/test-git.sh
+./scripts/update-git-config.sh --repo <url> --key <path>
+
+# Backup and recovery
+./scripts/backup.sh [--full|--database|--config] [--schedule <freq>]
+./scripts/restore.sh --backup <file>
+./scripts/backup.sh --list
+
+# Updates
+./scripts/update.sh [--check]
+./scripts/rollback.sh [--version <ver>] [--emergency]
+
+# Security
+./scripts/certificates.sh [--status|--renew|--update]
+./scripts/rotate-passwords.sh [--database|--services|--api-keys]
+./scripts/security-audit.sh
+
+# Cluster management (multi-server)
+./scripts/cluster.sh [--status|--add-node|--remove-node|--health]
+./scripts/loadbalancer.sh [--status|--update|--test]
+
+# Maintenance
+./scripts/maintenance.sh [--enable|--disable|--run-tasks]
+./scripts/emergency.sh [--stop|--restart|--safe-mode|--diagnose]
+./scripts/cleanup.sh
+```
+
+## Configuration Reference
+
+### Configuration File Format
+
+```yaml
+# permit-config.yaml
+deployment:
+  mode: single              # single, cluster, join
+  size: medium             # small, medium, large
+  
+git:
+  repository: "git@github.com:org/repo.git"
+  private_key_path: "./permit-policy-key"
+  branch: "main"           # optional, defaults to main
+  
+networking:
+  domain: "permit.yourcompany.com"  # optional
+  ip_access: false         # true for IP-based access
+  ssl_enabled: true
+  http_port: 80           # optional
+  https_port: 443         # optional
+  
+resources:
+  backend:
+    replicas: 3
+    cpu: "1000m"
+    memory: "2Gi"
+  celery:
+    replicas: 2
+    cpu: "500m"
+    memory: "1Gi"
+  database:
+    cpu: "2000m"
+    memory: "4Gi"
+    storage: "100Gi"
+    
+security:
+  ssl_only: true
+  strong_passwords: true
+  audit_logging: true
+  network_policies: false
+  
+certificates:
+  auto_renew: true
+  provider: "letsencrypt"  # letsencrypt, custom
+  email: "admin@yourcompany.com"  # for letsencrypt
+  
+backup:
+  enabled: true
+  schedule: "daily"        # daily, weekly, custom
+  retention_days: 30
+  storage_path: "/backups"
+  
+monitoring:
+  enabled: true
+  metrics_retention: "7d"
+  log_retention: "30d"
+```
+
+### Environment Variables
+
+The platform uses these environment variables:
+
+```bash
+# Database configuration
+PG_DSN="postgresql+asyncpg://user:pass@host:5432/db"
+PG_READ_DSN="postgresql+asyncpg://user:pass@host:5432/db"
+
+# Cache configuration  
+REDIS_DSN="redis://host:6379"
+REDIS_READ_DSN="redis://host:6379"
+
+# Message queue
+AMQP_DSN="amqp://user:pass@host:5672/"
+AMQP_EXCHANGE="permit-exchange"
+
+# Git configuration
+POLICY_REPO_URL="git@github.com:org/repo.git"
+POLICY_REPO_AUTH_PRIVATE_KEY="<ssh-private-key>"
+
+# Service URLs
+API_URL="http://permit-backend-v2"
+OPAL_SERVER_URL="http://opal-server"
+RELAY_STATISTICS_URL="http://permit-opal-relay-consumer-v2"
+
+# Security
+OPAL_MASTER_TOKEN="<secure-token>"
+LOCAL_JWT_KEY="<jwt-private-key>"
+
+# Logging
+LOG_LEVEL="INFO"           # DEBUG, INFO, WARNING, ERROR
+LOG_JSON_TO_STDERR="false"
+
+# Features
+ENABLE_MONITORING="true"
+ENABLE_TRACING="false"
+```
+
+## Service Architecture
+
+### Service Components
+
+```mermaid
+graph TB
+    LB[Load Balancer/Ingress] --> BE[Backend API]
+    BE --> DB[(PostgreSQL)]
+    BE --> REDIS[(Redis)]
+    BE --> MQ[(RabbitMQ)]
+    
+    BE --> OPAL[OPAL Server]
+    OPAL --> OI[OPAL Interface]
+    OPAL --> OR[OPAL Relay]
+    
+    BE --> PS[Policy Sync]
+    PS --> GIT[Git Repository]
+    
+    BE --> CELERY[Celery Workers]
+    CELERY --> MQ
+    
+    BE --> PDP[Policy Decision Point]
+    
+    BE --> OS[(OpenSearch)]
+```
+
+### Service Responsibilities
+
+| Service | Purpose | Scaling Strategy |
+|---------|---------|------------------|
+| **Backend API** | Main application API | Horizontal (3-10 replicas) |
+| **Celery Workers** | Background task processing | Horizontal (2-8 replicas) |
+| **OPAL Server** | Policy distribution | Vertical (1-2 replicas) |
+| **OPAL Interface** | OPAL API interface | Horizontal (2-5 replicas) |
+| **Policy Sync** | Git repository sync | Vertical (1 replica) |
+| **PDP** | Authorization decisions | Horizontal (3-20 replicas) |
+| **PostgreSQL** | Primary database | Vertical + read replicas |
+| **Redis** | Cache and sessions | Master + replicas |
+| **RabbitMQ** | Message queue | Cluster (3-5 nodes) |
+| **OpenSearch** | Audit logs and search | Cluster (1-3 nodes) |
+
+## Network Architecture
+
+### Port Requirements
+
+| Port | Service | Purpose | External Access |
+|------|---------|---------|-----------------|
+| 80 | HTTP | Web interface redirect | Yes |
+| 443 | HTTPS | Web interface | Yes |
+| 6443 | k3s API | Kubernetes API | Internal only |
+| 10250 | kubelet | Node communication | Internal only |
+| 5432 | PostgreSQL | Database | Internal only |
+| 6379 | Redis | Cache | Internal only |
+| 5672 | RabbitMQ | Message queue | Internal only |
+| 9200 | OpenSearch | Search engine | Internal only |
+
+### Security Groups
+
+For cloud deployments, configure security groups:
+
+```yaml
+# External access (from internet/users)
+ingress:
+  - port: 80
+    protocol: TCP
+    source: 0.0.0.0/0
+  - port: 443  
+    protocol: TCP
+    source: 0.0.0.0/0
+
+# Internal cluster communication
+ingress:
+  - port: 6443
+    protocol: TCP
+    source: <cluster-cidr>
+  - port: 10250
+    protocol: TCP  
+    source: <cluster-cidr>
+  - port: 5432-9200
+    protocol: TCP
+    source: <cluster-cidr>
+```
+
+## Backup and Recovery
+
+### Backup Types
+
+| Type | Contents | Frequency | Retention |
+|------|----------|-----------|-----------|
+| **Full** | Database + configs + volumes | Weekly | 12 weeks |
+| **Database** | PostgreSQL data only | Daily | 30 days |
+| **Config** | Configuration files only | Before changes | 10 versions |
+| **Emergency** | Critical data for recovery | On-demand | 7 days |
+
+### Backup Locations
+
+```bash
+# Default backup paths
+/opt/permit-platform/backups/
+├── full/
+│   ├── backup-20241201-full.tar.gz
+│   └── backup-20241208-full.tar.gz
+├── database/
+│   ├── backup-20241210-db.sql.gz
+│   └── backup-20241211-db.sql.gz
+├── config/
+│   └── backup-20241210-config.tar.gz
+└── emergency/
+    └── backup-20241210-emergency.tar.gz
+```
+
+### Recovery Procedures
+
+```bash
+# Recovery priority order:
+1. ./scripts/restart.sh              # Service restart
+2. ./scripts/restore.sh --database   # Database restore
+3. ./scripts/restore.sh --config     # Config restore  
+4. ./scripts/restore.sh --full       # Full restore
+5. ./scripts/emergency.sh --reinstall # Complete reinstall
+```
+
+## Performance Tuning
+
+### Resource Sizing Guidelines
+
+**Small Deployment (Development/Testing):**
+```yaml
+resources:
+  backend: { replicas: 2, cpu: "500m", memory: "1Gi" }
+  celery: { replicas: 1, cpu: "250m", memory: "512Mi" }
+  database: { cpu: "1000m", memory: "2Gi", storage: "50Gi" }
+  redis: { cpu: "250m", memory: "512Mi", storage: "10Gi" }
+```
+
+**Medium Deployment (Production):**
+```yaml
+resources:
+  backend: { replicas: 3, cpu: "1000m", memory: "2Gi" }
+  celery: { replicas: 2, cpu: "500m", memory: "1Gi" }
+  database: { cpu: "2000m", memory: "4Gi", storage: "100Gi" }
+  redis: { cpu: "500m", memory: "1Gi", storage: "20Gi" }
+```
+
+**Large Deployment (Enterprise):**
+```yaml
+resources:
+  backend: { replicas: 5, cpu: "2000m", memory: "4Gi" }
+  celery: { replicas: 4, cpu: "1000m", memory: "2Gi" }
+  database: { cpu: "4000m", memory: "8Gi", storage: "200Gi" }
+  redis: { cpu: "1000m", memory: "2Gi", storage: "50Gi" }
+```
+
+### Performance Monitoring
+
+```bash
+# Key metrics to monitor
+./scripts/metrics.sh --performance
+
+# Database performance
+./scripts/metrics.sh --database-performance
+
+# API response times
+./scripts/metrics.sh --api-performance
+
+# Resource utilization
+./scripts/metrics.sh --resource-utilization
+```
+
+## Security Hardening
+
+### Security Checklist
+
+- [ ] **SSL/TLS enabled** for all external connections
+- [ ] **Strong passwords** generated for all services
+- [ ] **Network policies** configured (if enabled)
+- [ ] **Regular backups** scheduled and tested
+- [ ] **Security scanning** enabled
+- [ ] **Audit logging** configured
+- [ ] **Certificate auto-renewal** configured
+- [ ] **Access controls** properly configured
+- [ ] **Git repository** secured with deploy keys
+- [ ] **Regular updates** applied
+
+### Security Monitoring
+
+```bash
+# Security audit
+./scripts/security-audit.sh
+
+# Check for vulnerabilities
+./scripts/security-scan.sh
+
+# Review access logs
+./scripts/audit-logs.sh --since 24h
+
+# Certificate status
+./scripts/certificates.sh --status
+```
+
+## Compliance and Auditing
+
+### Audit Log Locations
+
+```bash
+# Platform audit logs
+/var/log/permit-platform/audit.log
+
+# System audit logs
+/var/log/audit/audit.log
+
+# Application logs
+/var/log/permit-platform/application.log
+
+# Access logs
+/var/log/permit-platform/access.log
+```
+
+### Compliance Reports
+
+```bash
+# Generate compliance report
+./scripts/compliance-report.sh --format pdf
+
+# Export audit logs
+./scripts/export-audit-logs.sh --since 30d --format json
+
+# Security assessment
+./scripts/security-assessment.sh --detailed
+```
+
+---
+
+**Need more specific information?** Contact our support team for advanced configuration assistance.
