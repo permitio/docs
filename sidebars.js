@@ -39,7 +39,7 @@ const sidebars = {
                     </div>
                     API Reference
                   </a>
-                  <a target="_blank" rel="noopener noreferrer" href="https://permit-io.slack.com/join/shared_invite/zt-nz6yjgnp-RlP9rtOPwO0n0aH_vLbmBQ#/shared-invite/email">
+                  <a target="_blank" rel="noopener noreferrer" href="https://io.permit.io/slack">
                     <div>
                       <img src="/sidebar-top-icons/normal-icons/slack.svg" alt='' />
                       <img src="/sidebar-top-icons/hover-icons/slack.svg" alt='' />
