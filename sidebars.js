@@ -88,9 +88,9 @@ const sidebars = {
             "overview/use-the-permit-api-and-sdk",
             "overview/sync-your-first-user-with-sdk",
             "overview/perform-policy-check-with-cloud-pdp",
+            "overview/permit-cli-quickstart",
             "overview/local-authorization-microservice",
             "overview/setup-attribute-based-access-control",
-            // "overview/perform-a-local-policy-check",
             "overview/create-a-rebac-policy",
             "overview/sync-applications-data",
             "overview/advanced-authorization-queries",
@@ -398,6 +398,11 @@ const sidebars = {
       collapsible: false,
       className: "category-as-header",
       items: [
+        {
+          type: "doc",
+          id: "sdk/permit-cli-reference",
+          label: "Permit CLI",
+        },
         {
           type: "category",
           label: "NodeJS",
