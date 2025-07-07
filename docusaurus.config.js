@@ -547,7 +547,7 @@ const config = {
     ],
     "docusaurus-plugin-sass",
     "docusaurus-plugin-hotjar",
-    "plugin-image-zoom",
+    "docusaurus-plugin-image-zoom",
     async function TailwindCSSPlugin(context, options) {
       return {
         name: "docusaurus-tailwindcss",
@@ -564,7 +564,7 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
-      imageZoom: {
+      zoom: {
         selector: ".markdown :not(em) > img",
       },
       hotjar: {

@@ -335,18 +335,140 @@ The PDP server includes a configurable caching mechanism that significantly impr
 When enabled, the cache stores results of policy decisions with a configurable time-to-live (TTL), providing performance benefits for frequently evaluated permissions.
 
 You can configure the cache to use either an in-memory store for single instance deployments or Redis for distributed caching across multiple PDP instances. 
+
+For the `/allowed/bulk` endpoint, the cache is applied to each individual query within the bulk request. 
+The cache is shared with the `/allowed` endpoint, meaning individual permission checks within a bulk request can benefit from previously cached results from single `/allowed` calls and vice versa.
+
 Note that while caching significantly improves performance, it may lead to temporarily inaccurate results if permissions change during the cache TTL period.
 
-:::info Available from PDP v0.9.0
-PDP caching is currently in Early Access Preview (EAP).
-:::
-
 **Supported APIs:**
+- ✅ `/allowed`
+- ✅ `/allowed/bulk`
 - ✅ `/user-permissions`
-- 🔜 `/allowed` (coming soon)
-- 🔜 `/authorized_users` (coming soon)
+- ✅ `/authorized_users`
+
 
 For detailed configuration options, see the [Cache Configuration](/concepts/pdp/configuration#pdp_cache_store) section.
+
+## AuthZen Compatibility
+
+Permit's PDP is compatible with the [OpenID AuthZen Authorization API 1.0](https://openid.github.io/authzen/) specification, providing a standardized way for Policy Enforcement Points (PEPs) to communicate with Policy Decision Points (PDPs). 
+The AuthZen protocol enables interoperability between different authorization systems by defining a common API interface.
+
+### Access Evaluation
+
+Check if a subject can perform an action on a resource.
+
+```bash
+curl -X POST http://localhost:7766/v1/access/evaluation \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "subject": { "type": "user", "id": "alice@example.com" },
+    "action": { "name": "read" },
+    "resource": {
+      "type": "document",
+      "id": "doc123",
+      "properties": { "tenant": "default", "is_public": true }
+    },
+  }'
+```
+
+Response: `{"decision": true}`
+
+:::info
+Notice that we pass the `tenant` property along with inline ABAC attributes via the `properties` field.
+:::
+
+### Bulk Access Evaluations
+
+Evaluate multiple access requests with top-level attributes.
+
+```bash
+curl -X POST http://localhost:7766/v1/access/evaluations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "subject": {
+      "type": "user",
+      "id": "alice@example.com",
+      "properties": { "department": "engineering" }
+    },
+    "evaluations": [
+      {
+        "action": {"name": "read"},
+        "resource": {"type": "document", "id": "doc123", "properties": {"tenant": "default"}}
+      },
+      {
+        "action": {"name": "write"},
+        "resource": {"type": "document", "id": "doc456", "properties": {"tenant": "default"}}
+      }
+    ]
+  }'
+```
+
+Response: `{"evaluations": [{"decision": true}, {"decision": false}]}`
+
+### Subject Search
+
+Find subjects that can perform an action on a resource.
+
+```bash
+curl -X POST http://localhost:7766/v1/subjects \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "action": {"name": "read"},
+    "resource": {
+      "type": "document",
+      "id": "doc123",
+      "properties": {"tenant": "default"}
+    },
+  }'
+```
+
+Response: `{"subjects": [{"type": "user", "id": "alice@example.com"}]}`
+
+### Resource Search
+
+Find resources a subject can access for a given action.
+
+```bash
+curl -X POST http://localhost:7766/v1/resources \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "subject": { "type": "user", "id": "alice@example.com" },
+    "action": {"name": "read"},
+  }'
+```
+
+Response: `{"resources": [{"type": "document", "id": "doc123"}]}`
+
+### Action Search
+
+Find actions a subject can perform on a resource.
+
+```bash
+curl -X POST http://localhost:7766/v1/actions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "subject": {"type": "user", "id": "alice@example.com"},
+    "resource": {
+      "type": "document",
+      "id": "doc123",
+      "properties": {"tenant": "default"}
+    },
+  }'
+```
+
+Response: `{"actions": [{"name": "read"}, {"name": "write"}]}`
+
+:::info
+The AuthZen protocol is fully compatible with Permit's existing policy models. 
+All policy changes made through the Permit dashboard or API are immediately available through the AuthZen endpoints.
+:::
 
 ## Powered by OPA+OPAL
 

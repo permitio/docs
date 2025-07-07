@@ -1,0 +1,251 @@
+---
+title: Permit-Prisma Client Extension
+sidebar_label: Prisma ORM
+description: Integrate Permit.io fine-grained permissions directly into Prisma Client queries using the @permitio/permit-prisma extension.
+---
+
+# Permit-Prisma Extension
+
+The Permit-Prisma extension integrates Permit.io's fine-grained authorization directly into your Prisma ORM queries, ensuring every database operation respects your centralized permission policies.
+
+This integration works at the data layer, automatically enforcing access controls for create, read, update, and delete operations across your application.
+
+## Key Capabilities
+
+The Permit-Prisma extension provides three core capabilities:
+
+1. **Direct Permission Checks**: Automatically verifies if users are authorized to perform specific actions on resources before executing database operations.
+
+2. **Permission Filtering**: Restricts database queries so users see only data they're authorized to access, implementing true row-level security.
+
+3. **Resource Synchronization**: Keeps your Permit.io policy engine in sync with your database by automatically ingesting resource instances and their relationships.
+
+:::tip TL;DR
+- Seamlessly integrate Permit.io authorization into your Prisma database operations
+- Support for all authorization models: RBAC, ABAC, and ReBAC
+- Automatic permission checks on database operations
+- Data filtering based on user permissions
+- Resource instance synchronization with Permit.io
+:::
+
+## Installation
+
+Install the package (alongside the Prisma client package) from npm:
+
+```bash
+npm install @permitio/permit-prisma @prisma/client
+```
+## Prerequisites
+
+Before using the extension, ensure you have:
+
+- A [Permit.io account](https://app.permit.io)
+- Permit's environment API key from your project settings
+- A Policy Decision Point (PDP) - either Permit's hosted cloud PDP or a local PDP container (Use locally deployed PDP for ABAC and ReBAC policies)
+- Resources, actions, roles, and policies defined in Permit.io's dashboard or via the API
+
+## Basic Setup
+
+```ts
+import { PrismaClient } from "@prisma/client";
+import { createPermitClientExtension } from "@permitio/permit-prisma";
+
+const prisma = new PrismaClient().$extends(
+  createPermitClientExtension({
+    permitConfig: {
+      token: "<YOUR_PERMIT_API_KEY>", // Permit API Key (required)
+      pdp: "http://localhost:7766",   // PDP address (required)
+    },
+    enableAutomaticChecks: true,      // Enable automatic permission checks
+    enableResourceSync: true,         // Sync resource instances with Permit.io
+    enableAttributeSync: true,        // Sync resource attributes with Permit.io
+    enableDataFiltering: true,        // Enable automatic query filtering by permissions
+  })
+);
+```
+
+## Access Control Models
+
+This extension supports three access control models from Permit.io:
+
+### Role-Based Access Control (RBAC)
+
+**What it is**: Users are assigned roles (Admin, Editor, Viewer) with predefined permissions to perform actions on resource types.
+
+**Example**: An "Editor" role can update any document in the system.
+
+**Best for**: Simple permission structures where access is determined by job function or user level.
+
+### Attribute-Based Access Control (ABAC)
+
+**What it is**: Access decisions based on attributes of users, resources, or environment.
+
+**Examples**:
+
+- Allow access if `user.department == document.department`
+- Allow updates if `document.status == "DRAFT"`
+
+**How it works with the extension**: When `enableAttributeSync` is on, resource attributes are automatically synced to Permit.io for policy evaluation.
+
+**Best for**: Dynamic rules that depend on context or data properties.
+
+### Relationship-Based Access Control (ReBAC)
+
+**What it is**: Permissions based on relationships between users and specific resource instances.
+
+**Example**: A user is an "Owner" of document-123 but just a "Viewer" of document-456.
+
+**How it works with the extension**:
+
+- Resource instances are synced to Permit.io (with `enableResourceSync: true`)
+- Permission checks include the specific resource instance ID
+
+**Best for**: Collaborative applications where users need different permissions on different instances of the same resource type.
+
+### Choosing the Right Model
+
+- **RBAC**: When you need simple, role-based access control
+- **ABAC**: When decisions depend on data properties or contextual information
+- **ReBAC**: When users need different permissions on different instances
+
+## Permission Enforcement
+
+The Permit-Prisma extension implements fine-grained authorization checks on all Prisma operations. Here's how it works:
+
+### Permission Check Flow
+
+When `enableAutomaticChecks` is enabled, the extension:
+
+1. Intercepts all Prisma operations (create, read, update, delete)
+2. Maps the operation to a corresponding Permit.io action
+3. Checks if the current user has permission for that action on the resource
+4. Allows the operation to proceed if authorized, or throws a PermitError if denied
+
+```ts
+// Set the active user for permission checks
+prisma.$permit.setUser("john@example.com");
+
+// This will be checked against Permit.io policies automatically
+try {
+  const document = await prisma.document.create({
+    data: {
+      title: "New Document",
+      content: "Document content",
+    }
+  });
+  console.log("Document created successfully");
+} catch (error) {
+  if (error instanceof PermitError) {
+    console.error("Permission denied");
+  }
+}
+```
+
+## Configuration Examples for Different Models
+
+Here are example configurations for each access control model:
+
+### RBAC Example
+
+```ts
+// Configure for RBAC
+const prisma = new PrismaClient().$extends(
+  createPermitClientExtension({
+    permitConfig: { token: "YOUR_API_KEY", pdp: "http://localhost:7766" },
+    enableAutomaticChecks: true
+  })
+);
+
+// Simple role-based check
+prisma.$permit.setUser("admin@example.com");
+const documents = await prisma.document.findMany(); // Will succeed if admin role has read permission
+```
+
+### ABAC Example
+
+```ts
+// Configure for ABAC
+const prisma = new PrismaClient().$extends(
+  createPermitClientExtension({
+    permitConfig: { token: "YOUR_API_KEY", pdp: "http://localhost:7766" },
+    enableAutomaticChecks: true,
+    enableAttributeSync: true
+  })
+);
+
+// Set user with attributes
+prisma.$permit.setUser({
+  key: "doctor@hospital.com",
+  attributes: { department: "cardiology" }
+});
+
+// Will succeed only if user department matches record department based on policy
+const records = await prisma.medicalRecord.findMany({
+  where: { department: "cardiology" }
+});
+```
+
+### ReBAC Example
+
+```ts
+// Configure for ReBAC
+const prisma = new PrismaClient().$extends(
+  createPermitClientExtension({
+    permitConfig: { token: "YOUR_API_KEY", pdp: "http://localhost:7766" },
+    enableAutomaticChecks: true,
+    enableResourceSync: true,
+    enableDataFiltering: true
+  })
+);
+
+// Set user for instance-level permissions
+prisma.$permit.setUser("owner@example.com");
+
+// Will only succeed if the user has permission on this specific file instance
+const file = await prisma.file.findUnique({
+  where: { id: "file-123" }
+});
+```
+
+### Combined Model Example
+
+```ts
+// Configure for combined models (RBAC + ABAC + ReBAC)
+const prisma = new PrismaClient().$extends(
+  createPermitClientExtension({
+    permitConfig: { token: "YOUR_API_KEY", pdp: "http://localhost:7766" },
+    enableAutomaticChecks: true,
+    enableResourceSync: true,
+    enableAttributeSync: true,
+    enableDataFiltering: true
+  })
+);
+```
+
+## Manual Permission Checks
+
+For more control, you can also perform manual permission checks:
+
+```ts
+// Check permission manually
+const canUpdateDocument = await prisma.$permit.check(
+  "john@example.com", // user
+  "update",           // action
+  "document"          // resource
+);
+
+if (canUpdateDocument) {
+  await prisma.document.update({
+    where: { id: "doc-123" },
+    data: { title: "Updated Title" }
+  });
+}
+
+// Or enforce check (throws if denied)
+await prisma.$permit.enforceCheck(
+  "john@example.com",
+  "delete",
+  { type: "document", key: "doc-123" }
+);
+await prisma.document.delete({ where: { id: "doc-123" } });
+```
