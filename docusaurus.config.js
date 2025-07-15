@@ -34,8 +34,8 @@ const config = {
     mdx1Compat: {
       comments: true,
       admonitions: true,
-      headingIds: false
-    }
+      headingIds: false,
+    },
   },
   themes: ["@docusaurus/theme-mermaid"],
   presets: [
@@ -559,6 +559,23 @@ const config = {
         },
       };
     },
+    [
+      "@inkeep/cxkit-docusaurus",
+      {
+        ChatButton: {
+          baseSettings: {
+            apiKey: "446287e718c0fd535135e7e51147a028a61120d17fd74d2f",
+            primaryBrandColor: "#7542B5",
+            organizationDisplayName: "Permit.io",
+            // ...optional settings
+          },
+          aiChatSettings: {
+            // optional settings
+            aiAssistantAvatar: "/docs/static/logo.svg", // optional -- use your own AI assistant avatar
+          },
+        },
+      },
+    ],
   ],
 
   themeConfig:
@@ -590,7 +607,7 @@ const config = {
           {
             type: "docsVersion",
             position: "right",
-            className: "version"
+            className: "version",
           },
           {
             alt: "twitter logo",
