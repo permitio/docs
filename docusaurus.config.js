@@ -567,11 +567,13 @@ const config = {
             apiKey: "446287e718c0fd535135e7e51147a028a61120d17fd74d2f",
             primaryBrandColor: "#7542B5",
             organizationDisplayName: "Permit.io",
-            // ...optional settings
           },
-          aiChatSettings: {
-            // optional settings
-            aiAssistantAvatar: "/docs/static/logo.svg", // optional -- use your own AI assistant avatar
+        },
+        SearchBar: {
+          baseSettings: {
+            apiKey: "446287e718c0fd535135e7e51147a028a61120d17fd74d2f",
+            primaryBrandColor: "#7542B5",
+            organizationDisplayName: "Permit.io",
           },
         },
       },
