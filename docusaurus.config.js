@@ -542,6 +542,28 @@ const config = {
             from: "/category/work-with-authentication",
             to: "/how-to/sync-users",
           },
+          // MCP Permissions folder move redirects
+          {
+            from: [
+              "/mcp-permissions/index",
+              "/mcp-permissions/overview",
+              "/mcp-permissions/guide",
+              "/mcp-permissions/architecture"
+            ],
+            to: "/ai-security/mcp-permissions/index"
+          },
+          {
+            from: "/mcp-permissions/overview/",
+            to: "/ai-security/mcp-permissions/overview"
+          },
+          {
+            from: "/mcp-permissions/guide/",
+            to: "/ai-security/mcp-permissions/guide"
+          },
+          {
+            from: "/mcp-permissions/architecture/",
+            to: "/ai-security/mcp-permissions/architecture"
+          },
         ],
       },
     ],
