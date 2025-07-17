@@ -1,0 +1,647 @@
+---
+title: Learn by Example - Food Ordering Demo
+sidebar_label: Food Ordering Demo
+description: Learn how to implement an AI-powered system with human-in-the-loop (HITL) access control. This tutorial guides you through using the Permit.io MCP Server with ReBAC, FastAPI, and Gemini to enable safe, policy-driven agent workflows.
+---
+
+import TimelineWrapper from "../../../src/components/timeline/TimelineWrapper";
+import TimelineStep from "../../../src/components/timeline/TimelineStep";
+
+The **Permit MCP server** enables AI-powered applications to make real-world access decisions that require human oversight. This project demonstrates how to:
+
+- Use **natural language access control** via an LLM (Gemini)
+- Implement **ReBAC (Relationship-Based Access Control)** with Permit.io
+- Build and extend a real-world **MCP server** using Python and FastAPI
+- Design a **command-line client** that interacts with AI tools and secure APIs in real time
+
+:::tip
+If you're new to Permit.io’s **Access Request MCP**, we recommend starting with the following:
+- [**Access Request MCP Overview**](/ai-security/access-request-mcp/overview): Explains the human-in-the-loop pattern and how the MCP architecture enables it.
+- [**Permit MCP Technical Guide**](/ai-security/access-request-mcp/implementation-guide): Full installation and configuration reference for deploying and customizing the MCP server.
+>
+:::
+
+In this tutorial, you’ll build a fully functional food-ordering system that uses Gemini, FastAPI, and the Permit MCP server to enforce **context-aware**, **human-reviewed access control flows**.
+
+## Project Overview
+
+This demo brings the **Permit Access Request MCP** to life through a real-world scenario: a **family food ordering system** powered by AI, fine-grained policies, and human approvals.
+
+The core idea is simple:
+
+- **Children** can view a list of restaurants and dishes.
+- When a child tries to:
+    - Access a **restricted restaurant** → An access request is generated.
+    - Order a **premium dish** → An operation approval request is created.
+- **Parents** (who hold elevated roles in Permit) can review and approve/deny these requests.
+
+Once approved, children can proceed with the order.
+
+### **Tech Stack**
+
+This system demonstrates how the **Permit MCP server**, when combined with an LLM and role-based data modeling, enables secure **human-in-the-loop (HITL)** access flows for sensitive actions.
+
+| Component | Description |
+| --- | --- |
+| **LLM (Gemini)** | Parses natural language, invokes tools (like `order_dish`), and asks for user approval when needed |
+| **Permit.io + ReBAC** | Manages fine-grained roles and permission logic |
+| **MCP Server** | Interfaces between the LLM and Permit — creating requests, approving actions, and fetching resource data |
+| **FastAPI Backend** | Hosts the LLM environment securely and exposes a WebSocket for live interaction |
+| **CLI Client** | A terminal-based app for login, chat, and seeing approvals in action |
+
+## Project Setup
+
+In this section, we’ll set up the project environment by cloning the MCP demo repository, installing the required tools, and preparing the Python virtual environment.
+
+<TimelineWrapper>
+  <TimelineStep stepNumber={1}>
+    **Clone the MCP Server Repository** <br/>
+    Clone the repository and change directory:
+    ```bash
+git clone https://github.com/permitio/permit-mcp
+cd permit-mcp
+```
+    :::info
+    You’ll find the entire implementation of this demo inside [this repo](https://github.com/permitio/permit-mcp) — including the base server, backend, and CLI app.
+    :::
+  </TimelineStep>
+  <TimelineStep stepNumber={2}>
+    **Create and Activate a Virtual Environment** <br/>
+    Use [uv](https://github.com/astral-sh/uv) to set up the project. If you don’t already have `uv` installed, follow the instructions [here](https://github.com/astral-sh/uv#installation).
+    ```bash
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+  </TimelineStep>
+  <TimelineStep stepNumber={3}>
+    **Install Project Dependencies** <br/>
+    Install the MCP project in editable mode to pull in all required dependencies:
+    ```bash
+uv pip install -e .
+```
+    :::info This will install:
+    - `fastapi`, `mcp`, `permit-sdk`, and `python-dotenv`
+    - CLI utilities like `httpx`, `websockets`, and `rich`
+    - Security and auth helpers (`bcrypt`, `python-jose`)
+    - Database helpers (`aiosqlite`)
+    :::
+
+    :::tip
+    No need to install these manually — the editable install covers everything.
+    :::
+  </TimelineStep>
+</TimelineWrapper>
+
+## Permit.io Policy Setup
+Before running the server, we need to define the access control structure in the Permit.io dashboard. This includes:
+
+- Creating the resource model for restaurants
+- Defining ReBAC roles and policies
+- Setting up Permit Elements to manage access and approvals
+
+These elements are used both by the backend and the MCP server to handle requests and enforce permissions.
+<TimelineWrapper>
+  <TimelineStep stepNumber={1}>
+    **Create a ReBAC Resource for Restaurants** <br/>
+    - In your [Permit.io Dashboard](https://app.permit.io/), go to **Policy > Resources**
+    - Click **“Create a Resource”**
+    - Fill in the details:
+      - **Name**: `restaurants`
+      - **Roles**: `parent`, `child-can-view`
+
+![](/img/ai-security/MCP/food-demo/1.png)
+
+    - In the **Policy Editor** tab, assign permissions:
+      | Role | Permissions |
+      | --- | --- |
+      | `parent` | `create`, `read`, `update`, `delete` |
+      | `child-can-view` | `read` |
+
+![](/img/ai-security/MCP/food-demo/2.png)
+
+    :::info
+    This ReBAC setup ensures children can only access restaurants and menus once granted the child-can-view role.
+    :::
+
+  </TimelineStep>
+  <TimelineStep stepNumber={2}>
+    **Create Permit Elements** <br/>
+    [Permit Elements](/embeddable-uis/overview) are embeddable or API-accessible components that handle common access request flows.
+    ![](/img/ai-security/MCP/food-demo/3.png)
+    - Create a **User Management Element** for restaurant access requests with the following config:
+        - **Name**: `Restaurant Requests`
+        - **Resource Type**: `restaurants`
+        - **Permission Level Role**: `parent`
+        - **Assignable Roles**: `child-can-view`
+:::info 
+This element allows parent users to approve or deny access requests made by children for restaurants.
+:::
+    - Create an **Operation Approval Element** for dish approvals with the following config:
+        - **Name**: `Dish approval`
+        - **Resource Type**: `restaurants`
+:::info 
+This element allows users to request approval for specific operations, like ordering a restricted dish.
+![](/img/ai-security/MCP/food-demo/5.png)
+:::
+    - Create an **Approval Management Element** for one-time operation requests with the following config:
+        - Name: `Dish requests`
+
+:::info
+This element is used by reviewers (e.g. parents) to approve or deny one-time operation requests, such as premium dish orders.
+:::
+    
+    :::tip
+    Save the `ELEMENT_CONFIG_ID` (e.g. `restaurant-requests`, `dish-requests`) for your `.env` file.
+    ![](/img/ai-security/MCP/food-demo/4.png)
+    :::
+
+  </TimelineStep>
+  <TimelineStep stepNumber={3}>
+    **Gather Your Project Configuration** <br/>
+    - Head to **Project Settings** in the Permit dashboard and collect:
+      - `PROJECT_ID`, `ENV_ID`, `PERMIT_API_KEY`, `PERMIT_PDP_URL`
+    - Use these values in your `.env` file
+  </TimelineStep>
+  <TimelineStep stepNumber={4}>
+    **Add Test Users & Resource Instances** <br/>
+        - Navigate to **Directory > Instances**
+        - Click **Add Instance**
+          - **Resource Type**: restaurants
+          - **Instance Key**: **`*pizza-palace*`**
+          - **Tenant**: Default Tenant (or your working tenant)
+![](/img/ai-security/MCP/food-demo/6.png)
+        - Switch to the **Users** tab
+        - Click **Add User**
+            - **Key**: `joe`
+            - **Instance Access**: `restaurants:pizza-palace#parent`
+        - Click **Save**
+        - Create another user with the key `henry`, but don’t assign a role.
+
+Once everything is configured, we’re ready to clone the MCP server and connect your policies to a working agent.
+  </TimelineStep>
+</TimelineWrapper>
+
+## MCP Server Configuration
+
+Now that your Permit policies are ready, it’s time to configure and launch the MCP server. 
+
+:::tip
+For a detailed step-by-step guide on how to do that, [please refer to the MCP Server Configuration page](/ai-security/access-request-mcp/implementation-guide). 
+:::
+
+Once the server is running, tools like `create_access_request`, `approve_access_request`, and `list_resource_instances` become available to your AI agent (Claude, Gemini, etc.).
+The server talks to Permit.io’s PDP and Elements APIs to evaluate access rules and process approvals.
+
+## Custom MCP Tools
+
+The Permit MCP server includes out-of-the-box tools for access and approval flows, but for real-world use cases, you often need to extend it with **domain-specific logic**.
+
+In this section, you’ll add two custom tools for the food ordering use case:
+
+- `list_dishes`: Show available meals at a restaurant
+- `order_dish`: Place a food order (with access/approval logic)
+
+These tools will integrate with your SQLite database and use `permit.check()` to enforce permissions dynamically based on ReBAC roles and operation approvals.
+
+<TimelineWrapper>
+  <TimelineStep stepNumber={1}>
+    **Extend the MCP Server with `food_ordering_mcp.py`** <br/>
+    - In your repo root, create a new file:
+    ```bash
+touch food_ordering_mcp.py
+```
+
+:::info 
+This will be your custom MCP server entry point. It will:
+
+- Initialize Permit
+- Connect to your SQLite database
+- Register all default Permit tools
+- Add your own domain-specific tools
+:::
+
+
+    - Set up imports, environment, and MCP server logic
+    ```python
+from typing import List, Tuple
+import aiosqlite
+import sqlite3
+import os
+import sys
+from dotenv import load_dotenv
+from mcp.server.fastmcp import FastMCP
+from src.permit_mcp.server import PermitServer
+from mcp.server.fastmcp.exceptions import ToolError
+from permit import Permit
+
+# Load env variables
+load_dotenv()
+
+TENANT = os.getenv("TENANT")
+DB_NAME = sys.argv[1] if len(sys.argv) > 1 else "test.db"
+
+permit = Permit(
+    pdp=os.getenv("PERMIT_PDP_URL"),
+    token=os.getenv("PERMIT_API_KEY"),
+)
+
+conn = sqlite3.connect(DB_NAME)
+cursor = conn.cursor()
+
+# Initialize MCP
+mcp = FastMCP("family_food_ordering_system")
+permit_server = PermitServer(mcp)  # Register default tools
+```
+
+  </TimelineStep>
+  <TimelineStep stepNumber={2}>
+    **Add `list_dishes` Tool** <br/>
+    This function allows users to see meals at a given restaurant if they have access:
+    ```python
+@mcp.tool()
+async def list_dishes(user_id: str, restaurant_id: str) -> List[Tuple[str, float]]:
+    permitted = await permit.check(user_id, 'read', f"restaurants:{restaurant_id}")
+    if not permitted:
+        raise ToolError("Access denied. You are not permitted to view dishes.")
+
+    async with aiosqlite.connect(DB_NAME) as db:
+        query = "SELECT name, price FROM dishes WHERE restaurant_id = ?"
+        cursor = await db.execute(query, (restaurant_id,))
+        dishes = await cursor.fetchall()
+        await cursor.close()
+        return dishes
+```
+  </TimelineStep>
+  <TimelineStep stepNumber={3}>
+    **Add `order_dish` Tool with ReBAC and Price Limit Logic** <br/>
+:::info This tool:
+
+- Checks dish existence
+- Validates ReBAC access to restaurant
+- Enforces a price limit for children
+- Removes temporary `_Approved_` role after success
+:::
+    ```python
+@mcp.tool()
+async def order_dish(user_id: str, restaurant_id: str, dish_name: str) -> str:
+    MAX_ALLOWED_DISH_PRICE = 10  # dollars
+
+    async with aiosqlite.connect(DB_NAME) as db:
+        dish_cursor = await db.execute(
+            "SELECT price FROM dishes WHERE name = ? AND restaurant_id = ?",
+            (dish_name, restaurant_id),
+        )
+        dish = await dish_cursor.fetchone()
+        await dish_cursor.close()
+
+        if dish is None:
+            raise ToolError(f"Dish '{dish_name}' not found.")
+
+        user_cursor = await db.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+        user = await user_cursor.fetchone()
+        await user_cursor.close()
+
+    if user is None:
+        raise ToolError(f"User '{user_id}' not found.")
+
+    permitted_restaurant = await permit.check(user_id, "read", f"restaurants:{restaurant_id}")
+    if not permitted_restaurant:
+        raise ToolError("You are not allowed to order from this restaurant.")
+
+    permitted_dish = await permit.check(user_id, "operate", f"restaurants:{restaurant_id}")
+    if user[0] == "child" and dish[0] > MAX_ALLOWED_DISH_PRICE and not permitted_dish:
+        raise ToolError(
+            f"This dish costs ${dish[0]:.2f}. Approval required for expensive dishes."
+        )
+
+    if permitted_dish:
+        await permit.api.users.unassign_role({
+            "user": user_id,
+            "role": "_Approved_",
+            "resource_instance": f"restaurants:{restaurant_id}",
+            "tenant": TENANT
+        })
+
+    return f"✅ Order successfully placed for {dish_name}!"
+```
+  </TimelineStep>
+  <TimelineStep stepNumber={4}>
+    **Run the Server with Your Custom Tools** <br/>
+    To launch your custom server:
+    ```bash
+uv run food_ordering_mcp.py food_ordering.db
+```
+    This enables your LLM to access both default Permit tools and your extended ones (`list_dishes`, `order_dish`) in real time.
+  </TimelineStep>
+</TimelineWrapper>
+
+## Creating a LangGraph + LangChain MCP Client
+
+Now that the Permit MCP server is up and running, we’ll build an AI agent client that can interact with it. This client will:
+
+- Use a Gemini-powered LLM to decide what actions to takeDynamically invoke MCP tools like `request_access`, `approve_operation_approval`, etc.
+- Run entirely within a LangGraph workflow
+- Pause for human review using `interrupt()` (in the next section)
+
+Let’s connect the dots.
+
+
+<TimelineWrapper>
+  <TimelineStep stepNumber={1}>
+    **Install Required Dependencies** <br/>
+    Inside your MCP project directory, install the necessary packages:
+    ```bash
+uv add langchain-mcp-adapters langgraph langchain-google-genai
+```
+    This gives you:
+    - `langchain-mcp-adapters`: Converts Permit MCP tools into LangGraph-compatible tools
+    - `langgraph`: For orchestrating graph-based workflows
+    - `langchain-google-genai`: For interacting with Gemini 2.0 Flash
+  </TimelineStep>
+  <TimelineStep stepNumber={2}>
+    **Add a Google API Key** <br/>
+    Get an API key from [Google AI Studio](https://aistudio.google.com/app/apikey) and add it to your `.env` file:
+    ```
+GOOGLE_API_KEY=your-key-here
+```
+  </TimelineStep>
+  <TimelineStep stepNumber={3}>
+    **Build the MCP Client** <br/>
+    Create a file named client.py in your project root. We’ll break this file down into logical blocks:
+    - **Imports and Setup**: <br/>
+    Start by importing dependencies and loading environment variables:
+        ```python
+        import os
+        from typing_extensionsimport TypedDict, Literal, Annotated
+        from dotenvimport load_dotenv
+        from langchain_google_genaiimport ChatGoogleGenerativeAI
+        from langgraph.graphimport StateGraph, START, END
+        from langgraph.typesimport Command, interrupt
+        from langgraph.checkpoint.memoryimport MemorySaver
+        from langgraph.prebuiltimport ToolNode
+        from mcpimport ClientSession, StdioServerParameters
+        from mcp.client.stdioimport stdio_client
+        from langchain_mcp_adapters.toolsimport load_mcp_tools
+        import asyncio
+        from langgraph.graph.messageimport add_messages
+        ```
+        Then, load the environment and set up your Gemini LLM:
+        ```shell
+        load_dotenv()
+
+        global_llm_with_tools = None
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            google_api_key=os.getenv('GOOGLE_API_KEY')
+        )
+        ```
+    - **Configure MCP Server Parameters**: <br/>
+    Tell LangGraph how to communicate with the running MCP server:
+        ```shell
+        server_params = StdioServerParameters(
+        command="python",
+        args=["src/permit_mcp/server.py"],
+        )
+        ```
+    - **Define Workflow Nodes and the Graph Builder**: <br/>
+    Here’s the logic to route between calling the LLM and invoking tools:
+        ```python
+        asyncdefcall_llm(state):
+            response =await global_llm_with_tools.ainvoke(state["messages"])
+        return {"messages": [response]}
+
+        defroute_after_llm(state) -> Literal[END, "run_tool"]:
+        return ENDiflen(state["messages"][-1].tool_calls) == 0else "run_tool"
+
+        asyncdefsetup_graph(tools):
+            builder = StateGraph(State)
+            run_tool = ToolNode(tools)
+            builder.add_node(call_llm)
+            builder.add_node('run_tool', run_tool)
+
+            builder.add_edge(START, "call_llm")
+            builder.add_conditional_edges("call_llm", route_after_llm)
+            builder.add_edge("run_tool", "call_llm")
+
+            memory = MemorySaver()
+        return builder.compile(checkpointer=memory)
+        ```
+    In the above code, we have defined an LLM node and its conditional edge, which routes to the `run_tool` node if there is a tool call in the state's message, or ends the graph. We have also defined a function to set up and compile the graph with an in-memory checkpointer.
+
+    Next, add the following line of code to stream response from the graph and add an interactive chat loop, which will run until it’s explicitly exited.
+
+    - **Stream Output and Handle Chat Input, and an infinite loop for user interaction**: <br/>
+        ```python
+        asyncdefstream_responses(graph, config, invokeWith):
+        asyncfor eventin graph.astream(invokeWith, config, stream_mode='updates'):
+        for key, valuein event.items():
+        if key == 'call_llm':
+                        content = value["messages"][-1].content
+        if content:
+        print('\\n' + ", ".join(content)
+        ifisinstance(content,list)else content)
+
+        asyncdefchat_loop(graph):
+        while True:
+        try:
+                    user_input =input("\\nQuery: ").strip()
+        if user_inputin ["quit", "exit", "q"]:
+        print("Goodbye!")
+        break
+
+                    sys_m = """
+                    Always provide the resource instance key during tool calls, as the ReBAC authorization model is being used. To obtain the resource instance key, use the list_resource_instances tool to view available resource instances.
+
+                    Always parse the provided data before displaying it.
+                    If the user has initially provided their ID, use that for subsequent tool calls without asking them again.
+                    """
+
+                    invokeWith = {"messages": [
+                        {"role": "user", "content": sys_m + '\\n\\n' + user_input}]}
+                    config = {"configurable": {"thread_id": "1"}}
+
+        await stream_responses(graph, config, invokeWith)
+
+        except Exceptionas e:
+        print(f"Error: {e}")
+        ```
+    - **Final Assembly**: <br/>
+    Add the main entry point where we will convert the Permit MCP server tool to LangGraph-compatible tools, bind our LLM to the resulting tools, set up the graph, draw it to a file, and fire up the chat loop:
+        ```python
+        async defmain():
+        asyncwithstdio_client(server_params)as (read, write):
+        asyncwithClientSession(read, write)as session:
+        await session.initialize()
+                    tools =await load_mcp_tools(session)
+                    llm_with_tools = llm.bind_tools(tools)
+                    graph =await setup_graph(tools)
+
+        global global_llm_with_tools
+                    global_llm_with_tools = llm_with_tools
+
+        withopen("workflow_graph.png", "wb")as f:
+                        f.write(graph.get_graph().draw_mermaid_png())
+
+        awaitchat_loop(graph)
+
+        if __name__ == "__main__":
+            asyncio.run(main())
+        ```
+    - **Lastly, Run the Client**: <br/>
+        ```
+        uv run client.py
+        ```
+        After running, a new image file called workflow_graph.png will be created, which shows the graph. <br/>
+        ![](/img/ai-security/MCP/food-demo/7.png) <br/>
+        With everything set up, we can now specify queries like this:
+        ```
+        Query: My user id is henry, request accessto pizza palace with the reason: I am now 18,  and the role child-can-order
+        Query: My user id is joe, list all access requests
+        ```       
+  </TimelineStep>
+</TimelineWrapper>
+
+Your agent is now able to call MCP tools dynamically.
+
+## Adding Human-in-the-Loop with `interrupt()`
+
+With your LangGraph-powered MCP client up and running, Permit tools can now be invoked automatically. 
+
+But what happens when the action is **sensitive,** like granting access to a restricted resource or approving a high-risk operation?
+
+That’s where LangGraph’s `interrupt()` becomes useful.
+
+We’ll now add a **human approval node** to intercept and pause the workflow whenever the agent tries to invoke critical tools like:
+
+- `approve_access_request`
+- `approve_operation_approval`
+
+A human will be asked to **manually approve or deny** the tool call before the agent proceeds.
+
+### Define the Human Review Node
+
+At the top of your `client.py` file (before `setup_graph`), add the following function:
+
+```python
+asyncdefhuman_review_node(state) -> Command[Literal["call_llm", "run_tool"]]:
+    """Handle human review process."""
+    last_message = state["messages"][-1]
+    tool_call = last_message.tool_calls[-1]
+
+    high_risk_tools = ['approve_access_request', 'approve_operation_approval']
+if tool_call["name"]notin high_risk_tools:
+return Command(goto="run_tool")
+
+    human_review = interrupt({
+        "question": "Do you approve this tool call? (yes/no)",
+        "tool_call": tool_call,
+    })
+
+    review_action = human_review["action"]
+
+if review_action == "yes":
+return Command(goto="run_tool")
+
+return Command(goto="call_llm", update={"messages": [{
+        "role": "tool",
+        "content": f"The user declined your request to execute the {tool_call.get('name', 'Unknown')} tool, with arguments {tool_call.get('args', 'N/A')}",
+        "name": tool_call["name"],
+        "tool_call_id": tool_call["id"],
+    }]})
+```
+
+This node checks whether the tool being called is considered “high risk.” If it is, the graph is interrupted with a prompt asking for human confirmation.
+
+### Update Graph Routing
+
+Modify the `route_after_llm` function so that the tool calls route to the human review node instead of running immediately:
+
+```python
+defroute_after_llm(state) -> Literal[END, "human_review_node"]:
+    """Route logic after LLM processing."""
+return ENDiflen(state["messages"][-1].tool_calls) == 0else "human_review_node"
+```
+
+### Wire in the HITL Node
+
+Update the `setup_graph` function to add the `human_review_node` as a node in the graph:
+
+```scss
+async defsetup_graph(tools):
+    builder =StateGraph(State)
+    run_tool =ToolNode(tools)
+    builder.add_node(call_llm)
+    builder.add_node('run_tool', run_tool)
+    builder.add_node(human_review_node)  # Add the interrupt node here
+
+    builder.add_edge(START, "call_llm")
+    builder.add_conditional_edges("call_llm", route_after_llm)
+    builder.add_edge("run_tool", "call_llm")
+
+    memory =MemorySaver()
+    return builder.compile(checkpointer=memory)
+```
+
+### Handle Human Input During Runtime
+
+Finally, let’s enhance your `stream_responses` function to detect when the graph is interrupted, prompt for a decision, and resume with human input using **`*Command(resume={"action": user_input})*`**.
+
+After running the client, the graph should not look like this:
+
+![](/img/ai-security/MCP/food-demo/8.png)
+
+After running the client, your graph diagram will now include a human review node between the LLM and tool execution stages:
+
+This ensures that **you remain in control** whenever the agent tries to make a decision that could alter permissions or bypass restrictions.
+
+## Running the Project
+
+To run the project, first start the FastAPI server using the following command:
+
+```
+fastapi dev server.py
+```
+
+Next, run the CLI using the following command:
+
+```
+uv run client.py
+```
+
+You can log in with the following username and password:
+
+```bash
+[
+    {"username": "joe", "password": 'joe_password',  "role": "parent"},
+    {"username": "jane", "password": 'jane_password', "role": "parent"},
+    {"username": "henry",  "password": 'henry_password', "role": "child"},
+    {"username": "rose",  "password": 'rose_password', "role": "child"},
+]
+```
+
+## Final Thoughts & Resources
+
+In this tutorial, we built a secure, human-aware AI agent using Permit.io’s Access Request MCP, **LangGraph**, and **LangChain MCP Adapters**.
+
+Instead of letting the agent operate unchecked, we gave it the power to **request** access and **defer critical decisions to human users,** just like a responsible team member would.
+
+**We covered:**
+
+- How to model permissions and approval flows using Permit Elements and ReBAC
+- How to expose those flows via the Permit MCP server
+- How to build a LangGraph-powered client that invokes these tools naturally
+- And how to insert real-time human-in-the-loop (HITL) checks using `interrupt()`
+
+:::tip
+Want to see the full demo in action? Check out the [GitHub Repo](https://github.com/permitio/permit-mcp/tree/main/examples/food-ordering-system).
+:::
+
+
+### Further Reading:
+
+- [**Access Request MCP Overview**](/ai-security/access-request-mcp/overview) – Understand the concepts behind the MCP model and where HITL workflows are needed.
+- [**Access Request MCP Technical Guide**](/ai-security/access-request-mcp/implementation-guide) – Learn how to install, configure, and extend the MCP server for other projects.
+- [**LangGraph with Permit.io**](https://www.permit.io/blog/delegating-ai-permissions-to-human-users-with-permitios-access-request-mcp) – Use Permit with LangGraph's `interrupt()` function for approval gates.
+
+Got Questions? Join the [Permit.io Slack Community](https://io.permit.io/blog-slack)

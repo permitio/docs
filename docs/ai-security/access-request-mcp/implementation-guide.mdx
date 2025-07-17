@@ -1,0 +1,805 @@
+---
+title: Access Request MCP Implementation Guide
+sidebar_label: Implementation Guide
+description: Learn how to install, configure, and extend the Permit.io Access Request MCP Server. This technical guide walks through system requirements, environment setup, integration steps, and customization options for building safe, human-reviewed AI workflows.
+---
+import TimelineWrapper from "../../../src/components/timeline/TimelineWrapper";
+import TimelineStep from "../../../src/components/timeline/TimelineStep";
+
+# Access Request MCP Implementation Guide
+
+The Permit.io Access Request MCP Server is a powerful way to control AI automation with human oversight. It is designed for use in agentic systems where AI tools don’t just generate text but initiate real-world actions. 
+
+:::info when should I use this?
+You can read more about its use cases [here](/ai-security/access-request-mcp/overview)
+:::
+
+## Deployment Options
+
+The Permit MCP server can be deployed in two primary ways:
+
+**Local Mode** <br/>
+Ideal for testing and development, the server can be run alongside agents like Claude Desktop. It executes locally, with environment-based secrets.
+    
+**Hosted / Production Mode** <br/>
+In production, the server is deployed within a secure backend environment. It handles requests from AI agents (like LangGraph or LangChain) and interacts with the Permit.io API to enforce fine-grained access control policies.
+    
+
+## Requirements
+
+To run and develop with the Permit MCP server, you'll need the following tools and language support in your environment:
+
+### Required
+
+**Python ≥ 3.10** <br/>
+The server uses modern async features and type annotations that require Python 3.10 or later.
+    
+**`uv` ≥ 0.6.1** <br/>
+[uv](https://github.com/astral-sh/uv) is a modern Python package manager and virtual environment tool used to manage dependencies and run the project.
+    
+**A Permit.io Account** <br/>
+ You’ll need API credentials and configuration values from your Permit.io dashboard.
+
+### Additional Dependencies (Automatically Installed)
+
+The following libraries will be installed via `uv`:
+
+- `fastapi`: for building async APIs
+- `mcp`: for MCP tool interfaces and execution
+- `permit-sdk`: official Permit Python SDK
+- `python-dotenv`: for managing environment variables
+- `aiosqlite`: for async database interactions (if extending the server)
+- `bcrypt`, `python-jose[cryptography]`: for auth features in custom servers
+- `websockets`, `httpx`, `rich`: used in more advanced setups like the CLI demo or FastAPI backend
+
+:::tip
+You do not need to install these manually—just follow the installation instructions using uv in the next section and all dependencies will be resolved.
+:::
+
+## Installation
+
+<TimelineWrapper>
+  <TimelineStep stepNumber={1}>
+    **Clone the MCP Server Repository** <br/>
+    Clone the repository from GitHub, and change directory to the project folder
+
+    ```bash
+git clone https://github.com/permitio/permit-mcp
+cd permit-mcp
+```
+  </TimelineStep>
+  <TimelineStep stepNumber={2}>
+    **Create and Activate a Virtual Environment** <br/>
+    Use `uv` to set up a new environment, and activate it for your OS
+
+    ```bash
+uv venv
+source .venv/bin/activate     # For Windows: .venv\Scripts\activate
+```
+
+    :::info
+    If you don’t have uv installed yet, follow the instructions at https://github.com/astral-sh/uv.
+    :::
+  </TimelineStep>
+  <TimelineStep stepNumber={3}>
+    **Install Dependencies** <br/>
+    Install the project and all required dependencies in editable mode. <br/> 
+    This ensures all MCP tools, Permit SDKs, and FastAPI components are available
+
+    ```bash
+uv pip install -e .
+```
+  </TimelineStep>
+</TimelineWrapper>
+
+## MCP Server Configuration
+
+Before running the MCP server, you’ll need to configure environment variables that connect your instance to your Permit.io project and define the resources and flows you intend to manage.
+
+### Create a `.env` File
+
+Use the provided `.env.example` as a starting point:
+
+```bash
+cp .env.example .env
+```
+
+Then open `.env` and set the following variables:
+
+### Required Variables
+
+| Variable | Description |
+| --- | --- |
+| `PERMIT_API_KEY` | Your Permit API key. Get this from the Permit dashboard under **API Keys**. |
+| `PERMIT_PDP_URL` | The Permit PDP (Policy Decision Point) URL. Defaults to `https://cloudpdp.api.permit.io` . |
+| `TENANT` | Tenant identifier for your application. Most use `"default"`. |
+| `PROJECT_ID` | Your Permit project ID. Found in the Permit dashboard under **Project Settings**. |
+| `ENV_ID` | Your Permit environment ID (e.g., `production`, `staging`). |
+| `RESOURCE_KEY` | The key of the resource type you want to manage (e.g., `restaurants`). |
+| `ACCESS_ELEMENTS_CONFIG_ID` | ID of the user management element. Found under **Elements > User Management**. |
+| `OPERATION_ELEMENTS_CONFIG_ID` | ID of the operation approval element. Found under **Elements > Approval Management**. |
+
+### Example
+
+```
+PERMIT_API_KEY=pk_123abc456
+PERMIT_PDP_URL=http://localhost:7766
+TENANT=default
+PROJECT_ID=proj_abc123
+ENV_ID=env_prod
+RESOURCE_KEY=restaurants
+ACCESS_ELEMENTS_CONFIG_ID=restaurant-requests
+OPERATION_ELEMENTS_CONFIG_ID=dish-requests
+```
+
+### Use Local PDP for ReBAC Authorization
+
+If your project uses ABAC (Attribute-Based Access Control) or **ReBAC** (Relationship-Based Access Control), 
+you must run the Permit Local PDP and point `PERMIT_PDP_URL` to:
+
+```
+PERMIT_PDP_URL=http://localhost:7766
+```
+
+:::warning Note:
+This setup enables ReBAC role checks and contextual permission logic not available in the default cloud PDP.
+:::
+
+### Optional — Sync Users with Additional Metadata
+
+To enhance clarity in the UI and debugging tools, it's recommended to sync users with `first_name` or `role` metadata:
+
+```python
+await permit.api.sync_user({
+    "key": user_id,
+    "first_name": firstname
+})
+```
+
+This makes reviewing access and approval requests easier and more auditable.
+
+## Running the Server
+
+The Permit MCP server can be run either locally for development and testing—e.g., with Claude Desktop or another AI client—or deployed in a hosted environment for use in production AI workflows.
+
+### Local Usage with Claude Desktop
+
+For testing locally with a conversational AI interface (like Claude Desktop), you can configure Claude to launch the MCP server as a subprocess using the following config:
+
+### Claude Desktop Configuration
+
+```json
+{
+  "mcpServers": {
+    "permit": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/ABSOLUTE/PATH/TO/PARENT/FOLDER/src/permit_mcp",
+        "run",
+        "server.py"
+      ]
+    }
+  }
+}
+```
+
+Replace `/ABSOLUTE/PATH/TO/PARENT/FOLDER/` with the correct local file path to your cloned permit-mcp repo.
+
+Claude will automatically start the server using this configuration and route tool requests to it.
+
+### Hosted / Production Deployment
+
+For production use, the MCP server should be deployed alongside your LLM application (or behind an API gateway) in a secure environment. In this setup:
+
+- The **MCP server** handles sensitive logic and connects to Permit.io’s PDP.
+- The **LLM agent** (e.g., LangGraph, LangChain) calls MCP tools when the user requests access or approval.
+- The **Permit dashboard** is used to monitor, approve, or deny requests, or this can be done via the API.
+
+:::tip
+A working production example is included in the [Family Food Ordering CLI Tool tutorial](/ai-security/access-request-mcp/food-ordering-demo-example).
+::: 
+
+### Verifying It’s Working
+
+After configuring your `.env` and launching the server:
+
+```bash
+uv run server.py
+```
+
+You should see output indicating that the server is running and ready to accept tool calls from a connected AI client.
+
+## Extending the MCP Server
+
+The Permit MCP server is designed to be modular and developer-friendly. It allows you to extend, override, or selectively exclude tools to fit the needs of your application.
+
+### Why use MCP Server Extensions?
+
+- Add domain-specific functionality (e.g. list, update, or delete domain entities)
+- Enforce custom business logic on top of Permit checks
+- Customize request routing or formatting for specific LLMs or frontends
+- Interoperate with ReBAC attributes, external services, or embedded tools
+
+### Importing the Server Class
+
+The core server logic is encapsulated in the `PermitServer` class, which plugs into your `FastMCP` instance:
+
+```python
+from mcp.server.fastmcp import FastMCP
+from src.permit_mcp.server import PermitServer
+
+mcp = FastMCP("custom_server_name")
+permit_server = PermitServer(mcp)
+```
+
+This will register all built-in tools like `create_access_request`, `list_resource_instances`, and others onto your MCP instance.
+
+### Excluding Tools
+
+Want to remove certain tools? Use the `exclude_tools` parameter when instantiating `PermitServer`:
+
+```python
+permit_server = PermitServer(
+    mcp,
+    exclude_tools=['create_access_request', 'create_operation_approval']
+)
+```
+
+Only the remaining tools will be available to your LLM or frontend.
+
+### Adding Custom Tools
+
+You can easily register your own tools alongside Permit’s by using the `@mcp.tool()` decorator:
+
+```python
+@mcp.tool()
+async def list_dishes(user_id: str, restaurant_id: str) -> List[str]:
+    # Custom logic to fetch dish data from a database
+    ...
+```
+
+This allows your AI agent to interact with your application’s business logic while still using the Permit SDK for permission enforcement.
+
+## Available Tools / Endpoints
+
+The Permit MCP server exposes a set of AI-compatible tools for managing fine-grained access and approval workflows through natural language. These tools are available out of the box when you instantiate `PermitServer`.
+
+Each tool is fully compatible with LangChain, LangGraph, Claude Desktop, and other LLM systems that support function-calling agents.
+
+### Access Request Tools
+
+**`create_access_request`**: Create a new access request for a user who wants to gain permission to a resource.
+
+**Params:**
+- `user_id`: Who is making the request
+- `resource_instance`: Target resource
+- `role`: Role being requested
+- `reason`: Explanation or justification for the request
+
+**`list_access_requests`**: List access requests submitted by users, optionally filtered by approver or resource.
+
+**`approve_access_request`**: Approve a pending access request.
+
+**`deny_access_request`**: Deny or reject a pending access request.
+
+### Operation Approval Tools
+
+**`create_operation_approval`**: Request a one-time approval for performing a specific action on a resource (e.g. "order premium dish").
+
+**Params:**
+- `user_id`
+- `resource_instance`
+- `operation`: Name of the operation to be approved
+- `reason`
+
+**`list_operation_approvals`**: List submitted operation approvals (by user, role, or resource).
+
+**`approve_operation_approval`**: Approve a one-time operation (e.g. after reviewing context).
+
+**`deny_operation_approval`**: Reject the request to perform an operation.
+
+### Resource Management Tools
+
+**`list_resource_instances`**: Fetch a list of all existing instances of a resource (e.g. all restaurants). This is often used as a first step in the agent flow to identify available options and their `resource_key`s.
+
+## FastAPI Backend
+
+This section explains how to build a FastAPI-based backend that serves as a secure gateway between users, the MCP server, and the LLM (Gemini). It handles:
+
+- User login with password auth (JWT-based)
+- WebSocket chat interface with real-time LLM interaction
+- Safe execution of MCP tools using `stdio` subprocess
+- Role-based filtering of tools per user
+- Custom instructions for Gemini to structure requests
+
+This architecture ensures **LLMs can access tools securely**, and users are authenticated before invoking any sensitive actions.
+
+### Key Components
+
+- **JWT login endpoint**: issues access tokens based on a username/password.
+- **WebSocket `/ws/chat` endpoint**: processes user queries, executes tools, and returns Gemini responses.
+- **MCP subprocess manager**: spawns the custom MCP server (`food_ordering_mcp.py`) with your local DB.
+- **Tool filtering**: restricts tool usage based on user roles (e.g., children can't approve requests).
+- **LLM integration**: uses Gemini’s `function_calling` + context instructions to power the conversation.
+
+### Creating the FastAPI App
+
+<TimelineWrapper>
+  <TimelineStep stepNumber={1}>
+     Create a new file in the project root: <br/>
+    ```bash
+touch server.py
+```
+    Import dependencies and define the app:
+    ```python
+from fastapi import FastAPI, WebSocket, HTTPException, Depends, status
+from fastapi.security import OAuth2PasswordRequestForm
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from datetime import timedelta
+from contextlib import AsyncExitStack, asynccontextmanager
+import os, json, asyncio
+
+from google import genai
+from google.genai import types
+
+from utils import (
+    get_user,
+    verify_password,
+    create_access_token,
+    get_current_websocket_user,
+    filter_tools_by_role,
+    convert_mcp_tools_to_gemini,
+    retry_tool_call,
+    init_db,
+)
+
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+DB_NAME = os.getenv("DB_NAME")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+```
+    Create the FastAPI app and ensure DB initialization:
+    ```python
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+
+app = FastAPI(lifespan=lifespan)
+```
+  </TimelineStep>
+  <TimelineStep stepNumber={2}>
+    **Define WebSocket Connection Manager** <br/>
+    Used to manage active client connections.
+
+    ```python
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections = {}
+
+    async def connect(self, websocket: WebSocket, client_id: str):
+        await websocket.accept()
+        self.active_connections[client_id] = websocket
+
+    def disconnect(self, client_id: str):
+        self.active_connections.pop(client_id, None)
+
+    async def send_message(self, message: str, client_id: str):
+        if client_id in self.active_connections:
+            await self.active_connections[client_id].send_text(message)
+
+manager = ConnectionManager()
+```
+  </TimelineStep>
+  <TimelineStep stepNumber={3}>
+    **Login Endpoint** <br/>
+    Handles user authentication via username/password.
+
+    ```python
+@app.post("/token")
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = get_user(form_data.username)
+    if not user or not verify_password(form_data.password, user["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user["username"]}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+```
+  </TimelineStep>
+  <TimelineStep stepNumber={4}>
+    **WebSocket Chat Endpoint** <br/>
+    The main logic that connects: **WebSocket client** ↔ **LLM** ↔ **MCP tool server** <br/>
+    - Start by handling user auth and spawning the MCP subprocess.
+    - Then, filter tools by role, generate Gemini-compatible tool metadata, and prepare the chat context.
+    - Next, enter the main loop to receive user queries, pass them to Gemini, and process any tool calls.
+    - Finally, Wrap up with connection cleanup. 
+
+    ```python
+@app.websocket("/ws/chat")
+async def websocket_chat(websocket: WebSocket):
+    current_user = await get_current_websocket_user(websocket)
+    if not current_user:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    client_id = current_user.get("id")
+    await manager.connect(websocket, client_id)
+
+    try:
+        exit_stack = AsyncExitStack()
+        server_params = StdioServerParameters(
+            command="python",
+            args=["food_ordering_mcp.py", DB_NAME],
+        )
+        stdio_transport = await exit_stack.enter_async_context(stdio_client(server_params))
+        stdio, write = stdio_transport
+        session = await exit_stack.enter_async_context(ClientSession(stdio, write))
+
+        await session.initialize()
+
+        tools_result = await session.list_tools()
+        filtered_tools = filter_tools_by_role(tools_result.tools, current_user["role"])
+        mcp_tools = [{"function_declarations": convert_mcp_tools_to_gemini(filtered_tools)}]
+        contents = []
+
+        while True:
+            data = json.loads(await websocket.receive_text())
+            message = data.get("message")
+            history = data.get("history", [])
+            contents = history + [{"role": "user", "parts": [{"text": message}]}]
+
+            has_more_function_calls = True
+            while has_more_function_calls:
+                response = genai.Client(api_key=GEMINI_API_KEY).models.generate_content(
+                    model="gemini-2.5-flash-preview-04-17",
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        tools=mcp_tools,
+                        system_instruction=f"""
+                        - current_user_role: {current_user['role']}
+                        - user_id: "{current_user['id']}"
+                        - Assign role: "child-can-view"
+                        - Use list_resource_instances first to get keys
+                        - Always request reason from user for access/approval
+                        """
+                    )
+                )
+
+                # Send model response (if any)
+                if hasattr(response, "text") and response.text:
+                    contents.append({"role": "model", "parts": [{"text": response.text}]})
+                    await manager.send_message(json.dumps({
+                        "type": "text", "content": response.text
+                    }), client_id)
+
+                # Execute any function calls
+                function_calls = getattr(response, "function_calls", [])
+                if not function_calls:
+                    has_more_function_calls = False
+                    break
+
+                await manager.send_message(json.dumps({
+                    "type": "status", "content": "Processing function calls..."
+                }), client_id)
+
+                contents.append({
+                    "role": "model",
+                    "parts": [{"function_call": {
+                        "id": fc.id, "name": fc.name, "args": fc.args
+                    }} for fc in function_calls]
+                })
+
+                results = await asyncio.gather(*[
+                    retry_tool_call(session, fc.name, fc.args)
+                    for fc in function_calls
+                ])
+
+                contents.append({
+                    "role": "user",
+                    "parts": [{"function_response": r} for r in results]
+                })
+
+                await manager.send_message(json.dumps({
+                    "type": "history_update", "content": contents
+                }), client_id)
+
+    except Exception as err:
+        await manager.send_message(json.dumps({
+            "type": "error", "content": str(err)
+        }), client_id)
+    finally:
+        manager.disconnect(client_id)
+        await exit_stack.aclose()
+```
+  </TimelineStep>
+</TimelineWrapper>
+
+## Building a Command-Line Chat Client
+The client application will allow users to interact with the FastAPI backend via the command line. It will handle user login to obtain an authentication token and connect to the WebSocket endpoint to send messages and receive AI responses in real-time.
+
+<TimelineWrapper>
+  <TimelineStep stepNumber={1}>
+    **Create the CLI Client File** <br/>
+    Create a client.py file directly in the root, and start by adding the following lines to import the necessary libraries and define the FastAPI server's base URLs.
+
+    ```python
+import asyncio
+import json
+import httpx
+import websockets
+import sys
+from typing import Dict, List, Optional
+
+API_URL = "http://localhost:8000"  # Change if needed
+WS_URL = "ws://localhost:8000"     # WebSocket URL
+```
+  </TimelineStep>
+  <TimelineStep stepNumber={2}>
+    **Implement User Authentication** <br/>
+    Next, add the function responsible for user authentication.
+
+    ```python
+async def login(username: str, password: str) -> str | None:
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{API_URL}/token",
+            data={
+                "username": username,
+                "password": password,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+
+    if response.status_code == 200:
+        token = response.json().get("access_token")
+        print("✅ Login successful!\n")
+        return token
+    else:
+        print(f"❌ Login failed: {response.json().get('detail')}")
+        return None
+```
+  </TimelineStep>
+  <TimelineStep stepNumber={3}>
+    **Implement the Chat Session Logic** <br/>
+    Now, let's set up the main chat session logic to manage the WebSocket connection and the real-time conversation flow with the server and the LLM. We start by defining the chat function, initializing the message history, and setting up two flags: one to track whether a message is being processed, and another to track whether the "processing" message has been displayed.
+
+    ```python
+asyncdef chat(token: str):
+    history: List[Dict] = []
+    is_processing = False  # Simple flag to track message processing state
+    is_displayed_processing = False
+
+print("\n--- Chat session started ---")
+print("Type 'exit' to quit.\n")
+```
+  </TimelineStep>
+  <TimelineStep stepNumber={4}>
+    **Establish a secure WebSocket Connection** <br/>
+    Next, we attempt to establish a secure WebSocket connection to the server using the user's token. If the connection is successful, we define a nested async function receive_messages to run in the background. It listens for incoming messages, parses them, updates the conversation state, and prints the appropriate response type. The use of nonlocal allows it to modify variables defined in the outer chat function.
+
+    ```python
+try:
+    headers = {"Authorization": f"Bearer {token}"}
+
+asyncwith websockets.connect(
+        f"{WS_URL}/ws/chat",
+        additional_headers=headers
+    )as websocket:
+        # Start a background task for receiving messages
+asyncdef receive_messages():
+nonlocal is_processing, history, is_displayed_processing
+
+while True:
+try:
+                    message =await websocket.recv()
+                    data = json.loads(message)
+
+                    message_type = data.get("type")
+                    content = data.get("content")
+
+if message_type == "text":
+print(f"Assistant: {content}")
+elif message_type == "status":
+print(f"[Status] {content}")
+elif message_type == "error":
+print(f"⚠️ Error: {content}")
+                        is_processing = False  # Unlock on error
+                        is_displayed_processing = False
+elif message_type == "history_update":
+                        history = content
+                        is_processing = False  # Unlock when complete
+                        is_displayed_processing = False
+except Exceptionas e:
+print(f"\n⚠️ Error receiving message: {str(e)}")
+                    is_processing = False
+                    is_displayed_processing = False
+break
+```
+    We now start the receiver task using asyncio.create_task() so that message reception runs concurrently in the background while the main loop handles user input.
+
+  </TimelineStep>
+  <TimelineStep stepNumber={5}>
+  **The Main Chat Loop** <br/>
+
+      ```bash
+# Start the receiver task
+receiver_task = asyncio.create_task(receive_messages())
+```
+The following is the main chat loop. It continuously waits for user input, but first checks if a message is still being processed. If so, it shows a "processing" message only once and waits briefly.
+
+When ready, it reads user input from the terminal using `input()` inside a thread executor (to avoid blocking the async loop). If the input is `exit,` the chat ends. Otherwise, it sends the user message and the current chat history as a JSON payload over the WebSocket.
+
+```python
+while True:
+if is_processing:
+ifnot is_displayed_processing:
+print("⏳ Processing previous message. Please wait...")
+            is_displayed_processing = True
+
+await asyncio.sleep(1)
+continue
+
+    user_input =await asyncio.get_event_loop().run_in_executor(
+        None,lambda: input("You: ")
+    )
+
+if user_input.lower() == "exit":
+print("👋 Ending chat session.")
+break
+
+    # Set the processing flag before sending
+    is_processing = True
+
+    # Send the message
+    payload = {
+        "message": user_input,
+        "history": history
+    }
+
+try:
+await websocket.send(json.dumps(payload))
+except Exceptionas e:
+print(f"⚠️ Error sending message: {str(e)}")
+        is_processing = False
+        is_displayed_processing = False
+break
+```
+  </TimelineStep>
+  <TimelineStep stepNumber={6}>
+  **After Chat Loop** <br/>
+  After the chat loop exits (either due to an error or the user typing "exit"), we cancel the receiver task to stop the background message listener.
+
+```python
+# Clean up
+receiver_task.cancel()
+
+```
+
+Then, we handle potential exceptions, such as WebSocket errors or other unexpected issues, and print a warning to the user.
+
+```python
+except websockets.exceptions.WebSocketExceptionas e:
+print(f"⚠️ WebSocket connection error: {str(e)}")
+except Exceptionas e:
+print(f"⚠️ Unexpected error: {str(e)}")
+
+```
+  </TimelineStep>
+  <TimelineStep stepNumber={7}>
+  **Denifning CLI Entry Point** <br/>
+    Next, we will define a `main` function as the entry point for the CLI tool.
+    The `main` async function greets the user, prompts for username and password, and calls the `login` function. If a login is successful (a token is received), it calls the `chat` function to start the WebSocket session. The `if __name__ == "__main__":` block is the standard entry point. It runs the main coroutine and catches `KeyboardInterrupt` for graceful exit.
+    ```python
+    asyncdef main():
+print("👋 Welcome Food Ordering CLI tool!")
+
+    username = input("Username: ").strip()
+    password = input("Password: ").strip()
+
+    token =await login(username, password)
+
+if token:
+await chat(token)
+
+
+if __name__ == "__main__":
+try:
+        asyncio.run(main())
+except KeyboardInterrupt:
+print("\n👋 Program terminated by user.")
+except Exceptionas e:
+print(f"⚠️ Unexpected error: {str(e)}")
+        sys.exit(1)
+```
+  </TimelineStep> 
+  <TimelineStep stepNumber={8}>
+  **Running the CLI** <br/>
+  First, run the FastAPI backend using the following command:
+
+```
+fastapi dev server.py
+```
+
+Next, in another terminal instance, run the CLI using the following command:
+
+```
+uv run client.py
+```
+
+With this, we can now log in using one of the following credentials and start using our app.
+  </TimelineStep> 
+</TimelineWrapper>
+
+## Best Practices
+
+Here are some best practices to ensure your Permit MCP server is used effectively in both development and production environments.
+
+### Use Named Users
+
+Always include human-readable names when syncing or creating users:
+
+```python
+await permit.api.sync_user({
+    "key": user_id,
+    "first_name": firstname
+})
+```
+
+This makes it easier to review access and approval requests, especially in dashboards and logs. Anonymous user keys make audit trails harder to interpret.
+
+### ReBAC: Model Resources Intelligently
+
+When using relationship-based access control (ReBAC):
+
+- Ensure the `key` of the resource instance (e.g., a restaurant) is unique and stable.
+- Include important descriptive attributes like `name` or `allowed_for_children` to help the LLM and human reviewers make sense of the instance.
+
+```python
+await permit.api.resource_instances.create({
+    "resource": "restaurants",
+    "key": restaurant_id,
+    "tenant": TENANT,
+    "attributes": {
+        "name": restaurant_name,
+        "allowed_for_children": bool(allowed_for_children)
+    }
+})
+```
+
+### Enforce Permissions via Policy, Not Code
+
+Avoid hardcoding who can perform what. Instead, delegate logic to Permit policies. This makes access rules declarative, auditable, and easier to update without code changes.
+
+Use `await permit.check()` to centralize access decisions at runtime.
+
+### Log Everything
+
+Ensure all tool interactions — especially access and approval requests — are logged. Permit.io handles much of this by default, but you can augment with your own structured logging.
+
+### Support Asynchronous Approvals
+
+Not every approval has to be real-time. Use asynchronous review channels (Slack, dashboards, email) where human turnaround time can vary. Frameworks like HumanLayer or Permit Elements UI can help with this.
+
+### Test with Multiple Roles and Scenarios
+
+Verify that:
+
+- Unpermitted users are blocked from sensitive actions
+- Proper roles can approve requests
+- All fallback and rejection cases are handled gracefully
+
+Use Permit CLI’s test generation features to simulate and validate scenarios.
+
+### Combine with LangGraph for Flow Control
+
+LangGraph’s `interrupt()` function allows you to pause execution mid-task and wait for human approval, and is a perfect match for Permit’s access request model.
+
+Got Questions? Join the [Permit.io Slack Community](https://io.permit.io/blog-slack)
