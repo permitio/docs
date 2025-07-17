@@ -140,8 +140,9 @@ const sidebars = {
           type: "category",
           label: "Permit CLI",
           link: {
-            type: "doc",
-            id: "how-to/permit-cli/permit-cli",
+            type: "generated-index",
+            slug: "/category/permit-cli",
+            title: "Permit CLI",
           },
           items: [
             "how-to/permit-cli/permit-cli",
