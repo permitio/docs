@@ -582,16 +582,56 @@ const sidebars = {
       collapsed: false,
       className: "category-as-header",
       items: [
-        "quick-start/fastapi",
-        "quick-start/django",
-        "quick-start/flask",
-        "quick-start/nextjs",
-        "quick-start/nest",
-        "quick-start/express",
-        "quick-start/gin",
-        "quick-start/spring-boot",
-        "quick-start/aspnet",
-        "quick-start/rails"
+        {
+          type: 'doc',
+          id: 'quick-start/fastapi',
+          label: 'FastAPI',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/django',
+          label: 'Django',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/flask',
+          label: 'Flask',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/nextjs',
+          label: 'Next.js',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/nest',
+          label: 'NestJS',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/express',
+          label: 'Express.js',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/gin',
+          label: 'Gin',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/spring-boot',
+          label: 'Spring Boot',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/aspnet',
+          label: 'ASP.NET',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/rails',
+          label: 'Rails',
+        },
       ]
     },
     {
