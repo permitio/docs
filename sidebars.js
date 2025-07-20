@@ -136,6 +136,24 @@ const sidebars = {
             "how-to/build-policies/abac/time-based-role",
           ],
         },
+        {
+          type: "category",
+          label: "Permit CLI",
+          link: {
+            type: "generated-index",
+            slug: "/category/permit-cli",
+            title: "Permit CLI",
+          },
+          items: [
+            "how-to/permit-cli/permit-cli",
+            "how-to/permit-cli/permit-cli-envs",
+            "how-to/permit-cli/permit-cli-api",
+            "how-to/permit-cli/permit-cli-pdp",
+            "how-to/permit-cli/permit-cli-policy",
+            "how-to/permit-cli/permit-cli-test",
+            "how-to/permit-cli/permit-cli-gitops",
+          ],
+        },
       ],
     },
     {
