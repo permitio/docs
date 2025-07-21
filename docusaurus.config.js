@@ -546,7 +546,6 @@ const config = {
           {
             from: [
               "/mcp-permissions/index",
-              "/mcp-permissions/overview",
               "/mcp-permissions/guide",
               "/mcp-permissions/architecture"
             ],
