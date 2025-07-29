@@ -140,6 +140,46 @@ const sidebars = {
     },
     {
       type: "category",
+      label: "AI Security",
+      className: "category-as-header",
+      collapsed: false,
+      collapsible: false,
+      items: [
+        "ai-security/framework",
+        {
+          type: "category",
+          label: "Integrations",
+          items: [
+            "ai-security/integrations/langchain",
+            "ai-security/integrations/langflow",
+            "ai-security/integrations/pydantic-ai",
+            "ai-security/integrations/mongodb-rag",
+            "ai-security/integrations/openai-prompt-filtering"
+          ],
+        },
+        {
+          type: "category",
+          label: "MCP Permissions",
+          link: { type: "doc", id: "ai-security/mcp-permissions/index" },
+          items: [
+            "ai-security/mcp-permissions/overview",
+            "ai-security/mcp-permissions/architecture",
+            "ai-security/mcp-permissions/guide",
+          ],
+        },
+        {
+          type: "category",
+          label: "Access Request MCP",
+          items: [
+            "ai-security/access-request-mcp/overview",
+            "ai-security/access-request-mcp/implementation-guide",
+            "ai-security/access-request-mcp/food-ordering-demo-example"
+          ],
+        },
+      ],
+    },
+    {
+      type: "category",
       label: "Model Policies",
       collapsed: false,
       collapsible: false,
@@ -681,46 +721,6 @@ const sidebars = {
           type: "category",
           label: "Migrations",
           items: ["api/v2-migration-guide", "concepts/oss-fallback"],
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "AI Security",
-      className: "category-as-header",
-      collapsed: false,
-      collapsible: false,
-      items: [
-        "ai-security/framework",
-        {
-          type: "category",
-          label: "Integrations",
-          items: [
-            "ai-security/integrations/langchain",
-            "ai-security/integrations/langflow",
-            "ai-security/integrations/pydantic-ai",
-            "ai-security/integrations/mongodb-rag",
-            "ai-security/integrations/openai-prompt-filtering"
-          ],
-        },
-        {
-          type: "category",
-          label: "MCP Permissions",
-          link: { type: "doc", id: "ai-security/mcp-permissions/index" },
-          items: [
-            "ai-security/mcp-permissions/overview",
-            "ai-security/mcp-permissions/architecture",
-            "ai-security/mcp-permissions/guide",
-          ],
-        },
-        {
-          type: "category",
-          label: "Access Request MCP",
-          items: [
-            "ai-security/access-request-mcp/overview",
-            "ai-security/access-request-mcp/implementation-guide",
-            "ai-security/access-request-mcp/food-ordering-demo-example"
-          ],
         },
       ],
     },
