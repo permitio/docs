@@ -542,6 +542,12 @@ const config = {
             from: "/category/work-with-authentication",
             to: "/how-to/sync-users",
           },
+          {
+            from: [
+              "/mcp-permissions/index"
+            ],
+            to: "/ai-security/mcp-permissions/guide/"
+          },
         ],
       },
     ],
