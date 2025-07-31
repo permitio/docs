@@ -33,6 +33,13 @@ export const firstRow = [
   },
   {
     type: "link",
+    href: "/overview/permit-cli-quickstart",
+    label: "Use the Permit CLI",
+    svgIcon: <i className="ri-terminal-line ri-xl !text-[#974ef2]"></i>,
+    description: "Learn how to use the command-line interface for policy management and automation.",
+  },
+  {
+    type: "link",
     href: "/overview/local-authorization-microservice",
     label: "Run Local Authorization Microservice",
     svgIcon: <i className="ri-server-line ri-xl !text-[#974ef2]"></i>,
