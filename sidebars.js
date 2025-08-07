@@ -635,6 +635,65 @@ const sidebars = {
     },
     {
       type: "category",
+      label: "Quick Start Guide",
+      collapsible: false,
+      collapsed: false,
+      className: "category-as-header",
+      items: [
+        {
+          type: 'doc',
+          id: 'quick-start/fastapi',
+          label: 'FastAPI',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/django',
+          label: 'Django',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/flask',
+          label: 'Flask',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/nextjs',
+          label: 'Next.js',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/nest',
+          label: 'NestJS',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/express',
+          label: 'Express.js',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/gin',
+          label: 'Gin',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/spring-boot',
+          label: 'Spring Boot',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/aspnet',
+          label: 'ASP.NET',
+        },
+        {
+          type: 'doc',
+          id: 'quick-start/rails',
+          label: 'Rails',
+        },
+      ]
+    },
+    {
+      type: "category",
       label: "Integrate with Authentication",
       collapsed: false,
       collapsible: false,
