@@ -11,232 +11,194 @@ This section is only relevant to Enterprise customers who acquired an on-prem li
 
 Solutions for common issues you might encounter with Permit Platform.
 
-## Pre-Installation Issues
-
-### Git Repository Access
-
-<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
-  <div className="flex">
-    <div className="ml-3">
-      <p className="text-sm text-red-700">
-        <strong>❌ Problem:</strong> "Permission denied (publickey)" when testing Git access
-      </p>
-    </div>
-  </div>
-</div>
-
-**Test Git connection:**
-```bash
-ssh -T git@github.com -i ./permit-policy-key
-```
-
-**Solutions:**
-1. **Verify public key is added to repository:**
-   - Check GitHub/GitLab/Bitbucket settings
-   - Ensure "write access" is enabled for deploy key
-
-2. **Check private key permissions:**
-   ```bash
-   chmod 600 permit-policy-key
-   ls -la permit-policy-key  # Should show -rw-------
-   ```
-
-3. **Verify repository URL format:**
-   ```bash
-   # ✅ Correct formats:
-   git@github.com:yourorg/permit-policies.git
-   git@gitlab.com:yourorg/permit-policies.git
-   
-   # ❌ Incorrect formats:
-   https://github.com/yourorg/permit-policies.git
-   github.com:yourorg/permit-policies.git
-   ```
-
-### Deploy Key Issues
-
-<div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 my-4">
-  <div className="flex">
-    <div className="ml-3">
-      <p className="text-sm text-yellow-700">
-        <strong>⚠️ Problem:</strong> "Deploy key already in use" (GitHub)
-      </p>
-    </div>
-  </div>
-</div>
-
-**Solution:**
-Each GitHub deploy key can only be used by one repository.
-
-```bash
-# Generate a new key pair
-ssh-keygen -t rsa -b 4096 -f permit-policy-key-new -N ""
-
-# Add permit-policy-key-new.pub to your repository
-# Use permit-policy-key-new in installation
-```
-
-### Server Requirements
-
-<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
-  <div className="flex">
-    <div className="ml-3">
-      <p className="text-sm text-red-700">
-        <strong>❌ Problem:</strong> Server doesn't meet minimum requirements
-      </p>
-    </div>
-  </div>
-</div>
-
-**Check server resources:**
-```bash
-# Check CPU cores
-nproc
-
-# Check memory
-free -h
-
-# Check disk space
-df -h
-
-# Check OS version
-cat /etc/os-release
-```
-
-**Minimum requirements:**
-- **CPU:** 4 cores
-- **RAM:** 8GB
-- **Storage:** 50GB available
-- **OS:** Ubuntu 18.04+, RHEL/CentOS 7+
-
 ## Installation Issues
 
-### Permission Errors
+### Frontend Domain Configuration Error
 
 <div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
   <div className="flex">
     <div className="ml-3">
       <p className="text-sm text-red-700">
-        <strong>❌ Problem:</strong> "Permission denied" during installation
+        <strong>❌ Problem:</strong> "Frontend domain not configured in values.yaml"
       </p>
     </div>
   </div>
 </div>
+
+**Error message:**
+```bash
+[ERROR] ❌ Frontend domain not configured in values.yaml
+Please edit charts/permit-platform/values.yaml and replace:
+  frontendDomain: "CHANGEME_FRONTEND_DOMAIN"
+```
 
 **Solution:**
-```bash
-# Always run installer with sudo
-sudo ./install.sh
+1. Edit `charts/permit-platform/values.yaml`
+2. Replace `CHANGEME_FRONTEND_DOMAIN` with your actual domain:
+   ```yaml
+   global:
+     frontendDomain: "permit.yourcompany.com"  # Your domain here
+   ```
+3. Re-run the installation script
 
-# Check if you have sudo access
-sudo whoami  # Should output "root"
-```
-
-### Disk Space Issues
+### Docker Image Loading Failures
 
 <div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
   <div className="flex">
     <div className="ml-3">
       <p className="text-sm text-red-700">
-        <strong>❌ Problem:</strong> "No space left on device"
+        <strong>❌ Problem:</strong> Images fail to load during installation
       </p>
     </div>
   </div>
 </div>
 
-**Check disk usage:**
+**Error symptoms:**
 ```bash
-# Check available space
+[ERROR] Failed to load permit-backend-v2.tar after 3 attempts
+Error loading image: docker: Error response from daemon
+```
+
+**Diagnostic steps:**
+```bash
+# Check Docker service status
+systemctl status docker
+
+# Check available disk space
 df -h
 
-# Check largest directories
-du -sh /* | sort -hr | head -10
+# Check Docker daemon logs
+journalctl -u docker --tail=20
 
-# Clean up if needed
-sudo apt-get clean  # Ubuntu/Debian
-sudo yum clean all  # RHEL/CentOS
-```
-
-### Port Conflicts
-
-<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
-  <div className="flex">
-    <div className="ml-3">
-      <p className="text-sm text-red-700">
-        <strong>❌ Problem:</strong> "Port already in use" (80, 443, 6443)
-      </p>
-    </div>
-  </div>
-</div>
-
-**Check what's using ports:**
-```bash
-# Check port 80
-sudo netstat -tulpn | grep :80
-# or
-sudo lsof -i :80
-
-# Check port 443
-sudo netstat -tulpn | grep :443
-
-# Check k3s API port
-sudo netstat -tulpn | grep :6443
+# Test Docker manually
+docker pull hello-world
 ```
 
 **Solutions:**
-1. **Stop conflicting services:**
+1. **Insufficient disk space:**
    ```bash
-   sudo systemctl stop apache2  # or nginx, httpd
-   sudo systemctl disable apache2
+   # Free up space
+   docker system prune -f
+   sudo apt-get clean
    ```
 
-2. **Use different ports (advanced):**
+2. **Docker service issues:**
    ```bash
-   sudo ./install.sh --http-port 8080 --https-port 8443
+   # Restart Docker
+   sudo systemctl restart docker
+   
+   # Check Docker is running
+   sudo systemctl status docker
    ```
 
-### k3s Installation Failures
+3. **Permission issues:**
+   ```bash
+   # Add user to docker group
+   sudo usermod -aG docker $USER
+   # Log out and back in, then retry
+   ```
+
+### Kubernetes Access Issues
 
 <div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
   <div className="flex">
     <div className="ml-3">
       <p className="text-sm text-red-700">
-        <strong>❌ Problem:</strong> k3s fails to start or install
+        <strong>❌ Problem:</strong> "Unable to connect to Kubernetes cluster"
       </p>
     </div>
   </div>
 </div>
 
-**Check k3s logs:**
+**Error symptoms:**
 ```bash
-# Check k3s service status
-sudo systemctl status k3s
-
-# View k3s logs
-sudo journalctl -u k3s -f
-
-# Check k3s node status
-sudo k3s kubectl get nodes
+[ERROR] Kubernetes cluster not accessible
+error: couldn't get current server API group list
 ```
 
-**Common solutions:**
-1. **Restart k3s:**
-   ```bash
-   sudo systemctl restart k3s
-   ```
+**Diagnostic steps:**
+```bash
+# Check kubectl configuration
+kubectl cluster-info
 
-2. **Reinstall k3s:**
-   ```bash
-   sudo /usr/local/bin/k3s-uninstall.sh
-   sudo ./install.sh
-   ```
+# Check kubeconfig
+echo $KUBECONFIG
+ls -la ~/.kube/config
 
-3. **Check system requirements:**
+# Test basic connectivity
+kubectl get nodes
+```
+
+**Solutions:**
+1. **Configure kubectl:**
    ```bash
-   # Ensure sufficient memory
-   free -h
+   # Set kubeconfig if not configured
+   export KUBECONFIG=/path/to/your/kubeconfig
    
-   # Check if swap is disabled (recommended)
-   sudo swapoff -a
+   # Or copy config to default location
+   mkdir -p ~/.kube
+   cp /path/to/kubeconfig ~/.kube/config
+   ```
+
+2. **Check cluster status:**
+   ```bash
+   # For managed clusters (EKS, GKE, AKS)
+   # Ensure cluster is running and accessible
+   
+   # For on-premise clusters
+   systemctl status kubelet
+   systemctl status kube-apiserver
+   ```
+
+### Helm Installation Issues
+
+<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-red-700">
+        <strong>❌ Problem:</strong> Helm deployment fails
+      </p>
+    </div>
+  </div>
+</div>
+
+**Error symptoms:**
+```bash
+Error: failed to install chart: context deadline exceeded
+Error: UPGRADE FAILED: another operation is in progress
+```
+
+**Diagnostic steps:**
+```bash
+# Check Helm status
+helm list -n permit-platform
+
+# Check pending releases
+helm list --pending -n permit-platform
+
+# Check namespace
+kubectl get all -n permit-platform
+```
+
+**Solutions:**
+1. **Rollback failed release:**
+   ```bash
+   # If upgrade failed
+   helm rollback permit-platform -n permit-platform
+   
+   # Or uninstall and retry
+   helm uninstall permit-platform -n permit-platform
+   ./scripts/install-permit-platform.sh
+   ```
+
+2. **Check resource constraints:**
+   ```bash
+   # Check cluster resources
+   kubectl top nodes
+   kubectl describe nodes
+   
+   # Check for failed pods
+   kubectl get pods -n permit-platform --field-selector=status.phase=Failed
    ```
 
 ## Post-Installation Issues
@@ -255,31 +217,60 @@ sudo k3s kubectl get nodes
 
 **Diagnostic steps:**
 
-1. **Check platform status:**
+1. **Check pod status:**
    ```bash
-   ./scripts/status.sh
+   kubectl get pods -n permit-platform
+   kubectl get ingress -n permit-platform
    ```
 
-2. **Test local connectivity:**
+2. **Test internal connectivity:**
    ```bash
-   # Test from server itself
-   curl -k https://localhost
-   curl -k https://$(hostname -I | awk '{print $1}')
+   # Check if services are responding
+   kubectl port-forward -n permit-platform svc/permit-frontend 3000:3000 &
+   curl http://localhost:3000
    ```
 
-3. **Check ingress configuration:**
+3. **Check ingress controller:**
    ```bash
-   ./scripts/logs.sh ingress
-   ./scripts/status.sh --ingress
+   kubectl get pods -n ingress-nginx
+   kubectl logs -n ingress-nginx deployment/ingress-nginx-controller
    ```
 
-4. **Verify DNS/networking:**
+4. **Verify DNS resolution:**
    ```bash
-   # If using custom domain
-   nslookup permit.yourcompany.com
+   # Test domain resolution
+   nslookup [your-frontend-domain]
    
-   # Test from client machine
-   telnet <server-ip> 443
+   # Check hosts file (for .local domains)
+   cat /etc/hosts
+   ```
+
+**Solutions:**
+
+1. **DNS issues:**
+   ```bash
+   # For development (.local domains), add to hosts file
+   echo "127.0.0.1 permit-platform.local" | sudo tee -a /etc/hosts
+   
+   # For production, ensure DNS points to server IP
+   ```
+
+2. **Ingress issues:**
+   ```bash
+   # Check ingress status
+   kubectl describe ingress permit-frontend -n permit-platform
+   
+   # Restart ingress controller if needed
+   kubectl rollout restart deployment/ingress-nginx-controller -n ingress-nginx
+   ```
+
+3. **Service issues:**
+   ```bash
+   # Check if frontend pod is running
+   kubectl get pods -n permit-platform -l app=permit-frontend
+   
+   # Check frontend logs
+   kubectl logs -n permit-platform deployment/permit-frontend
    ```
 
 ### Service Startup Issues
@@ -296,38 +287,103 @@ sudo k3s kubectl get nodes
 
 **Check service health:**
 ```bash
-# Check all services
-./scripts/status.sh --detailed
+# Check all pods status
+kubectl get pods -n permit-platform
 
 # Check specific service logs
-./scripts/logs.sh backend
-./scripts/logs.sh celery
-./scripts/logs.sh opal-server
+kubectl logs -n permit-platform deployment/permit-backend-v2
+kubectl logs -n permit-platform deployment/celery-general
+kubectl logs -n permit-platform deployment/opal-server
 
-# Check resource usage
-./scripts/status.sh --resources
+# Check events for issues
+kubectl get events -n permit-platform --sort-by='.lastTimestamp'
 ```
 
 **Common solutions:**
 
-1. **Restart services:**
+1. **Restart failing services:**
    ```bash
-   ./scripts/restart.sh
+   # Restart specific deployment
+   kubectl rollout restart deployment/permit-backend-v2 -n permit-platform
+   
+   # Restart all deployments
+   kubectl rollout restart deployment -n permit-platform
    ```
 
 2. **Check resource constraints:**
    ```bash
-   # Check if out of memory
-   dmesg | grep -i "killed process"
+   # Check node resources
+   kubectl top nodes
+   kubectl describe nodes
    
-   # Check disk space
-   df -h
+   # Check for OOMKilled pods
+   kubectl get pods -n permit-platform -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[0].lastState.terminated.reason}{"\n"}{end}' | grep OOMKilled
    ```
 
-3. **Scale down if resource-constrained:**
+3. **Scale resources if needed:**
    ```bash
-   ./scripts/scale.sh backend --replicas 1
-   ./scripts/scale.sh celery --replicas 1
+   # Scale backend replicas
+   kubectl scale deployment permit-backend-v2 -n permit-platform --replicas=2
+   
+   # Scale celery workers
+   kubectl scale deployment celery-general -n permit-platform --replicas=1
+   ```
+
+### Authentication and Login Issues
+
+<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-red-700">
+        <strong>❌ Problem:</strong> Cannot login with admin credentials
+      </p>
+    </div>
+  </div>
+</div>
+
+**Error symptoms:**
+- "Invalid username or password"
+- Login form keeps reloading
+- Authentication redirect loops
+
+**Diagnostic steps:**
+```bash
+# Check Keycloak status
+kubectl get pods -n permit-platform -l app=keycloak
+kubectl logs -n permit-platform deployment/keycloak
+
+# Check backend authentication logs
+kubectl logs -n permit-platform deployment/permit-backend-v2 | grep -i auth
+
+# Verify admin password
+kubectl get secret keycloak-admin-secret -n permit-platform -o jsonpath='{.data.password}' | base64 -d
+```
+
+**Solutions:**
+
+1. **Reset admin password:**
+   ```bash
+   # Get current admin password from secret
+   kubectl get secret keycloak-admin-secret -n permit-platform -o jsonpath='{.data.password}' | base64 -d
+   
+   # If password doesn't work, check if Keycloak initialized properly
+   kubectl logs -n permit-platform deployment/keycloak | grep -i "admin user"
+   ```
+
+2. **Check Keycloak configuration:**
+   ```bash
+   # Verify Keycloak is accessible
+   kubectl port-forward -n permit-platform svc/keycloak 8080:8080 &
+   curl http://localhost:8080/auth/realms/permit-platform
+   ```
+
+3. **Authentication configuration issues:**
+   ```bash
+   # Check backend authentication environment variables
+   kubectl describe deployment permit-backend-v2 -n permit-platform | grep -A 20 Environment
+   
+   # Verify cookie configuration
+   kubectl logs -n permit-platform deployment/permit-backend-v2 | grep -i cookie
    ```
 
 ### Database Connection Issues
@@ -345,220 +401,203 @@ sudo k3s kubectl get nodes
 **Check database status:**
 ```bash
 # Check PostgreSQL pod
-./scripts/status.sh database
+kubectl get pods -n permit-platform -l app=postgres
+kubectl logs -n permit-platform deployment/postgres
 
-# Check database logs
-./scripts/logs.sh postgres
-
-# Test database connectivity
-./scripts/test-database.sh
+# Test database connectivity from backend
+kubectl exec -n permit-platform deployment/permit-backend-v2 -- psql -h postgres -U permit -d permit -c "SELECT 1;"
 ```
 
 **Solutions:**
 
 1. **Restart database:**
    ```bash
-   ./scripts/restart.sh postgres
+   kubectl rollout restart deployment/postgres -n permit-platform
+   
+   # Wait for database to be ready
+   kubectl wait --for=condition=ready pod -l app=postgres -n permit-platform --timeout=300s
    ```
 
-2. **Check database resources:**
+2. **Check database initialization:**
    ```bash
-   ./scripts/status.sh postgres --resources
+   # Check if database initialized properly
+   kubectl logs -n permit-platform deployment/postgres | grep -i "database system is ready"
+   
+   # Check database size and connections
+   kubectl exec -n permit-platform deployment/postgres -- psql -U permit -c "\l"
    ```
 
-3. **Verify database initialization:**
+3. **Verify database secrets:**
    ```bash
-   ./scripts/logs.sh postgres | grep -i "database system is ready"
+   # Check database password in secret
+   kubectl get secret postgres-secret -n permit-platform -o jsonpath='{.data.password}' | base64 -d
    ```
 
-### Git Sync Issues
+### Policy Sync Issues (Optional)
 
-<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+<div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 my-4">
   <div className="flex">
     <div className="ml-3">
-      <p className="text-sm text-red-700">
-        <strong>❌ Problem:</strong> Policy sync failing from Git repository
+      <p className="text-sm text-yellow-700">
+        <strong>⚠️ Problem:</strong> Policy sync failing from Git repository
       </p>
     </div>
   </div>
 </div>
+
+**Only relevant if you configured Policy Sync during installation.**
 
 **Test Git connectivity:**
 ```bash
-# Test SSH connection
-ssh -T git@github.com -i ./permit-policy-key
+# Check Policy Sync pod status
+kubectl get pods -n permit-platform -l app=permit-policy-sync-v2
 
-# Check policy sync logs
-./scripts/logs.sh policy-sync
+# Check Policy Sync logs
+kubectl logs -n permit-platform deployment/permit-policy-sync-v2
 
-# Test Git from within platform
-./scripts/test-git.sh
+# Verify SSH key secret
+kubectl get secret policy-sync-ssh-key -n permit-platform -o jsonpath='{.data.private-key}' | base64 -d | head -1
 ```
 
 **Solutions:**
 
-1. **Verify Git credentials:**
+1. **Verify Git credentials in secret:**
    ```bash
-   # Recreate Git configuration
-   ./scripts/update-git-config.sh \
-     --repo "git@github.com:yourorg/permit-policies.git" \
-     --key "./permit-policy-key"
-   ```
-
-2. **Manual sync:**
-   ```bash
-   ./scripts/policy-sync.sh --force
-   ```
-
-3. **Check repository permissions:**
-   - Verify deploy key still exists in repository
-   - Ensure write access is still enabled
-
-## Performance Issues
-
-### Slow Response Times
-
-<div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 my-4">
-  <div className="flex">
-    <div className="ml-3">
-      <p className="text-sm text-yellow-700">
-        <strong>⚠️ Problem:</strong> Platform responding slowly
-      </p>
-    </div>
-  </div>
-</div>
-
-**Diagnostic steps:**
-
-1. **Check resource usage:**
-   ```bash
-   ./scripts/status.sh --resources
-   htop  # or top
-   ```
-
-2. **Check service response times:**
-   ```bash
-   # Test API response time
-   time curl -k https://localhost/health
+   # Check if SSH key is properly configured
+   kubectl describe secret policy-sync-ssh-key -n permit-platform
    
-   # Check database performance
-   ./scripts/metrics.sh --database
+   # Test SSH connection manually (if possible)
+   ssh -T git@github.com -i /path/to/permit-policy-key
    ```
 
-3. **Scale up if needed:**
+2. **Restart Policy Sync service:**
    ```bash
-   ./scripts/scale.sh backend --replicas 3
-   ./scripts/scale.sh celery --replicas 2
+   kubectl rollout restart deployment/permit-policy-sync-v2 -n permit-platform
    ```
 
-### High Resource Usage
+## Log Collection and Monitoring
 
-<div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 my-4">
-  <div className="flex">
-    <div className="ml-3">
-      <p className="text-sm text-yellow-700">
-        <strong>⚠️ Problem:</strong> High CPU or memory usage
-      </p>
-    </div>
-  </div>
-</div>
+### Collecting Diagnostic Information
 
-**Investigation:**
+For troubleshooting or support requests:
+
 ```bash
-# Check top resource consumers
-./scripts/metrics.sh --top-consumers
+# Get all pod logs
+kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres > permit-platform-logs.txt
 
-# Check for memory leaks
-./scripts/metrics.sh --memory-analysis
+# Get pod status and descriptions
+kubectl get pods -n permit-platform -o wide > pod-status.txt
+kubectl describe pods -n permit-platform > pod-descriptions.txt
 
-# Review service resource limits
-./scripts/status.sh --resource-limits
+# Get events
+kubectl get events -n permit-platform --sort-by='.lastTimestamp' > events.txt
+
+# Get service and ingress info
+kubectl get svc,ingress -n permit-platform -o yaml > networking.yaml
+
+# Check resource usage
+kubectl top pods -n permit-platform > resource-usage.txt
 ```
 
-**Solutions:**
+### Performance Monitoring
 
-1. **Optimize resource allocation:**
-   ```bash
-   ./scripts/resources.sh backend --memory 2Gi --cpu 1000m
-   ```
-
-2. **Enable auto-scaling:**
-   ```bash
-   ./scripts/scale.sh --auto-enable
-   ```
-
-## Recovery Procedures
-
-### Emergency Recovery
-
-If the platform is completely down:
-
+**Check resource consumption:**
 ```bash
-# 1. Check system health
-./scripts/emergency.sh --diagnose
+# Monitor pod resources
+kubectl top pods -n permit-platform
 
-# 2. Try emergency restart
-./scripts/emergency.sh --restart
+# Monitor node resources
+kubectl top nodes
 
-# 3. If restart fails, try safe mode
-./scripts/emergency.sh --safe-mode
-
-# 4. Last resort: reinstall
-sudo ./scripts/cleanup.sh
-sudo ./install.sh
+# Check for resource limits being hit
+kubectl describe pods -n permit-platform | grep -A 5 -B 5 "resource\|limit\|request"
 ```
 
-### Data Recovery
+**Scale services if needed:**
+```bash
+# Scale backend for more capacity
+kubectl scale deployment permit-backend-v2 -n permit-platform --replicas=3
 
-If you need to recover from backup:
+# Scale celery workers
+kubectl scale deployment celery-general -n permit-platform --replicas=2
+
+# Check horizontal pod autoscaler (if configured)
+kubectl get hpa -n permit-platform
+```
+
+## Advanced Troubleshooting
+
+### Clean Installation Reset
+
+If you need to completely reset the installation:
 
 ```bash
-# List available backups
-./scripts/backup.sh --list
+# 1. Uninstall all Helm releases
+helm uninstall permit-platform -n permit-platform 2>/dev/null || true
+helm uninstall third-party-services -n permit-platform 2>/dev/null || true  
+helm uninstall migrations -n permit-platform 2>/dev/null || true
 
-# Restore from specific backup
-./scripts/restore.sh --backup backup-20241201-143022.tar.gz
+# 2. Delete namespace (removes all resources)
+kubectl delete namespace permit-platform
 
-# Verify restoration
-./scripts/status.sh --verify
+# 3. Clean up any persistent volumes (careful!)
+kubectl get pv | grep permit-platform  # Check before deleting
+kubectl delete pv $(kubectl get pv -o jsonpath='{.items[?(@.spec.claimRef.namespace=="permit-platform")].metadata.name}')
+
+# 4. Re-run installation
+./scripts/install-permit-platform.sh
+```
+
+### Manual Service Recovery
+
+If specific services are failing:
+
+```bash
+# Force delete stuck pods
+kubectl delete pod <pod-name> -n permit-platform --force --grace-period=0
+
+# Patch deployment to fix issues
+kubectl patch deployment permit-backend-v2 -n permit-platform -p '{"spec":{"template":{"spec":{"containers":[{"name":"permit-backend-v2","image":"new-image-tag"}]}}}}'
+
+# Check and fix persistent volume claims
+kubectl get pvc -n permit-platform
+kubectl describe pvc <pvc-name> -n permit-platform
 ```
 
 ## Getting Support
 
-### Before Contacting Support
+When contacting support, please provide:
 
-1. **Collect comprehensive logs:**
-   ```bash
-   ./scripts/collect-logs.sh --include-system
-   # Creates: permit-platform-logs-YYYYMMDD-HHMMSS.tar.gz
-   ```
+**Required Information:**
+- **Installation method**: Kubernetes cluster type (EKS, GKE, AKS, on-premise)
+- **Platform version**: From installer package filename
+- **Error description**: What you were trying to do and what happened
+- **Timeline**: When did the issue start?
 
-2. **Gather system information:**
-   ```bash
-   ./scripts/system-info.sh > system-info.txt
-   ```
+**Helpful Diagnostics:**
+```bash
+# Create comprehensive diagnostic bundle
+{
+  echo "=== CLUSTER INFO ==="
+  kubectl cluster-info
+  echo "=== NODES ==="
+  kubectl get nodes -o wide
+  echo "=== PERMIT PLATFORM PODS ==="
+  kubectl get pods -n permit-platform -o wide
+  echo "=== RECENT EVENTS ==="
+  kubectl get events -n permit-platform --sort-by='.lastTimestamp' | tail -20
+  echo "=== INGRESS STATUS ==="
+  kubectl get ingress -n permit-platform
+  echo "=== STORAGE ==="
+  kubectl get pv,pvc -n permit-platform
+} > permit-support-info.txt
+```
 
-3. **Document the issue:**
-   - What were you trying to do?
-   - What happened instead?
-   - When did it start happening?
-   - Any recent changes?
-
-### Contact Information
-
+**Contact Information:**
 - **📧 Email:** support@permit.io
-- **💬 Slack:** #support channel
-- **🕐 Response time:** Within 24 hours
-
-### What to Include
-
-Always attach:
-- ✅ **Logs bundle** from `collect-logs.sh`
-- ✅ **System information** 
-- ✅ **Platform version** and build ID
-- ✅ **Detailed description** of the issue
-- ✅ **Steps to reproduce** (if applicable)
+- **📖 Documentation:** Available in your organization's Permit.io account
+- **🕐 Response time:** Within 24 hours for enterprise customers
 
 ---
 
-**Still having issues?** Our support team is here to help. Don't hesitate to reach out with your logs and system information.
+**Need more help?** Our support team has experience with all major Kubernetes platforms and can assist with advanced troubleshooting scenarios.
