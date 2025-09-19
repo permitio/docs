@@ -1,6 +1,6 @@
 ---
 title: "Management Guide" 
-description: "Day-to-day operations and maintenance"
+description: "Configuration, operations, and maintenance"
 ---
 
 :::info Enterprise Only
@@ -9,45 +9,140 @@ This section is only relevant to Enterprise customers who acquired an on-prem li
 
 # Management Guide
 
-Learn how to manage and maintain your Permit Platform deployment.
+Learn how to configure, manage, and maintain your Permit Platform deployment.
+
+## Configuration Management
+
+### Primary Configuration File
+
+All platform configuration is managed through `charts/permit-platform/values.yaml`. The key sections you can customize:
+
+#### Required Configuration
+
+```yaml
+# Must be configured before installation
+global:
+  frontendDomain: "permit.yourcompany.com"  # REQUIRED - Replace CHANGEME_FRONTEND_DOMAIN
+
+permitServices:
+  policySync:
+    enabled: true
+    policyRepoUrl: "git@github.com:yourorg/permit-policies.git"  # REQUIRED
+    sshPrivateKey: |  # REQUIRED
+      -----BEGIN OPENSSH PRIVATE KEY-----
+      [Your SSH private key]
+      -----END OPENSSH PRIVATE KEY-----
+```
+
+#### Common Customizations
+
+**1. Custom Image Registry:**
+```yaml
+global:
+  imageRegistry: "myregistry.company.com"  # Your private registry
+  # Or for cloud providers:
+  # imageRegistry: "123456789.dkr.ecr.region.amazonaws.com"  # AWS ECR
+  # imageRegistry: "myregistry.azurecr.io"  # Azure
+  # imageRegistry: "gcr.io/project-id"  # GCP
+```
+
+**2. Resource Scaling:**
+```yaml
+permitServices:
+  backend:
+    replicas: 3  # Scale backend for high availability
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1000m"
+      limits:
+        memory: "4Gi"
+        cpu: "2000m"
+```
+
+**3. Storage Configuration:**
+```yaml
+thirdPartyServices:
+  postgres:
+    persistence:
+      size: "50Gi"  # Increase for production
+      storageClass: "fast-ssd"  # Use specific storage class
+  
+  opensearch:
+    persistence:
+      size: "100Gi"  # For production audit logs
+```
+
+**4. OpenSearch Tuning:**
+```yaml
+opensearch:
+  indexSettings:
+    auditLogs:
+      numberOfShards: 1  # Single-node: 1, Multi-node: 3-5
+      numberOfReplicas: 0  # Single-node: 0, HA: 1+
+  ism:
+    rollover:
+      minSize: "50gb"  # Adjust based on volume
+      minAge: "30d"   # Retention period
+```
+
+### Applying Configuration Changes
+
+After modifying `values.yaml`:
+
+```bash
+# Upgrade deployment with new configuration
+helm upgrade permit-platform charts/permit-platform -n permit-platform
+
+# Check rollout status
+kubectl rollout status deployment -n permit-platform
+
+# Verify changes
+kubectl get pods -n permit-platform
+```
 
 ## Daily Operations
 
-### Platform Status
+### Platform Health Monitoring
 
 ```bash
-# Check overall platform health
-./scripts/status.sh
+# Check all pods status
+kubectl get pods -n permit-platform
 
-# Detailed service status
-./scripts/status.sh --detailed
+# Get detailed pod information
+kubectl describe pods -n permit-platform
 
-# Resource usage monitoring
-./scripts/status.sh --resources
+# Check service endpoints
+kubectl get services -n permit-platform
+
+# View recent events
+kubectl get events -n permit-platform --sort-by='.lastTimestamp'
 ```
 
 ### Log Management
 
 ```bash
-# View logs for specific services
-./scripts/logs.sh backend
-./scripts/logs.sh celery
-./scripts/logs.sh opal-server
-./scripts/logs.sh policy-sync
-./scripts/logs.sh pdp
-
-# View all platform logs
-./scripts/logs.sh --all
+# View backend logs
+kubectl logs -n permit-platform deployment/permit-backend-v2 --tail=100
 
 # Follow logs in real-time
-./scripts/logs.sh backend --follow
+kubectl logs -n permit-platform deployment/permit-backend-v2 -f
+
+# View logs for crashed pods
+kubectl logs -n permit-platform <pod-name> --previous
+
+# Export all logs
+kubectl logs -n permit-platform --all-containers=true > platform-logs.txt
 ```
 
 ### Service Management
 
 ```bash
-# Restart all platform services
-./scripts/restart.sh
+# Restart specific service
+kubectl rollout restart deployment/permit-backend-v2 -n permit-platform
+
+# Restart all services
+kubectl rollout restart deployment -n permit-platform
 
 # Restart specific service
 ./scripts/restart.sh backend

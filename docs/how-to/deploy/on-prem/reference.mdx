@@ -1,6 +1,6 @@
 ---
 title: "Reference Documentation"
-description: "Detailed reference materials and advanced configurations"
+description: "Command reference and configuration options for Permit Platform"
 ---
 
 :::info Enterprise Only
@@ -9,418 +9,574 @@ This section is only relevant to Enterprise customers who acquired an on-prem li
 
 # Reference Documentation
 
-Comprehensive reference materials for advanced configuration and administration.
+Reference materials for Permit Platform on-premise deployment.
 
-## Command Reference
+## Installation Command Reference
 
-### Installation Commands
+### Basic Installation
 
 ```bash
-# Interactive installation
-sudo ./install.sh
+# Standard production Kubernetes installation
+./scripts/install-permit-platform.sh
 
-# Automated installation
-sudo ./install.sh \
-  --size {small|medium|large} \
-  --domain "permit.yourcompany.com" \
-  --git-repo "git@github.com:org/repo.git" \
-  --git-key "./private-key" \
-  [--ip-access] \
-  [--config config.yaml]
-
-# Multi-server installation
-sudo ./install.sh \
-  --mode {cluster|join} \
-  --server <ip> \
-  --token <token> \
-  [other options...]
-
-# Configuration file installation
-sudo ./install.sh --config permit-config.yaml
+# Get help and see all options
+./scripts/install-permit-platform.sh --help
 ```
 
-### Management Commands
+### Deployment Targets
 
 ```bash
-# Status and monitoring
-./scripts/status.sh [--detailed|--resources|--version]
-./scripts/health-check.sh [--endpoints|--services]
-./scripts/metrics.sh [--performance|--resources]
+# Production Kubernetes (EKS, GKE, AKS, on-premise)
+./scripts/install-permit-platform.sh
 
-# Logging
-./scripts/logs.sh [service-name] [--follow|--since=24h]
-./scripts/collect-logs.sh [--include-system|--emergency]
+# OpenShift (ROSA, OCP)
+./scripts/install-permit-platform.sh --openshift
 
-# Service management
-./scripts/restart.sh [service-name]
-./scripts/reload.sh [service-name]
-./scripts/stop.sh [service-name]
-./scripts/start.sh [service-name]
+# Local Kind cluster (development)
+./scripts/install-permit-platform.sh --kind
+```
 
-# Scaling
-./scripts/scale.sh <service> --replicas <number>
-./scripts/scale.sh --auto-enable
-./scripts/resources.sh <service> --memory <size> --cpu <size>
+### TLS Certificate Options
 
-# Git management
-./scripts/policy-status.sh
-./scripts/policy-sync.sh [--force]
-./scripts/test-git.sh
-./scripts/update-git-config.sh --repo <url> --key <path>
+```bash
+# Auto-generate certificates (mkcert/OpenSSL)
+./scripts/install-permit-platform.sh --generate-tls
 
-# Backup and recovery
-./scripts/backup.sh [--full|--database|--config] [--schedule <freq>]
-./scripts/restore.sh --backup <file>
-./scripts/backup.sh --list
+# Skip TLS configuration (external termination)
+./scripts/install-permit-platform.sh --skip-tls-check
 
-# Updates
-./scripts/update.sh [--check]
-./scripts/rollback.sh [--version <ver>] [--emergency]
+# Use custom certificates (configure in values.yaml)
+./scripts/install-permit-platform.sh
+```
 
-# Security
-./scripts/certificates.sh [--status|--renew|--update]
-./scripts/rotate-passwords.sh [--database|--services|--api-keys]
-./scripts/security-audit.sh
+### Advanced Options
 
-# Cluster management (multi-server)
-./scripts/cluster.sh [--status|--add-node|--remove-node|--health]
-./scripts/loadbalancer.sh [--status|--update|--test]
+```bash
+# Custom namespace
+./scripts/install-permit-platform.sh --namespace my-namespace
 
-# Maintenance
-./scripts/maintenance.sh [--enable|--disable|--run-tasks]
-./scripts/emergency.sh [--stop|--restart|--safe-mode|--diagnose]
-./scripts/cleanup.sh
+# Preview without applying
+./scripts/install-permit-platform.sh --dry-run
+
+# Skip image loading (testing/re-runs)
+./scripts/install-permit-platform.sh --skip-images
+
+# OpenShift with custom registry
+./scripts/install-permit-platform.sh --openshift --skip-openshift-registry
+```
+
+## Kubernetes Management Commands
+
+### Pod and Service Management
+
+```bash
+# Check all pods status
+kubectl get pods -n permit-platform
+
+# Check services and endpoints
+kubectl get services -n permit-platform
+
+# View deployment status
+kubectl get deployments -n permit-platform
+
+# Check ingress configuration
+kubectl get ingress -n permit-platform
+```
+
+### Log Viewing
+
+```bash
+# View backend logs
+kubectl logs -n permit-platform deployment/permit-backend-v2
+
+# View frontend logs
+kubectl logs -n permit-platform deployment/permit-frontend
+
+# View authentication logs
+kubectl logs -n permit-platform deployment/keycloak
+
+# View database logs
+kubectl logs -n permit-platform deployment/postgres
+
+# View all logs
+kubectl logs -n permit-platform --all-containers=true
+```
+
+### Service Management
+
+```bash
+# Restart specific deployment
+kubectl rollout restart deployment/permit-backend-v2 -n permit-platform
+
+# Restart all deployments
+kubectl rollout restart deployment -n permit-platform
+
+# Scale services
+kubectl scale deployment permit-backend-v2 -n permit-platform --replicas=3
+kubectl scale deployment celery-general -n permit-platform --replicas=2
+
+# Check rollout status
+kubectl rollout status deployment/permit-backend-v2 -n permit-platform
+```
+
+### Troubleshooting Commands
+
+```bash
+# Check events for issues
+kubectl get events -n permit-platform --sort-by='.lastTimestamp'
+
+# Describe problematic pods
+kubectl describe pod <pod-name> -n permit-platform
+
+# Check resource usage
+kubectl top pods -n permit-platform
+kubectl top nodes
+
+# Check persistent volumes
+kubectl get pv,pvc -n permit-platform
+
+# Check secrets
+kubectl get secrets -n permit-platform
 ```
 
 ## Configuration Reference
 
-### Configuration File Format
+### Complete values.yaml Configuration Options
+
+The `charts/permit-platform/values.yaml` file provides extensive customization options for your deployment:
+
+### Global Configuration
 
 ```yaml
-# permit-config.yaml
-deployment:
-  mode: single              # single, cluster, join
-  size: medium             # small, medium, large
+global:
+  # REQUIRED: Your platform domain
+  frontendDomain: "permit.yourcompany.com"  # CHANGEME_FRONTEND_DOMAIN
   
-git:
-  repository: "git@github.com:org/repo.git"
-  private_key_path: "./permit-policy-key"
-  branch: "main"           # optional, defaults to main
+  # Image registry configuration
+  imageRegistry: ""  # Empty for Docker Hub
+                     # Or: "123456789.dkr.ecr.region.amazonaws.com" for ECR
+                     # Or: "myregistry.azurecr.io" for Azure
+                     # Or: "gcr.io/project-id" for GCP
+  imagePullPolicy: "IfNotPresent"  # Always, Never, IfNotPresent
   
-networking:
-  domain: "permit.yourcompany.com"  # optional
-  ip_access: false         # true for IP-based access
-  ssl_enabled: true
-  http_port: 80           # optional
-  https_port: 443         # optional
+  # Database configuration
+  postgres:
+    enabled: true
+    host: "postgres"
+    port: 5432
+    database: "permit"
+    username: "permit"
+    password: "CHANGEME_POSTGRES_PASSWORD"  # Auto-generated if not set
+    
+  # Redis cache configuration
+  redis:
+    enabled: true
+    host: "redis"
+    port: 6379
+    password: ""  # Leave empty for no authentication
+    
+  # Message queue configuration
+  rabbitmq:
+    enabled: true
+    host: "rabbitmq"
+    port: 5672
+    managementPort: 15672
+    username: "permit"
+    password: "CHANGEME_RABBITMQ_PASSWORD"  # Auto-generated if not set
+    
+  # OpenSearch configuration
+  opensearch:
+    enabled: true
+    host: "opensearch"
+    port: 9200
+    username: "admin"
+    password: "CHANGEME_OPENSEARCH_PASSWORD"  # Auto-generated if not set
+    
+  # Keycloak authentication
+  keycloak:
+    enabled: true
+    host: "keycloak"
+    port: 8080
+    adminUsername: "admin"
+    adminPassword: "CHANGEME_KEYCLOAK_ADMIN_PASSWORD"  # Auto-generated
+    realm: "permit-platform"
+    clientId: "permit-backend"
+    clientSecret: "permit-client-secret"
+    db:
+      password: "CHANGEME_KEYCLOAK_DB_PASSWORD"  # Auto-generated
+```
+
+### OpenShift-Specific Configuration
+
+```yaml
+openshift:
+  enabled: false  # Set to true for OpenShift deployments
   
-resources:
+  # ServiceAccount for privileged operations
+  serviceAccount:
+    create: true
+    name: "permit-privileged-sa"
+    sccName: "anyuid"  # Security Context Constraint
+    
+  # OpenShift Route (alternative to Ingress)
+  route:
+    enabled: false  # Use Ingress by default
+    termination: "edge"  # edge, passthrough, or reencrypt
+    insecureEdgeTerminationPolicy: "Redirect"
+    
+  # Security contexts for OpenShift
+  securityContext:
+    defaultUser: null  # Let OpenShift assign
+    defaultGroup: null
+    defaultFsGroup: null
+```
+
+### Ingress and TLS Configuration
+
+```yaml
+ingress:
+  enabled: true
+  className: "nginx"  # nginx, traefik, alb, etc.
+  annotations: {}  # Custom ingress annotations
+  
+  # TLS/SSL configuration
+  tls:
+    enabled: true
+    # Option 1: Provide certificates directly
+    certificate:
+      cert: |
+        -----BEGIN CERTIFICATE-----
+        [Your certificate content]
+        -----END CERTIFICATE-----
+      key: |
+        -----BEGIN PRIVATE KEY-----
+        [Your private key content]
+        -----END PRIVATE KEY-----
+    
+    # Option 2: Reference certificate files
+    certificateFiles:
+      certFile: "/path/to/cert.pem"
+      keyFile: "/path/to/key.pem"
+```
+
+### Third-Party Services Configuration
+
+```yaml
+thirdPartyServices:
+  enabled: true
+  
+  # PostgreSQL database
+  postgres:
+    enabled: true
+    image: "postgres_15-alpine"
+    persistence:
+      enabled: true
+      size: "10Gi"  # Minimum, 20Gi+ for production
+      storageClass: ""  # Use default if empty
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+    # PostgreSQL tuning parameters
+    config:
+      maxConnections: "150"
+      sharedBuffers: "128MB"
+      effectiveCacheSize: "384MB"
+      workMem: "8MB"
+      maintenanceWorkMem: "64MB"
+      checkpointCompletionTarget: "0.9"
+      walBuffers: "4MB"
+      randomPageCost: "1.1"  # SSD optimization
+      
+  # Redis cache
+  redis:
+    enabled: true
+    image: "redis_7-alpine"
+    persistence:
+      enabled: true
+      size: "5Gi"
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "200m"
+        
+  # OpenSearch for audit logs
+  opensearch:
+    enabled: true
+    image: "opensearchproject_opensearch_2.11.0"
+    persistence:
+      enabled: true
+      size: "15Gi"  # Minimum for 3 shards
+    resources:
+      requests:
+        memory: "3Gi"
+        cpu: "750m"
+      limits:
+        memory: "6Gi"
+        cpu: "1500m"
+    # Index State Management (ISM)
+    ism:
+      enabled: true
+      rollover:
+        minSize: "15gb"  # Rollover at 15GB
+        minAge: "7d"     # Or after 7 days
+      transitions:
+        toReadOnly: "7d"
+        toDelete: "30d"  # Adjust for compliance
+    # Index configuration
+    indexSettings:
+      auditLogs:
+        numberOfShards: 3  # Default for multi-node
+        numberOfReplicas: 0  # No replicas for on-premise
+        
+  # RabbitMQ message queue
+  rabbitmq:
+    enabled: true
+    image: "rabbitmq_3.12.10-management-alpine"
+    persistence:
+      enabled: true
+      size: "5Gi"
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+        
+  # Keycloak authentication
+  keycloak:
+    enabled: true
+    image: "quay.io_keycloak_keycloak_20.0.5"
+    persistence:
+      enabled: true
+      size: "5Gi"
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+```
+
+### Permit Platform Services Configuration
+
+```yaml
+permitServices:
+  # Backend API service
   backend:
-    replicas: 3
-    cpu: "1000m"
-    memory: "2Gi"
-  celery:
-    replicas: 2
-    cpu: "500m"
-    memory: "1Gi"
-  database:
-    cpu: "2000m"
-    memory: "4Gi"
-    storage: "100Gi"
+    enabled: true
+    replicas: 1  # Scale as needed
+    image: "permit-backend-v2"
+    tag: "latest"
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+    env:  # Environment variable overrides
+      LOG_LEVEL: "INFO"
+      ENABLE_MONITORING: "true"
+      
+  # Frontend application
+  frontend:
+    enabled: true
+    replicas: 1
+    image: "permit-frontend"
+    tag: "latest"
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+        
+  # OPAL policy server
+  opalServer:
+    enabled: true
+    replicas: 1
+    image: "permitio/opal-server"
+    tag: "0.7.5-rc.7"
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+        
+  # Policy synchronization (REQUIRED)
+  policySync:
+    enabled: true
+    policyRepoUrl: "git@github.com:yourorg/permit-policies.git"
+    sshPrivateKey: |
+      -----BEGIN OPENSSH PRIVATE KEY-----
+      [Your SSH private key content]
+      -----END OPENSSH PRIVATE KEY-----
+    branch: "main"  # Git branch to sync from
+    syncInterval: "60s"  # How often to check for updates
     
-security:
-  ssl_only: true
-  strong_passwords: true
-  audit_logging: true
-  network_policies: false
-  
-certificates:
-  auto_renew: true
-  provider: "letsencrypt"  # letsencrypt, custom
-  email: "admin@yourcompany.com"  # for letsencrypt
-  
-backup:
+  # Celery workers
+  celeryGeneral:
+    enabled: true
+    replicas: 1  # Scale based on workload
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+```
+
+### Advanced Configuration Options
+
+```yaml
+# Database migrations
+migrations:
   enabled: true
-  schedule: "daily"        # daily, weekly, custom
-  retention_days: 30
-  storage_path: "/backups"
+  runOnInstall: true
+  runOnUpgrade: true
   
+# Security contexts
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  
+# Resource quotas (optional)
+resourceQuota:
+  enabled: false
+  limits:
+    cpu: "100"
+    memory: "200Gi"
+    persistentvolumeclaims: "20"
+    
+# Network policies (optional)
+networkPolicy:
+  enabled: false
+  ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: permit-platform
+            
+# Monitoring and observability (optional)
 monitoring:
+  enabled: false
+  prometheus:
+    enabled: false
+    port: 9090
+  grafana:
+    enabled: false
+    port: 3000
+```
+
+### Performance Tuning Options
+
+```yaml
+# Connection pooling
+pgBouncer:
   enabled: true
-  metrics_retention: "7d"
-  log_retention: "30d"
+  maxClientConnections: 200
+  defaultPoolSize: 25
+  minPoolSize: 10
+  reservePoolSize: 5
+  
+# Horizontal Pod Autoscaling
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilization: 80
+  targetMemoryUtilization: 80
 ```
 
-### Environment Variables
-
-The platform uses these environment variables:
-
-```bash
-# Database configuration
-PG_DSN="postgresql+asyncpg://user:pass@host:5432/db"
-PG_READ_DSN="postgresql+asyncpg://user:pass@host:5432/db"
-
-# Cache configuration  
-REDIS_DSN="redis://host:6379"
-REDIS_READ_DSN="redis://host:6379"
-
-# Message queue
-AMQP_DSN="amqp://user:pass@host:5672/"
-AMQP_EXCHANGE="permit-exchange"
-
-# Git configuration
-POLICY_REPO_URL="git@github.com:org/repo.git"
-POLICY_REPO_AUTH_PRIVATE_KEY="<ssh-private-key>"
-
-# Service URLs
-API_URL="http://permit-backend-v2"
-OPAL_SERVER_URL="http://opal-server"
-RELAY_STATISTICS_URL="http://permit-opal-relay-consumer-v2"
-
-# Security
-OPAL_MASTER_TOKEN="<secure-token>"
-LOCAL_JWT_KEY="<jwt-private-key>"
-
-# Logging
-LOG_LEVEL="INFO"           # DEBUG, INFO, WARNING, ERROR
-LOG_JSON_TO_STDERR="false"
-
-# Features
-ENABLE_MONITORING="true"
-ENABLE_TRACING="false"
-```
-
-## Service Architecture
-
-### Service Components
-
-```mermaid
-graph TB
-    LB[Load Balancer/Ingress] --> BE[Backend API]
-    BE --> DB[(PostgreSQL)]
-    BE --> REDIS[(Redis)]
-    BE --> MQ[(RabbitMQ)]
-    
-    BE --> OPAL[OPAL Server]
-    OPAL --> OI[OPAL Interface]
-    OPAL --> OR[OPAL Relay]
-    
-    BE --> PS[Policy Sync]
-    PS --> GIT[Git Repository]
-    
-    BE --> CELERY[Celery Workers]
-    CELERY --> MQ
-    
-    BE --> PDP[Policy Decision Point]
-    
-    BE --> OS[(OpenSearch)]
-```
-
-### Service Responsibilities
-
-| Service | Purpose | Scaling Strategy |
-|---------|---------|------------------|
-| **Backend API** | Main application API | Horizontal (3-10 replicas) |
-| **Celery Workers** | Background task processing | Horizontal (2-8 replicas) |
-| **OPAL Server** | Policy distribution | Vertical (1-2 replicas) |
-| **OPAL Interface** | OPAL API interface | Horizontal (2-5 replicas) |
-| **Policy Sync** | Git repository sync | Vertical (1 replica) |
-| **PDP** | Authorization decisions | Horizontal (3-20 replicas) |
-| **PostgreSQL** | Primary database | Vertical + read replicas |
-| **Redis** | Cache and sessions | Master + replicas |
-| **RabbitMQ** | Message queue | Cluster (3-5 nodes) |
-| **OpenSearch** | Audit logs and search | Cluster (1-3 nodes) |
-
-## Network Architecture
-
-### Port Requirements
-
-| Port | Service | Purpose | External Access |
-|------|---------|---------|-----------------|
-| 80 | HTTP | Web interface redirect | Yes |
-| 443 | HTTPS | Web interface | Yes |
-| 6443 | k3s API | Kubernetes API | Internal only |
-| 10250 | kubelet | Node communication | Internal only |
-| 5432 | PostgreSQL | Database | Internal only |
-| 6379 | Redis | Cache | Internal only |
-| 5672 | RabbitMQ | Message queue | Internal only |
-| 9200 | OpenSearch | Search engine | Internal only |
-
-### Security Groups
-
-For cloud deployments, configure security groups:
+### Backup and Recovery Configuration
 
 ```yaml
-# External access (from internet/users)
-ingress:
-  - port: 80
-    protocol: TCP
-    source: 0.0.0.0/0
-  - port: 443  
-    protocol: TCP
-    source: 0.0.0.0/0
-
-# Internal cluster communication
-ingress:
-  - port: 6443
-    protocol: TCP
-    source: <cluster-cidr>
-  - port: 10250
-    protocol: TCP  
-    source: <cluster-cidr>
-  - port: 5432-9200
-    protocol: TCP
-    source: <cluster-cidr>
+backup:
+  enabled: false
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention: 30  # Days to keep backups
+  storageLocation: "s3://backup-bucket/permit"
+  
+restore:
+  enabled: false
+  backupName: ""  # Specific backup to restore from
 ```
 
-## Backup and Recovery
+## Uninstallation
 
-### Backup Types
-
-| Type | Contents | Frequency | Retention |
-|------|----------|-----------|-----------|
-| **Full** | Database + configs + volumes | Weekly | 12 weeks |
-| **Database** | PostgreSQL data only | Daily | 30 days |
-| **Config** | Configuration files only | Before changes | 10 versions |
-| **Emergency** | Critical data for recovery | On-demand | 7 days |
-
-### Backup Locations
+### Complete Removal
 
 ```bash
-# Default backup paths
-/opt/permit-platform/backups/
-├── full/
-│   ├── backup-20241201-full.tar.gz
-│   └── backup-20241208-full.tar.gz
-├── database/
-│   ├── backup-20241210-db.sql.gz
-│   └── backup-20241211-db.sql.gz
-├── config/
-│   └── backup-20241210-config.tar.gz
-└── emergency/
-    └── backup-20241210-emergency.tar.gz
+# Remove all Helm releases
+helm uninstall permit-platform -n permit-platform 2>/dev/null || true
+helm uninstall third-party-services -n permit-platform 2>/dev/null || true
+helm uninstall migrations -n permit-platform 2>/dev/null || true
+
+# Delete namespace (removes all resources)
+kubectl delete namespace permit-platform
+
+# Clean up persistent volumes (careful!)
+kubectl get pv | grep permit-platform
+kubectl delete pv $(kubectl get pv -o jsonpath='{.items[?(@.spec.claimRef.namespace=="permit-platform")].metadata.name}')
 ```
 
-### Recovery Procedures
+### Selective Removal
 
 ```bash
-# Recovery priority order:
-1. ./scripts/restart.sh              # Service restart
-2. ./scripts/restore.sh --database   # Database restore
-3. ./scripts/restore.sh --config     # Config restore  
-4. ./scripts/restore.sh --full       # Full restore
-5. ./scripts/emergency.sh --reinstall # Complete reinstall
+# Remove only platform services (keep data)
+helm uninstall permit-platform -n permit-platform
+
+# Remove specific deployments
+kubectl delete deployment permit-backend-v2 -n permit-platform
+kubectl delete deployment permit-frontend -n permit-platform
 ```
 
-## Performance Tuning
+## Support Information
 
-### Resource Sizing Guidelines
+### Diagnostic Collection
 
-**Small Deployment (Development/Testing):**
-```yaml
-resources:
-  backend: { replicas: 2, cpu: "500m", memory: "1Gi" }
-  celery: { replicas: 1, cpu: "250m", memory: "512Mi" }
-  database: { cpu: "1000m", memory: "2Gi", storage: "50Gi" }
-  redis: { cpu: "250m", memory: "512Mi", storage: "10Gi" }
-```
-
-**Medium Deployment (Production):**
-```yaml
-resources:
-  backend: { replicas: 3, cpu: "1000m", memory: "2Gi" }
-  celery: { replicas: 2, cpu: "500m", memory: "1Gi" }
-  database: { cpu: "2000m", memory: "4Gi", storage: "100Gi" }
-  redis: { cpu: "500m", memory: "1Gi", storage: "20Gi" }
-```
-
-**Large Deployment (Enterprise):**
-```yaml
-resources:
-  backend: { replicas: 5, cpu: "2000m", memory: "4Gi" }
-  celery: { replicas: 4, cpu: "1000m", memory: "2Gi" }
-  database: { cpu: "4000m", memory: "8Gi", storage: "200Gi" }
-  redis: { cpu: "1000m", memory: "2Gi", storage: "50Gi" }
-```
-
-### Performance Monitoring
+Create comprehensive diagnostic bundle for support:
 
 ```bash
-# Key metrics to monitor
-./scripts/metrics.sh --performance
-
-# Database performance
-./scripts/metrics.sh --database-performance
-
-# API response times
-./scripts/metrics.sh --api-performance
-
-# Resource utilization
-./scripts/metrics.sh --resource-utilization
+{
+  echo "=== CLUSTER INFO ==="
+  kubectl cluster-info
+  echo "=== PERMIT PLATFORM PODS ==="
+  kubectl get pods -n permit-platform -o wide
+  echo "=== RECENT EVENTS ==="
+  kubectl get events -n permit-platform --sort-by='.lastTimestamp' | tail -20
+  echo "=== SERVICES ==="
+  kubectl get svc,ingress -n permit-platform
+  echo "=== STORAGE ==="
+  kubectl get pv,pvc -n permit-platform
+} > permit-support-bundle.txt
 ```
 
-## Security Hardening
-
-### Security Checklist
-
-- [ ] **SSL/TLS enabled** for all external connections
-- [ ] **Strong passwords** generated for all services
-- [ ] **Network policies** configured (if enabled)
-- [ ] **Regular backups** scheduled and tested
-- [ ] **Security scanning** enabled
-- [ ] **Audit logging** configured
-- [ ] **Certificate auto-renewal** configured
-- [ ] **Access controls** properly configured
-- [ ] **Git repository** secured with deploy keys
-- [ ] **Regular updates** applied
-
-### Security Monitoring
+### Log Collection
 
 ```bash
-# Security audit
-./scripts/security-audit.sh
+# Collect all pod logs
+kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres > all-logs.txt
 
-# Check for vulnerabilities
-./scripts/security-scan.sh
-
-# Review access logs
-./scripts/audit-logs.sh --since 24h
-
-# Certificate status
-./scripts/certificates.sh --status
-```
-
-## Compliance and Auditing
-
-### Audit Log Locations
-
-```bash
-# Platform audit logs
-/var/log/permit-platform/audit.log
-
-# System audit logs
-/var/log/audit/audit.log
-
-# Application logs
-/var/log/permit-platform/application.log
-
-# Access logs
-/var/log/permit-platform/access.log
-```
-
-### Compliance Reports
-
-```bash
-# Generate compliance report
-./scripts/compliance-report.sh --format pdf
-
-# Export audit logs
-./scripts/export-audit-logs.sh --since 30d --format json
-
-# Security assessment
-./scripts/security-assessment.sh --detailed
+# Collect specific service logs
+kubectl logs -n permit-platform deployment/permit-backend-v2 > backend-logs.txt
+kubectl logs -n permit-platform deployment/keycloak > auth-logs.txt
 ```
 
 ---
 
-**Need more specific information?** Contact our support team for advanced configuration assistance.
+**Need help?** Contact support@permit.io with your diagnostic bundle and system information.
