@@ -37,6 +37,16 @@ Your installer package includes:
 
 Understanding what happens during installation helps you troubleshoot issues and customize your deployment.
 
+### Helm Chart Architecture
+
+The installation deploys **3 separate Helm charts** in a specific order:
+
+1. **`third-party-services`** - Infrastructure components (PostgreSQL, Redis, OpenSearch, RabbitMQ, Keycloak)
+2. **`migrations`** - Database schema setup (backend schema, OPAL relay schema, indices)  
+3. **`permit-platform`** - All Permit services (35 services total: backend, frontend, OPAL, policy enforcement)
+
+This 3-phase approach ensures proper dependency management and allows for independent scaling and management of each component layer.
+
 ### Complete Installation Process Breakdown
 
 The `install-permit-platform.sh` script is a comprehensive deployment orchestrator that handles:
@@ -746,22 +756,27 @@ The installation script performs these steps automatically:
    - Sets up RBAC permissions
 
 4. **Third-party Services Deployment** (2-3 minutes)
-   - PostgreSQL database
+   **Helm Chart: `third-party-services`**
+   - PostgreSQL database (with read replica)
    - Redis cache
-   - OpenSearch for audit logs
+   - OpenSearch for audit logs (3 shards, ISM policies)
    - RabbitMQ message queue
    - Keycloak authentication server
 
 5. **Database Migrations** (1-2 minutes)
-   - Backend database schema
-   - OPAL relay database schema
-   - Audit log indices in OpenSearch
+   **Helm Chart: `migrations`**
+   - Backend database schema initialization
+   - OPAL relay database schema setup
+   - OpenSearch index templates and ISM policies
+   - Initial data seeding
 
 6. **Platform Services Deployment** (2-4 minutes)
-   - Permit backend services
-   - OPAL policy management
-   - Frontend application
-   - Policy sync service (if configured)
+   **Helm Chart: `permit-platform`**
+   - Permit backend services (permit-backend-v2, celery workers)
+   - OPAL policy management (opal-server, relay components)
+   - Frontend application (permit-frontend)
+   - Policy sync service (permit-policy-sync-v2)
+   - All 35 services total
 
 7. **Ingress and Networking** (1 minute)
    - Nginx ingress controller
@@ -818,19 +833,19 @@ When installation finishes successfully, you'll see detailed access information:
 ```bash
 [SUCCESS] 🎉 Permit Platform On-Prem deployed successfully!
 [INFO] Access your Permit Platform at:
-[INFO]   • Frontend: https://permit-platform.local
+[INFO]   • Frontend: https://permit-frontend.local
 [INFO]     - Admin user: admin/[Generated Password]
 [INFO]     - Or register a new account
 [INFO] Additional services:
-[INFO]   • OpenSearch Dashboard: https://permit-platform.local/opensearch/ (no authentication required)
-[INFO]   • RabbitMQ Dashboard: https://permit-platform.local/rabbitmq/ (permit/[Generated Password])
-[INFO]   • Keycloak Admin: https://permit-platform.local/auth (admin/[Same Admin Password])
-[INFO]   • SCIM Service: https://permit-platform.local/scim
+[INFO]   • OpenSearch Dashboard: https://permit-frontend.local/opensearch/ (no authentication required)
+[INFO]   • RabbitMQ Dashboard: https://permit-frontend.local/rabbitmq/ (permit/[Generated Password])
+[INFO]   • Keycloak Admin: https://permit-frontend.local/auth (admin/[Same Admin Password])
+[INFO]   • SCIM Service: https://permit-frontend.local/scim
 [INFO] Important:
 [INFO]   • For Kind clusters (development), add to /etc/hosts:
-[INFO]     127.0.0.1 permit-platform.local
+[INFO]     127.0.0.1 permit-frontend.local
 [INFO]   • For OpenShift ROSA (development), find router IP and add to /etc/hosts:
-[INFO]     $(nslookup $(oc get ingress -n permit-platform -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}') | grep Address | tail -1 | awk '{print $2}') permit-platform.local
+[INFO]     $(nslookup $(oc get ingress -n permit-platform -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}') | grep Address | tail -1 | awk '{print $2}') permit-frontend.local
 [INFO]   • Certificate warnings are normal for self-signed certificates
 [INFO]   • Click 'Advanced' → 'Proceed to site' in browser
 [INFO] For troubleshooting, run: kubectl get pods -n permit-platform
@@ -915,14 +930,14 @@ For `.local` domains or development environments, update your hosts file:
 ##### Kind Clusters (Local Development)
 ```bash
 # Add to /etc/hosts (Linux/Mac) or C:\Windows\System32\drivers\etc\hosts (Windows)
-127.0.0.1 permit-platform.local
+127.0.0.1 permit-frontend.local
 ```
 
 ##### OpenShift ROSA
 ```bash
 # Find the router IP and add to hosts file
 ROUTER_IP=$(nslookup $(oc get ingress -n permit-platform -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}') | grep Address | tail -1 | awk '{print $2}')
-echo "$ROUTER_IP permit-platform.local" | sudo tee -a /etc/hosts
+echo "$ROUTER_IP permit-frontend.local" | sudo tee -a /etc/hosts
 ```
 
 ##### Standard Kubernetes
@@ -930,7 +945,7 @@ echo "$ROUTER_IP permit-platform.local" | sudo tee -a /etc/hosts
 # Get the LoadBalancer/NodePort IP
 kubectl get svc -n ingress-nginx
 # Add the external IP to hosts file
-echo "<EXTERNAL-IP> permit-platform.local" | sudo tee -a /etc/hosts
+echo "<EXTERNAL-IP> permit-frontend.local" | sudo tee -a /etc/hosts
 ```
 
 ### TLS/SSL Certificates
