@@ -187,26 +187,34 @@ kubectl rollout restart deployment -n permit-platform
 ### Policy Synchronization
 
 ```bash
-# Check policy sync status
-./scripts/policy-status.sh
+# Check policy sync pod status
+kubectl get pods -n permit-platform -l app=permit-policy-sync-v2
 
-# Manual policy sync
-./scripts/policy-sync.sh
+# View policy sync logs
+kubectl logs -n permit-platform deployment/permit-policy-sync-v2
 
-# Test Git connectivity
-./scripts/test-git.sh
+# Check OPAL server status (coordinates policy distribution)
+kubectl logs -n permit-platform deployment/opal-server
+
+# Restart policy sync if needed
+kubectl rollout restart deployment/permit-policy-sync-v2 -n permit-platform
 ```
 
 ### Repository Updates
 
 ```bash
-# Update Git repository configuration
-./scripts/update-git-config.sh \
-  --repo "git@github.com:neworg/new-policies.git" \
-  --key "./new-private-key"
+# Update Git repository configuration in values.yaml
+vi charts/permit-platform/values.yaml
 
-# Validate new repository access
-./scripts/validate-git.sh
+# Update the policy sync secret with new SSH key
+kubectl create secret generic policy-sync-ssh-key -n permit-platform \
+  --from-literal=private-key="$(cat new-private-key)" \
+  --from-literal=repo-url="git@github.com:neworg/new-policies.git" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Restart services to pick up new configuration
+kubectl rollout restart deployment/permit-policy-sync-v2 -n permit-platform
+kubectl rollout restart deployment/opal-server -n permit-platform
 ```
 
 ## Backup and Recovery
@@ -245,30 +253,36 @@ kubectl rollout restart deployment -n permit-platform
 ### Platform Updates
 
 ```bash
-# Check for available updates
-./scripts/update.sh --check
+# Extract new version package
+tar -xzf permit-platform-on-prem-installer-v2.0.0.tar.gz
+cd permit-platform-on-prem-installer-v2.0.0
 
-# Download update package
-curl -L "<new-version-link>" -o permit-platform-v1.1.0.tar.gz
-tar -xzf permit-platform-v1.1.0.tar.gz && cd permit-platform-v1.1.0
+# Backup current configuration
+cp /path/to/current/charts/permit-platform/values.yaml ./values-backup.yaml
 
-# Run upgrade
-sudo ./upgrade.sh
+# Update configuration with your settings
+vi charts/permit-platform/values.yaml
 
-# Verify upgrade
-./scripts/status.sh --version
+# Run installation (automatically upgrades existing deployment)
+./scripts/install-permit-platform.sh
+
+# Verify upgrade completed successfully
+kubectl get pods -n permit-platform
+helm list -n permit-platform
 ```
 
 ### Rollback Procedures
 
 ```bash
-# Rollback to previous version
-./scripts/rollback.sh
+# Rollback using Helm (most recent release)
+helm rollback permit-platform -n permit-platform
 
-# Rollback to specific version
-./scripts/rollback.sh --version v1.0.5
+# Rollback to specific release number
+helm history permit-platform -n permit-platform
+helm rollback permit-platform 3 -n permit-platform
 
-# Emergency rollback (quick)
+# Check rollback status
+helm status permit-platform -n permit-platform
 ./scripts/rollback.sh --emergency
 ```
 
@@ -292,27 +306,33 @@ sudo ./upgrade.sh
 ### Password Rotation
 
 ```bash
-# Rotate database passwords
-./scripts/rotate-passwords.sh --database
+# Update database passwords in secrets
+kubectl patch secret postgres-secret -n permit-platform \
+  --type='merge' -p='{"data":{"password":"'$(echo -n 'new-password' | base64)'"}}'
 
-# Rotate service passwords
-./scripts/rotate-passwords.sh --services
+# Update service passwords in backend secret  
+kubectl patch secret permit-backend-v2-secret -n permit-platform \
+  --type='merge' -p='{"data":{"PG_DSN":"'$(echo -n 'postgresql+asyncpg://permit:new-password@postgres:5432/permit' | base64)'"}}'
 
-# Generate new API keys
-./scripts/rotate-passwords.sh --api-keys
+# Restart affected services
+kubectl rollout restart deployment -n permit-platform
 ```
 
 ### Security Auditing
 
 ```bash
-# Run security audit
-./scripts/security-audit.sh
+# Check pod security context
+kubectl get pods -n permit-platform -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.spec.securityContext}{"\n"}{end}'
 
-# Check for vulnerabilities
-./scripts/security-scan.sh
+# Review service account permissions
+kubectl describe serviceaccount -n permit-platform
 
-# Review access logs
-./scripts/audit-logs.sh --since 24h
+# Check for privileged containers
+kubectl get pods -n permit-platform -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.spec.containers[*].securityContext.privileged}{"\n"}{end}'
+
+# Audit logs from OpenSearch
+kubectl port-forward -n permit-platform svc/opensearch 9200:9200 &
+curl "http://localhost:9200/audit_logs/_search?q=*&size=100"
 ```
 
 ## Monitoring and Alerting
@@ -320,8 +340,8 @@ sudo ./upgrade.sh
 ### Health Monitoring
 
 ```bash
-# Continuous health monitoring
-./scripts/health-monitor.sh --continuous
+# Monitor pod health and resource usage
+kubectl top pods -n permit-platform
 
 # Generate health report
 ./scripts/health-report.sh
@@ -392,15 +412,23 @@ sudo ./upgrade.sh
 ### Log Collection for Support
 
 ```bash
-# Collect all logs for support
-./scripts/collect-logs.sh
-# Creates: permit-platform-logs-YYYYMMDD-HHMMSS.tar.gz
+# Collect all pod logs for support
+kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres > permit-platform-logs.txt
 
-# Collect with system information
-./scripts/collect-logs.sh --include-system
+# Collect system information
+kubectl get pods,svc,ingress,pv,pvc -n permit-platform -o wide > system-info.txt
+kubectl get events -n permit-platform --sort-by='.lastTimestamp' > events.txt
 
-# Emergency log collection
-./scripts/collect-logs.sh --emergency
+# Create support bundle
+tar -czf permit-platform-support-$(date +%Y%m%d-%H%M%S).tar.gz \
+  permit-platform-logs.txt system-info.txt events.txt
+# Add resource usage information
+kubectl top pods -n permit-platform > resource-usage.txt
+kubectl top nodes > node-usage.txt
+
+# Include all files in support bundle
+tar -czf permit-platform-support-$(date +%Y%m%d-%H%M%S).tar.gz \
+  *.txt
 ```
 
 ## Maintenance Windows
