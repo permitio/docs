@@ -1,7 +1,7 @@
 ---
 title: "On-Premises Deployment"
 description: "Deploy Permit Platform in your air-gapped environment"
-sidebar: false
+sidebar_position: 1
 ---
 
 :::info Enterprise Only
@@ -10,33 +10,162 @@ This section is only relevant to Enterprise customers who acquired an on-prem li
 
 # On-Premises Deployment
 
-Deploy Permit Platform in your air-gapped environment with complete control and security.
+## What is On-Premises Deployment?
+
+On-premises deployment allows you to run the complete Permit authorization platform within your own infrastructure, ideal for organizations requiring:
+
+- **Air-gapped environments** - No internet connectivity required
+- **Data sovereignty** - Complete control over where data resides
+- **Custom compliance requirements** - Meet regulatory standards
+- **Enhanced security** - Full control over the authorization infrastructure
+
+## Understanding the Architecture
+
+### What is a PDP (Policy Decision Point)?
+
+The **Policy Decision Point (PDP)** is the core component that makes authorization decisions in real-time. It:
+
+- **Syncs authorization policies** from the control plane to maintain an up-to-date local cache
+- **Evaluates permissions** using Open Policy Agent (OPA) for high-performance decisions
+- **Handles authorization requests** from your applications without external dependencies
+- **Operates independently** once policies are synced, ensuring low latency
+
+**Learn more**: [PDP Concepts](/concepts/pdp/overview) | [GitHub Repository](https://github.com/permitio/PDP)
+
+### Architecture Overview
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                      Your Infrastructure                          │
+│                                                                   │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │              Permit Platform (Control Plane)               │  │
+│  │                                                            │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐   │  │
+│  │  │   Frontend   │  │   Backend    │  │ OPAL Server   │   │  │
+│  │  │   (UI/API)   │  │   Services   │  │(Policy Engine)│   │  │
+│  │  └──────────────┘  └──────────────┘  └───────────────┘   │  │
+│  │                                                            │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐   │  │
+│  │  │  PostgreSQL  │  │    Redis     │  │   RabbitMQ    │   │  │
+│  │  │  (Database)  │  │   (Cache)    │  │  (Messaging)  │   │  │
+│  │  └──────────────┘  └──────────────┘  └───────────────┘   │  │
+│  │                                                            │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐   │  │
+│  │  │  OpenSearch  │  │  Keycloak    │  │  Policy Sync  │   │  │
+│  │  │   (Logs)     │  │    (IAM)     │  │  (Git→OPAL)   │   │  │
+│  │  └──────────────┘  └──────────────┘  └───────┬───────┘   │  │
+│  └────────────────────────────────────────────────┼──────────┘  │
+│                                                    │ Policy      │
+│                                                    │ Updates     │
+│                          ┌─────────────────────────┘             │
+│                          │                                       │
+│                          ▼                                       │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │           Policy Decision Points (PDPs)                    │ │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │ │
+│  │  │ PDP Pod  │  │ PDP Pod  │  │ PDP Pod  │  │   ...    │  │ │
+│  │  │ + OPA    │  │ + OPA    │  │ + OPA    │  │          │  │ │
+│  │  └────▲─────┘  └────▲─────┘  └────▲─────┘  └──────────┘  │ │
+│  └───────┼─────────────┼─────────────┼────────────────────────┘ │
+│          │             │             │                           │
+│          │ Authorization Requests (low latency)                  │
+│          │             │             │                           │
+│  ┌───────┴─────────────┴─────────────┴────────────────────────┐ │
+│  │              Your Applications / Services                   │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │ External Policy Repository (Git)                            │ │
+│  │ - Authorization policies in Rego format (OPA)               │ │
+│  │ - Synced to OPAL via Policy Sync service                    │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+### Deployment Components
+
+The on-premises deployment includes:
+
+**Permit Platform (Control Plane)**
+- ✅ **Frontend** - Web UI dashboard and management interface
+- ✅ **Backend Services** - REST API, policy management, and core services (~20+ microservices)
+- ✅ **OPAL Server** - Open Policy Administration Layer for policy distribution
+- ✅ **Policy Sync** - Git repository synchronization for policy-as-code
+
+**Infrastructure Services**
+- ✅ **PostgreSQL** - Primary database for policies, users, and configuration (with read replicas)
+- ✅ **Redis** - High-performance caching layer
+- ✅ **RabbitMQ** - Message queue for asynchronous operations
+- ✅ **OpenSearch** - Decision logs storage and analytics
+- ✅ **Keycloak** - Identity and access management
+
+**Policy Decision Points (Deployed Separately)**
+- ✅ **PDP Pods** - Distributed authorization decision engines (deployed via separate Helm chart)
+- ✅ **OPA (Open Policy Agent)** - Policy evaluation engine embedded in each PDP
+
+**Platform Requirements**
+- ✅ **Kubernetes/OpenShift** - Container orchestration (Red Hat OpenShift, EKS, GKE, AKS, or Kind)
+- ✅ **Air-gapped installation** - No internet connection required post-setup
+- ✅ **High availability** - Multiple replicas for critical services
+
+### Connection Flow
+
+```
+Policy Management Flow:
+1. Admin commits policy changes to Git repository
+2. Policy Sync service detects changes and pulls updates
+3. OPAL Server processes and distributes policies
+4. PDPs receive policy updates via OPAL protocol
+5. PDPs update local OPA cache (policies stay in-memory)
+
+Authorization Request Flow:
+1. Application → PDP: "Can user X perform action Y on resource Z?"
+2. PDP evaluates using local OPA engine (cached policies)
+3. PDP → Application: Allow/Deny decision (sub-millisecond, no network calls)
+4. PDP sends decision logs → Backend → OpenSearch (async)
+
+User Management Flow:
+1. Admin creates policies/roles in Frontend UI
+2. Backend stores configuration in PostgreSQL
+3. Backend publishes updates via RabbitMQ
+4. OPAL Server picks up changes and pushes to PDPs
+5. PDPs immediately enforce new policies
+```
+
+## Security
+
+The Permit Platform includes enterprise-grade security features for on-premises deployments:
+
+- **TLS/SSL Encryption** - HTTPS for all external communications
+- **Encryption at Rest** - PostgreSQL data encryption for policies and configurations
+- **Secrets Management** - Kubernetes secrets for SSH keys, API tokens, and credentials
+- **RBAC & IAM** - Role-based access control via integrated Keycloak
+- **Network Isolation** - Components run in isolated Kubernetes namespace
+- **SSH Key Authentication** - Secure Git repository access for policy-as-code
+- **API Key Authentication** - Secure PDP-to-Control-Plane communication
+- **Audit Logging** - Complete decision logs stored in OpenSearch
+
+For detailed security configuration and operational best practices, see the [Installation Guide](/how-to/deploy/on-prem/installation) and [Management Guide](/how-to/deploy/on-prem/management).
 
 ## Quick Navigation
 
 - **[Quick Start](/how-to/deploy/on-prem/quick-start)** - Get running in 10-15 minutes
-- **[Prerequisites](/how-to/deploy/on-prem/prerequisites)** - Prepare your environment  
+- **[Prerequisites](/how-to/deploy/on-prem/prerequisites)** - Prepare your environment
 - **[Installation](/how-to/deploy/on-prem/installation)** - Detailed deployment options
+- **[Deploying PDP](/how-to/deploy/on-prem/pdp-deployment)** - Deploy additional PDPs
 - **[Management](/how-to/deploy/on-prem/management)** - Day-to-day operations
 - **[Troubleshooting](/how-to/deploy/on-prem/troubleshooting)** - Common issues and solutions
 - **[Reference](/how-to/deploy/on-prem/reference)** - Complete command reference
-
-## What You'll Deploy
-
-The on-premises deployment includes:
-
-- ✅ **Production-ready Kubernetes** cluster
-- ✅ **Complete Permit Platform** with all services
-- ✅ **Air-gapped installation** - no internet required
-- ✅ **Automatic security** configuration
-- ✅ **High availability** support
 
 ## Deployment Process
 
 1. **Prepare environment** - Git repository and server requirements
 2. **Run installer** - Single command deployment
 3. **Access platform** - Complete setup wizard
-4. **Configure policies** - Deploy your authorization rules
+4. **Deploy PDPs** - Add Policy Decision Points for your applications
+5. **Configure policies** - Create and deploy authorization rules
+6. **Integrate applications** - Connect your apps to PDP endpoints
 
 ## Support
 
