@@ -135,6 +135,11 @@ const sidebars = {
             "how-to/build-policies/abac/time-based-role",
           ],
         },
+        {
+          type: "doc",
+          id: "getting-started/slack-support",
+          label: "Get Support on Slack",
+        },
       ],
     },
     {
