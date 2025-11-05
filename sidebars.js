@@ -137,6 +137,12 @@ const sidebars = {
           ],
         },
         {
+          type: "doc",
+          id: "getting-started/slack-support",
+          label: "Get Support on Slack",
+        },
+        {
+          
           type: "category",
           label: "Permit CLI",
           link: {
