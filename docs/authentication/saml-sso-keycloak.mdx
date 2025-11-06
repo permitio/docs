@@ -1,0 +1,319 @@
+---
+sidebar_position: 12
+title: SAML SSO with Keycloak
+sidebar_label: Keycloak
+---
+
+# Configure SAML SSO with Keycloak
+
+This guide walks you through configuring Keycloak as your SAML identity provider for Permit.io.
+
+:::tip Tested Configuration
+These instructions have been tested with Keycloak 20+ and are production-ready.
+:::
+
+## Prerequisites
+
+- Admin access to your Keycloak instance (`https://your-keycloak.com/auth/admin`)
+- Your **Permit.io Organization ID** - found in Permit.io → Settings → Organization
+- Your application's public URL (e.g., `https://app.yourcompany.com`)
+
+## Step 1: Create SAML Client
+
+1. Log in to **Keycloak Admin Console**
+2. Select your realm (or click **Create realm** if needed)
+3. Navigate to **Clients**
+4. Click **Create client**
+
+### Client Configuration
+
+**Client type:** Select `SAML` (not OpenID Connect)
+
+:::warning Important
+Permit.io currently supports **SAML 2.0 only**. Keycloak also offers OpenID Connect, but you must select **SAML** as the client type for Permit.io integration.
+:::
+
+**Client ID:**
+```
+https://app.yourcompany.com/v2/auth/saml/metadata/<YOUR_ORG_ID>
+```
+
+**Example:**
+```
+https://app.yourcompany.com/v2/auth/saml/metadata/b60624aa2079499b897b46d29a82e190
+```
+
+Replace:
+- `app.yourcompany.com` - Your application domain
+- `<YOUR_ORG_ID>` - Your Permit.io organization ID
+
+Click **Next**
+
+## Step 2: Configure Client Settings
+
+Go to the **Settings** tab:
+
+### General Settings
+
+- **Name**: Enter a friendly name (e.g., "MyApp SAML")
+- **Enabled**: Turn **ON**
+
+### SAML Capabilities
+
+- **Name ID format**: Select `email`
+- **Force POST binding**: **OFF**
+- **Include AuthnStatement**: **ON**
+- **Sign documents**: **ON**
+- **Sign assertions**: **ON**
+- **Client signature required**: **OFF** ⚠️ **Important - must be OFF**
+
+### Login Settings
+
+**Valid redirect URIs:**
+```
+https://app.yourcompany.com/*
+```
+
+**Base URL:**
+```
+https://app.yourcompany.com
+```
+
+**Master SAML Processing URL:**
+```
+https://app.yourcompany.com/v2/auth/saml/callback
+```
+
+Click **Save**
+
+## Step 3: Configure Role Attribute (Critical!)
+
+:::warning Critical Step
+This step prevents "duplicate attribute" errors. Do not skip!
+:::
+
+1. Go to **Client scopes** tab
+2. Find and click **role_list (saml)**
+3. Go to **Mappers** tab
+4. Click the **role list** mapper
+5. Enable the toggle: **"Single Role Attribute"**
+6. Click **Save**
+
+## Step 4: Configure Attribute Mappers
+
+1. Go back to your client → **Client scopes** tab
+2. Click your dedicated scope (e.g., `yourapp-dedicated`)
+3. Go to **Mappers** tab
+4. Click **Add mapper** → **By configuration**
+5. Select **User Property**
+
+### Create Email Mapper
+
+- **Name**: `email`
+- **Property**: `email`
+- **SAML Attribute Name**: `email`
+- **SAML Attribute NameFormat**: `Basic`
+
+Click **Save**
+
+### Create First Name Mapper
+
+- **Name**: `firstName`
+- **Property**: `firstName`
+- **SAML Attribute Name**: `firstName`
+- **SAML Attribute NameFormat**: `Basic`
+
+Click **Save**
+
+### Create Last Name Mapper
+
+- **Name**: `lastName`
+- **Property**: `lastName`
+- **SAML Attribute Name**: `lastName`
+- **SAML Attribute NameFormat**: `Basic`
+
+Click **Save**
+
+## Step 5: Extract IdP Metadata
+
+1. Go to **Realm Settings** → **General** tab
+2. Click the **SAML 2.0 Identity Provider Metadata** link
+
+Or navigate directly to:
+```
+https://your-keycloak.com/auth/realms/your-realm/protocol/saml/descriptor
+```
+
+### Extract These Values from the XML
+
+**1) IdP Entity ID**
+
+Look for the `entityID` attribute:
+```xml
+<EntityDescriptor entityID="https://your-keycloak.com/auth/realms/your-realm" ...>
+```
+
+Copy the full entity ID URL.
+
+**2) IdP SSO URL**
+
+Look for `SingleSignOnService` with `HTTP-POST` binding:
+```xml
+<SingleSignOnService
+  Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+  Location="https://your-keycloak.com/auth/realms/your-realm/protocol/saml"/>
+```
+
+Copy the full URL from the `Location` attribute.
+
+**3) X.509 Certificate**
+
+Look for the certificate between `<ds:X509Certificate>` tags:
+```xml
+<ds:X509Certificate>
+MIICmzCCAYMCBgGBk...certificate content...
+</ds:X509Certificate>
+```
+
+Copy the entire base64 string. You can optionally wrap it with headers:
+```
+-----BEGIN CERTIFICATE-----
+MIICmzCCAYMCBgGBk...
+-----END CERTIFICATE-----
+```
+
+Both formats work!
+
+## Step 6: Create Test User
+
+1. Navigate to **Users** → **Add user**
+2. Fill in:
+   - **Username**: `testuser`
+   - **Email**: `testuser@yourcompany.com`
+   - **First name**: `Test`
+   - **Last name**: `User`
+   - **Email verified**: **ON**
+3. Click **Create**
+4. Go to **Credentials** tab
+5. Click **Set password**
+   - Enter password
+   - **Temporary**: **OFF**
+   - Click **Save**
+
+## Step 7: Configure Permit.io
+
+Now add the SSO connection in Permit.io:
+
+1. Log in to [Permit.io](https://app.permit.io)
+2. Navigate to **Settings** → **SSO Configuration**
+3. Click **Add SSO Connection**
+4. Fill in the form:
+
+### SSO Connection Form
+
+**Domain:**
+```
+yourcompany.com
+```
+Your organization's email domain
+
+**Connection Name:**
+```
+Keycloak Production
+```
+
+**IdP Entity ID:**
+```
+https://your-keycloak.com/auth/realms/your-realm
+```
+(From Step 5)
+
+**IdP SSO URL:**
+```
+https://your-keycloak.com/auth/realms/your-realm/protocol/saml
+```
+(From Step 5)
+
+**IdP X.509 Certificate:**
+
+Paste the certificate from Step 5 (with or without headers).
+
+**IdP Single Logout URL:**
+
+Leave empty
+
+Click **Create**
+
+## Step 8: Test the Integration
+
+### Get Your SSO Login URL
+
+```
+https://app.yourcompany.com/v2/auth/saml/login?domain=yourcompany.com
+```
+
+Replace:
+- `app.yourcompany.com` - Your application domain
+- `yourcompany.com` - The domain you configured in Step 7
+
+### Test the Flow
+
+1. Open the URL in an **incognito/private window**
+2. You should be redirected to Keycloak login
+3. Enter the test user credentials
+4. You'll be redirected back to your app at `/sso/callback`
+5. User is authenticated!
+
+:::note First Login
+On first login, the user is automatically created in Permit.io. You must assign roles via the Permit.io dashboard or API.
+:::
+
+## Troubleshooting
+
+### "Invalid Request" or "Unknown Client"
+
+**Cause:** Client ID mismatch
+
+**Solution:**
+- Verify the Client ID in Keycloak matches exactly: `https://app.yourcompany.com/v2/auth/saml/metadata/<YOUR_ORG_ID>`
+- Check your Permit.io organization ID is correct
+
+### "Found an Attribute element with duplicated Name"
+
+**Cause:** "Single Role Attribute" not enabled
+
+**Solution:**
+- Go to your client → **Client scopes** → **role_list (saml)** → **Mappers** → **role list**
+- Enable **"Single Role Attribute"** toggle
+- Save
+
+This is a common Keycloak issue - Step 3 above fixes it.
+
+### "Invalid Signature"
+
+**Cause:** Client signature required is ON
+
+**Solution:**
+- Go to your client → **Settings** tab
+- Under **SAML Capabilities**, set **Client signature required** to **OFF**
+- Save
+
+### User Not Created
+
+**Cause:** Missing attribute mappings
+
+**Solution:**
+- Verify all three attribute mappers are configured in Step 4: `email`, `firstName`, `lastName`
+- Check the mappers are added to the client's dedicated scope
+
+## Next Steps
+
+- [Integrate your application](/authentication/saml-sso#integrate-your-application)
+- [Assign roles to SSO users](/authentication/saml-sso#assign-roles-to-sso-users)
+- [Test the complete flow](/authentication/saml-sso#test-your-setup)
+
+## Need Help?
+
+- 📧 Email: [support@permit.io](mailto:support@permit.io)
+- 💬 Slack: [Join our community](https://io.permit.io/docs-to-slack)
+- 📚 Main SAML SSO Guide: [SAML SSO](/authentication/saml-sso)

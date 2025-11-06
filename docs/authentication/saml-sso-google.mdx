@@ -1,0 +1,298 @@
+---
+sidebar_position: 14
+title: SAML SSO with Google Workspace
+sidebar_label: Google Workspace
+---
+
+# Configure SAML SSO with Google Workspace
+
+This guide walks you through configuring Google Workspace as your SAML identity provider for Permit.io.
+
+:::info Supported
+Google Workspace supports SAML 2.0 and works with Permit.io. These instructions are for Google Workspace admin accounts.
+:::
+
+## Prerequisites
+
+- Admin access to **Google Admin Console** (`https://admin.google.com`)
+- Your **Permit.io Organization ID** - found in Permit.io → Settings → Organization
+- Your application's public URL (e.g., `https://app.yourcompany.com`)
+
+## Step 1: Create SAML Application
+
+1. Log in to **Google Admin Console**
+2. Navigate to **Apps** → **Web and mobile apps**
+3. Click **Add app** → **Add custom SAML app** (not OIDC)
+4. Enter **App name** (e.g., "MyApp")
+5. Optional: Upload app logo
+6. Click **Continue**
+
+:::warning Important
+Permit.io currently supports **SAML 2.0 only**. Google Workspace also supports OIDC (OpenID Connect), but you must create a **custom SAML app** for Permit.io integration.
+:::
+
+## Step 2: Download IdP Information
+
+Google shows you the IdP details on this screen.
+
+### Option 1: Download Metadata (Recommended)
+
+1. Click **Download Metadata**
+2. Save the XML file
+3. Click **Continue**
+
+Skip to Step 3 and extract values from the XML file.
+
+### Option 2: Copy Values Manually
+
+If you prefer, copy these values shown on the screen:
+
+**SSO URL** - Copy the URL (e.g., `https://accounts.google.com/o/saml2/idp?idpid=...`)
+
+**Entity ID** - Copy the entity ID (e.g., `https://accounts.google.com/o/saml2?idpid=...`)
+
+**Certificate** - Click **Download Certificate** and save the `.cer` file
+
+Then click **Continue**
+
+## Step 3: Configure Service Provider Details
+
+**ACS URL (Assertion Consumer Service URL):**
+```
+https://app.yourcompany.com/v2/auth/saml/callback
+```
+
+**Entity ID:**
+```
+https://app.yourcompany.com/v2/auth/saml/metadata/<YOUR_ORG_ID>
+```
+
+**Example:**
+```
+https://app.yourcompany.com/v2/auth/saml/metadata/b60624aa2079499b897b46d29a82e190
+```
+
+Replace:
+- `app.yourcompany.com` - Your application domain
+- `<YOUR_ORG_ID>` - Your Permit.io organization ID
+
+**Start URL:** Leave empty
+
+**Name ID format:** Select `EMAIL`
+
+**Name ID:** Select `Basic Information > Primary email`
+
+Click **Continue**
+
+## Step 4: Attribute Mapping
+
+Map Google Directory attributes to app attributes:
+
+| Google Directory attribute | App attribute |
+|---------------------------|---------------|
+| Primary email | `email` |
+| First name | `firstName` |
+| Last name | `lastName` |
+
+To add each mapping:
+1. Click **Add mapping**
+2. Select Google attribute from dropdown
+3. Enter app attribute name exactly as shown above
+4. Repeat for all three attributes
+
+Click **Finish**
+
+## Step 5: Turn On the Service
+
+1. Click on your newly created app
+2. Click **User access**
+3. Select **ON for everyone** (or choose specific organizational units)
+4. Click **Save**
+
+:::tip Testing
+You can initially turn on the app for a specific OU (organizational unit) to test with a subset of users before rolling out to everyone.
+:::
+
+## Step 6: Extract IdP Metadata
+
+### If You Downloaded Metadata XML
+
+Open the XML file and extract:
+
+**1) IdP Entity ID**
+
+Look for the `entityID` attribute:
+```xml
+<EntityDescriptor entityID="https://accounts.google.com/o/saml2?idpid=..." ...>
+```
+
+Copy the full entity ID URL.
+
+**2) IdP SSO URL**
+
+Look for `SingleSignOnService`:
+```xml
+<SingleSignOnService
+  Location="https://accounts.google.com/o/saml2/idp?idpid=..."
+  Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"/>
+```
+
+Copy the full URL from the `Location` attribute.
+
+**3) X.509 Certificate**
+
+Look for the certificate between `<ds:X509Certificate>` tags:
+```xml
+<ds:X509Certificate>
+MIIDdDCCAlygAwIBAgIGAXo...certificate content...
+</ds:X509Certificate>
+```
+
+Copy the entire base64 string. You can optionally wrap it with headers:
+```
+-----BEGIN CERTIFICATE-----
+MIIDdDCCAlygAwIBAgIGAXo...
+-----END CERTIFICATE-----
+```
+
+### If You Copied Values Manually
+
+If you downloaded a `.cer` file in Step 2, convert it:
+
+**On macOS/Linux:**
+```bash
+openssl x509 -in GoogleIDPCertificate.cer -out certificate.pem
+```
+
+Then open `certificate.pem` and copy the contents.
+
+**On Windows:**
+Open the `.cer` file, go to Details → Copy to File → Base64-encoded X.509
+
+## Step 7: Configure Permit.io
+
+Now add the SSO connection in Permit.io:
+
+1. Log in to [Permit.io](https://app.permit.io)
+2. Navigate to **Settings** → **SSO Configuration**
+3. Click **Add SSO Connection**
+4. Fill in the form:
+
+### SSO Connection Form
+
+**Domain:**
+```
+yourcompany.com
+```
+Your organization's email domain
+
+**Connection Name:**
+```
+Google Workspace Production
+```
+
+**IdP Entity ID:**
+```
+https://accounts.google.com/o/saml2?idpid=C1234abcd
+```
+(From Step 6)
+
+**IdP SSO URL:**
+```
+https://accounts.google.com/o/saml2/idp?idpid=C1234abcd
+```
+(From Step 6)
+
+**IdP X.509 Certificate:**
+
+Paste the certificate from Step 6 (with or without headers).
+
+**IdP Single Logout URL:**
+
+Leave empty
+
+Click **Create**
+
+## Step 8: Test the Integration
+
+### Get Your SSO Login URL
+
+```
+https://app.yourcompany.com/v2/auth/saml/login?domain=yourcompany.com
+```
+
+Replace:
+- `app.yourcompany.com` - Your application domain
+- `yourcompany.com` - The domain you configured in Step 7
+
+### Test the Flow
+
+1. Open the URL in an **incognito/private window**
+2. You should be redirected to Google login
+3. Enter credentials for a Google Workspace user
+4. You'll be redirected back to your app at `/sso/callback`
+5. User is authenticated!
+
+:::note First Login
+On first login, the user is automatically created in Permit.io. You must assign roles via the Permit.io dashboard or API.
+:::
+
+## Troubleshooting
+
+### "Invalid Request" or "App Not Configured"
+
+**Cause:** Entity ID mismatch or app not turned on
+
+**Solution:**
+- Verify the Entity ID in Google matches: `https://app.yourcompany.com/v2/auth/saml/metadata/<YOUR_ORG_ID>`
+- Go to Google Admin → **Apps** → Your app → **User access**
+- Ensure the app is turned ON for the user's organizational unit
+
+### User Not Created or Missing Name
+
+**Cause:** Attribute mappings not configured
+
+**Solution:**
+- Go to Google Admin → **Apps** → Your app → Click **SAML attribute mapping**
+- Verify all three mappings exist:
+  - Primary email → `email`
+  - First name → `firstName`
+  - Last name → `lastName`
+
+### Certificate Error
+
+**Cause:** Wrong certificate format or expired
+
+**Solution:**
+- Download fresh metadata from Google (Steps 2 and 6)
+- Ensure certificate is in PEM format (base64)
+- Update certificate in Permit.io SSO configuration
+
+### "Access Denied" Error
+
+**Cause:** User not in an OU with access enabled
+
+**Solution:**
+- Go to Google Admin → **Apps** → Your app → **User access**
+- Ensure the user's organizational unit has access turned ON
+
+## Optional: Restrict to Specific Groups
+
+To limit SSO access to specific groups:
+
+1. In Google Admin, go to your SAML app → **User access**
+2. Select **ON for some groups**
+3. Select the groups that should have access
+4. Click **Save**
+
+## Next Steps
+
+- [Integrate your application](/authentication/saml-sso#integrate-your-application)
+- [Assign roles to SSO users](/authentication/saml-sso#assign-roles-to-sso-users)
+- [Test the complete flow](/authentication/saml-sso#test-your-setup)
+
+## Need Help?
+
+- 📧 Email: [support@permit.io](mailto:support@permit.io)
+- 💬 Slack: [Join our community](https://io.permit.io/docs-to-slack)
+- 📚 Main SAML SSO Guide: [SAML SSO](/authentication/saml-sso)

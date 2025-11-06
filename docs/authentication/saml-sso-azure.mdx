@@ -1,0 +1,276 @@
+---
+sidebar_position: 13
+title: SAML SSO with Azure AD
+sidebar_label: Azure AD
+---
+
+# Configure SAML SSO with Azure AD
+
+This guide walks you through configuring Azure Active Directory (Microsoft Entra ID) as your SAML identity provider for Permit.io.
+
+:::tip Tested Configuration
+These instructions apply to Azure Active Directory (Microsoft Entra ID) and Azure AD B2C.
+:::
+
+## Prerequisites
+
+- Admin access to your Azure Portal (`https://portal.azure.com`)
+- Your **Permit.io Organization ID** - found in Permit.io → Settings → Organization
+- Your application's public URL (e.g., `https://app.yourcompany.com`)
+
+## Step 1: Create Enterprise Application
+
+1. Log in to **Azure Portal**
+2. Navigate to **Azure Active Directory** (or **Microsoft Entra ID**)
+3. Click **Enterprise applications** in the left menu
+4. Click **New application**
+5. Click **Create your own application**
+6. Select **"Integrate any other application you don't find in the gallery (Non-gallery)"**
+7. Enter application name (e.g., "MyApp")
+8. Click **Create**
+
+## Step 2: Configure SAML
+
+1. In your new application, click **Single sign-on** in the left menu
+2. **Select SAML** (not OIDC or other options)
+3. Click **Edit** on the **Basic SAML Configuration** section
+
+:::warning Important
+Permit.io currently supports **SAML 2.0 only**. Azure AD also supports OIDC (OpenID Connect), but Permit.io's native implementation requires SAML. If you need OIDC support, please contact Permit.io support.
+:::
+
+### Basic SAML Configuration
+
+**Identifier (Entity ID):**
+```
+https://app.yourcompany.com/v2/auth/saml/metadata/<YOUR_ORG_ID>
+```
+
+**Example:**
+```
+https://app.yourcompany.com/v2/auth/saml/metadata/b60624aa2079499b897b46d29a82e190
+```
+
+**Reply URL (Assertion Consumer Service URL):**
+```
+https://app.yourcompany.com/v2/auth/saml/callback
+```
+
+Replace:
+- `app.yourcompany.com` - Your application domain
+- `<YOUR_ORG_ID>` - Your Permit.io organization ID
+
+Click **Save**
+
+## Step 3: Configure Attributes & Claims
+
+Azure AD usually configures these claims automatically, but verify they exist:
+
+1. Click **Edit** on the **Attributes & Claims** section
+2. Ensure these claims are present:
+
+| Claim name | Source attribute |
+|------------|------------------|
+| `email` or `emailaddress` | `user.mail` |
+| `firstName` or `givenname` | `user.givenname` |
+| `lastName` or `surname` | `user.surname` |
+
+### Add Missing Claims (if needed)
+
+If any claims are missing:
+
+1. Click **Add new claim**
+2. Fill in:
+   - **Name**: `email` (or `firstName`, `lastName`)
+   - **Source**: `Attribute`
+   - **Source attribute**: Select from dropdown (`user.mail`, `user.givenname`, `user.surname`)
+3. Click **Save**
+
+## Step 4: Download Metadata
+
+1. Scroll down to **SAML Signing Certificate** section
+2. Click **Download** next to **Federation Metadata XML**
+3. Save the XML file
+
+### Extract These Values from the XML
+
+Open the downloaded XML file:
+
+**1) IdP Entity ID**
+
+Look for the `entityID` attribute:
+```xml
+<EntityDescriptor entityID="https://sts.windows.net/a1b2c3d4-..." ...>
+```
+
+Copy the full entity ID URL.
+
+**2) IdP SSO URL**
+
+Look for `SingleSignOnService` with `HTTP-Redirect` or `HTTP-POST` binding:
+```xml
+<SingleSignOnService
+  Location="https://login.microsoftonline.com/a1b2c3d4-.../saml2"
+  Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"/>
+```
+
+Copy the full URL from the `Location` attribute.
+
+**3) X.509 Certificate**
+
+Look for the certificate between `<X509Certificate>` tags:
+```xml
+<X509Certificate>
+MIIC8DCCAdigAwIBA...certificate content...
+</X509Certificate>
+```
+
+Copy the entire base64 string. You can optionally wrap it with headers:
+```
+-----BEGIN CERTIFICATE-----
+MIIC8DCCAdigAwIBA...
+-----END CERTIFICATE-----
+```
+
+Both formats work!
+
+## Step 5: Assign Users
+
+1. In your Azure AD application, click **Users and groups** in the left menu
+2. Click **Add user/group**
+3. Click **Users and groups** (or **None Selected**)
+4. Select users or groups who should have access
+5. Click **Select**
+6. Click **Assign**
+
+## Step 6: Configure Permit.io
+
+Now add the SSO connection in Permit.io:
+
+1. Log in to [Permit.io](https://app.permit.io)
+2. Navigate to **Settings** → **SSO Configuration**
+3. Click **Add SSO Connection**
+4. Fill in the form:
+
+### SSO Connection Form
+
+**Domain:**
+```
+yourcompany.com
+```
+Your organization's email domain
+
+**Connection Name:**
+```
+Azure AD Production
+```
+
+**IdP Entity ID:**
+```
+https://sts.windows.net/a1b2c3d4-e5f6-7890-abcd-ef1234567890/
+```
+(From Step 4)
+
+**IdP SSO URL:**
+```
+https://login.microsoftonline.com/a1b2c3d4-.../saml2
+```
+(From Step 4)
+
+**IdP X.509 Certificate:**
+
+Paste the certificate from Step 4 (with or without headers).
+
+**IdP Single Logout URL:**
+
+Leave empty
+
+Click **Create**
+
+## Step 7: Test the Integration
+
+### Get Your SSO Login URL
+
+```
+https://app.yourcompany.com/v2/auth/saml/login?domain=yourcompany.com
+```
+
+Replace:
+- `app.yourcompany.com` - Your application domain
+- `yourcompany.com` - The domain you configured in Step 6
+
+### Test the Flow
+
+1. Open the URL in an **incognito/private window**
+2. You should be redirected to Microsoft login page
+3. Enter credentials for a user assigned to the app
+4. Complete MFA if required by your Azure AD policies
+5. You'll be redirected back to your app at `/sso/callback`
+6. User is authenticated!
+
+:::note First Login
+On first login, the user is automatically created in Permit.io. You must assign roles via the Permit.io dashboard or API.
+:::
+
+## Troubleshooting
+
+### "Invalid Request" or AADSTS Error
+
+**Cause:** Entity ID mismatch or Reply URL not configured
+
+**Solution:**
+- Verify the Identifier in Azure AD matches exactly: `https://app.yourcompany.com/v2/auth/saml/metadata/<YOUR_ORG_ID>`
+- Verify the Reply URL is: `https://app.yourcompany.com/v2/auth/saml/callback`
+- Check your Permit.io organization ID is correct
+
+### User Not Created or Missing Name
+
+**Cause:** Claims not configured properly
+
+**Solution:**
+- Go to Azure AD app → **Single sign-on** → **Attributes & Claims**
+- Verify these claims exist and map correctly:
+  - `email` → `user.mail`
+  - `firstName` or `givenname` → `user.givenname`
+  - `lastName` or `surname` → `user.surname`
+
+### Certificate Error
+
+**Cause:** Wrong certificate or expired
+
+**Solution:**
+- Download fresh Federation Metadata XML from Azure AD (repeat Step 4)
+- Update certificate in Permit.io SSO configuration
+
+### "User not assigned to application" Error
+
+**Cause:** User not assigned in Azure AD
+
+**Solution:**
+- Go to Azure AD app → **Users and groups**
+- Click **Add user/group**
+- Assign the user to the application
+
+## Optional: Configure User Assignment
+
+By default, Azure AD requires explicit user assignment. To allow all users in your organization:
+
+1. Go to your Azure AD application → **Properties**
+2. Set **User assignment required?** to **No**
+3. Click **Save**
+
+:::warning Security Note
+Allowing all users without assignment may grant unintended access. Use with caution.
+:::
+
+## Next Steps
+
+- [Integrate your application](/authentication/saml-sso#integrate-your-application)
+- [Assign roles to SSO users](/authentication/saml-sso#assign-roles-to-sso-users)
+- [Test the complete flow](/authentication/saml-sso#test-your-setup)
+
+## Need Help?
+
+- 📧 Email: [support@permit.io](mailto:support@permit.io)
+- 💬 Slack: [Join our community](https://io.permit.io/docs-to-slack)
+- 📚 Main SAML SSO Guide: [SAML SSO](/authentication/saml-sso)

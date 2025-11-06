@@ -1,0 +1,266 @@
+---
+sidebar_position: 11
+title: SAML SSO with Okta
+sidebar_label: Okta
+---
+
+# Configure SAML SSO with Okta
+
+This guide walks you through configuring Okta as your SAML identity provider for Permit.io.
+
+:::tip Tested Configuration
+These instructions have been tested with Okta trial and production accounts.
+:::
+
+## Prerequisites
+
+- Admin access to your Okta account (`https://yourdomain.okta.com/admin`)
+- Your **Permit.io Organization ID** - found in Permit.io → Settings → Organization
+- Your application's public URL (e.g., `https://app.yourcompany.com`)
+
+## Step 1: Create SAML Application in Okta
+
+1. Log in to **Okta Admin Console**
+2. Navigate to **Applications** → **Applications**
+3. Click **Create App Integration**
+4. **Select SAML 2.0** (not OIDC - OpenID Connect)
+5. Click **Next**
+
+:::warning Important
+Permit.io currently supports **SAML 2.0 only**. Do not select "OIDC - OpenID Connect" when creating the app integration. If you need OIDC support, please contact Permit.io support.
+:::
+
+## Step 2: Configure General Settings
+
+- **App name**: Enter your application name (e.g., "MyApp")
+- **App logo**: Optional - upload your app logo
+- Click **Next**
+
+## Step 3: Configure SAML Settings
+
+### Single Sign-On URL
+
+```
+https://app.yourcompany.com/v2/auth/saml/callback
+```
+
+Replace `app.yourcompany.com` with your actual domain.
+
+✅ Check the box: **"Use this for Recipient URL and Destination URL"**
+
+### Audience URI (SP Entity ID)
+
+```
+https://app.yourcompany.com/v2/auth/saml/metadata/<YOUR_ORG_ID>
+```
+
+**Example:**
+```
+https://app.yourcompany.com/v2/auth/saml/metadata/b60624aa2079499b897b46d29a82e190
+```
+
+Replace:
+- `app.yourcompany.com` - Your application domain
+- `<YOUR_ORG_ID>` - Your Permit.io organization ID
+
+### Additional Settings
+
+- **Name ID format**: Select `EmailAddress`
+- **Application username**: Select `Email`
+
+### Attribute Statements
+
+Add these three attribute mappings:
+
+| Name | Name format | Value |
+|------|-------------|-------|
+| `email` | Unspecified | `user.email` |
+| `firstName` | Unspecified | `user.firstName` |
+| `lastName` | Unspecified | `user.lastName` |
+
+Click **Next**
+
+## Step 4: Feedback Form
+
+- Select **"I'm an Okta customer adding an internal app"**
+- Leave other fields empty
+- Click **Finish**
+
+## Step 5: Extract IdP Metadata
+
+1. In your newly created app, go to the **Sign On** tab
+2. Scroll down to **SAML Signing Certificates**
+3. Click **Actions** → **View IdP metadata**
+4. A new tab opens with XML metadata
+
+### Copy the Metadata URL
+
+The URL looks like:
+```
+https://trial-2711708.okta.com/app/exkx5vtyzaE5axbm9697/sso/saml/metadata
+```
+
+### Extract These Values from the XML
+
+**1) IdP Entity ID**
+
+Look for the `entityID` attribute:
+```xml
+<md:EntityDescriptor entityID="http://www.okta.com/exkx5vtyzaE5axbm9697" ...>
+```
+
+Copy: `http://www.okta.com/exkx5vtyzaE5axbm9697`
+
+**2) IdP SSO URL**
+
+Look for `SingleSignOnService` with `HTTP-POST` binding:
+```xml
+<md:SingleSignOnService
+  Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+  Location="https://trial-2711708.okta.com/app/.../sso/saml"/>
+```
+
+Copy the full URL from the `Location` attribute.
+
+**3) X.509 Certificate**
+
+Look for the certificate between `<ds:X509Certificate>` tags:
+```xml
+<ds:X509Certificate>
+MIIDqjCCApKgAwIBAgIGAZ...certificate content...
+</ds:X509Certificate>
+```
+
+Copy the entire base64 string. You can optionally wrap it with:
+```
+-----BEGIN CERTIFICATE-----
+MIIDqjCCApKgAwIBAgIGAZ...
+-----END CERTIFICATE-----
+```
+
+Both formats work!
+
+## Step 6: Assign Users to the App
+
+1. Go to the **Assignments** tab
+2. Click **Assign** → **Assign to People**
+3. Find users who should access your app
+4. Click **Assign** next to each user
+5. Click **Save and Go Back**
+6. Click **Done**
+
+## Step 7: Configure Permit.io
+
+Now add the SSO connection in Permit.io:
+
+1. Log in to [Permit.io](https://app.permit.io)
+2. Navigate to **Settings** → **SSO Configuration**
+3. Click **Add SSO Connection**
+4. Fill in the form:
+
+### SSO Connection Form
+
+**Domain:**
+```
+yourcompany.com
+```
+Your organization's email domain (e.g., users with `@yourcompany.com` emails)
+
+**Connection Name:**
+```
+Okta Production
+```
+
+**IdP Entity ID:**
+```
+http://www.okta.com/exkx5vtyzaE5axbm9697
+```
+(From Step 5)
+
+**IdP SSO URL:**
+```
+https://trial-2711708.okta.com/app/exkx5vtyzaE5axbm9697/sso/saml
+```
+(From Step 5)
+
+**IdP X.509 Certificate:**
+
+Paste the certificate from Step 5 (with or without headers).
+
+**IdP Single Logout URL:**
+
+Leave empty
+
+Click **Create**
+
+## Step 8: Test the Integration
+
+### Get Your SSO Login URL
+
+```
+https://app.yourcompany.com/v2/auth/saml/login?domain=yourcompany.com
+```
+
+Replace:
+- `app.yourcompany.com` - Your application domain
+- `yourcompany.com` - The domain you configured in Step 7
+
+### Test the Flow
+
+1. Open the URL in an **incognito/private window**
+2. You should be redirected to Okta login
+3. Enter credentials for a user assigned to the app
+4. Complete MFA if required
+5. You'll be redirected back to your app at `/sso/callback`
+6. User is authenticated!
+
+:::note First Login
+On first login, the user is automatically created in Permit.io. You must assign roles via the Permit.io dashboard or API.
+:::
+
+## Troubleshooting
+
+### "Invalid Request" in Okta
+
+**Cause:** Entity ID mismatch
+
+**Solution:**
+- Verify the Audience URI in Okta matches exactly: `https://app.yourcompany.com/v2/auth/saml/metadata/<YOUR_ORG_ID>`
+- Check your Permit.io organization ID is correct
+
+### User Not Created
+
+**Cause:** Missing attribute mappings
+
+**Solution:**
+- Go to Okta app → **Sign On** tab → **Attributes**
+- Verify all three attributes are configured: `email`, `firstName`, `lastName`
+
+### Certificate Error
+
+**Cause:** Wrong certificate or expired
+
+**Solution:**
+- Download fresh metadata from Okta (repeat Step 5)
+- Update certificate in Permit.io SSO configuration
+
+## Optional: Adjust MFA Requirements
+
+By default, Okta may require MFA for all logins. To adjust:
+
+1. In your Okta app, go to **Sign On** tab
+2. Under **Sign On Policy**, click **Edit**
+3. Adjust MFA requirements as needed
+4. Save
+
+## Next Steps
+
+- [Integrate your application](/authentication/saml-sso#integrate-your-application)
+- [Assign roles to SSO users](/authentication/saml-sso#assign-roles-to-sso-users)
+- [Test the complete flow](/authentication/saml-sso#test-your-setup)
+
+## Need Help?
+
+- 📧 Email: [support@permit.io](mailto:support@permit.io)
+- 💬 Slack: [Join our community](https://io.permit.io/docs-to-slack)
+- 📚 Main SAML SSO Guide: [SAML SSO](/authentication/saml-sso)
