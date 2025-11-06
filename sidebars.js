@@ -708,6 +708,20 @@ const sidebars = {
         "authentication/permit-and-authentication",
         {
           type: "category",
+          label: "SAML SSO",
+          link: {
+            type: "doc",
+            id: "authentication/saml-sso",
+          },
+          items: [
+            "authentication/saml-sso-okta",
+            "authentication/saml-sso-azure",
+            "authentication/saml-sso-keycloak",
+            "authentication/saml-sso-google",
+          ],
+        },
+        {
+          type: "category",
           link: {
             type: "doc",
             id: "authentication/auth0/permit-integration",
