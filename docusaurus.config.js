@@ -174,7 +174,7 @@ const config = {
           },
           {
             from: "/tutorials/deploying/on-prem",
-            to: "/how-to/deploy/on-prem",
+            to: "/concepts/deployment-options",
           },
           {
             from: "/tutorials/deploying/overview",
@@ -288,7 +288,7 @@ const config = {
           },
           {
             from: "/getting-started/deploying/on-prem",
-            to: "/how-to/deploy/on-prem",
+            to: "/concepts/deployment-options",
           },
           {
             from: "/features/projects-and-env",
