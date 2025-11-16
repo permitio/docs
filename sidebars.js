@@ -369,7 +369,6 @@ const sidebars = {
             "how-to/manage-data/use-external-data-source",
             "how-to/manage-data/local-facts-uploader",
             "how-to/bulk-operations",
-            "how-to/manage-data/pdp-sharding",
           ],
         },
       ],
@@ -625,7 +624,7 @@ const sidebars = {
         {
           type: "doc",
           id: "sdk/rust/quickstart-rust",
-          label: "Rust (Coming Soon)",
+          label: "Rust",
         },
         {
           type: "doc",
