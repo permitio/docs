@@ -355,10 +355,6 @@ const config = {
             from: "/features/loading-data/via-opal",
             to: "/how-to/manage-data/loading-data",
           },
-          {
-            from: "/concepts/pdp-sharding",
-            to: "/how-to/manage-data/pdp-sharding",
-          },
           // Docs restructure iteration 1 - 5th March 2024
           {
             from: ["/getting-started/quickstart", "/overview/permit-demo"],
