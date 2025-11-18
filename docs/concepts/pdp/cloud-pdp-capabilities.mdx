@@ -1,0 +1,145 @@
+---
+sidebar_position: 2
+title: Cloud PDP Capabilities
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+## What is the Cloud PDP?
+
+The **Cloud PDP** is Permit's **managed Policy Decision Point** that runs in Permit.io's infrastructure and serves authorization decisions over HTTPS.
+It exposes the same high‑level APIs as the container PDP and is **backward compatible** with existing SDK integrations that target
+`https://cloudpdp.api.permit.io`.
+
+Use the Cloud PDP when you want:
+
+- **Managed infrastructure** – No containers, upgrades, or scaling to maintain.
+- **High throughput & data volume** – Optimized for large‑scale policy checks.
+
+For full control over deployment topology, network placement, and container‑level tuning, use the
+[`permitio/pdp-v2` container PDP](/concepts/pdp/overview#run-a-local-pdp-with-docker).
+
+## Supported Policy Models
+
+- **RBAC (Role‑Based Access Control)** – **Supported**
+- **ReBAC (Relationship‑Based Access Control)** – **Supported**
+- **ABAC (Attribute‑Based Access Control)** – **Not supported**
+- **Multi‑tenant authorization** – **Supported**
+
+Cloud PDP and the container PDP share the same policy model as defined in your Permit project; the main difference is **where**
+the PDP runs and which runtime features you can configure yourself.
+
+## Supported Permission Evaluation Types
+
+The Cloud PDP supports the same core **permission evaluation types** as the container PDP for the models listed above:
+
+- **`/allowed` – Single permission check**  
+  See [Check](/how-to/enforce-permissions/check).
+  - SDK: `permit.check(...)`
+  - HTTP: `POST /allowed`
+- **`/allowed/bulk` – Bulk permission checks**  
+  See [Bulk Check](/how-to/enforce-permissions/bulk-check).
+  - HTTP: `POST /allowed/bulk`
+- **`/user-permissions` – User permissions for a subject**  
+  See [User Permissions](/how-to/enforce-permissions/user-permissions).
+  - "What can this user do?"
+  - HTTP: `POST /user-permissions`
+- **`/authorized_users` – Authorized users for a resource**  
+  See [Authorized Users](/how-to/enforce-permissions/authorized-users).
+  - "Which users are allowed to do X on Y?"
+  - HTTP: `POST /authorized_users`
+- **AuthZen (OpenID AuthZen Authorization API 1.0)** – standard evaluation and search APIs:
+  - **Access Evaluation**: `POST /v1/access/evaluation`
+  - **Bulk Access Evaluations**: `POST /v1/access/evaluations`
+  - **Subject Search**: `POST /v1/subjects`
+  - **Resource Search**: `POST /v1/resources`
+  - **Action Search**: `POST /v1/actions`
+
+:::note
+The SDKs abstract most of these endpoints – in day‑to‑day usage you will primarily call higher‑level helpers on the client side.
+:::
+
+:::warning Container‑only helpers
+The following helper APIs are **container PDP only** and are **not supported** by the Cloud PDP:
+
+- [`permit.AllTenantsCheck`](/how-to/enforce-permissions/all-tenants-check) (all‑tenants check across a PDP cluster)
+- Local enforcement APIs such as `/local/role_assignments`
+  (see [`Local Enforcement APIs`](/how-to/enforce-permissions/list-role-assignments))
+:::
+
+## Observability & Logs
+
+- **Audit logs & decision logs**
+  - Cloud PDP sends decision logs to Permit Cloud and they appear in the **Audit Logs** UI and APIs in the **same format**
+    as logs from the container PDP.
+  - Any dashboards, filters, or exports you rely on today continue to work.
+- **Debug Mode**
+  - You can enable **Debug Mode** per environment or PDP configuration; this enriches decision logs with additional context.
+  - For configuration details, see [Debug Mode](/how-to/use-audit-logs/debug-mode).
+
+:::info
+For the Cloud PDP, Debug Mode is managed via **Permit environment configuration** (UI/API).
+You do **not** run or configure the Cloud PDP container directly.
+:::
+
+### Not Provided by Cloud PDP
+
+Because the Cloud PDP is a **managed service**, some container‑level observability features are **not exposed**:
+
+- No direct `/metrics` endpoint or custom metrics sink.
+- No Helm‑based **logs forwarder** (Fluent Bit sidecar) configuration.
+- No direct access to the underlying OPA process, OPAL services, or internal logs.
+
+You should rely on:
+
+- **Audit Logs** in the Permit dashboard.
+- Application‑side metrics and logging around your PDP calls.
+
+## Data Handling & Scale
+
+The Cloud PDP is designed for **high data volume and high throughput**.
+Policy and data ingestion, replication, and storage are fully managed by Permit.
+
+- You **do not** manage any embedded data engines for the Cloud PDP.
+- You **cannot** configure OPAL Scope or custom data sources for the Cloud PDP – instead, you load data into Permit as **users, resource instances, tenants, relationship tuples, and role assignments**, and the Cloud PDP consumes that managed data.
+- You get a single, stable HTTPS endpoint that serves decisions for your project/environment.
+
+If you need full control over:
+
+- Custom external data sources via OPAL Scope.
+- Embedded data stores or other on-disk state inside the PDP container.
+- Offline mode, backups, and network path to Permit Cloud.
+
+then you should use the **container PDP** instead.
+
+## Comparison: Cloud PDP vs Container PDP
+
+| Capability                                    | Cloud PDP (managed)                     | Container PDP (`permitio/pdp-v2`)              |
+| ---                                          | ---                                     | ---                                            |
+| Deployment                                   | Managed by Permit                       | You run the Docker image                       |
+| Policy models                                | RBAC, ReBAC                             | RBAC, ReBAC, ABAC                              |
+| Multi‑tenant                                 | ✅ Supported                            | ✅ Supported                                   |
+| Single / bulk checks, user‑permissions, etc. | ✅ Supported                            | ✅ Supported                                   |
+| AuthZen API                                  | ✅ Supported                            | ✅ Supported                                   |
+| All‑tenants check helper                     | ❌ Not supported                        | ✅ `permit.AllTenantsCheck`                    |
+| Local enforcement APIs (`/local/*`)          | ❌ Not supported                        | ✅ Supported                                   |
+| External data via OPAL Scope                 | ❌ Not exposed                          | ✅ Supported                                   |
+| Debug mode configuration                     | Environment‑level (UI / API)           | Env‑level + `PDP_DEBUG` env var                |
+| Logs forwarder / Fluent Bit                  | ❌ Not supported                        | ✅ Helm value `pdp.logs_forwarder.*`           |
+| Metrics & APM                                | Internal only                           | ✅ Exposed (metrics, Datadog, etc.)           |
+| Offline mode / backups                       | Managed by Permit                       | ✅ `PDP_ENABLE_OFFLINE_MODE` and backup volume |
+
+## When to Use Which?
+
+- **Use Cloud PDP when**:
+  - You want a **fully managed**, production‑ready PDP with minimal operational overhead.
+  - You need to support **RBAC and ReBAC** at high scale without running containers.
+  - You rely on standard permission evaluations such as `check` / `/allowed`, `/allowed/bulk`, `/user-permissions`, `/authorized_users`, and the AuthZen API endpoints.
+
+- **Use the container PDP when**:
+  - You need **ABAC** support today.
+  - You require fine‑grained control over deployment topology, networks, and scaling.
+  - You depend on **local helper APIs**, custom data sources, or advanced observability.
+
+
