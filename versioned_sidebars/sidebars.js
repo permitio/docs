@@ -157,11 +157,6 @@ const sidebars = {
             },
           ],
         },
-        {
-          type: "doc",
-          id: "features/FoAz",
-          label: "Frontend-only Authz (FoAz)",
-        },
       ],
     },
     {

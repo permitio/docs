@@ -180,10 +180,14 @@ const config = {
             from: "/tutorials/deploying/overview",
             to: "/how-to/deploy/overview",
           },
-          // FOAZ FIX
+          // FOAZ FIX - Redirect to URL Mapping
           {
             from: "/frontend-only-authz/overview",
-            to: "/foaz/overview",
+            to: "/how-to/enforce-permissions/url-mapping/url-mapping-check",
+          },
+          {
+            from: "/foaz/overview",
+            to: "/how-to/enforce-permissions/url-mapping/url-mapping-check",
           },
           {
             from: "/features/policy-editor/editor-overview",
