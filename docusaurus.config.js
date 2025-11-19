@@ -180,7 +180,7 @@ const config = {
             from: "/tutorials/deploying/overview",
             to: "/how-to/deploy/overview",
           },
-          // FOAZ FIX - Redirect to URL Mapping
+          // Legacy URL Mapping redirect
           {
             from: "/frontend-only-authz/overview",
             to: "/how-to/enforce-permissions/url-mapping/url-mapping-check",
@@ -524,7 +524,7 @@ const config = {
           { from: "/category/elements", to: "/embeddable-uis/overview" },
           { from: "/category/erlang-beta", to: "/sdk/erlang/quickstart-erlang" },
           { from: "/category/php-beta", to: "/sdk/php/quickstart-php" },
-          { from: "/category/rust-coming-soon", to: "/sdk/rust/quickstart-rust" },
+          { from: "/category/rust-coming-soon", to: "/sdk/sdks-overview" },
           {
             from: "/category/kotlin-beta",
             to: "/sdk/kotlin/quickstart-kotlin",

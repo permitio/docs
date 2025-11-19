@@ -625,11 +625,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "sdk/rust/quickstart-rust",
-          label: "Rust",
-        },
-        {
-          type: "doc",
           id: "sdk/sdks-overview",
           label: "SDK Feature Parity",
         },
