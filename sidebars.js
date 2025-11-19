@@ -323,7 +323,7 @@ const sidebars = {
         "how-to/enforce-permissions/data-filtering",
         {
           type: "category",
-          label: "URL Mapping",
+          label: "URL-based enforcement",
           items: [
             "how-to/enforce-permissions/url-mapping/url-mapping-check",
             "how-to/enforce-permissions/url-mapping/regex-url-mapping-check",
