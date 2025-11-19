@@ -726,7 +726,6 @@ const sidebars = {
           items: ["authentication/cognito/cognito-demo-app"],
         },
         "authentication/stytch/permit-integration",
-        "authentication/fusionauth",
         "authentication/supertokens",
         "authentication/hankopermit",
         "authentication/logto",
