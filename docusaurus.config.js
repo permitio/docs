@@ -180,10 +180,14 @@ const config = {
             from: "/tutorials/deploying/overview",
             to: "/how-to/deploy/overview",
           },
-          // FOAZ FIX
+          // Legacy URL Mapping redirect
           {
             from: "/frontend-only-authz/overview",
-            to: "/foaz/overview",
+            to: "/how-to/enforce-permissions/url-mapping/url-mapping-check",
+          },
+          {
+            from: "/foaz/overview",
+            to: "/how-to/enforce-permissions/url-mapping/url-mapping-check",
           },
           {
             from: "/features/policy-editor/editor-overview",
@@ -355,10 +359,6 @@ const config = {
             from: "/features/loading-data/via-opal",
             to: "/how-to/manage-data/loading-data",
           },
-          {
-            from: "/concepts/pdp-sharding",
-            to: "/how-to/manage-data/pdp-sharding",
-          },
           // Docs restructure iteration 1 - 5th March 2024
           {
             from: ["/getting-started/quickstart", "/overview/permit-demo"],
@@ -524,7 +524,7 @@ const config = {
           { from: "/category/elements", to: "/embeddable-uis/overview" },
           { from: "/category/erlang-beta", to: "/sdk/erlang/quickstart-erlang" },
           { from: "/category/php-beta", to: "/sdk/php/quickstart-php" },
-          { from: "/category/rust-coming-soon", to: "/sdk/rust/quickstart-rust" },
+          { from: "/category/rust-coming-soon", to: "/sdk/sdks-overview" },
           {
             from: "/category/kotlin-beta",
             to: "/sdk/kotlin/quickstart-kotlin",

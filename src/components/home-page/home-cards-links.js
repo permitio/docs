@@ -204,7 +204,7 @@ export const enforcementRow = [
   },
   {
     type: "link",
-    href: "/foaz/url-mapping-check/",
+    href: "/how-to/enforce-permissions/url-mapping/url-mapping-check",
     label: "URL Mapping",
     svgIcon: <i className="ri-map-pin-line ri-xl !text-[#974ef2]"></i>,
     description: "Map and secure routes with access control",
