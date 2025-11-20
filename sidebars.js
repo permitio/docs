@@ -600,6 +600,13 @@ const sidebars = {
         },
         {
           type: "category",
+          label: "Database-level Authorization",
+          items: [
+            "integrations/database-access-control/trino-integration",
+          ],
+        },
+        {
+          type: "category",
           link: {
             type: "doc",
             id: "integrations/gateways/overview",
