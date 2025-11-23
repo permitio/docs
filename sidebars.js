@@ -142,7 +142,6 @@ const sidebars = {
           label: "Get Support on Slack",
         },
         {
-          
           type: "category",
           label: "Permit CLI",
           link: {
@@ -178,7 +177,7 @@ const sidebars = {
             "ai-security/integrations/langflow",
             "ai-security/integrations/pydantic-ai",
             "ai-security/integrations/mongodb-rag",
-            "ai-security/integrations/openai-prompt-filtering"
+            "ai-security/integrations/openai-prompt-filtering",
           ],
         },
         {
@@ -197,7 +196,7 @@ const sidebars = {
           items: [
             "ai-security/access-request-mcp/overview",
             "ai-security/access-request-mcp/implementation-guide",
-            "ai-security/access-request-mcp/food-ordering-demo-example"
+            "ai-security/access-request-mcp/food-ordering-demo-example",
           ],
         },
       ],
@@ -276,8 +275,7 @@ const sidebars = {
                 {
                   type: "doc",
                   id: "api/rebac/groups/groups-ui",
-                  label:'Groups UI',
-          
+                  label: "Groups UI",
                 },
                 {
                   type: "doc",
@@ -289,9 +287,7 @@ const sidebars = {
             {
               type: "category",
               label: "API Examples",
-              items: [
-                "api/rebac/rebac-api-calls",
-              ],
+              items: ["api/rebac/rebac-api-calls"],
             },
           ],
         },
@@ -599,11 +595,14 @@ const sidebars = {
           id: "integrations/infra-as-code/terraform-provider",
         },
         {
+          type: "doc",
+          label: "n8n",
+          id: "integrations/workflow-automation/n8n",
+        },
+        {
           type: "category",
           label: "Database-level Authorization",
-          items: [
-            "integrations/database-access-control/trino-integration",
-          ],
+          items: ["integrations/database-access-control/trino-integration"],
         },
         {
           type: "category",
@@ -681,56 +680,56 @@ const sidebars = {
       className: "category-as-header",
       items: [
         {
-          type: 'doc',
-          id: 'quick-start/fastapi',
-          label: 'FastAPI',
+          type: "doc",
+          id: "quick-start/fastapi",
+          label: "FastAPI",
         },
         {
-          type: 'doc',
-          id: 'quick-start/django',
-          label: 'Django',
+          type: "doc",
+          id: "quick-start/django",
+          label: "Django",
         },
         {
-          type: 'doc',
-          id: 'quick-start/flask',
-          label: 'Flask',
+          type: "doc",
+          id: "quick-start/flask",
+          label: "Flask",
         },
         {
-          type: 'doc',
-          id: 'quick-start/nextjs',
-          label: 'Next.js',
+          type: "doc",
+          id: "quick-start/nextjs",
+          label: "Next.js",
         },
         {
-          type: 'doc',
-          id: 'quick-start/nest',
-          label: 'NestJS',
+          type: "doc",
+          id: "quick-start/nest",
+          label: "NestJS",
         },
         {
-          type: 'doc',
-          id: 'quick-start/express',
-          label: 'Express.js',
+          type: "doc",
+          id: "quick-start/express",
+          label: "Express.js",
         },
         {
-          type: 'doc',
-          id: 'quick-start/gin',
-          label: 'Gin',
+          type: "doc",
+          id: "quick-start/gin",
+          label: "Gin",
         },
         {
-          type: 'doc',
-          id: 'quick-start/spring-boot',
-          label: 'Spring Boot',
+          type: "doc",
+          id: "quick-start/spring-boot",
+          label: "Spring Boot",
         },
         {
-          type: 'doc',
-          id: 'quick-start/aspnet',
-          label: 'ASP.NET',
+          type: "doc",
+          id: "quick-start/aspnet",
+          label: "ASP.NET",
         },
         {
-          type: 'doc',
-          id: 'quick-start/rails',
-          label: 'Rails',
+          type: "doc",
+          id: "quick-start/rails",
+          label: "Rails",
         },
-      ]
+      ],
     },
     {
       type: "category",
