@@ -157,16 +157,6 @@ const sidebars = {
             },
           ],
         },
-        {
-          type: "doc",
-          id: "features/FoAz",
-          label: "Frontend-only Authz (FoAz)",
-        },
-        {
-          type: "doc",
-          id: "features/coming-soon",
-          label: "Coming Soon",
-        },
       ],
     },
     {
@@ -193,11 +183,6 @@ const sidebars = {
           type: "doc",
           id: "concepts/pdp",
           label: "Policy Decision Point",
-        },
-        {
-          type: "doc",
-          id: "concepts/pdp-sharding",
-          label: "PDP Sharding",
         },
       ],
     },
