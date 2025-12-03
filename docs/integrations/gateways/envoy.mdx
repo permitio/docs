@@ -1,0 +1,189 @@
+---
+sidebar_position: 4
+title: Envoy Proxy x Permit
+---
+
+## Overview
+
+This guide explains how to integrate Envoy's External Authorization (ext_authz) filter with a Permit.io PDP using **GitOps-managed custom Rego policies**.
+With this setup, Envoy acts as a gateway that filters application requests by calling the PDP, which evaluates your Permit policies (optionally using **URL Mapping**) and returns an allow/deny decision.
+
+---
+
+## Prerequisites
+
+- **Envoy** deployed with the [External Authorization filter](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_authz_filter) available
+- **Permit.io account** and project with a running PDP
+- **PDP version** **0.9.10 or higher** (required for this integration)
+- **GitOps flow** configured for your Permit environment (see below)
+- Basic familiarity with Envoy configuration and OPA/Rego
+
+---
+
+## 1. Configure GitOps for Custom Policies
+
+Use Permit GitOps to manage your PDP policies (including the Envoy entrypoint) in a Git repository.
+
+1. **Configure GitOps** for your environment (choose one of the following):
+   - **Using the CLI**: follow the CLI GitOps guide: [Custom Rego (OPA) and GitOps CLI](/how-to/permit-cli/permit-cli-gitops).
+   - **Using the manual flow**: follow the GitOps integration guide: [Git and Permit](/integrations/gitops/github).
+2. **Clone the GitOps repository** locally and check out the branch for the environment you want Envoy to protect.
+
+Once GitOps is configured, any changes you push to the repository will be synced to the PDP.
+
+---
+
+## 2. Add an Envoy entrypoint policy under `custom`
+
+In your GitOps repository:
+
+1. **Create a new Rego file** under the `custom` directory at the root of the GitOps repo, for example:
+
+   ```text
+   custom/envoy_entrypoint.rego
+   ```
+
+2. Define an entrypoint rule that Envoy's ext_authz integration will call.
+   The PDP OPA plugin will evaluate the data document at the path you configure (see the `PDP_OPA_PLUGINS` section below).
+
+   A simplified example of an Envoy entrypoint policy might look like this:
+
+   ```rego
+   package permit
+
+   import data.permit.root as check
+   import input.attributes.request.http as http_request
+
+   # Boolean entrypoint evaluated by the Envoy ext_authz gRPC plugin
+   default envoy = false
+
+   envoy {
+     # Extract relevant fields from the Envoy input
+     url := http_request.path
+     method := http_request.method
+
+     # Example user & tenant extraction (adapt to your authentication setup)
+     user_key := http_request.headers["x-user-id"]
+     tenant_key := http_request.headers["x-tenant-id"]
+
+     check_input := {
+       "user": {
+         "key": user_key,
+       },
+       "action": method,
+       "resource": {
+         "type": url,
+         "tenant": tenant_key,
+       },
+     }
+
+     # Call "permit.check"
+     check.allow with input as check_input
+   }
+   ```
+
+3. Commit and **push** the new file to the GitOps repository.
+4. Wait for the PDP to sync the updated policies (or trigger a sync if you are using a CI flow).
+
+For the full structure of the Envoy authorization input (`input`) used in your policy, see the official
+[Envoy ext_authz filter documentation](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_authz_filter).
+
+---
+
+## 3. Configure the PDP OPA plugins
+
+The PDP **must** be started with an `envoy_ext_authz_grpc` plugin that exposes the Envoy-compatible gRPC service and points it at your custom policy entrypoint.
+
+Set the **`PDP_OPA_PLUGINS`** environment variable when running the PDP:
+
+```bash
+export PDP_OPA_PLUGINS='{"permit_graph":{},"envoy_ext_authz_grpc":{"addr":":9191","path":"permit/envoy"}}'
+```
+
+- **`permit_graph`** is required for Permit to function correctly.
+- **`envoy_ext_authz_grpc`** enables the Envoy gRPC external authorization endpoint.
+- **`addr`** is the address/port on which the gRPC server will listen (e.g. `:9191`).
+- **`path`** must match the OPA data path of your Envoy entrypoint policy (in the example above, `data.permit.envoy`).
+
+For more advanced plugin and Envoy integration options (timeouts, metadata, headers, etc.), see the OPA Envoy plugin configuration docs: [OPA Envoy Integration Configuration](https://www.openpolicyagent.org/docs/latest/envoy/#configuration).
+
+
+Ensure this variable is set alongside your usual PDP configuration (such as `PDP_API_KEY`, `PDP_DEBUG`, etc.).
+
+---
+
+## 4. Configure Envoy to call the PDP
+
+In your Envoy configuration, add the **HTTP ext_authz filter** and point it to the PDP gRPC endpoint configured above.
+
+A minimal example (simplified) might look like this:
+
+```yaml
+http_filters:
+  - name: envoy.filters.http.ext_authz
+    typed_config:
+      "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+      transport_api_version: V3
+      grpc_service:
+        envoy_grpc:
+          cluster_name: permit_pdp_ext_authz
+        timeout: 0.5s
+
+clusters:
+  - name: permit_pdp_ext_authz
+    type: logical_dns
+    connect_timeout: 0.25s
+    lb_policy: round_robin
+    load_assignment:
+      cluster_name: permit_pdp_ext_authz
+      endpoints:
+        - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: pdp
+                    port_value: 9191
+```
+
+Adjust the cluster name, address, and port to match your environment.
+Consult the [Envoy ext_authz docs](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_authz_filter)
+for the full configuration options.
+
+---
+
+## 5. Using URL Mapping with Envoy
+
+You can leverage Permit **URL Mapping** so that Envoy only passes the raw URL and method, while the PDP resolves them into Permit resources and actions.
+
+```rego
+# Placeholder: URL Mapping Rego example for Envoy will be added here.
+# This block will show how to resolve the incoming URL and method
+# using Permit URL Mapping and then perform a `permit.check`.
+```
+
+1. **Define URL Mappings** in the Permit UI:
+   - For simple templated URLs, follow: [Simple URL Mapping Check](/how-to/enforce-permissions/url-mapping/url-mapping-check)
+   - For advanced patterns, follow: [Regex URL Mapping Check](/how-to/enforce-permissions/url-mapping/regex-url-mapping-check)
+
+2. **Regex mappings and captured group**:
+   - When using **regex URL mapping**, the **first captured group** in the regex will be used as the **resource key** in the `permit.check` evaluation.
+
+3. **Integrate URL Mapping into your Envoy entrypoint policy**:
+   - Add a Rego rule in your Envoy entrypoint policy that resolves the incoming URL and method using Permit URL Mapping and then performs a `permit.check`.
+   - **Placeholder:** a concrete Rego example for URL Mapping resolution in the Envoy entrypoint policy will be added here.
+
+Once configured, every Envoy ext_authz call will:
+
+1. Send the request details (URL, method, user identity, tenant, etc.) to the PDP.
+2. Use URL Mapping (if enabled) to resolve the request into a resource/action.
+3. Evaluate your Permit policies via `permit.check` and return **allow/deny** to Envoy.
+
+---
+
+## 6. Example repository
+
+An example repository demonstrating this integration (including a complete `envoy_entrypoint.rego`, Envoy configuration, and GitOps layout) will be provided here:
+
+**[Example Envoy x Permit integration repo](TO_BE_ADDED)**
+
+Use that repository as a reference implementation and adapt it to your environment and deployment tooling.
