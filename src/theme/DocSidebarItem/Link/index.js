@@ -1,21 +1,21 @@
 import React from 'react';
 import clsx from 'clsx';
-import {ThemeClassNames} from '@docusaurus/theme-common';
-import {isActiveSidebarItem} from '@docusaurus/theme-common/internal';
+import { ThemeClassNames } from '@docusaurus/theme-common';
 import Link from '@docusaurus/Link';
 import isInternalUrl from '@docusaurus/isInternalUrl';
 import IconExternalLink from '@theme/Icon/ExternalLink';
 import styles from './styles.module.css';
+import { isActiveSidebarItem } from '@docusaurus/plugin-content-docs/lib/client/docsUtils.js';
 export default function DocSidebarItemLink({
   item,
   onItemClick,
   activePath,
   level,
   index,
-    svg,
+  svg,
   ...props
 }) {
-  const {href, label, className, autoAddBaseUrl} = item;
+  const { href, label, className, autoAddBaseUrl } = item;
   const isActive = isActiveSidebarItem(item, activePath);
   const isInternalLink = isInternalUrl(href);
 
@@ -43,9 +43,9 @@ export default function DocSidebarItemLink({
           onClick: onItemClick ? () => onItemClick(item) : undefined,
         })}
         {...props}>
-          {item?.customProps?.icon && <i className={`ri-${item.customProps.icon}`} style={{paddingInlineEnd:"8px", width: "16.11px", height:"16.16px" , inlineSize: "inherit"}}/>}
+        {item?.customProps?.icon && <i className={`ri-${item.customProps.icon}`} style={{ paddingInlineEnd: "8px", width: "16.11px", height: "16.16px", inlineSize: "inherit" }} />}
         {label}
-          {!isInternalLink && <IconExternalLink />}
+        {!isInternalLink && <IconExternalLink />}
       </Link>
     </li>
   );

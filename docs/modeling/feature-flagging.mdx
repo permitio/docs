@@ -1,0 +1,304 @@
+---
+sidebar_position: 6
+title: Custom UX with Feature Toggling
+---
+
+This tutorial will guide you through setting up **[ABAC](/how-to/build-policies/abac/overview)**
+(Attribute-based Access Control) policies with Permit and show you how to create a custom user experience.
+This will depend on who's **logged in**, the **role** assigned to them, and the specific **attributes** set for
+that role.
+
+The method is especially useful when you want to limit the use of new features in your application to a select group of test users.
+It’s also common to use this method to adjust the app experience of paying users based on their payment status or location.
+
+### What we'll build
+
+Attribute-Based Access Control (ABAC) is a flexible security model that uses attributes as the basis for access control decisions.
+Unlike traditional models like Role-Based Access Control (RBAC), which grant permissions based on predefined roles, ABAC allows
+for more granular and dynamic control by considering a wide range of attributes related to users or resources.
+
+:::note
+A significant advantage of ABAC is its ability to dynamically utilize attributes from the user's Identity Provider (IDP) without
+the need for syncing this information to the access control system, such as Permit. This capability ensures that access decisions
+are always based on the most current data directly linked to the user's identity, enhancing both security and efficiency.
+:::
+
+In this project, we aim to develop a demo application that dynamically displays tiles based on a user's role and permissions.
+The application will take into account various resources and their attributes to enforce permissions meticulously.
+
+Our dashboard will be designed to dynamically load tiles that are relevant to specific factors, such as the user's country and
+their associated sales channel. This approach ensures that each user experience is personalized and secure, aligning with their
+access rights and organizational role.
+
+## Prerequisites
+
+Before we begin, make sure you have the following prerequisites in place:
+
+1. An account with Permit
+2. A properly configured PDP (Policy Decision Point) with the correct API Key
+3. The Permit SDK package installed
+4. An authentication provider of your choosing (we support them all). For this tutorial, we used [clerk.com](https://clerk.com/)
+5. A basic app where you'll enforce permissions and adjust the UI. For this demo, you can clone a
+   `nextjs/react` boilerplate starter.
+
+## Modeling basic roles and resources
+
+As part of this project, we will work with our `fe-permit-sdk` and CASL to build a feature-toggling solution that uses Permit to manage who can view specific components in your application.
+
+In this walkthrough, we will use Attribute-based Access Control to decide which components are rendered.
+This will allow us to not just check against a role for the currently logged-in user but also against specific conditions.
+
+If you want to dive deeper into understanding ABAC, check out our guide [here](/how-to/build-policies/abac/overview).
+
+The first step is to define the attributes we will be working with. In our example, we are working with Clerk as our authentication provider.
+Clerk allows us to store metadata for individual users. In this case, we will store each user's `country` and `channel`.
+
+![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/clerk-attributes.png)
+
+The attributes defined in the authentication provider need to be mapped into the Permit. Permit needs to know their name and
+data type. In this case, both are a `String` - but many different data types are available for you to choose from.
+
+![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/attributes.png)
+
+Once we define our attributes, we must define the resources we will work with. Each defined resource should be the UI
+component that we want to conditionally render. Let's start off by defining the first resource.
+
+![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/new-resource.png)
+
+Now, we can define all the four resources we want to work with.
+
+![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/all-resources.png)
+
+Each resource will need corresponding attributes to be defined as part of it. We will be using the values of these resources for our
+`loadLocalStateBulk` function, passing in the `resource`, `resource attributes` and `action`.
+
+![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/resources-with-attributes.png)
+
+## Rendering the UI based on permissions
+
+The below guide is a quick implementation of what needs to be done to get CASL to render our components based
+on this example project. If you want to go into more detail about what CASL is and how it works, check out
+our in-depth guide [here](/integrations/feature-flagging/casl).
+
+To control access to resources within an application, we must first define a `Viewer` role that outlines specific permissions for
+accessing resources. This role allows us to set up a policy to define which resources are viewable by which users.
+
+![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/viewer-role.png)
+
+Resources are conditionally rendered based on this policy; if a user has the `"view"` permission for a particular resource, that
+resource will be displayed to them. This approach ensures that each user sees only the resources they are authorized to access.
+Below is an example where we can only view one resource called `Topics for you`.
+
+![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/viewer-role-policy-limited.png)
+
+We also can adjust the policy to view all the components.
+
+![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/viewer-role-policy.png)
+
+### Creating an API endpoint to handle permission checks
+
+As part of the CASL component that we will be creating later in this guide, we will need to specify an API
+route that we can call. This API route will perform bulk `permit.check()` operations for us, returning the result for
+each.
+
+Here is a basic implementation of such an endpoint, which we have under `/api/something`. You can name the file
+as you wish.
+
+```js
+import { Permit } from "permitio";
+
+const permit = new Permit({
+  token: "YOUR_PERMIT_API_KEY",
+  pdp: "http://localhost:7766",
+});
+
+export default async function handler(req, res) {
+  try {
+    const { resourcesAndActions } = req.body;
+    const { user: userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "No userId provided." });
+    }
+
+    const checkPermissions = async (resourceAndAction) => {
+      const { resource, action, userAttributes, resourceAttributes } = resourceAndAction;
+
+      const allowed = permit.check(
+        {
+          key: userId,
+          attributes: userAttributes,
+        },
+        action,
+        {
+          type: resource,
+          attributes: resourceAttributes,
+          tenant: "default",
+        }
+      );
+
+      return allowed;
+    };
+
+    const permittedList = await Promise.all(resourcesAndActions.map(checkPermissions));
+
+    console.log(permittedList); // Printing the result of the checks
+
+    return res.status(200).json({ permittedList });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+```
+
+Notice that we have imported the Permit library, and initialized the Permit object. You can follow
+this [guide](/overview/connecting-your-app#1-get-your-permit-environment-api-key) to understand where to fetch your API key.
+
+Once we are done with this step, we need to make sure to pull and launch our PDP - you can also find the steps on
+how to do this [here](/overview/connecting-your-app#2-setup-your-pdp-policy-decision-point-container).
+
+### Creating the `AbilityLoader`
+
+The AbilityLoader component is integral to this setup, diligently working to asynchronously retrieve and
+establish user-specific permissions, particularly upon user sign-in.
+
+In this scenario, we're employing Clerk.com as our authentication provider to obtain the userId, which we have
+synchronized with Permit. This allows us to identify the currently logged-in user and correlate them with the
+associated policy for their role. It's crucial to highlight that you can choose any authentication provider
+that best fits your needs—Permit is designed to integrate seamlessly with all of them.
+
+```js
+import React, { createContext, useEffect, useState } from "react";
+import { useUser } from "@clerk/nextjs";
+import { Ability } from "@casl/ability";
+import { Permit, permitState } from "permit-fe-sdk";
+
+// Create Context
+export const AbilityContext = createContext();
+
+export const AbilityLoader = ({ children }) => {
+  const { isSignedIn, user } = useUser();
+  const [ability, setAbility] = useState(undefined);
+
+  useEffect(() => {
+    const getAbility = async (loggedInUser) => {
+      const permit = Permit({
+        loggedInUser: loggedInUser,
+        backendUrl: "/api/something",
+      });
+
+      await permit.loadLocalStateBulk([
+        {
+          action: "view",
+          resource: "Products",
+          userAttributes: {
+            country: "PL",
+            channel: "ABC",
+          },
+        },
+        {
+          action: "view",
+          resource: "Product_Configurators",
+          userAttributes: {
+            country: "UK",
+            channel: "ABC",
+          },
+        },
+        {
+          action: "view",
+          resource: "Project_Builder",
+          userAttributes: {
+            country: "FR",
+            channel: "DEF",
+          },
+        },
+        {
+          action: "view",
+          resource: "Topics_for_you",
+          userAttributes: {
+            country: "ES",
+            channel: "DEF",
+          },
+        },
+      ]);
+
+      const caslConfig = permitState.getCaslJson();
+
+      return caslConfig && caslConfig.length ? new Ability(caslConfig) : undefined;
+    };
+
+    if (isSignedIn) {
+      getAbility(user.id).then((caslAbility) => {
+        setAbility(caslAbility);
+      });
+    }
+  }, [isSignedIn, user]);
+
+  return <AbilityContext.Provider value={ability}>{children}</AbilityContext.Provider>;
+};
+```
+
+### Conditionally rendering the UI
+
+First of all, in the file where you want to render part of the UI based on a condition, make sure you import
+`permitState`.
+
+```js
+import { permitState } from "permit-fe-sdk";
+```
+
+Then, utilize permitState to render parts of the HTML.
+
+```js
+<div className="flex h-full">
+  <div className="flex flex-col flex-grow">
+    {permitState?.check("view", "Products", {
+      country: user.publicMetadata.country,
+      channel: user.publicMetadata.channel,
+    }) && <div className="bg-white m-4 p-4 h-[250px]">Products</div>}
+
+    {permitState?.check("view", "Product_Configurators", {
+      country: user.publicMetadata.country,
+      channel: user.publicMetadata.channel,
+    }) && <div className="bg-white m-4 p-4 h-[200px]">Product Configurators</div>}
+
+    {permitState?.check("view", "Project_Builder", {
+      country: user.publicMetadata.country,
+      channel: user.publicMetadata.channel,
+    }) && <div className="bg-white m-4 p-4 h-[200px]">Project Builder</div>}
+
+    {permitState?.check("view", "Topics_for_you", {
+      country: user.publicMetadata.country,
+      channel: user.publicMetadata.channel,
+    }) && <div className="bg-white m-4 p-4 h-[100px]">Topics for you</div>}
+  </div>
+</div>
+```
+
+In conclusion, we've explored a streamlined approach to integrating feature toggling in your frontend UI using Permit,
+which effectively manages access to specific components.
+
+Next, we'll provide a visualization of what the Policy Editor might look like, alongside how the UI will appear once these
+settings are implemented. This will help illustrate the practical application of feature toggles in enhancing user interface
+management and security.
+
+### UI example with all permissions enabled
+
+#### The UI
+
+![All tiles](/ui-videos/modeling/custom-ui-demo/feature-flagging-1.png)
+
+#### The Permit Policy
+
+![All Permissions](/ui-videos/modeling/custom-ui-demo/feature-flagging-2.png)
+
+### UI example with some permissions enabled
+
+#### The UI
+
+![One tile](/ui-videos/modeling/custom-ui-demo/feature-flagging-3.png)
+
+#### The Permit Policy
+
+![One Permission](/ui-videos/modeling/custom-ui-demo/feature-flagging-4.png)

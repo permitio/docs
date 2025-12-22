@@ -1,0 +1,1 @@
+await permit.getUserPermissions(user);

@@ -1,0 +1,615 @@
+---
+title: "Management Guide" 
+description: "Configuration, operations, and maintenance"
+---
+
+:::info Enterprise Only
+This section is only relevant to Enterprise customers who acquired an on-prem license.
+:::
+
+# Management Guide
+
+Learn how to configure, manage, and maintain your Permit Platform deployment.
+
+## Post-Installation Access
+
+After successful deployment, your Permit Platform provides access to multiple services and management interfaces.
+
+### Primary Application Access
+
+**Frontend Application:**
+```
+URL: https://your-configured-domain.com
+Login: Use the admin credentials shown at end of installation
+       Or register a new account
+```
+
+The admin password is auto-generated during installation and displayed in the installation output. You can also retrieve it from Kubernetes secrets:
+
+```bash
+# Retrieve admin password
+kubectl get secret global-infrastructure-secret -n permit-platform \
+  -o jsonpath='{.data.KEYCLOAK_ADMIN_PASSWORD}' | base64 -d
+```
+
+### Management Dashboards
+
+All management interfaces are accessible via your configured domain with path-based routing:
+
+| Service | URL | Credentials | Purpose |
+|---------|-----|-------------|---------|
+| **Permit Frontend** | `https://your-domain.com` | admin/[auto-generated] or register | Main policy management UI |
+| **Keycloak Admin** | `https://your-domain.com/auth` | admin/[auto-generated] | User authentication and identity management |
+| **RabbitMQ Dashboard** | `https://your-domain.com/rabbitmq/` | permit/[auto-generated] | Message queue monitoring |
+| **OpenSearch Dashboard** | `https://your-domain.com/opensearch/` | No auth required | Audit logs and analytics |
+| **SCIM Service** | `https://your-domain.com/scim` | API-based | Identity provider integration (Okta, etc.) |
+
+### Retrieving Service Credentials
+
+All service passwords are stored in Kubernetes secrets and auto-generated during installation:
+
+```bash
+# Keycloak admin password
+kubectl get secret global-infrastructure-secret -n permit-platform \
+  -o jsonpath='{.data.KEYCLOAK_ADMIN_PASSWORD}' | base64 -d
+
+# RabbitMQ password
+kubectl get secret global-infrastructure-secret -n permit-platform \
+  -o jsonpath='{.data.RABBITMQ_PASSWORD}' | base64 -d
+
+# PostgreSQL password
+kubectl get secret global-infrastructure-secret -n permit-platform \
+  -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d
+```
+
+### Local Development Access
+
+For Kind clusters or `.local` domains, add an entry to your `/etc/hosts` file:
+
+```bash
+# macOS/Linux
+echo "127.0.0.1 your-configured-domain.local" | sudo tee -a /etc/hosts
+
+# Windows (PowerShell as Administrator)
+Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value "127.0.0.1 your-configured-domain.local"
+```
+
+For OpenShift ROSA deployments, find your router IP:
+
+```bash
+# Get OpenShift router IP
+oc get svc -n openshift-ingress router-default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+
+# Add to /etc/hosts
+echo "[router-ip] your-configured-domain.com" | sudo tee -a /etc/hosts
+```
+
+### Service Health Checks
+
+Verify all services are running correctly:
+
+```bash
+# Check all pods status
+kubectl get pods -n permit-platform
+
+# Health check endpoints
+curl -k https://your-domain.com/health              # Frontend health
+curl -k https://your-domain.com/scim/health         # SCIM health
+curl -k https://your-domain.com/api/v2/health       # Backend health
+```
+
+## Configuration Management
+
+### Primary Configuration File
+
+All platform configuration is managed through `charts/permit-platform/values.yaml`. The key sections you can customize:
+
+#### Required Configuration
+
+```yaml
+# Must be configured before installation
+global:
+  frontendDomain: "permit.yourcompany.com"  # REQUIRED - Replace CHANGEME_FRONTEND_DOMAIN
+
+permitServices:
+  policySync:
+    enabled: true
+    policyRepoUrl: "git@github.com:yourorg/permit-policies.git"  # REQUIRED
+    sshPrivateKey: |  # REQUIRED
+      -----BEGIN OPENSSH PRIVATE KEY-----
+      [Your SSH private key]
+      -----END OPENSSH PRIVATE KEY-----
+```
+
+#### Common Customizations
+
+**1. Custom Image Registry:**
+```yaml
+global:
+  imageRegistry: "myregistry.company.com"  # Your private registry
+  # Or for cloud providers:
+  # imageRegistry: "123456789.dkr.ecr.region.amazonaws.com"  # AWS ECR
+  # imageRegistry: "myregistry.azurecr.io"  # Azure
+  # imageRegistry: "gcr.io/project-id"  # GCP
+```
+
+**2. Resource Scaling:**
+```yaml
+permitServices:
+  backend:
+    replicas: 3  # Scale backend for high availability
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1000m"
+      limits:
+        memory: "4Gi"
+        cpu: "2000m"
+```
+
+**3. Storage Configuration:**
+```yaml
+thirdPartyServices:
+  postgres:
+    persistence:
+      size: "50Gi"  # Increase for production
+      storageClass: "fast-ssd"  # Use specific storage class
+  
+  opensearch:
+    persistence:
+      size: "100Gi"  # For production audit logs
+```
+
+**4. OpenSearch Tuning:**
+```yaml
+opensearch:
+  indexSettings:
+    auditLogs:
+      numberOfShards: 1  # Single-node: 1, Multi-node: 3-5
+      numberOfReplicas: 0  # Single-node: 0, HA: 1+
+  ism:
+    rollover:
+      minSize: "50gb"  # Adjust based on volume
+      minAge: "30d"   # Retention period
+```
+
+### Applying Configuration Changes
+
+The platform uses **3 separate Helm charts** that can be managed independently:
+
+```bash
+# 1. Update third-party services (PostgreSQL, Redis, OpenSearch, RabbitMQ, Keycloak)
+helm upgrade third-party-services charts/permit-platform \
+  --set permitServices.enabled=false \
+  --set thirdPartyServices.enabled=true \
+  -n permit-platform
+
+# 2. Run migrations (database schema updates)
+helm upgrade migrations charts/permit-platform \
+  --set migrations.enabled=true \
+  -n permit-platform
+
+# 3. Update platform services (all 35 Permit services)
+helm upgrade permit-platform charts/permit-platform \
+  --set permitServices.enabled=true \
+  -n permit-platform
+
+# Check status of all deployments
+kubectl rollout status deployment -n permit-platform
+
+# Verify changes
+helm list -n permit-platform
+kubectl get pods -n permit-platform
+```
+
+## Daily Operations
+
+### Platform Health Monitoring
+
+```bash
+# Check all pods status
+kubectl get pods -n permit-platform
+
+# Get detailed pod information
+kubectl describe pods -n permit-platform
+
+# Check service endpoints
+kubectl get services -n permit-platform
+
+# View recent events
+kubectl get events -n permit-platform --sort-by='.lastTimestamp'
+```
+
+### Log Management
+
+```bash
+# View backend logs
+kubectl logs -n permit-platform deployment/permit-backend-v2 --tail=100
+
+# Follow logs in real-time
+kubectl logs -n permit-platform deployment/permit-backend-v2 -f
+
+# View logs for crashed pods
+kubectl logs -n permit-platform <pod-name> --previous
+
+# Export all logs
+kubectl logs -n permit-platform --all-containers=true > platform-logs.txt
+```
+
+### Service Management
+
+```bash
+# Restart specific service
+kubectl rollout restart deployment/permit-backend-v2 -n permit-platform
+
+# Restart all services
+kubectl rollout restart deployment -n permit-platform
+
+# Check restart status
+kubectl rollout status deployment/permit-backend-v2 -n permit-platform
+```
+
+## Scaling Operations
+
+### Horizontal Scaling
+
+```bash
+# Scale backend services
+kubectl scale deployment permit-backend-v2 -n permit-platform --replicas=3
+
+# Scale worker processes  
+kubectl scale deployment celery-general -n permit-platform --replicas=2
+
+# Scale OPAL components
+kubectl scale deployment opal-server -n permit-platform --replicas=2
+kubectl scale deployment permit-opal-relay-consumer-v2 -n permit-platform --replicas=2
+
+# Check scaling status
+kubectl get deployments -n permit-platform
+```
+
+### Resource Adjustment
+
+```bash
+# Update resource requests and limits
+kubectl patch deployment permit-backend-v2 -n permit-platform -p='{"spec":{"template":{"spec":{"containers":[{"name":"permit-backend-v2","resources":{"requests":{"memory":"2Gi","cpu":"1000m"},"limits":{"memory":"4Gi","cpu":"2000m"}}}]}}}}'
+
+# View current resource usage
+kubectl top pods -n permit-platform
+
+# Check resource quotas and limits
+kubectl describe deployment permit-backend-v2 -n permit-platform | grep -A 10 "Limits\|Requests"
+```
+
+## Git Repository Management
+
+### Policy Synchronization
+
+```bash
+# Check policy sync pod status
+kubectl get pods -n permit-platform -l app=permit-policy-sync-v2
+
+# View policy sync logs
+kubectl logs -n permit-platform deployment/permit-policy-sync-v2
+
+# Check OPAL server status (coordinates policy distribution)
+kubectl logs -n permit-platform deployment/opal-server
+
+# Restart policy sync if needed
+kubectl rollout restart deployment/permit-policy-sync-v2 -n permit-platform
+```
+
+### Repository Updates
+
+```bash
+# Update Git repository configuration in values.yaml
+vi charts/permit-platform/values.yaml
+
+# Update the policy sync secret with new SSH key
+kubectl create secret generic policy-sync-ssh-key -n permit-platform \
+  --from-literal=private-key="$(cat new-private-key)" \
+  --from-literal=repo-url="git@github.com:neworg/new-policies.git" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Restart services to pick up new configuration
+kubectl rollout restart deployment/permit-policy-sync-v2 -n permit-platform
+kubectl rollout restart deployment/opal-server -n permit-platform
+```
+
+## Backup and Recovery
+
+### Creating Backups
+
+```bash
+# Database backup using kubectl
+kubectl exec -n permit-platform deployment/postgres -- pg_dump -U permit permit > backup-$(date +%Y%m%d-%H%M%S).sql
+
+# Backup configuration (values.yaml)
+cp charts/permit-platform/values.yaml values-backup-$(date +%Y%m%d-%H%M%S).yaml
+
+# Backup all secrets
+kubectl get secrets -n permit-platform -o yaml > secrets-backup-$(date +%Y%m%d-%H%M%S).yaml
+
+# Backup persistent volume claims
+kubectl get pvc -n permit-platform -o yaml > pvc-backup-$(date +%Y%m%d-%H%M%S).yaml
+```
+
+### Backup Management
+
+```bash
+# List available backups
+ls -la *backup*.{sql,yaml}
+
+# Restore database from backup
+kubectl exec -i -n permit-platform deployment/postgres -- psql -U permit -d permit < backup-20241201-143022.sql
+
+# Restore configuration
+cp values-backup-20241201-143022.yaml charts/permit-platform/values.yaml
+./scripts/install-permit-platform.sh  # Re-apply configuration
+```
+
+## Updates and Upgrades
+
+### Platform Updates
+
+```bash
+# Extract new version package
+tar -xzf permit-platform-on-prem-installer-v2.0.0.tar.gz
+cd permit-platform-on-prem-installer-v2.0.0
+
+# Backup current configuration
+cp /path/to/current/charts/permit-platform/values.yaml ./values-backup.yaml
+
+# Update configuration with your settings
+vi charts/permit-platform/values.yaml
+
+# Run installation (automatically upgrades existing deployment)
+./scripts/install-permit-platform.sh
+
+# Verify upgrade completed successfully
+kubectl get pods -n permit-platform
+helm list -n permit-platform
+```
+
+### Rollback Procedures
+
+```bash
+# Rollback using Helm (most recent release)
+helm rollback permit-platform -n permit-platform
+
+# Rollback to specific release number
+helm history permit-platform -n permit-platform
+helm rollback permit-platform 3 -n permit-platform
+
+# Check rollback status
+helm status permit-platform -n permit-platform
+kubectl get pods -n permit-platform
+```
+
+## Security Maintenance
+
+### Certificate Management
+
+```bash
+# Check current TLS certificate
+kubectl get secret permit-frontend-tls -n permit-platform -o yaml
+
+# Check certificate expiration
+kubectl get secret permit-frontend-tls -n permit-platform -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -dates
+
+# Update TLS certificate
+kubectl create secret tls permit-frontend-tls -n permit-platform \
+  --cert=./new-cert.pem \
+  --key=./new-key.pem \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Restart ingress to pick up new certificate
+kubectl rollout restart deployment/ingress-nginx-controller -n ingress-nginx
+```
+
+### Password Rotation
+
+```bash
+# Update database passwords in secrets
+kubectl patch secret postgres-secret -n permit-platform \
+  --type='merge' -p='{"data":{"password":"'$(echo -n 'new-password' | base64)'"}}'
+
+# Update service passwords in backend secret  
+kubectl patch secret permit-backend-v2-secret -n permit-platform \
+  --type='merge' -p='{"data":{"PG_DSN":"'$(echo -n 'postgresql+asyncpg://permit:new-password@postgres:5432/permit' | base64)'"}}'
+
+# Restart affected services
+kubectl rollout restart deployment -n permit-platform
+```
+
+### Security Auditing
+
+```bash
+# Check pod security context
+kubectl get pods -n permit-platform -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.spec.securityContext}{"\n"}{end}'
+
+# Review service account permissions
+kubectl describe serviceaccount -n permit-platform
+
+# Check for privileged containers
+kubectl get pods -n permit-platform -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.spec.containers[*].securityContext.privileged}{"\n"}{end}'
+
+# Audit logs from OpenSearch
+kubectl port-forward -n permit-platform svc/opensearch 9200:9200 &
+curl "http://localhost:9200/audit_logs/_search?q=*&size=100"
+```
+
+## Monitoring and Alerting
+
+### Health Monitoring
+
+```bash
+# Monitor pod health and resource usage
+kubectl top pods -n permit-platform
+
+# Check all services health
+kubectl get pods,svc,ingress -n permit-platform
+
+# Check service endpoints and connectivity
+kubectl get endpoints -n permit-platform
+```
+
+### Performance Monitoring
+
+```bash
+# Resource utilization across all services
+kubectl top pods -n permit-platform --sort-by=memory
+kubectl top nodes
+
+# Check resource limits vs usage
+kubectl describe nodes | grep -A 5 "Allocated resources"
+
+# Monitor specific service performance
+kubectl logs -n permit-platform deployment/permit-backend-v2 --tail=100 | grep -E "(ERROR|WARN|response_time)"
+```
+
+## Multi-Server Management
+
+### Cluster Operations
+
+```bash
+# View cluster status
+kubectl cluster-info
+kubectl get nodes -o wide
+
+# Check node resources and conditions
+kubectl describe nodes
+
+# View cluster events
+kubectl get events --all-namespaces --sort-by='.lastTimestamp'
+
+# Check cluster health
+kubectl get componentstatuses
+```
+
+### Load Balancing
+
+```bash
+# Check ingress controller status
+kubectl get pods -n ingress-nginx
+kubectl get svc -n ingress-nginx
+
+# View load balancer configuration
+kubectl get ingress -n permit-platform -o yaml
+
+# Test service connectivity
+kubectl run test-pod --image=busybox --rm -it --restart=Never -- wget -qO- http://permit-backend-v2.permit-platform.svc.cluster.local:8000/health
+```
+
+## Troubleshooting Commands
+
+### System Diagnostics
+
+```bash
+# Comprehensive system check
+kubectl get all -n permit-platform
+kubectl top nodes
+kubectl top pods -n permit-platform
+
+# Network connectivity test
+kubectl exec -n permit-platform deployment/permit-backend-v2 -- curl -s http://postgres:5432 || echo "Database connection failed"
+kubectl exec -n permit-platform deployment/permit-backend-v2 -- curl -s http://redis:6379 || echo "Redis connection failed"
+
+# Storage health check
+kubectl get pv,pvc -n permit-platform
+kubectl describe pvc -n permit-platform
+```
+
+### Log Collection for Support
+
+```bash
+# Collect all pod logs for support
+kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres > permit-platform-logs.txt
+
+# Collect system information
+kubectl get pods,svc,ingress,pv,pvc -n permit-platform -o wide > system-info.txt
+kubectl get events -n permit-platform --sort-by='.lastTimestamp' > events.txt
+
+# Create support bundle
+tar -czf permit-platform-support-$(date +%Y%m%d-%H%M%S).tar.gz \
+  permit-platform-logs.txt system-info.txt events.txt
+# Add resource usage information
+kubectl top pods -n permit-platform > resource-usage.txt
+kubectl top nodes > node-usage.txt
+
+# Include all files in support bundle
+tar -czf permit-platform-support-$(date +%Y%m%d-%H%M%S).tar.gz \
+  *.txt
+```
+
+## Maintenance Windows
+
+### Planned Maintenance
+
+```bash
+# Scale down all services for maintenance
+kubectl scale deployment --replicas=0 -n permit-platform --all
+
+# Verify all pods are down
+kubectl get pods -n permit-platform
+
+# After maintenance, scale services back up
+kubectl scale deployment permit-backend-v2 -n permit-platform --replicas=1
+kubectl scale deployment permit-frontend -n permit-platform --replicas=1
+kubectl scale deployment celery-general -n permit-platform --replicas=1
+# ... continue for other services
+```
+
+### Emergency Procedures
+
+```bash
+# Emergency stop all platform services
+kubectl scale deployment --replicas=0 -n permit-platform --selector=app!=postgres,app!=redis
+
+# Emergency restart all services
+kubectl rollout restart deployment -n permit-platform
+
+# Safe mode - restart only essential services
+kubectl scale deployment permit-backend-v2 -n permit-platform --replicas=1
+kubectl scale deployment permit-frontend -n permit-platform --replicas=1
+```
+
+## Configuration Management
+
+### Environment Variables
+
+```bash
+# View current configuration in backend deployment
+kubectl describe deployment permit-backend-v2 -n permit-platform | grep -A 20 "Environment:"
+
+# Update environment variables via values.yaml
+vi charts/permit-platform/values.yaml
+./scripts/install-permit-platform.sh  # Re-apply configuration
+
+# Check if configuration was applied
+kubectl get deployment permit-backend-v2 -n permit-platform -o yaml | grep -A 10 env:
+```
+
+### Configuration Management
+
+```bash
+# View all configmaps
+kubectl get configmaps -n permit-platform
+
+# View all secrets (for environment variables)
+kubectl get secrets -n permit-platform
+
+# Edit configuration directly (advanced users only)
+kubectl edit deployment permit-backend-v2 -n permit-platform
+```
+
+---
+
+**Need help with troubleshooting?** Check the [Troubleshooting Guide](/how-to/deploy/on-prem/troubleshooting) →
+
+## Support
+
+Need help with platform management?
+
+- 📧 **Email**: support@permit.io
+- 💬 **Slack**: [Join our community](https://io.permit.io/slack)

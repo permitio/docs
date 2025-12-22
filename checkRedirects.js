@@ -22,7 +22,7 @@ async function searchLinksInFolder(folderPath, links) {
 async function searchLinksInFile(filePath, links) {
   const content = await fs.readFile(filePath, "utf8");
   links.forEach((link) => {
-    if (content.includes(`(${link}`)) {
+    if (content.includes(`(${link})`)) {
       files.push(`Found link "${link}" in file: ${filePath}`);
     }
   });
