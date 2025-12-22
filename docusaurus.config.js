@@ -1,6 +1,12 @@
 /* eslint-disable spellcheck/spell-checker */
 // @ts-check
 // Note: type annotations allow type checking and IDEs autocompletion
+// require("@babel/register")({
+//   extensions: [".js", ".jsx"],
+//   presets: ["@babel/preset-env", "@babel/preset-react"],
+//   plugins: ["@babel/plugin-transform-modules-commonjs"],
+// });
+
 const path = require("path");
 
 const lightCodeTheme = require("./src/css/prism-theme");
@@ -23,7 +29,14 @@ const config = {
   favicon: "logo/favicon.ico",
   organizationName: "permitio", // Usually your GitHub org/user name.
   projectName: "docs", // Usually your repo name.
-  markdown: { mermaid: true },
+  markdown: {
+    mermaid: true,
+    mdx1Compat: {
+      comments: true,
+      admonitions: true,
+      headingIds: false,
+    },
+  },
   themes: ["@docusaurus/theme-mermaid"],
   presets: [
     [
@@ -42,9 +55,6 @@ const config = {
               label: "2.0.0",
               path: "/",
             },
-            "1.0.0": {
-              banner: "none",
-            },
           },
         },
         blog: false, // disables docusaurus blog
@@ -60,7 +70,6 @@ const config = {
       "@docusaurus/plugin-client-redirects",
       {
         redirects: [
-          // Backwards support - We moved multitenancy into features
           {
             from: "/concepts/multi-tenancy",
             to: "/how-to/build-policies/policy-basics",
@@ -165,16 +174,20 @@ const config = {
           },
           {
             from: "/tutorials/deploying/on-prem",
-            to: "/how-to/deploy/on-prem",
+            to: "/concepts/deployment-options",
           },
           {
             from: "/tutorials/deploying/overview",
             to: "/how-to/deploy/overview",
           },
-          // FOAZ FIX
+          // Legacy URL Mapping redirect
           {
             from: "/frontend-only-authz/overview",
-            to: "/foaz/overview",
+            to: "/how-to/enforce-permissions/url-mapping/url-mapping-check",
+          },
+          {
+            from: "/foaz/overview",
+            to: "/how-to/enforce-permissions/url-mapping/url-mapping-check",
           },
           {
             from: "/features/policy-editor/editor-overview",
@@ -279,7 +292,7 @@ const config = {
           },
           {
             from: "/getting-started/deploying/on-prem",
-            to: "/how-to/deploy/on-prem",
+            to: "/concepts/deployment-options",
           },
           {
             from: "/features/projects-and-env",
@@ -320,7 +333,7 @@ const config = {
           },
           {
             from: "/embeddable-uis/element/access-requests",
-            to: "/api/examples/access-requests",
+            to: "/api/elements/access-requests",
           },
           {
             from: "/features/permit-elements/email-configuration-and-templates",
@@ -335,8 +348,8 @@ const config = {
             to: "/embeddable-uis/user-preview",
           },
           {
-            from: "/features/multitenancy",
-            to: "/concepts/multitenancy",
+            from: ["/features/multitenancy", "/concepts/multitenancy"],
+            to: "/concepts/multi-tenant-authorization",
           },
           {
             from: "/features/loading-data/via-api",
@@ -345,10 +358,6 @@ const config = {
           {
             from: "/features/loading-data/via-opal",
             to: "/how-to/manage-data/loading-data",
-          },
-          {
-            from: "/concepts/pdp-sharding",
-            to: "/how-to/manage-data/pdp-sharding",
           },
           // Docs restructure iteration 1 - 5th March 2024
           {
@@ -364,12 +373,8 @@ const config = {
             to: "/sdk/sdks-overview",
           },
           {
-            from: ["/category/how-to", "/category/-guides--tutorials"],
-            to: "/category/guides--tutorials",
-          },
-          {
             from: ["/category/integrations", "/category/-integrate-to-applications"],
-            to: "/category/integrate-to-applications",
+            to: "/quickstart",
           },
           {
             from: ["/category/modeling-examples", "/category/-learn-by-example"],
@@ -411,13 +416,144 @@ const config = {
             from: "/integrations/authentication/your-authentication",
             to: "/authentication/your-authentication",
           },
-          { from: "/category/-work-with-authentication", to: "/category/work-with-authentication" },
+          // SDK changes
+          {
+            from: "/sdk/nodejs/usage-example",
+            to: "/sdk/nodejs/quickstart-nodejs",
+          },
+          {
+            from: "/concepts/pdp",
+            to: "/concepts/pdp/overview",
+          },
+          // Moz report
+          {
+            from: "/features/policy-editor/abac/overview",
+            to: "/how-to/build-policies/abac/overview",
+          },
+          {
+            from: "/features/policy-editor/rbac/overview",
+            to: "/how-to/build-policies/rbac/overview",
+          },
+          {
+            from: "/category/sdk",
+            to: "/sdk/sdks-overview",
+          },
+          {
+            from: "/api/examples/manage-env",
+            to: "/manage-your-account/creating-environments",
+          },
+          // Sidebar Restructure
+          {
+            from: "/api/examples/bulk-operations",
+            to: "/how-to/bulk-operations",
+          },
+          {
+            from: "/api/rbac/overview",
+            to: "/how-to/build-policies/rbac/overview",
+          },
+          {
+            from: [
+              "/category/integrate-to-applications",
+              "/category/guides--tutorials",
+              "/category/-work-with-authentication",
+              "/category/how-to",
+              "/category/-guides--tutorials",
+              "/overview/permit-sdlc",
+              "/category/build-policies",
+            ],
+            to: "/quickstart",
+          },
+          {
+            from: ["/category/policy-lifecycle", "/how-to/manage-policy-lifecycle"],
+            to: "/how-to/SDLC/CI-CD",
+          },
+          {
+            from: "/category/golang",
+            to: "/sdk/golang/quickstart-golang",
+          },
+          {
+            from: "/category/nodejs",
+            to: "/sdk/nodejs/quickstart-nodejs",
+          },
+          {
+            from: "/category/python",
+            to: "/sdk/python/quickstart_python_sync",
+          },
+          {
+            from: "/category/ruby",
+            to: "/sdk/ruby/quickstart-ruby",
+          },
+          {
+            from: "/category/java",
+            to: "/sdk/java/quickstart-java",
+          },
+          {
+            from: "/category/dotnet",
+            to: "/sdk/dotnet/quickstart-dotnet",
+          },
+          {
+            from: "/category/rebac",
+            to: "/how-to/build-policies/rebac/overview",
+          },
+          {
+            from: "/category/enforce-permissions",
+            to: "/how-to/enforce-permissions/check",
+          },
+          {
+            from: "/category/audit-logs",
+            to: "/how-to/use-audit-logs/types-and-filtering",
+          },
+          {
+            from: "/category/deploy",
+            to: "/how-to/deploy/deploy-to-production",
+          },
+          {
+            from: ["/category/abac", "/category/abac-1"],
+            to: "/how-to/build-policies/abac/overview",
+          },
+          { from: "/category/api-examples", to: "/api/api-with-cli" },
+          {
+            from: "/category/auth0",
+            to: "/authentication/auth0/permit-integration",
+          },
+          { from: "/category/c-beta", to: "/sdk/cpp/quickstart-cpp" },
+          {
+            from: "/category/cognito",
+            to: "/authentication/cognito/permit-integration",
+          },
+          { from: "/category/elements", to: "/embeddable-uis/overview" },
+          { from: "/category/erlang-beta", to: "/sdk/erlang/quickstart-erlang" },
+          { from: "/category/php-beta", to: "/sdk/php/quickstart-php" },
+          { from: "/category/rust-coming-soon", to: "/sdk/sdks-overview" },
+          {
+            from: "/category/kotlin-beta",
+            to: "/sdk/kotlin/quickstart-kotlin",
+          },
+          { from: "/category/policy-decision-point-pdp", to: "/concepts/pdp/overview" },
+          {
+            from: ["/category/rbac", "/category/rbac-1"],
+            to: "/how-to/build-policies/rbac/overview",
+          },
+          {
+            from: "/category/understanding-errors",
+            to: "/category/errors",
+          },
+          {
+            from: "/category/work-with-authentication",
+            to: "/how-to/sync-users",
+          },
+          {
+            from: [
+              "/mcp-permissions/index"
+            ],
+            to: "/ai-security/mcp-permissions/guide/"
+          },
         ],
       },
     ],
     "docusaurus-plugin-sass",
     "docusaurus-plugin-hotjar",
-    "plugin-image-zoom",
+    "docusaurus-plugin-image-zoom",
     async function TailwindCSSPlugin(context, options) {
       return {
         name: "docusaurus-tailwindcss",
@@ -429,12 +565,31 @@ const config = {
         },
       };
     },
+    [
+      "@inkeep/cxkit-docusaurus",
+      {
+        ChatButton: {
+          baseSettings: {
+            apiKey: "446287e718c0fd535135e7e51147a028a61120d17fd74d2f",
+            primaryBrandColor: "#7542B5",
+            organizationDisplayName: "Permit.io",
+          },
+        },
+        SearchBar: {
+          baseSettings: {
+            apiKey: "446287e718c0fd535135e7e51147a028a61120d17fd74d2f",
+            primaryBrandColor: "#7542B5",
+            organizationDisplayName: "Permit.io",
+          },
+        },
+      },
+    ],
   ],
 
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
-      imageZoom: {
+      zoom: {
         selector: ".markdown :not(em) > img",
       },
       hotjar: {
@@ -458,8 +613,9 @@ const config = {
             className: "algolia-search",
           },
           {
-            type: "docsVersionDropdown",
+            type: "docsVersion",
             position: "right",
+            className: "version",
           },
           {
             alt: "twitter logo",
@@ -492,7 +648,7 @@ const config = {
       },
       prism: {
         theme: require("prism-react-renderer/themes/dracula"),
-        additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl"],
+        additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl", "php", "bash"],
       },
       colorMode: {
         defaultMode: "light",
@@ -500,9 +656,9 @@ const config = {
         respectPrefersColorScheme: false,
       },
       algolia: {
-        appId: "5XEC02AV6V",
-        apiKey: "468aa3509ee97f55ff3c6dcff73c61c4",
-        indexName: "docs",
+        appId: "MVBO9ANY91",
+        apiKey: "cce9564dd44f4505a37949e7ba1593e0",
+        indexName: "permit",
         contextualSearch: true,
       },
       announcementBar: {

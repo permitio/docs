@@ -1,0 +1,322 @@
+---
+title: Implementing Fine-grained Authorization in NestJS Application
+sidebar_position: 5
+---
+
+import TimelineStep from "../../src/components/timeline/TimelineStep";
+import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
+
+Integrate fine-grained authorization into your NestJS application to enable secure collaboration, where users can create, edit, and manage content based on their specific roles and permissions.
+
+<br />
+
+This guide shows you how to add fine-grained authorization to a NestJS application using Permit.io. You will set up a policy for creating posts and comments, register users, assign them roles (like Author, Moderator, or Reader), and enforce permissions directly in your app's endpoints and middleware.
+
+By the end, you will have a working example where only authorized users can access protected endpoints, and you will understand how to integrate Permit.io into your own NestJS applications.
+
+## Prerequisites
+
+- NestJS application
+- [Docker](https://www.docker.com/) (for running the PDP server)
+- [Node.js](https://nodejs.org/en) (for installing and running the Permit CLI)
+- [Permit.io](https://permit.io) account (Follow [this](/quickstart) guide to create an account)
+
+## Policy Configuration
+
+Before integrating Permit.io with your NestJS application, you need to configure a policy. If you already have a policy configured, you can skip this section and proceed directly to the [integration guide](#integration-guide).
+
+<details open>
+<summary>Configure Policy in Permit</summary>
+
+<TimelineWrapper>
+<TimelineStep>
+
+### Installing the Permit CLI
+
+First, install the [Permit CLI](https://github.com/permitio/permit-cli). The Permit CLI is a command-line tool that allows you to create policies, run the PDP server, and perform other tasks. To install the CLI, run the following command in your terminal:
+
+```bash
+npm install -g @permitio/cli
+```
+
+Once the installation is complete, run `permit` to confirm the installation.
+
+</TimelineStep>
+<TimelineStep>
+
+### Authenticating the CLI
+
+To use the CLI, authenticate it with your Permit account. Run:
+
+```bash
+permit login
+```
+
+This command opens a browser window and prompts you to log in with your Permit account. After logging in, the CLI is authenticated and ready to use. This also logs you into the default environment (a project can have multiple environments).
+
+You can change the environment by running `permit env select` and then selecting the environment you want to use.
+
+</TimelineStep>
+<TimelineStep>
+
+### Creating a policy with a template
+
+The Permit CLI offers various templates to create a policy with predefined roles and resources using best practices. This simplifies policy creation compared to starting from scratch.
+
+To check the available templates, run `permit template list`. You can also visit the [Permit CLI repo](https://github.com/permitio/permit-cli/tree/main/source/templates) to see the templates and the actual terraform code for each template.
+
+![permit template list](/img/quick-start-guide/permit-template-list.png)
+
+Use the **blogging-platform** template to create the policy. This template helps you set up a policy for a blogging platform with roles and resources. The policy is explained in detail in the next step.
+
+To apply the template, run the following command:
+
+```bash
+permit template apply --template blogging-platform
+```
+
+You will see a success message in the terminal.
+
+</TimelineStep>
+<TimelineStep>
+
+### Understanding and accessing the policy from the dashboard
+
+Next, go to the Permit dashboard, select your project, and click on the **Policy** tab in the left sidebar. You will see the policy you just created.
+
+![permit policy](/img/quick-start-guide/policy-editor-dash.png)
+
+- For the blog application, there are two resources: **Posts** and **Comments**. Depending on the role and action, the user will have access to the resource. New users accessing the blog are assigned the **Reader** role and have permission to read posts.
+- As users become **Authors**, they gain access to create and update blog posts and manage comments.
+- There is also a relationship between **Post** and **Comment** resources: the person who creates a post automatically becomes a **Comment Moderator**.
+- A **Free Post** resource set filters non-premium posts, allowing **Readers** to access only free content. This is a ReBAC setup.
+
+This setup combines ABAC and ReBAC to enforce flexible and secure permissions. You can easily add or remove permissions by checking or unchecking them in the policy editor.
+
+</TimelineStep>
+</TimelineWrapper>
+
+</details>
+
+## Integration Guide
+
+Now that you have a policy configured, you can integrate Permit.io with your NestJS application. The following steps will guide you through the integration process.
+
+<TimelineWrapper>
+<TimelineStep>
+
+### Getting the API key
+
+To get the API key:
+
+1. Click on **Projects** in the left sidebar.
+2. Click on the three dots for the environment you want to use.
+3. Click on **Copy API Key** and store it in a safe place. You will use this API key to authenticate your application with Permit.io. If you have any difficulty getting the API key, follow this [guide](/overview/connecting-your-app/#1-get-your-permit-environment-api-key).
+
+Once you have the API key, proceed to integrate Permit.io with your NestJS application.
+
+</TimelineStep>
+<TimelineStep>
+
+### Installing Node.js SDK
+
+Once you have a NestJS application ready (or you can create a new one for this guide), install the Permit Node.js SDK. To install the SDK, run the following command in your terminal:
+
+```bash
+npm install permitio
+```
+
+Read more about the Node.js SDK [here](/sdk/nodejs/quickstart-nodejs).
+
+</TimelineStep>
+<TimelineStep>
+
+### Setting up the NestJS application with Permit.io
+
+Start by creating a Permit provider. Create a new file `permit.provider.ts` in the `src/permit` directory (your project structure may vary) and add the following code:
+
+```typescript
+// src/permit/permit.provider.ts
+import { Permit } from 'permitio';
+
+export const permit = new Permit({
+  token: process.env.PERMIT_API_KEY!,
+  pdp: process.env.PDP_URL!,
+});
+```
+
+This code imports the `Permit` class from the `permitio` package and creates a new instance. It requires two environment variables: `PERMIT_API_KEY` (the API key you copied from the Permit dashboard) and `PDP_URL` (the URL of the PDP server). You will set these up later.
+
+</TimelineStep>
+<TimelineStep>
+
+### Setting up the endpoints
+
+Create endpoints for syncing users and creating tenants. Create a new file `app.controller.ts` in the `src` directory and add the following code. Also, create a guard to protect your endpoints.
+
+```typescript
+// src/app.controller.ts
+import { Controller, Post, Body, HttpException, HttpStatus, UseGuards, Get } from '@nestjs/common';
+import { permit } from './permit/permit.provider';
+import { PermitGuard } from './permit/permit.guard';
+
+@Controller()
+export class AppController {
+  @Post('register')
+  async register(@Body() body: { email: string, first_name: string, last_name: string }) {
+    const { email, first_name, last_name } = body;
+    if (!email || !first_name || !last_name) {
+      throw new HttpException('Missing required fields', HttpStatus.BAD_REQUEST);
+    }
+    try {
+      const user = await permit.api.users.sync({
+        key: email,
+        email,
+        first_name,
+        last_name,
+      });
+      const assignedRole = {
+        user: email,
+        role: 'Reader',
+        tenant: 'default'
+      };
+      const response = await permit.api.assignRole(JSON.stringify(assignedRole));
+
+      // Continue with the rest of the code
+      return {
+        message: 'User registered and role assigned',
+        user,
+        response
+      };
+    } catch (err) {
+      throw new HttpException('Failed to sync user', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  // middleware to check if the user has access to the resource
+  @UseGuards(PermitGuard)
+  @Get('posts')
+  getPosts() {
+    return { message: "You have passed the auth check" };
+  }
+}
+```
+
+- The `register` handler allows new users to register for the blog application and assigns them the **Reader** role, giving them access to read posts.
+- The `getPosts` handler returns a secret message and is protected by the guard. Just like a middleware.
+</TimelineStep>
+<TimelineStep>
+
+
+### Setting up the guard
+
+Create a guard to protect your endpoints. Create a new file `permit.guard.ts` in the `src/permit` directory and add the following code:
+
+```typescript
+// src/permit/permit.guard.ts
+import { CanActivate, ExecutionContext, Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { permit } from './permit.provider';
+
+// This guard checks if the user has access to the resource
+@Injectable()
+export class PermitGuard implements CanActivate {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+    const user = request.headers['x-user'];
+    const action = 'create';
+    const resource = 'Post';
+    if (!user) {
+      throw new HttpException('Missing permission info', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      const permitted = await permit.check(user, action, resource);
+      return permitted;
+    } catch (err) {
+      throw new HttpException('Permission check failed', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+}
+```
+
+Since the blog application can have various elements like creating a post, commenting, editing, etc.,  `/posts` to demonstrate access control. Only users with the **Author** role can create a post.
+
+You can use the same pattern to protect other endpoints, such as commenting, editing, or accessing premium content, by adjusting the action and resource values accordingly.
+
+</TimelineStep>
+<TimelineStep>
+
+### Setting up the PDP server
+
+At this point, your application is ready with the user synced and the policy created. To enforce the policy, use [Permit's PDP](/concepts/pdp/overview) (Policy Decision Point) to check if the user has access to the resource. First, set up the PDP.
+
+Run the following command to spin up your environment PDP in a Docker container:
+
+```bash
+permit pdp run
+```
+
+After you run the above command, you will see output with information such as container ID, name, etc.
+
+![permit pdp run](/img/quick-start-guide/create-pdp.png)
+
+The PDP server runs on port `7766` by default. You can change the port if needed. Finally, update the `PDP_URL` environment variable in your application.
+
+</TimelineStep>
+<TimelineStep>
+
+### Testing the registration process
+
+To demonstrate the registration process, use the `curl` command to make a request to the `/register` endpoint. Register two users **John** and **Emma**. Both of these users will be automatically assigned the **Reader** role.
+
+![curl create user](/img/quick-start-guide/nest-register-user.png)
+
+As shown in the image above, the users are created successfully and you receive information about the users in the response, such as `id`, `project_id`, `key`, etc.
+
+In the next step, we will assign **John** with the **Author** role to allow them to create a post.
+
+</TimelineStep>
+<TimelineStep>
+
+### Giving the user access to the resource
+
+By default, users are assigned the **Reader** role. To allow John to create posts, assign him the **Author** role:
+
+1. Select **Directory** from the left sidebar in the Permit dashboard.
+2. Beside the user, click on the **Add Instance Role** button.
+3. Select tenant **(default)** from the dropdown.
+4. Select the **Author** role and **Save** button.
+
+You will verify this later when you check the access.
+
+![user access](/img/quick-start-guide/user-access.png)
+
+</TimelineStep>
+<TimelineStep>
+
+### Checking the access
+
+Now, check the policy enforcement. Since you have added the **John** user as an **Author**, you can check if the user has **create** access to the **Post** resource. To do this, use the `curl` command to make a request to the `/posts` endpoint.
+
+![curl check access](/img/quick-start-guide/next-user-permitted.png)
+
+As shown in the image above, the user is permitted to access the resource. 
+
+Now, check the access for **Emma**. Since she is not assigned the **Author** role, she should not be able to create a post and access the resource.
+
+![curl check access](/img/quick-start-guide/next-user-not-permitted.png)
+
+As shown in the image above, the user is not permitted to access the resource. This is how you can enforce policies using Permit.io with NestJS.
+
+</TimelineStep>
+</TimelineWrapper>
+
+## Conclusion
+
+In this guide, you learned how to integrate Permit.io with NestJS. You created a simple NestJS application that syncs users and tenants with Permit.io. You also created endpoints to verify user access to resources. You used the Permit SDK to enforce policies and check authorization. You also set up the PDP server locally using Docker.
+
+## Further Reading
+
+- [Node.js SDK Documentation](/sdk/nodejs/quickstart-nodejs) - Explore advanced features and API methods
+- [Building RBAC Policies](/how-to/build-policies/rbac/overview) - Learn how to create and manage role-based policies
+- [Embeddable User Management](/embeddable-uis/overview) - Add user management UI components to your application

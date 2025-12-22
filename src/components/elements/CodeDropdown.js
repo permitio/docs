@@ -1,8 +1,7 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import anime from "animejs/lib/anime.es.js";
 // import SyntaxHighlighter from "react-syntax-highlighter";
 // import { docco } from "react-syntax-highlighter/dist/esm/styles/hljs";
-import ReactMarkdown from "react-markdown";
 import { CodeBlock, tomorrowNightBlue } from "react-code-blocks";
 import "./CodeDropdown.scss";
 import { render } from "react-dom";
@@ -93,7 +92,7 @@ export default function CodeDropdown(props) {
 			</div>
 			{isOpen ? (
 				<div className="w-full mb-6 px-3">
-					<ReactMarkdown>{props.children}</ReactMarkdown>
+					{props.children}
 
 					<div className="parentCodeSelector w-full">
 						<div className="w-full bg-[#0f2540] h-8 flex items-center border-b-2 border-black rounded-t-md">

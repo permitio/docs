@@ -1,21 +1,19 @@
-/* eslint-disable spellcheck/spell-checker */
 import React from "react";
+import PropTypes from "prop-types";
 import styles from "./styles.module.css";
 
 import hero_image from "./assets/hero.png";
 import cloud from "./assets/cloud.png";
 
-const SectionHero = () => (
+const SectionHero = ({ title, text }) => (
   <div className="min-h-[260px] relative p-6 md:p-12 !-mt-[2.2rem] overflow-hidden ">
     <div className="flex flex-col xl:flex-row items-center justify-between gap-10 mx-auto w-full px-0 lg:px-5 max-w-6xl">
       <div className="flex flex-col gap-3 shrink-0 relative z-20">
-        <h1 className={`!m-0 text-[28px] ${styles.title}`}>Welcome to Permit.io</h1>
-        <p className={`text-sm !leading-5 ${styles.text}`}>
-          <span className="lg:block">
-            Here you&apos;ll find comprehensive guides and resources to help{" "}
-          </span>{" "}
-          you get started with Permit and explore our platform.
-        </p>
+        <h1 className={`!m-0 text-[28px] ${styles.title}`}>{title}</h1>
+        <p
+          className={`text-sm !leading-5 ${styles.text}`}
+          dangerouslySetInnerHTML={{ __html: text }}
+        ></p>
       </div>
       <figure className="relative m-0 pointer-events-none w-full lg:w-auto">
         <img
@@ -39,5 +37,15 @@ const SectionHero = () => (
     <div className={`${styles.section_hero_hr}`}></div>
   </div>
 );
+
+SectionHero.propTypes = {
+  title: PropTypes.string.isRequired,
+  text: PropTypes.string.isRequired,
+};
+
+SectionHero.defaultProps = {
+  title: "Welcome to Permit.io",
+  text: "",
+};
 
 export default SectionHero;

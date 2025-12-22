@@ -3,139 +3,175 @@ sidebar_position: 2
 title: Git and Permit
 ---
 
-## Hosted Git support
+Learn how to manage the policies configured in Permit in your GitHub repositories using GitOps
 
-This guide is demonstrating GitOps on Github, but should work in a similar fashion to other Git repositories which can be configured
-with an SSH key.
+---
 
-The main actions are, adding a SSH deploy key with write access to your repository, and configuring Permit to use it with the SSH
-url of your repository.
+To configure your GitHub repository to work properly with Permit, this guide will walk you through two main steps:
+
+1. Adding an SSH deploy key with write access to your repository.
+2. Configuring Permit to use your repository with the SSH url and the deploy key.
+
+:::tip
+If you prefer an automated `bash` script that prompts for all the input, [view the example gist](https://gist.github.com/ocap-kirk/803bdfb4592d6c60a12cc9d6121d5455). 
+:::
+
+:::info
+While this guide is focused on GitHub, the same steps can be applied to other Git providers that supports SSH deploy keys with minor modifications.
 
 - [Add deploy key to GitLab](https://docs.gitlab.com/ee/user/project/deploy_keys/)
 - [Add deploy key to Bitbucket](https://support.atlassian.com/bitbucket-cloud/docs/set-up-an-ssh-key/)
-
-:::info note #1
-Ensure that this deploy key is configured without Two-Factor Authentication (2FA) to allow the Permit server unimpeded read and
-write access to your repository.
 :::
 
-:::info note #2
-When utilizing the [Copy Environment API](https://api.permit.io/v2/redoc#tag/Environments/operation/copy_environment) with a
+## Add SSH Deploy Key
+
+Adding an SSH deploy key is simple. Below are the steps to add a key with write access to your GitHub repository.
+
+### Create a repository
+
+You need a repository with a default branch that exists on the remote (with an initial commit).
+If you already have a repository you can skip to the [next step](#generating-an-ssh-key).
+
+Create your repository in [GitHub](https://github.com/new):
+![GitHub new repo](/img/integrations/gitops/github-new-repo.png)
+
+:::info
+When utilizing Permit GitOps and the [Copy Environment API](https://api.permit.io/v2/redoc#tag/Environments/operation/copy_environment) with a
 brand-new Git repository that has **no commits on the main branch**, ensure that at least one file is added and committed. This step
 is essential for our system to successfully clone the branch.
 :::
 
-## GitHub Example
+By default the following mapping takes effect - each repository is mapped to a specific Permit project, and for each project,
+branches are created and mapped for each Permit environment.
 
-### Configure your git repository
+### Generating an SSH key
 
-Please follow the below steps to make your Permit policy stored at your git repository.
-
-### Create a repository
-
-You need a repository with a default branch that exists on the remote ( with an initial commit ).
-If you already have a repository you can skip to [next step](#give-permit-permissions-to-your-repository).
-
-Create your repository at [GitHub](https://github.com/new):
-_![GitHub new repo](/img/integrations/gitops/github-new-repo.png)_
-
-#### Project/Env mapping to Repositories and Branches
-
-By default the following mapping takes effect - each repository is mapped to a specific Permit project, and under it branches are created and mapped for each Permit environment under the Project.
-Additional layout are supported, but not currently available via the API.
-
-### Give Permit permissions to your repository
-
-In order for us to be able to generate and push policies to your repository, you need to create an SSH key,
+In order for you to be able to generate and push policies to your repository, you need to create an SSH key,
 and add it as a "Deploy Key" with write access to your repo.
 
-#### Generate an SSH key
-
-You can use this command to generate a secured SSH key:
+You can use the below command to generate a secured SSH key:
 
 ```
 ssh-keygen -t ecdsa -b 521 -C "help@permit.io"
 ```
 
-You will be prompted to enter a location for the private and public keys ( your private key will be securely stored on our end, no passphrase will be required )
-_![SSH key generation](/img/integrations/gitops/generate-ssh-key.png)_
+You will be prompted to enter a location for the private and public keys. Don't worry, your private key will be securely stored on
+our end, and no passphrase will be required.
+
+![SSH key generation](/img/integrations/gitops/generate-ssh-key.png)
 
 The private key is at the location you chose and the public key is at the same location with a ".pub" suffix.
 
-#### Add the Deploy Key
+### Adding the Deploy Key
 
-1. To add a "Deploy Key", go to your repository &rarr; Settings &rarr; Deploy Keys and press on "Add deploy key" button.
+:::info Note
 
-   _![Add Deploy Key Step 1](/img/integrations/gitops/github-add-deploy-key-1.png)_
+Make sure the deploy key is set up without Two-Factor Authentication (2FA) to allow the Permit server unrestricted read and
+write access to your repository.
+:::
 
-2. Copy the public SSH key you've generated [previously](#generate-an-ssh-key) to your clipboard and paste it in the GitHub prompt.
+1. To add a "Deploy Key", go to your repository &rarr; Settings &rarr; Deploy Keys and press on the "Add deploy key" button.
 
-   **It is required to toggle the "Allow write access"**
-   _![Add Deploy Key Step 2](/img/integrations/gitops/github-add-deploy-key-2.png)_
+   ![Add Deploy Key Step 1](/img/integrations/gitops/github-add-deploy-key-1.png)
 
-## Configure Permit to use your repository
+2. Copy the public SSH key you have generated [previously](#generating-an-ssh-key) to your clipboard and paste it in the GitHub prompt.
 
-### Make Permit use the repository
+   **Make sure to toggle "Allow write access"**
+   ![Add Deploy Key Step 2](/img/integrations/gitops/github-add-deploy-key-2.png)
 
-1. Login to [Permit.io](https://app.permit.io).
+## Permit GitOps Configuration
 
-2. Navigate to your project. with the project selector at sidebar.
+The following steps will guide you on how to configure Permit to use your GitHub repository with the SSH url and the deploy key.
 
-3. Navigate to [API Keys](https://app.permit.io/settings/api-keys) page.
+### Creating a JSON Configuration File
 
-    ![API Keys Page](/img/integrations/gitops/permit-settings-api-keys.png)
+To perform the initial GitOps configuration API call to Permit, you need to create a JSON file with the following structure:
 
-4. Create a Project or Organization API Key. (you will need it for the 8th step)
+```json
+{
+  "url": "<your-ssh-url>",
+  "main_branch_name": "<your-default-branch>",
+  "credentials": {
+    "auth_type": "ssh",
+    "username": "git",
+    "private_key": "<your-private-key>"
+  },
+  "key": "<your-custom-id-string-without-spaces>"
+}
+```
 
-5. Copy the SSH url from GitHub:
-   _![Copy SSH url](/img/integrations/gitops/github-copy-ssh-url.png)_
+With the JSON created, we can start filling it in with the required information.
 
-6. Copy the SSH private key you've generated [previously](#generate-an-ssh-key) and replace new lines with "\n".
+### Copy the SSH Details from GitHub
+
+1. Copy the SSH url from GitHub, and replace the `<your-ssh-url>` placeholder in the JSON file
+   ![Copy SSH url](/img/integrations/gitops/github-copy-ssh-url.png)
+
+2. Copy the SSH private key you've generated [previously](#generating-an-ssh-key) and replace new lines with "\n".
    You can do the new line replacement using the following command:
 
    ```shell
    awk -v ORS='\\n' '1' <private-key-file>
    ```
 
-7. Paste your values into that json and store at in a file:
+3. Replace the `<your-default-branch>` placeholder with the default branch name of your repository (usually `main`).
 
-   ```json
-   {
-     "url": "<your-ssh-url>",
-     "main_branch_name": "<your-default-branch>",
-     "credentials": {
-       "auth_type": "ssh",
-       "username": "git",
-       "private_key": "<your-private-key>"
-     },
-     "key": "<your-custom-id-string-without-spaces>"
-   }
-   ```
+### Get your Project Key / ID from Permit
 
-8. Get your project key / id from this URL
+1. Login to [Permit.io](https://app.permit.io).
+
+2. Navigate to your project using the project selector found on the sidebar.
+
+3. Navigate to the [API Keys](https://app.permit.io/settings/api-keys) page and create a project or organization API key.
+
+   ![API Keys Page](/img/integrations/gitops/permit-settings-api-keys.png)
+
+4. Get your project key / id using the below command.
 
    ```shell
-   curl -X GET "https://api.permit.io/v2/projects" -H "Content-Type: application/json" -H "Authorization: Bearer {API_KEY from step 4}"
+   curl -X GET "https://api.permit.io/v2/projects" -H "Content-Type: application/json" -H "Authorization: Bearer {API_KEY from step 3}"
    ```
 
-9. Replace the placeholder with your [project id or key](/api/examples/get-project-and-env/#get-project-id-or-key) and execute a POST request to Permit with your json:
+5. Replace the JSON placeholder with your [project id or key](/api/examples/get-project-and-env/#get-project-id-or-key)
+
+### Configure Permit to Use Your Repository
+
+1. Execute a POST request to Permit with your JSON:
 
    ```shell
    curl -X POST "https://api.permit.io/v2/projects/<your-project-id-or-key>/repos" -H "Content-Type: application/json" -H "Authorization: Bearer {API_KEY from step 4}" --data-binary @"path/to/your/json"
    ```
 
-10. Please return to your GitHub repository. You will now observe new branches, each corresponding to a different environment in your project. These branches are named following the format `permit/generated/<env_id>`, where `<env_id>` is the unique identifier for each environment. You can specify a custom branch name by setting the `custom_branch_name` of your environment, [see an example](/api/examples/manage-env#customize-gitops-branch-name).
+2. Now, if you return to your GitHub repository, you will observe new branches, each corresponding to a different environment in
+   your project. These branches are named following the format `permit/generated/<env_id>`, where `<env_id>` is the unique identifier for
+   each environment.
 
-11. After validating your new policy branches, you need to activate the new repository in Permit,
-    to do this, replace the below placeholders with your [project id or key](/api/examples/get-project-and-env/#get-project-id-or-key) and execute a PUT request to Permit:
-    ```shell
-    curl -X PUT "https://api.permit.io/v2/projects/<your-project-id-or-key>/repos/<your-repo-id-or-key>/activate" -H "Authorization: Bearer <your-permit-api-key>"
-    ```
-12. To add custom policy code for each environment, ensure you have checked out the correct branch using permit/generated/<env_id>. Insert your policy code exclusively within the `custom` folder. This can be done by either editing the `custom/root.rego` file with your custom Rego code or by creating a new file and importing it in the `custom/root.rego` file.
-    _Please avoid editing policy code outside of this folder, as it could potentially be overridden by our code or break the Rego code._
+   You can specify a custom branch name by setting the custom_branch_name of your environment. [See an example](/manage-your-account/creating-environments#customize-gitops-branch-name).
 
-Once modifications are made within an environment branch, push it to the remote GitHub repository(To the same environment branch not the main branch). Permit cloud will then detect these changes and relay them to the PDP that is associated with that environment for update.
+3. After validating your new policy branches, you need to activate the new repository in Permit. To do this, replace the placeholders
+   below with your [project ID or key](/api/examples/get-project-and-env/#get-project-id-or-key) and execute a PUT request to Permit:
 
-As a result, your git repository now serves as the policy source for your PDPs.
+   ```shell
+   curl -X PUT "https://api.permit.io/v2/projects/<your-project-id-or-key>/repos/<your-repo-id-or-key>/activate" -H "Authorization: Bearer <your-permit-api-key>"
+   ```
 
-13. Your git repository is now ready to be synced to your PDPs 🚀
+### Test Your Configuration
+
+Now that we activated our Git repository to work with Permit, let's test out a custom policy.
+
+1. Checkout to the correct branch using `permit/generated/<env_id>`.
+
+2. Insert your policy code exclusively within the `custom` folder. This can be done by either editing the `custom/root.rego` file
+   with your custom Rego code or by creating a new file and importing it in the `custom/root.rego` file. You can see an example of
+   such a custom policy [here](/integrations/gitops/custom_policy).
+
+   :::danger Important Note
+   Please avoid editing policy code outside of this folder, as it could potentially be overridden by our code or break the Rego code.
+   :::
+
+3. Once modifications are made within an environment branch, push it to the remote GitHub repository (the same environment branch
+   and not the main branch). Permit cloud will then detect these changes and relay them to the PDP that is associated with that
+   environment for an update.
+
+Your git repository is now ready to be synced to your PDPs. Test it by checking permissions against your newly created
+custom policies 🚀
