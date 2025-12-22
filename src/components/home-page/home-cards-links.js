@@ -24,6 +24,79 @@ export const firstRow = [
   },
 ];
 
+export const quickStartRow = [
+  {
+    type: "link",
+    href: "/quick-start/nest",
+    label: "NestJS",
+    svgIcon: <i className="ri-server-line ri-xl !text-[#E74C3C]"></i>,
+    description: "Add authorization to your NestJS application",
+  },
+  {
+    type: "link",
+    href: "/quick-start/nextjs",
+    label: "Next.js",
+    svgIcon: <i className="ri-reactjs-line ri-xl !text-[#E74C3C]"></i>,
+    description: "Integrate fine-grained authorization with Next.js",
+  },
+  {
+    type: "link",
+    href: "/quick-start/express",
+    label: "Express.js",
+    svgIcon: <i className="ri-terminal-box-line ri-xl !text-[#E74C3C]"></i>,
+    description: "Secure your Express.js API endpoints",
+  },
+  {
+    type: "link",
+    href: "/quick-start/fastapi",
+    label: "FastAPI",
+    svgIcon: <i className="ri-rocket-line ri-xl !text-[#E74C3C]"></i>,
+    description: "Python authorization with FastAPI framework",
+  },
+  {
+    type: "link",
+    href: "/quick-start/django",
+    label: "Django",
+    svgIcon: <i className="ri-building-line ri-xl !text-[#E74C3C]"></i>,
+    description: "Add permissions to your Django application",
+  },
+  {
+    type: "link",
+    href: "/quick-start/flask",
+    label: "Flask",
+    svgIcon: <i className="ri-flask-line ri-xl !text-[#E74C3C]"></i>,
+    description: "Implement authorization in Flask applications",
+  },
+  {
+    type: "link",
+    href: "/quick-start/aspnet",
+    label: "ASP.NET Core",
+    svgIcon: <i className="ri-microsoft-line ri-xl !text-[#E74C3C]"></i>,
+    description: "Secure .NET applications with Permit",
+  },
+  {
+    type: "link",
+    href: "/quick-start/spring-boot",
+    label: "Spring Boot",
+    svgIcon: <i className="ri-plant-line ri-xl !text-[#E74C3C]"></i>,
+    description: "Java authorization with Spring Boot",
+  },
+  {
+    type: "link",
+    href: "/quick-start/gin",
+    label: "Gin",
+    svgIcon: <i className="ri-speed-line ri-xl !text-[#E74C3C]"></i>,
+    description: "Go web framework with authorization",
+  },
+  {
+    type: "link",
+    href: "/quick-start/rails",
+    label: "Ruby on Rails",
+    svgIcon: <i className="ri-train-line ri-xl !text-[#E74C3C]"></i>,
+    description: "Add permissions to Rails applications",
+  },
+];
+
 export const policyModelingRow = [
   {
     type: "link",
@@ -140,7 +213,7 @@ export const enforcementRow = [
   },
   {
     type: "link",
-    href: "/foaz/url-mapping-check/",
+    href: "/how-to/enforce-permissions/url-mapping/url-mapping-check",
     label: "URL Mapping",
     svgIcon: <i className="ri-map-pin-line ri-xl !text-[#974ef2]"></i>,
     description: "Map and secure routes with access control",
