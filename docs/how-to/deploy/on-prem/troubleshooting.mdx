@@ -329,6 +329,204 @@ kubectl get events -n permit-platform --sort-by='.lastTimestamp'
    kubectl scale deployment celery-general -n permit-platform --replicas=1
    ```
 
+### ImagePullBackOff Errors
+
+<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-red-700">
+        <strong>❌ Problem:</strong> Pods stuck in ImagePullBackOff state - cannot pull container images
+      </p>
+    </div>
+  </div>
+</div>
+
+**Error symptoms:**
+```bash
+kubectl get pods -n permit-platform
+NAME                              READY   STATUS             RESTARTS   AGE
+permit-backend-v2-xxx             0/1     ImagePullBackOff   0          2m
+permit-frontend-xxx               0/1     ImagePullBackOff   0          2m
+```
+
+**Diagnostic steps:**
+```bash
+# Check pod events for detailed error message
+kubectl describe pod permit-backend-v2-xxx -n permit-platform
+
+# Common error messages you'll see:
+# - "Failed to pull image... unauthorized: authentication required"
+#   → Missing or incorrect imagePullSecrets
+#
+# - "Failed to pull image... not found" or "manifest unknown"
+#   → Images not pushed to registry, or wrong imageRegistry in values.yaml
+#
+# - "Failed to pull image... denied: Permission denied"
+#   → GKE/EKS/AKS node doesn't have permission to pull from registry
+```
+
+**Solutions by Root Cause:**
+
+**1. Missing imagePullSecrets (Artifactory/Harbor/Private Registries)**
+
+If using Artifactory, Harbor, or private Docker registry:
+```bash
+# Step 1: Create the Kubernetes secret
+kubectl create secret docker-registry registry-credentials \
+  --docker-server=artifactory.company.com \
+  --docker-username=YOUR_USERNAME \
+  --docker-password=YOUR_TOKEN \
+  --namespace=permit-platform
+
+# Step 2: Verify secret was created
+kubectl get secret registry-credentials -n permit-platform
+
+# Step 3: Update values.yaml
+vi charts/permit-platform/values.yaml
+
+# Add this to global section:
+# global:
+#   imageRegistry: "artifactory.company.com/permit-platform"
+#   imagePullSecrets:
+#     - registry-credentials
+
+# Step 4: Upgrade the Helm release
+helm upgrade permit-platform charts/permit-platform -n permit-platform
+```
+
+**2. Forgot to Use --skip-images Flag**
+
+If you pushed images to a private registry but ran the installer WITHOUT `--skip-images`:
+```bash
+# Problem: Installer loaded wrong images from local tar files!
+# Solution: Re-run installer with --skip-images flag
+
+# For GKE:
+./scripts/install-permit-platform.sh --gke --skip-images
+
+# For other Kubernetes with private registry:
+./scripts/install-permit-platform.sh --skip-images
+
+# For OpenShift with private registry:
+./scripts/install-permit-platform.sh --openshift --skip-images
+```
+
+**3. Wrong imageRegistry Configuration**
+
+Check your `values.yaml` has the correct registry URL:
+```bash
+# View current configuration
+kubectl get cm -n permit-platform
+
+# Verify imageRegistry matches where you pushed images
+cat charts/permit-platform/values.yaml | grep imageRegistry
+
+# Should match your push command:
+# If you ran: ./scripts/push-images-to-registry.sh us-central1-docker.pkg.dev/project/repo
+# Then values.yaml must have: imageRegistry: "us-central1-docker.pkg.dev/project/repo"
+```
+
+**4. Images Not Pushed to Registry**
+
+Verify images actually exist in your registry:
+```bash
+# For GKE/Google Artifact Registry:
+gcloud artifacts docker images list us-central1-docker.pkg.dev/PROJECT/REPO
+
+# For Artifactory:
+curl -u username:password https://artifactory.company.com/v2/_catalog
+
+# For Harbor:
+curl -u username:password https://harbor.company.com/v2/_catalog
+
+# For AWS ECR:
+aws ecr describe-repositories --region us-east-1
+aws ecr list-images --repository-name permit-platform --region us-east-1
+```
+
+**If images are missing, push them:**
+```bash
+cd permit-platform-installer
+./scripts/push-images-to-registry.sh YOUR_REGISTRY_URL
+```
+
+**5. GKE Workload Identity / IAM Permissions**
+
+For GKE with Google Artifact Registry, ensure nodes have pull permissions:
+```bash
+# Grant Artifact Registry Reader role to GKE service account
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+  --role="roles/artifactregistry.reader"
+
+# Or for specific node pool service account:
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:SA_NAME@PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/artifactregistry.reader"
+
+# Verify permissions
+gcloud projects get-iam-policy PROJECT_ID \
+  --flatten="bindings[].members" \
+  --filter="bindings.role:roles/artifactregistry.reader"
+```
+
+**6. EKS with ECR - Missing IAM Role**
+
+For EKS with AWS ECR:
+```bash
+# Verify node IAM role has ECR pull permissions
+aws iam get-role --role-name YOUR_NODE_ROLE_NAME
+
+# Add ECR read policy if missing
+aws iam attach-role-policy \
+  --role-name YOUR_NODE_ROLE_NAME \
+  --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+```
+
+**7. AKS with ACR - Missing Role Assignment**
+
+For AKS with Azure Container Registry:
+```bash
+# Get AKS cluster identity
+az aks show -g RESOURCE_GROUP -n CLUSTER_NAME --query identityProfile
+
+# Grant AcrPull role to AKS
+az aks update -g RESOURCE_GROUP -n CLUSTER_NAME --attach-acr ACR_NAME
+
+# Verify access
+az acr check-access --name ACR_NAME
+```
+
+**Quick Verification Commands:**
+
+```bash
+# Check which images are failing
+kubectl get pods -n permit-platform -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[*].image}{"\t"}{.status.containerStatuses[*].state.waiting.reason}{"\n"}{end}' | grep ImagePull
+
+# Check all imagePullSecrets are configured
+kubectl get deployment -n permit-platform -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.template.spec.imagePullSecrets[*].name}{"\n"}{end}'
+
+# Test pulling an image manually (on a cluster node)
+kubectl run test-pull --image=YOUR_REGISTRY/permit-backend-v2:TAG --namespace=permit-platform --dry-run=client
+```
+
+<div className="bg-blue-50 border-l-4 border-blue-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-blue-700">
+        <strong>💡 Prevention Tip:</strong> When using private registries, always follow this order:
+        <ol className="mt-2 space-y-1 text-sm">
+          <li>1. Push images to registry (<code>push-images-to-registry.sh</code>)</li>
+          <li>2. Create imagePullSecrets if needed (Artifactory/Harbor only)</li>
+          <li>3. Configure values.yaml with imageRegistry and imagePullSecrets</li>
+          <li>4. Run installer with <code>--skip-images</code> flag</li>
+        </ol>
+        See <a href="/how-to/deploy/on-prem/installation#step-35-push-images-to-private-registry-gke-example" className="underline">Installation Guide Step 3.5</a> for complete workflow.
+      </p>
+    </div>
+  </div>
+</div>
+
 ### Authentication and Login Issues
 
 <div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
