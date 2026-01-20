@@ -134,7 +134,7 @@ For more information, see the [Trino documentation](https://trino.io/docs/curren
 
 ### Row-level Filtering
 
-Row filters let you attach SQL predicates that Trino appends as `WHERE` clauses based on a user’s permissions:
+Row filters let you attach SQL predicates that Trino appends as `WHERE` clauses based on a user's permissions:
 
 ```4:16:trino-authz-example/trino-authz.yaml
 rowFilters:
@@ -156,6 +156,45 @@ If multiple filters apply, Trino chains them with `AND`.
 You can review the [Audit Logs](https://app.permit.io/audit-log) to see the Permit action checked on the table resource, causing the filter to be applied.
 
 For more information, see the [Trino documentation](https://trino.io/docs/current/security/opa-access-control.html#row-filtering).
+
+#### User-Specific Filtering with `current_user`
+
+Filter expressions can reference Trino's [`current_user`](https://trino.io/docs/current/functions/session.html) function, enabling user-specific data access. The key pattern:
+
+- **Permit** determines **which filter** applies (based on the user's role/permissions).
+- **The SQL expression** determines **which rows** using `current_user`.
+
+```yaml
+rowFilters:
+  trino_table_postgresql_public_orders:
+    - action: view_all
+      expression: "1=1"                        # Admins see everything
+    - action: view_own
+      expression: "owner_id = current_user"   # Users see only their records
+```
+
+Assign `view_all` to admin roles and `view_own` to regular users in Permit. When a user queries the table, the appropriate filter is applied based on their permissions.
+
+:::tip
+For `current_user` to return the correct identity, configure [Trino authentication](#trino-authentication) (e.g., JWT) to pass the user identifier.
+:::
+
+#### Subqueries in Filter Expressions
+
+Filters can include subqueries for more complex scoping:
+
+```yaml
+rowFilters:
+  trino_table_postgresql_public_documents:
+    - action: view_team_data
+      expression: "team_id IN (SELECT team_id FROM team_members WHERE user_id = current_user)"
+```
+
+This resolves team membership at query time, allowing users to see data for all teams they belong to.
+
+:::warning
+When a user has multiple filter actions, Trino chains them with `AND` (intersection). Design role assignments so users typically have one filter action per table.
+:::
 
 ## Reference
 
@@ -339,9 +378,38 @@ Using that, you can combine Permit authorization for application users, and Trin
 
 ### Trino authentication
 
-You can use Trino's several Authentication mechanisms to identify the user, like [JWT](https://trino.io/docs/current/security/jwt.html) or [OAuth2](https://trino.io/docs/current/security/oauth2.html).
+You can use Trino's authentication mechanisms to identify the user, like [JWT](https://trino.io/docs/current/security/jwt.html) or [OAuth2](https://trino.io/docs/current/security/oauth2.html).
 
-Using it, you can pass-through the user's identity to Trino, so the PDP can check against the application user's identity and permissions.
+Using it, you can pass-through the user's identity to Trino, so the PDP can check against the application user's identity and permissions. This is essential for row filters that use `current_user`.
+
+#### JWT Authentication Setup
+
+JWT authentication allows your application to pass user identity to Trino via tokens. The user identifier extracted from the JWT becomes the value of `current_user` in Trino queries.
+
+1. Configure Trino's JWT authentication in `/etc/trino/config.properties`:
+
+```properties
+http-server.authentication.type=JWT
+http-server.authentication.jwt.key-file=https://cluster.example.net/.well-known/jwks.json
+http-server.authentication.jwt.principal-field=sub
+```
+
+The `principal-field` setting determines which JWT claim becomes `current_user`. Common options:
+- `sub` (subject) - standard JWT claim for user identity
+- `user_id` - if your tokens use a custom claim
+- `email` - if using email as the user identifier
+
+2. When your application queries Trino, include the JWT in the Authorization header:
+
+```
+Authorization: Bearer <jwt-token>
+```
+
+3. The user identifier from the JWT is then available as `current_user` in row filter expressions.
+
+:::tip
+Make sure the user identifier in your JWT matches the format used in your row filter expressions. For example, if your `employee_id` column contains UUIDs, configure `principal-field` to extract the UUID claim from your JWT.
+:::
 
 For more information, see the [Trino authentication documentation](https://trino.io/docs/current/security/authentication-types.html).
 
@@ -365,3 +433,26 @@ We recommend the following performance optimizations:
 - Scale the PDP cluster horizontally to handle the load.
 
 For more information, see the [Permit PDP Deployment Models](/concepts/pdp/overview#production-deployment-models) documentation.
+
+## FAQ
+
+### Can I combine RBAC/ABAC with row-level filtering?
+
+Yes. Permit's policy model (RBAC/ABAC) determines **which filter action** a user has. 
+The row filter SQL expression determines **which rows** they see. 
+For example, a "manager" role derived via RBAC could grant a `view_team_data` action that applies a team-scoped filter.
+
+### Are row filters dynamic?
+
+Filter expressions are static SQL defined in YAML, but they can use Trino's `current_user` function which resolves dynamically at query time. This allows `owner_id = current_user` to return different rows for different users.
+
+### How does `current_user` get populated?
+
+From Trino's authentication. With JWT, configure `http-server.authentication.jwt.principal-field` to specify which claim becomes `current_user`. See [JWT Authentication Setup](#jwt-authentication-setup).
+
+### Can filters access user attributes from Permit?
+
+Not directly. Store user-to-group mappings in a database table and use subqueries:
+```sql
+team_id IN (SELECT team_id FROM team_members WHERE user_id = current_user)
+```
