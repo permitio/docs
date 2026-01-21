@@ -26,8 +26,11 @@ Reference materials for Permit Platform on-premise deployment.
 ### Deployment Targets
 
 ```bash
-# Production Kubernetes (EKS, GKE, AKS, on-premise)
+# Production Kubernetes (EKS, AKS, on-premise)
 ./scripts/install-permit-platform.sh
+
+# Google Kubernetes Engine (GKE)
+./scripts/install-permit-platform.sh --gke
 
 # OpenShift (ROSA, OCP)
 ./scripts/install-permit-platform.sh --openshift
@@ -58,11 +61,39 @@ Reference materials for Permit Platform on-premise deployment.
 # Preview without applying
 ./scripts/install-permit-platform.sh --dry-run
 
-# Skip image loading (testing/re-runs)
+# Skip image loading (REQUIRED when using pushed images to private registry)
 ./scripts/install-permit-platform.sh --skip-images
 
 # OpenShift with custom registry
 ./scripts/install-permit-platform.sh --openshift --skip-openshift-registry
+```
+
+### When to Use --skip-images Flag
+
+**Use `--skip-images` when:**
+- ✅ Images are already pushed to your private registry (GKE/GAR, Artifactory, Harbor, ECR, ACR)
+- ✅ Re-running installation after initial image load
+- ✅ Testing Helm chart changes without reloading images
+
+**Do NOT use `--skip-images` when:**
+- ❌ First-time installation from tar.gz package
+- ❌ Images need to be loaded to Docker daemon (Kind clusters)
+- ❌ Using Docker Hub and images aren't pre-loaded
+
+**Example workflows:**
+
+```bash
+# Workflow 1: GKE with Google Artifact Registry
+./scripts/push-images-to-registry.sh us-central1-docker.pkg.dev/project/permit-platform
+./scripts/install-permit-platform.sh --gke --skip-images
+
+# Workflow 2: Artifactory with imagePullSecrets
+./scripts/push-images-to-registry.sh artifactory.company.com/permit-platform
+kubectl create secret docker-registry registry-credentials --docker-server=artifactory.company.com ...
+./scripts/install-permit-platform.sh --skip-images
+
+# Workflow 3: Standard K8s, first install with local tar files
+./scripts/install-permit-platform.sh  # NO --skip-images flag
 ```
 
 ## Kubernetes Management Commands
@@ -183,12 +214,36 @@ global:
   frontendDomain: "permit.yourcompany.com"  # CHANGEME_FRONTEND_DOMAIN
   
   # Image registry configuration
-  imageRegistry: ""  # Empty for Docker Hub
-                     # Or: "123456789.dkr.ecr.region.amazonaws.com" for ECR
-                     # Or: "myregistry.azurecr.io" for Azure
-                     # Or: "gcr.io/project-id" for GCP
+  # This field is automatically set when using push-images-to-registry.sh script
+  imageRegistry: ""  # Empty for Docker Hub (public images)
+                     # Or: "us-central1-docker.pkg.dev/project/repo" for Google Artifact Registry
+                     # Or: "gcr.io/project-id" for Google Container Registry
+                     # Or: "123456789.dkr.ecr.region.amazonaws.com/repo" for AWS ECR
+                     # Or: "myregistry.azurecr.io/repo" for Azure ACR
+                     # Or: "artifactory.company.com/repo" for JFrog Artifactory
   imagePullPolicy: "IfNotPresent"  # Always, Never, IfNotPresent
-  
+
+  # Note: The push-images-to-registry.sh script automatically updates this field
+  # when you push images to your private registry. See installation guide Step 3.5.
+
+  # Image pull secrets for private registries (optional)
+  # Required for registries that need authentication (Artifactory, Harbor, private registries)
+  # Not needed for GKE/GAR, EKS/ECR, or AKS/ACR (automatic node authentication)
+  #
+  # IMPORTANT: You must create the Kubernetes secret BEFORE installation:
+  # kubectl create secret docker-registry registry-credentials \
+  #   --docker-server=artifactory.company.com \
+  #   --docker-username=USERNAME \
+  #   --docker-password=PASSWORD \
+  #   --namespace=permit-platform
+  #
+  # Then reference the secret name here:
+  imagePullSecrets: []
+  # Example:
+  # imagePullSecrets:
+  #   - registry-credentials
+  #   - backup-registry-credentials
+
   # Database configuration
   postgres:
     enabled: true
