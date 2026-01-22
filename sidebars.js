@@ -684,6 +684,11 @@ const sidebars = {
       collapsible: false,
       className: "category-as-header",
       items: [
+        {
+          type: "doc",
+          id: "getting-started/slack-support",
+          label: "Get Support on Slack",
+        },
         "updates-and-feedback/changelog",
         "updates-and-feedback/roadmap",
         "updates-and-feedback/feature-requests",
