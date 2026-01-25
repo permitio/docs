@@ -9,6 +9,12 @@ Using environment variables, you can configure the PDP to suit your needs.
 Since the PDP uses OPAL under the hood, all of [OPAL Configurations](https://docs.opal.ac/getting-started/configuration) are also available with a `OPAL_` prefix.
 PDP specific configurations are available with a `PDP_` prefix.
 
+
+:::info
+PDP versions follow Semantic Versioning conventions. Hence, minor versions (e.g., 1.2.3 to 1.2.4) do not introduce breaking changes. For further details and more information, see [SemVer](https://semver.org/)
+:::
+
+
 ## PDP Configurations
 
 #### PDP_API_KEY
@@ -29,18 +35,51 @@ Default: `https://api.permit.io`
 
 The URL of the Permit.io control plane.
 
+#### PDP_CONTROL_PLANE_TIMEOUT
+
+Default: `75`
+
+Timeout in seconds for control plane requests. 
+This includes proxied requests for the [Consistent Updates](/how-to/manage-data/local-facts-uploader) APIs.
+
 #### PDP_DEBUG
 
 Default: `None`
 
-PDP debug mode configuration.
-There available configurations are:
-- `PDP_DEBUG=None` - The default behavior, will use the configuration set by Permit.io Cloud.
+Enables debug mode, which injects debug attributes to OPA policy queries.
+The available configurations are:
+- `PDP_DEBUG=None` - The default behavior - will use the configuration set by Permit.io Cloud.
 - `PDP_DEBUG=True` - Will enable Debug Mode for this specific PDP.
 - `PDP_DEBUG=False` - Will disable Debug Mode for this specific PDP.
 
+:::warning
+Turning on Debug Mode will impact policy evaluation latency. Thus, it is recommended to disable Debug Mode when running in production.
+:::
+
 For more detailed configuration about the PDP Debug Mode,
 please check the full documentation [here](/how-to/use-audit-logs/debug-mode/).
+
+#### PDP_PORT
+
+Default: `7766`
+
+The port the PDP server will listen on.
+
+_Added in PDP v0.9.0<br /> use UVICORN_PORT for PDP versions prior to v0.9.0_
+
+#### PDP_HEALTHCHECK_TIMEOUT
+
+Default: `3`
+
+Timeout in seconds for health checks. This controls how long the PDP will wait for health check responses before timing out.
+
+#### PDP_USE_NEW_AUTHORIZED_USERS
+
+Default: `false`
+
+Feature flag for enabling the new authorized users implementation. This feature is controlled by the control plane.
+
+_Added in PDP v0.9.0_
 
 #### PDP_SHARD_ID
 
@@ -147,16 +186,6 @@ Default: `None`
 
 The token used for centralized logging.
 
-#### PDP_CENTRAL_LOG_ENABLED
-
-Default: `False`
-
-Forward logs to the centralized logging service.
-
-:::warning
-This feature is deprecated and will be removed in future versions.
-:::
-
 #### PDP_PING_INTERVAL
 
 Default: `10`
@@ -167,7 +196,9 @@ The interval for pinging the control plane, in seconds.
 
 Default: `1`
 
-The timeout for querying OPA for an allow decision, in seconds. `0` means no timeout.
+The timeout for querying OPA for an allow decision, in seconds. 
+Version 0.8.x and below:  `0` means no timeout.
+Version 0.9.0 and above: `0` means 0 seconds. 
 
 #### PDP_OPA_CLIENT_FAILURE_THRESHOLD
 
@@ -252,6 +283,31 @@ Default: `False`
 
 If true, the `/metrics` endpoint will be accessible without authentication.
 
+#### PDP_ALLOW_UNAUTHENTICATED_TRINO
+
+Default: `False`
+
+Expose the Trino authorization endpoints without requiring PDP authentication. When enabled, clients can reach the Trino routes without presenting an API key.
+
+:::warning Warning:
+Trino does not currently support passing an API key or credentials when calling external authorization endpoints. 
+As a result, you must expose the PDP's Trino authorization routes (such as `/trino/allowed`, `/trino/row-filter`, `/trino/batch-column-masking`) without authentication, by setting `PDP_ALLOW_UNAUTHENTICATED_TRINO=True`.
+
+Because these endpoints are unauthenticated, **do not expose your PDP** to the public internet or any untrusted networks. 
+Always deploy the PDP behind a firewall or within a secure, trusted network accessible only by the Trino cluster. 
+
+For more information, follow the [Trino issue](https://github.com/trinodb/trino/issues/27022) on this topic.
+:::
+
+#### PDP_TRINO_AUTHZ_CONFIG_PATH
+
+Default: `/app/config/trino-authz.yaml`
+
+Absolute path to the YAML file that defines Trino row filters and column masking policies loaded by the PDP. 
+If the file is absent or fails to parse, the PDP starts without additional Trino authorization rules.
+
+For more information, see the [Trino integration documentation](/integrations/database-access-control/trino-integration#pdp-trino-config-file).
+
 #### PDP_LOCAL_FACTS_WAIT_TIMEOUT
 
 Default: `10`
@@ -263,6 +319,14 @@ When using SDK proxy facts via PDP, the default time to wait for the facts to be
 Default: `<green>{time}</green> | {process} | <blue>{name: <40}</blue>|<level>{level:^6} | {message}</level>`
 
 Change this parameter to change the log format (e.g. remove colors).
+
+#### PDP_LOCAL_FACTS_TIMEOUT_POLICY
+
+Default: `ignore`
+
+The policy to use when the PDP fails to apply a data update within the timeout period.
+- `ignore`: Respond immediately when data update did not apply within the timeout period
+- `fail`: Respond with 424 status code when data update did not apply within the timeout period
 
 #### PDP_DATA_UPDATE_CALLBACKS
 
@@ -295,12 +359,123 @@ Data update callbacks can increase data synchronization latency.
 Optimize the callback endpoint to handle expected loads efficiently.
 :::
 
-#### PDP_FACTDB_ENABLED
+#### PDP_CACHE_STORE
 
-Default: `False`
+Default: `none`
 
-Enable FactDB for this PDP. For more information, see the [FactDB documentation](/concepts/pdp/factdb).
+The cache storage type. Options include: none, in-memory, and redis.
+For more information, see the [PDP Cache documentation](/concepts/pdp/overview#pdp-caching-mechanism).
 
+_Added in PDP v0.9.0_
+
+#### PDP_CACHE_TTL
+
+Default: `3600`
+
+Time-to-live in seconds for cached items.
+
+_Added in PDP v0.9.0_
+
+#### PDP_CACHE_MEMORY_CAPACITY
+
+Default: `128`
+
+Memory capacity in MiB for in-memory cache (when using in-memory store).
+
+_Added in PDP v0.9.0_
+
+#### PDP_CACHE_REDIS_URL
+
+Default: "" (empty string)
+
+Redis connection URL (when using redis store).
+
+_Added in PDP v0.9.0_
+
+#### PDP_HORIZON_PORT
+
+Default: `7001`
+
+The port for the Horizon service. 
+Horizon is the PDP's internal Python service bridge that facilitates communication between different components within the PDP.
+
+_Added in PDP v0.9.0<br /> use UVICORN_PORT for PDP versions prior to v0.9.0_
+
+#### PDP_HORIZON_CLIENT_TIMEOUT
+
+Default: `60`
+
+Timeout in seconds for Horizon client requests.
+
+_Added in PDP v0.9.0_
+
+#### PDP_HORIZON_NICENESS
+
+Default: `10`
+
+The niceness value for the PDP Horizon process (the internal Python service). 
+Niceness values range from -20 (highest priority) to 19 (lowest priority), where 0 represents equal priority.
+
+This setting helps manage CPU resource allocation, particularly the interaction between the Horizon service and the OPA process. 
+A higher value (e.g., 10, the default) makes Horizon 'nicer', yielding CPU more readily to other processes like OPA. 
+
+_Added in PDP v0.9.0_
+
+#### PDP_HORIZON_HEALTH_CHECK_TIMEOUT
+
+Default: `1`
+
+Timeout in seconds for individual health check requests to the Horizon service. If a health check takes longer than this timeout, it will be considered failed.
+
+_Added in PDP v0.9.0_
+
+#### PDP_HORIZON_HEALTH_CHECK_INTERVAL
+
+Default: `5`
+
+Interval in seconds between consecutive health checks of the Horizon service. The PDP will continuously monitor the Horizon service at this interval.
+
+_Added in PDP v0.9.0_
+
+#### PDP_HORIZON_HEALTH_CHECK_FAILURE_THRESHOLD
+
+Default: `12`
+
+Number of consecutive health check failures before the PDP will attempt to restart the Horizon service. This helps ensure service reliability by automatically recovering from failures.
+
+_Added in PDP v0.9.0_
+
+#### PDP_HORIZON_STARTUP_DELAY
+
+Default: `5`
+
+Initial delay in seconds before the PDP begins health checking the Horizon service after startup. This allows the Horizon service time to fully initialize before monitoring begins.
+
+_Added in PDP v0.9.0_
+
+#### PDP_HORIZON_RESTART_INTERVAL
+
+Default: `1`
+
+Interval in seconds between service restart attempts when the Horizon service needs to be restarted due to health check failures.
+
+_Added in PDP v0.9.0_
+
+#### PDP_HORIZON_TERMINATION_TIMEOUT
+
+Default: `30`
+
+Timeout in seconds to wait for the Horizon service to gracefully terminate during shutdown or restart operations. After this timeout, the service will be forcefully terminated.
+
+_Added in PDP v0.9.0_
+
+#### PDP_OPA_URL
+
+Default: `http://localhost:8181`
+
+URL for the Open Policy Agent service.
+
+_Added in PDP v0.9.0_
 
 ## OPAL Configurations
 
@@ -414,24 +589,50 @@ Default: `False`
 
 Include diagnosis in log messages.
 
+:::danger
+When OPAL_LOG_DIAGNOSE is set to True, it may print sensitive information, including secrets.
+:::
+
 :::note
 Additional configurations are available in the [OPAL documentation](https://docs.opal.ac/getting-started/configuration).
-Warning: If OPAL_LOG_DIAGNOSE is set to True, it may print sensitive information, including secrets.
+:::
+
+#### OPAL_LOG_SERIALIZE
+
+Default: `False`
+
+Serialize log records as JSON format to STDERR (useful for log aggregation services)
+
+:::note
+Additional configurations are available in the [OPAL documentation](https://docs.opal.ac/getting-started/configuration).
 :::
 
 ## Additional Configurations
+
+#### ALL_PROXY
+
+When running the PDP behind an HTTP proxy in an isolated network, configure the proxy environment variables:
+
+```bash
+# Proxy for all protocols (i.e. HTTPS, WSS)
+ALL_PROXY=http://proxy.example.com:8080
+```
+
+**Configuring proxy via TLS / HTTPS is not supported.**
+The PDP uses TLS connections for both HTTP and WebSocket protocols connecting to the control plane at Permit.io Cloud. 
+At the moment, TLS in TLS is not supported, therefore requiring proxy to be accessible via HTTP only. 
+_For more information, see [aiohttp documentation](https://docs.aiohttp.org/en/stable/client_advanced.html#proxy-support)._
+
+Your proxy **must support HTTP/2 and WebSocket connections** for the PDP to function properly. 
+For detailed proxy setup instructions, see the [OPAL proxy tutorial](https://docs.opal.ac/tutorials/setup_opal_behind_proxy).
+
+_Added in PDP v0.9.4_
 
 #### UVICORN_NUM_WORKERS
 
 Default: `1`
 
 The number of parallel workers to run the PDP server on.
-
-#### UVICORN_PORT
-
-Default: `7000`
-
-The port to run the PDP server on.
 
 #### GUNICORN_TIMEOUT
 

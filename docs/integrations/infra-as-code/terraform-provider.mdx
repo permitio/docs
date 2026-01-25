@@ -1,177 +1,543 @@
 ---
 sidebar_position: 1
 title: Terraform Provider
+description: "Manage Permit.io authorization policies as code using Terraform"
 ---
+
 ![terraform](/img/infra-as-code/tf-half.png)
 
-Permit.io is a cloud-based authorization service that allows you to define and manage permissions for your application.
-In order to make it easier and safer to manage your objects and policies in Permit.io, we have created a Terraform provider.
+# Permit.io Terraform Provider
 
-The Terraform provider is open source and available on [GitHub](https://github.com/permitio/terraform-provider-permit-io).
-## Docs
+The **Permit.io Terraform Provider** allows you to manage your authorization policies, resources, roles, and permissions as infrastructure code. This enables you to version control your authorization policies, automate deployments, and maintain consistency across environments.
 
-Our Terraform provider has auto-generated documentation that can be found here - https://registry.terraform.io/providers/permitio/permit-io/latest/docs.
-We recommend using the auto-generated documentation as it is always up-to-date with the latest version of the provider.
+## What is Infrastructure as Code (IaC)?
 
-## Usage
+Infrastructure as Code is the practice of managing and provisioning computing infrastructure through machine-readable definition files rather than physical hardware configuration or interactive configuration tools. With Terraform, you can:
 
-### Provider Definition
+- **Version Control**: Track changes to your authorization policies in Git
+- **Automation**: Deploy policies consistently across environments
+- **Collaboration**: Review and approve policy changes through pull requests
+- **Reproducibility**: Ensure identical environments across development, staging, and production
+
+:::tip
+The Permit CLI has the ability to [export environments to Terraform scripts](/how-to/permit-cli/permit-cli-envs/#terraform-and-iac)
+:::
+
+## Quick Start
+
+### Prerequisites
+
+Before you begin, ensure you have:
+
+- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.0 or [OpenTofu](https://opentofu.org/docs/intro/install/) >= 1.0 installed
+- A [Permit.io account](https://app.permit.io) with an API key
+- Basic understanding of [Terraform syntax](https://developer.hashicorp.com/terraform/language)
+
+### 1. Get Your API Key
+
+1. Go to [app.permit.io](https://app.permit.io)
+2. Navigate to **Settings** → **API Keys**
+3. Copy your environment-level API key
+
+### 2. Create Your First Terraform Configuration
+
+Create a new directory for your Terraform project and add the following files:
+
+**`main.tf`** - Main Terraform configuration:
 
 ```hcl
 terraform {
   required_providers {
     permitio = {
       source  = "registry.terraform.io/permitio/permit-io"
-      version = "~> 0.0.1"
+      version = "~> 0.0.14"  # Use the latest version
     }
   }
 }
-```
 
-
-### Configure the Provider
-```hcl
+# Configure the Permit.io provider
 provider "permitio" {
-    api_url = "https://api.permit.io" # Defaults to - "https://api.permit.io - Can be set as an environment variable PERMITIO_API_URL
-    api_key = "YOUR_API_KEY" # Can be set as an environment variable PERMITIO_API_KEY
+  api_key = "YOUR_API_KEY"  # Replace with your actual API key
+  # api_url = "https://api.permit.io"  # Optional: defaults to https://api.permit.io
+}
+
+# Define a resource (e.g., documents in your application)
+resource "permitio_resource" "document" {
+  key         = "document"
+  name        = "Document"
+  description = "A confidential document that users can read and write"
+  
+  actions = {
+    "read" = {
+      "name"        = "Read"
+      "description" = "Read a document"
+    }
+    "write" = {
+      "name"        = "Write"
+      "description" = "Write to a document"
+    }
+    "delete" = {
+      "name"        = "Delete"
+      "description" = "Delete a document"
+    }
+  }
+  
+  attributes = {
+    "title" = {
+      "description" = "The title of the document"
+      "type"        = "string"
+    }
+    "owner" = {
+      "description" = "The owner of the document"
+      "type"        = "string"
+    }
+  }
+}
+
+# Define roles with specific permissions
+resource "permitio_role" "reader" {
+  key         = "reader"
+  name        = "Reader"
+  description = "Can read documents but cannot modify them"
+  permissions = ["document:read"]
+  
+  depends_on = [permitio_resource.document]
+}
+
+resource "permitio_role" "writer" {
+  key         = "writer"
+  name        = "Writer"
+  description = "Can read and write documents"
+  permissions = ["document:read", "document:write"]
+  
+  depends_on = [permitio_resource.document]
+}
+
+resource "permitio_role" "admin" {
+  key         = "admin"
+  name        = "Administrator"
+  description = "Full access to documents including deletion"
+  permissions = ["document:read", "document:write", "document:delete"]
+  
+  depends_on = [permitio_resource.document]
 }
 ```
 
-### Creating Objects in Permitio
+**`variables.tf`** - Define variables for better configuration management:
 
-#### Create a Resource
 ```hcl
+variable "permit_api_key" {
+  description = "Permit.io API key"
+  type        = string
+  sensitive   = true
+}
+
+variable "permit_api_url" {
+  description = "Permit.io API URL"
+  type        = string
+  default     = "https://api.permit.io"
+}
+```
+
+**`terraform.tfvars`** - Set your actual values (don't commit this file):
+
+```hcl
+permit_api_key = "your-actual-api-key-here"
+permit_api_url = "https://api.permit.io"
+```
+
+### 3. Initialize and Apply
+
+```bash
+# Initialize Terraform
+terraform init
+
+# Plan your changes
+terraform plan
+
+# Apply the configuration
+terraform apply
+```
+
+## Using with OpenTofu
+
+[OpenTofu](https://opentofu.org/) is an open-source fork of Terraform that maintains compatibility with Terraform providers and configurations. You can use the Permit.io Terraform provider with OpenTofu without any modifications to your configuration files.
+
+### Installing OpenTofu
+
+```bash
+# Using Homebrew (macOS/Linux)
+brew install opentofu
+
+# Using the official installer
+curl -fsSL https://get.opentofu.org/install.sh | sh
+
+# Using package managers
+# Ubuntu/Debian
+sudo apt-get install opentofu
+
+# CentOS/RHEL/Fedora
+sudo dnf install opentofu
+```
+
+### Using OpenTofu Commands
+
+Replace `terraform` commands with `tofu`:
+
+```bash
+# Initialize OpenTofu
+tofu init
+
+# Plan your changes
+tofu plan
+
+# Apply the configuration
+tofu apply
+
+# Show current state
+tofu show
+
+# Destroy resources
+tofu destroy
+```
+
+### Configuration Compatibility
+
+Your Terraform configuration files work exactly the same with OpenTofu:
+
+```hcl
+terraform {
+  required_providers {
+    permitio = {
+      source  = "registry.terraform.io/permitio/permit-io"
+      version = "~> 0.0.14"
+    }
+  }
+}
+
+provider "permitio" {
+  api_key = "YOUR_API_KEY"
+}
+
+# All your resources remain the same
 resource "permitio_resource" "document" {
   key         = "document"
   name        = "Document"
   description = "A confidential document"
-  actions     = {
-    "read" : {
-      "name" : "Read",
-      "description" : "Read a document",
-    },
-    "write" : {
-      "name" : "Write",
-      "description" : "Write a document",
+  # ... rest of configuration
+}
+```
+
+### Benefits of Using OpenTofu
+
+- **Open Source**: Fully open-source with community-driven development
+- **Terraform Compatible**: Drop-in replacement for Terraform
+- **Enhanced Features**: Some additional features and improvements over Terraform
+- **Active Development**: Regular updates and community contributions
+- **Same Provider Ecosystem**: Uses the same Terraform Registry and providers
+
+## Core Concepts
+
+### Resources
+
+Resources in Permit.io represent the objects that users can access in your application (e.g., documents, users, projects).
+
+```hcl
+resource "permitio_resource" "example" {
+  key         = "unique_key"
+  name        = "Human Readable Name"
+  description = "Description of what this resource represents"
+  
+  actions = {
+    "action_key" = {
+      "name"        = "Human Readable Action"
+      "description" = "What this action does"
+    }
+  }
+  
+  attributes = {
+    "attribute_name" = {
+      "description" = "Description of the attribute"
+      "type"        = "string"  # or "number", "boolean", "array", "object"
     }
   }
 }
 ```
 
-#### Create a Role
+### Roles
+
+Roles define what actions users can perform on resources.
 
 ```hcl
-resource "permitio_role" "reader" {
-  key         = "reader"
-  name        = "Reader"
-  description = "A role that allows reading documents"
-  permissions = [
-    "document:read"
-  ]
-  extends     = []
-  depends_on  = [
-    permitio_resource.document # This is required to ensure that the resource is created before the role (for the permissions assignment)
-  ]
+resource "permitio_role" "example" {
+  key         = "role_key"
+  name        = "Role Name"
+  description = "What this role allows users to do"
+  permissions = ["resource:action"]  # Format: "resource_key:action_key"
+  
+  depends_on = [permitio_resource.resource_name]
 }
 ```
 
+### User Sets and Resource Sets
 
-#### Create a Resource Set
-
+User Sets and Resource Sets allow you to group users and resources based on conditions.
 
 ```hcl
-resource "permitio_resource_set" "secret_docs" {
-  key      = "secret_docs"
-  name     = "Secret Docs"
+# Group users by email domain
+resource "permitio_user_set" "admins" {
+  key  = "admins"
+  name = "Administrators"
+  conditions = jsonencode({
+    "allOf" = [
+      {
+        "subject.email" = {
+          contains = "@admin.com"
+        }
+      }
+    ]
+  })
+}
+
+# Group resources by attribute
+resource "permitio_resource_set" "public_docs" {
+  key      = "public_docs"
+  name     = "Public Documents"
   resource = permitio_resource.document.key
   conditions = jsonencode({
-    "allOf" : [
+    "allOf" = [
       {
-        "allOf" : [
-          {
-            "resource.title" = {
-              contains = "Rye"
-            },
-          }
-        ]
+        "resource.visibility" = {
+          equals = "public"
+        }
       }
     ]
   })
 }
 ```
 
-#### Create a User Set
+### Condition Set Rules
 
-
-```hcl
-resource "permitio_user_set" "privileged_users" {
-  key  = "privileged_users"
-  name = "Privileged Users"
-  conditions = jsonencode({
-    "allOf" : [
-      {
-        "allOf" : [
-          {
-            "subject.email" = {
-              contains = "@admin.com"
-            },
-          }
-        ]
-      }
-    ]
-  })
-}
-```
-
-#### Create a Condition Set Rule
-
+Condition Set Rules define when specific permissions apply based on user and resource sets.
 
 ```hcl
-resource "permitio_condition_set_rule" "allow_privileged_users_to_read_secret_docs" {
-  user_set     = permitio_user_set.privileged_users.key
-  resource_set = permitio_resource_set.secret_docs.key
+resource "permitio_condition_set_rule" "admin_access" {
+  user_set     = permitio_user_set.admins.key
+  resource_set = permitio_resource_set.public_docs.key
   permission   = "document:read"
 }
 ```
 
-#### Creating a Frontend-only Authorization (FoAz) proxy
+## Advanced Examples
+
+### ReBAC (Relationship-Based Access Control)
+
+The Terraform provider supports ReBAC for complex hierarchical permissions:
 
 ```hcl
-resource "permitio_proxy_config" "foaz" {
-  key            = "foaz"
-  name           = "Boaz"
-  auth_mechanism = "basic"
-  auth_secret = {
-    basic = "hello:world"
+# Define resources with relationships
+resource "permitio_resource" "folder" {
+  key  = "folder"
+  name = "Folder"
+  actions = {
+    "list" = { "name" = "List" }
+    "create" = { "name" = "Create" }
   }
-  mapping_rules = [
-    {
-      url = "https://example.com/documents"
-      http_method = "post"
-      resource = "document"
-      action = "read"
-    },
-    {
-      url = "https://example.com/documents/{project_id}"
-      http_method = "get"
-      resource = "document"
-      action = "read"
-    },
-    {
-      url = "https://example.com/documents/{project_id}"
-      http_method = "put"
-      resource = "document"
-      action = "update"
-      headers = {
-        "x-update-id": "foaz"
-      }
-    },
-    {
-      url = "https://example.com/documents/{project_id}"
-      http_method = "delete"
-      resource = "document"
-      action = "delete"
-    }
-  ]
+}
+
+resource "permitio_resource" "file" {
+  key  = "file"
+  name = "File"
+  actions = {
+    "read" = { "name" = "Read" }
+    "write" = { "name" = "Write" }
+  }
+}
+
+# Define the relationship
+resource "permitio_relation" "parent" {
+  key              = "parent"
+  name             = "parent of"
+  subject_resource = permitio_resource.folder.key
+  object_resource  = permitio_resource.file.key
+}
+
+# Define roles for each resource
+resource "permitio_role" "folder_admin" {
+  key         = "admin"
+  name        = "Folder Administrator"
+  permissions = ["folder:list", "folder:create"]
+  resource    = permitio_resource.folder.key
+}
+
+resource "permitio_role" "file_admin" {
+  key         = "admin"
+  name        = "File Administrator"
+  permissions = ["file:read", "file:write"]
+  resource    = permitio_resource.file.key
+}
+
+# Derive file permissions from folder permissions
+resource "permitio_role_derivation" "folder_to_file" {
+  resource    = permitio_resource.file.key
+  role        = permitio_role.file_admin.key
+  on_resource = permitio_resource.folder.key
+  to_role     = permitio_role.folder_admin.key
+  linked_by   = permitio_relation.parent.key
 }
 ```
+
+### User Attributes
+
+Define custom attributes for users to enable attribute-based access control:
+
+```hcl
+resource "permitio_user_attribute" "department" {
+  key         = "department"
+  description = "The department the user belongs to"
+  type        = "string"
+}
+
+resource "permitio_user_attribute" "security_level" {
+  key         = "security_level"
+  description = "User's security clearance level"
+  type        = "number"
+}
+```
+
+## Repository Examples
+
+The [Permit.io Terraform Provider repository](https://github.com/permitio/terraform-provider-permit-io) contains comprehensive examples:
+
+### Basic Example
+[View the basic example](https://github.com/permitio/terraform-provider-permit-io/tree/main/examples/basic-example) that demonstrates:
+- Resource creation with actions and attributes
+- Role definition with permissions
+- User sets and resource sets
+- Condition set rules
+- Basic proxy configuration
+
+### ReBAC Example
+[View the ReBAC example](https://github.com/permitio/terraform-provider-permit-io/tree/main/examples/rebac) that shows:
+- Resource relationships
+- Role derivations
+- Hierarchical permission inheritance
+
+## Environment Variables
+
+For better security, use environment variables instead of hardcoding API keys:
+
+```bash
+export PERMITIO_API_KEY="your-api-key"
+export PERMITIO_API_URL="https://api.permit.io"  # Optional
+```
+
+Then in your Terraform configuration:
+
+```hcl
+provider "permitio" {
+  # Terraform will automatically use the environment variables
+}
+```
+
+## Best Practices
+
+### 1. Use Variables for Configuration
+
+```hcl
+variable "environment" {
+  description = "Environment name (dev, staging, prod)"
+  type        = string
+}
+
+resource "permitio_resource" "document" {
+  key         = "document"
+  name        = "Document"
+  description = "Documents for ${var.environment} environment"
+  # ... rest of configuration
+}
+```
+
+### 2. Use Data Sources for Existing Resources
+
+```hcl
+data "permitio_resource" "existing_document" {
+  key = "document"
+}
+
+resource "permitio_role" "reader" {
+  permissions = ["${data.permitio_resource.existing_document.key}:read"]
+}
+```
+
+### 3. Use Outputs for Important Information
+
+```hcl
+output "resource_id" {
+  value = permitio_resource.document.id
+}
+
+output "role_permissions" {
+  value = permitio_role.admin.permissions
+}
+```
+
+### 4. Use Workspaces for Environment Separation
+
+```bash
+# Create separate workspaces for different environments
+terraform workspace new dev
+terraform workspace new staging
+terraform workspace new prod
+
+# Switch between workspaces
+terraform workspace select dev
+```
+
+:::note
+**OpenTofu Users**: Replace `terraform` with `tofu` in all workspace commands:
+```bash
+tofu workspace new dev
+tofu workspace select dev
+```
+:::
+
+## Troubleshooting
+
+### Common Issues
+
+1. **API Key Issues**
+   - Ensure you're using an environment-level API key, not a workspace-level key
+   - Verify the API key has the correct permissions
+
+2. **Resource Dependencies**
+   - Use `depends_on` when resources reference each other
+   - Ensure resources are created before roles that reference them
+
+3. **Permission Format**
+   - Use the format `resource_key:action_key` for permissions
+   - Ensure the resource and action keys match exactly
+
+### Getting Help
+
+- [Terraform Provider Documentation](https://registry.terraform.io/providers/permitio/permit-io/latest/docs)
+- [GitHub Repository](https://github.com/permitio/terraform-provider-permit-io)
+- [Permit.io Documentation](https://docs.permit.io)
+- [Terraform Documentation](https://developer.hashicorp.com/terraform/docs)
+- [OpenTofu Documentation](https://opentofu.org/docs)
+
+## Next Steps
+
+Now that you have the basics, explore:
+
+- [Advanced Authorization Patterns](/overview/advanced-authorization-queries)
+- [Attribute-Based Access Control (ABAC)](/how-to/build-policies/abac/overview)
+- [Relationship-Based Access Control (ReBAC)](/how-to/build-policies/rebac/overview)
+- [Policy as Code with GitOps](/integrations/gitops/overview)
+- [Permit CLI for Automation](/how-to/permit-cli/)
+
+---
+
+:::info
+**Need Help?** Join our [Slack community](https://io.permit.io/slack) (channel #permit-saas), or (if you're in less of a hurry) check out our [GitHub issues](https://github.com/permitio/terraform-provider-permit-io/issues) for support.
+:::

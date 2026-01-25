@@ -1,0 +1,1467 @@
+---
+title: "Installation Guide"
+description: "Complete installation guide for Permit Platform on-premise deployment"
+---
+
+:::info Enterprise Only
+This section is only relevant to Enterprise customers who acquired an on-prem license.
+:::
+
+# Installation Guide
+
+Complete step-by-step installation guide for deploying Permit Platform in your environment.
+
+<div className="bg-blue-50 border-l-4 border-blue-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-blue-700">
+        <strong>Prerequisites required:</strong> Make sure you've completed the <a href="/how-to/deploy/on-prem/prerequisites" className="underline">prerequisites setup</a> before starting.
+      </p>
+    </div>
+  </div>
+</div>
+
+## Installation Overview
+
+The Permit Platform on-premise installation uses a unified installer that deploys all services as a single Kubernetes application. The installation requires minimal configuration - you only need to set your frontend domain and Policy Sync configuration.
+
+### Package Contents
+
+Your installer package includes:
+- **Installation script**: `scripts/install-permit-platform.sh`
+- **Helm chart**: Unified chart that deploys all services
+- **Docker images**: All required images as tar files (airgapped deployment)
+- **Configuration files**: values.yaml with examples and documentation
+
+## What the Install Script Does
+
+Understanding what happens during installation helps you troubleshoot issues and customize your deployment.
+
+### Helm Chart Architecture
+
+The installation deploys **3 separate Helm charts** in a specific order:
+
+1. **`third-party-services`** - Infrastructure components (PostgreSQL, Redis, OpenSearch, RabbitMQ, Keycloak)
+2. **`migrations`** - Database schema setup (backend schema, OPAL relay schema, indices)  
+3. **`permit-platform`** - All Permit services (35 services total: backend, frontend, OPAL, policy enforcement)
+
+This 3-phase approach ensures proper dependency management and allows for independent scaling and management of each component layer.
+
+### Complete Installation Process Breakdown
+
+The `install-permit-platform.sh` script is a comprehensive deployment orchestrator that handles:
+
+#### 1. Pre-Installation Validation (1-2 minutes)
+**What it checks:**
+- ✅ **Kubernetes cluster connectivity** - Validates `kubectl` access and cluster health
+- ✅ **Required tools** - Verifies `docker`, `helm`, `kind` (if needed) are installed and working
+- ✅ **Frontend domain configuration** - Ensures `values.yaml` has valid frontend domain (not CHANGEME_FRONTEND_DOMAIN)
+- ✅ **Policy Sync configuration** - Validates that `CHANGEME_GIT_REPO_URL` and `CHANGEME_SSH_PRIVATE_KEY` placeholders have been replaced with actual values
+- ✅ **Storage requirements** - Checks available disk space for image loading
+- ✅ **Network connectivity** - Tests Docker registry access and image pull capabilities
+
+**Script commands:**
+```bash
+# Validates cluster connectivity
+kubectl cluster-info --request-timeout=10s
+
+# Checks frontend domain configuration
+grep -q "CHANGEME_FRONTEND_DOMAIN" charts/permit-platform/values.yaml && exit 1
+
+# Validates Git repository configuration
+grep -q "CHANGEME_GIT_REPO_URL" charts/permit-platform/values.yaml && exit 1
+grep -q "CHANGEME_SSH_PRIVATE_KEY" charts/permit-platform/values.yaml && exit 1
+
+# Validates required tools
+which docker helm kubectl || exit 1
+```
+
+#### 2. Image Management (3-5 minutes)
+**What it does:**
+- 📦 **Loads Docker images** from tar files in the package (airgapped deployment)
+- 🏷️ **Tags images** for target registry (Docker Hub, ECR, private registry)
+- 🔐 **Handles registry authentication** (automatically for ECR, manually for private registries)
+- 📊 **Reports image status** - Shows which images loaded successfully
+
+**Complete image list (35 services total):**
+```bash
+# Core Platform Services (7 images)
+permit-backend-v2                     # Main API and business logic
+permit-frontend                       # React web application
+opal-server                          # Policy management (permitio/opal-server:0.7.5-rc.7)
+permit-policy-sync-v2                # Git policy synchronization
+permit-bundled-opa                   # Open Policy Agent engine
+celery-general                       # Background task processing
+permit-celery-beat                   # Scheduled task processing
+
+# Policy Enforcement & Relay Services (8 images)
+permit-opal-interface-v2             # OPAL interface
+permit-opal-relay-api-v2             # Policy relay API
+permit-opal-relay-consumer-v2        # Policy update consumer
+permit-opal-relay-reports-consumer-v2 # Report processing
+permit-opal-relay-statistics-api-v2  # Statistics API
+permit-opal-relay-watcher-v2         # Policy watcher
+permit-relay-jwt-api                 # JWT authentication
+permit-cache-rebuilder               # Cache optimization
+
+# Data Processing Services (9 images)
+permit-data-generator                # Data generation
+permit-data-generator-heavy          # Heavy data processing
+permit-decision-logs                 # Decision logging
+permit-dl-enricher-v2               # Log enrichment
+permit-pdp-cache-builder             # PDP cache building
+permit-pdp-data                      # PDP data management
+permit-pdp-deltas                    # PDP delta processing
+permit-webhook-transmitter-v2        # Webhook delivery
+permit-scim-okta                     # SCIM integration
+
+# Infrastructure Services (11 images)
+postgres                             # Main database
+postgres-read-replica                # Read replica database
+pgbouncer                            # Connection pooling
+redis                                # Cache and session storage
+opensearch                           # Audit logs and analytics
+opensearch-dashboards               # Search dashboard
+rabbitmq                             # Message queue
+keycloak                             # Authentication server
+keycloak-postgres                    # Auth database
+permit-foaz-proxy                    # Proxy service
+permit-proxy                         # Application proxy
+```
+
+#### 3. Kubernetes Environment Setup (30 seconds)
+**What it creates:**
+- 🏗️ **Namespace creation** - Creates `permit-platform` namespace (or custom namespace)
+- 🔐 **RBAC configuration** - Sets up service accounts and permissions
+- 📋 **Secret generation** - Auto-generates secure passwords and tokens:
+  - PostgreSQL database password
+  - RabbitMQ message queue password
+  - Keycloak admin password
+  - OPAL authentication tokens
+  - JWT signing keys for services
+
+**Example secret generation:**
+```bash
+# Auto-generates secure 32-character passwords
+POSTGRES_PASSWORD=$(openssl rand -hex 16)
+RABBITMQ_PASSWORD=$(openssl rand -hex 16)
+KEYCLOAK_ADMIN_PASSWORD=$(openssl rand -hex 16)
+```
+
+<div className="bg-blue-50 border-l-4 border-blue-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-blue-700">
+        <strong>🔐 Password Persistence Across Upgrades:</strong> Once generated, these passwords are stored in Kubernetes secrets and automatically reused on subsequent installations or upgrades. The installer checks for existing secrets before generating new passwords, ensuring your services maintain the same credentials across platform updates.
+      </p>
+    </div>
+  </div>
+</div>
+
+#### 4. Infrastructure Services Deployment (2-3 minutes)
+**What it deploys (in order):**
+
+**Step 4a: Database Layer**
+- 🗄️ **PostgreSQL** - Primary database for all platform data
+  - Database: `permit` 
+  - User: `permit`
+  - Storage: 20GB persistent volume
+  - Configured with performance tuning for production
+
+**Step 4b: Cache and Message Queue**
+- ⚡ **Redis** - Session storage, caching, and Celery task queue
+  - Port: 6379
+  - Storage: 5GB persistent volume
+  - No authentication (internal network only)
+
+- 📨 **RabbitMQ** - Message queue for asynchronous processing
+  - Ports: 5672 (AMQP), 15672 (Management UI)
+  - Storage: 5GB persistent volume
+  - Management UI accessible via ingress
+
+**Step 4c: Search and Analytics**
+- 🔍 **OpenSearch** - Audit logs, decision logs, and analytics
+  - Port: 9200
+  - Storage: 15GB persistent volume (3 shards default)
+  - Dashboard accessible via ingress
+  - Index State Management (ISM) for log retention
+
+**Step 4d: Authentication**
+- 🔑 **Keycloak** - Identity and access management
+  - Port: 8080
+  - Realm: `permit-platform`
+  - Admin console accessible via ingress
+  - Integrated with PostgreSQL for user storage
+
+#### 5. Database Schema Initialization (1-2 minutes)
+**What it runs:**
+- 📊 **Backend migrations** - Creates core platform tables and schema
+  - User accounts and organizations
+  - Projects and environments  
+  - Roles, resources, and policies
+  - Audit trails and decision logs
+
+- 🔄 **OPAL relay migrations** - Sets up policy synchronization tables
+  - Policy distribution state
+  - PDP (Policy Decision Point) management
+  - Message queuing for policy updates
+
+```bash
+# Migration commands executed
+cd /opt/permit/backend && alembic upgrade head
+cd /opt/permit/opal_relay && alembic upgrade head
+```
+
+#### 6. Platform Services Deployment (2-4 minutes)
+**What it deploys:**
+
+**Core Backend Services:**
+- 🏢 **permit-backend-v2** - Main API server
+  - REST API for frontend and integrations
+  - Policy management and evaluation
+  - User and organization management
+  - Integrated with all infrastructure services
+
+- 👥 **celery-general** - Background task processing
+  - Async operations (email, reports, data processing)
+  - Policy cache rebuilding
+  - Audit log processing
+
+**Policy Management:**
+- 📋 **opal-server** - Open Policy Agent (OPA) management
+  - Policy distribution to PDPs
+  - Git repository synchronization
+  - Real-time policy updates
+
+- 🔄 **permit-policy-sync-v2** - Git policy synchronization
+  - Connects to your Git repository (if configured)
+  - Monitors for policy changes
+  - Automatic policy deployment
+
+**Policy Enforcement Components:**
+- 🛡️ **permit-opal-relay-api-v2** - Policy decision relay
+- 🔗 **permit-opal-relay-consumer-v2** - Policy update consumer
+- 🏃 **permit-bundled-opa** - Open Policy Agent (OPA) engine
+- 🔄 **permit-cache-rebuilder** - Policy cache optimization
+
+**Frontend Application:**
+- 🖥️ **permit-frontend** - React web application
+  - User interface for policy management
+  - Organization and project setup
+  - Policy builder and testing tools
+  - Integrated with Keycloak authentication
+
+#### 7. Networking and Ingress (1 minute)
+**What it configures:**
+- 🌐 **NGINX Ingress Controller** - Routes external traffic to services
+- 🔒 **TLS/SSL Certificates** - Handles HTTPS termination:
+  - **Auto-generated**: Uses mkcert or OpenSSL for self-signed certificates
+  - **Custom certificates**: Uses certificates from values.yaml
+  - **External termination**: Skips TLS configuration (for ALB, cert-manager, etc.)
+
+- 📍 **Service discovery** - Internal DNS names for service communication:
+  ```
+  permit-frontend:3000        → Frontend application
+  permit-backend-v2:8000      → Backend API
+  opal-server:7002           → Policy server
+  postgres:5432              → Database
+  redis:6379                 → Cache
+  keycloak:8080              → Authentication
+  ```
+
+#### 8. Health Verification and Startup (1-2 minutes)
+**What it verifies:**
+- 🏥 **Pod health checks** - Waits for all pods to reach "Running" status
+- 🔍 **Service readiness** - Checks all services respond to health endpoints
+- 🌐 **Ingress connectivity** - Validates external access to frontend
+- 🔐 **Authentication flow** - Verifies Keycloak integration
+
+### Configuration Files the Script Uses
+
+#### Primary Configuration: `charts/permit-platform/values.yaml`
+The script reads and validates this file for:
+
+```yaml
+global:
+  frontendDomain: "permit.yourcompany.com"  # REQUIRED - Replace CHANGEME_FRONTEND_DOMAIN
+  imageRegistry: ""                        # Optional - Docker Hub if empty
+  
+permitServices:
+  policySync:
+    enabled: true                          # REQUIRED for production
+    policyRepoUrl: "git@github.com:yourorg/policies.git"  # REQUIRED - Replace CHANGEME_GIT_REPO_URL
+    sshPrivateKey: |                       # REQUIRED - Replace CHANGEME_SSH_PRIVATE_KEY
+      -----BEGIN OPENSSH PRIVATE KEY-----
+      b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAA...
+      -----END OPENSSH PRIVATE KEY-----
+    # Note: SSH keys are preserved across upgrades via Kubernetes secrets
+
+thirdPartyServices:
+  postgres:
+    persistence:
+      size: "20Gi"                         # Database storage
+  opensearch:
+    persistence:
+      size: "15Gi"                         # Log storage (3 shards default)
+```
+
+#### Helm Charts: `charts/permit-platform/`
+Contains Kubernetes manifests for:
+- **Deployments** - All service configurations
+- **Services** - Internal networking
+- **Secrets** - Secure credential storage
+- **ConfigMaps** - Service configuration
+- **Ingress** - External routing rules
+- **PersistentVolumeClaims** - Storage requirements
+
+### What Gets Created in Your Cluster
+
+After successful installation, you'll have a complete platform with:
+
+#### Deployments (35 total)
+```bash
+kubectl get deployments -n permit-platform
+NAME                                    READY   STATUS
+# Core Platform Services (8 services)
+permit-backend-v2                       1/1     Running  # Main API server
+permit-frontend                         1/1     Running  # Web application
+opal-server                             1/1     Running  # Policy management
+permit-policy-sync-v2                   1/1     Running  # Git synchronization
+permit-bundled-opa                      1/1     Running  # Policy engine
+celery-general                          1/1     Running  # Background tasks
+permit-celery-beat                      1/1     Running  # Scheduled tasks
+
+# Policy Enforcement & Relay Services (8 services)
+permit-opal-interface-v2                1/1     Running  # OPAL interface
+permit-opal-relay-api-v2                1/1     Running  # Policy relay API
+permit-opal-relay-consumer-v2           1/1     Running  # Policy updates
+permit-opal-relay-reports-consumer-v2   1/1     Running  # Report processing
+permit-opal-relay-statistics-api-v2     1/1     Running  # Statistics API
+permit-opal-relay-watcher-v2            1/1     Running  # Policy watcher
+permit-relay-jwt-api                    1/1     Running  # JWT authentication
+permit-cache-rebuilder                  1/1     Running  # Cache optimization
+
+# Data Processing Services (9 services)
+permit-data-generator                   1/1     Running  # Data generation
+permit-data-generator-heavy             1/1     Running  # Heavy data processing
+permit-decision-logs                    1/1     Running  # Decision logging
+permit-dl-enricher-v2                   1/1     Running  # Log enrichment
+permit-pdp-cache-builder                1/1     Running  # PDP cache building
+permit-pdp-data                         1/1     Running  # PDP data management
+permit-pdp-deltas                       1/1     Running  # PDP delta processing
+permit-webhook-transmitter-v2           1/1     Running  # Webhook delivery
+permit-scim-okta                        1/1     Running  # SCIM integration
+
+# Infrastructure Services (10 services)
+postgres                                1/1     Running  # Main database
+postgres-read-replica                   1/1     Running  # Read replica
+pgbouncer                               1/1     Running  # Connection pooling
+redis                                   1/1     Running  # Cache
+opensearch                              1/1     Running  # Audit logs
+opensearch-dashboards                   1/1     Running  # Search dashboard
+rabbitmq                                1/1     Running  # Message queue
+keycloak                                1/1     Running  # Authentication
+keycloak-postgres                       1/1     Running  # Auth database
+permit-foaz-proxy                       1/1     Running  # Proxy service
+permit-proxy                            1/1     Running  # Application proxy
+```
+
+#### Services (26 total)
+```bash
+kubectl get services -n permit-platform
+NAME                                  TYPE           PORT(S)
+# Core Platform Services
+permit-frontend                       ClusterIP      80/TCP            # Web UI
+permit-backend-v2                     ClusterIP      8000/TCP          # API server
+opal-server                           ClusterIP      7002/TCP          # Policy server
+permit-policy-sync-v2                 ClusterIP      8000/TCP          # Git sync
+permit-bundled-opa                    ClusterIP      8181/TCP          # Policy engine
+
+# Policy Enforcement & Relay Services  
+permit-opal-interface-v2              ClusterIP      8000/TCP          # OPAL interface
+permit-opal-relay-api-v2              ClusterIP      8000/TCP          # Policy relay API
+permit-opal-relay-consumer-v2         ClusterIP      8000/TCP          # Policy updates
+permit-opal-relay-statistics-api-v2   ClusterIP      8000/TCP          # Statistics API
+permit-relay-jwt-api                  ClusterIP      8000/TCP          # JWT auth
+
+# Data Processing Services
+permit-decision-logs                  ClusterIP      8000/TCP          # Decision logging
+permit-pdp-cache-builder              ClusterIP      8000/TCP          # PDP cache
+permit-pdp-data                       ClusterIP      8000/TCP          # PDP data
+permit-pdp-deltas                     ClusterIP      8000/TCP          # PDP deltas
+permit-scim-okta                      ClusterIP      8000/TCP          # SCIM integration
+permit-foaz-proxy                     ClusterIP      3128/TCP          # Proxy service
+permit-proxy                          ClusterIP      80/TCP            # Application proxy
+
+# Database Services
+postgres                              ClusterIP      5432/TCP          # Main database
+postgres-read-replica                 ClusterIP      5432/TCP          # Read replica
+pgbouncer                             ClusterIP      5432/TCP          # Connection pooling
+keycloak-postgres                     ClusterIP      5432/TCP          # Auth database
+
+# Infrastructure Services
+redis                                 ClusterIP      6379/TCP          # Cache
+opensearch                            ClusterIP      9200,9300/TCP     # Search engine
+opensearch-dashboards                 ClusterIP      5601/TCP          # Search dashboard
+rabbitmq                              ClusterIP      5672,15672/TCP    # Message queue
+keycloak                              ClusterIP      8080/TCP          # Authentication
+```
+
+#### Secrets (5 application secrets)
+```bash
+kubectl get secrets -n permit-platform | grep -v "dockercfg\|helm.sh"
+NAME                         TYPE                 DATA
+global-infrastructure-secret Opaque              27    # Global platform config
+opal-server-v2-secret        Opaque              9     # Policy server config
+permit-backend-v2-secret     Opaque              14    # API credentials
+permit-frontend-tls          kubernetes.io/tls   2     # TLS certificate
+pgbouncer-secret             Opaque              14    # Database connection pooling
+```
+
+#### Persistent Volumes (7 total)
+```bash
+kubectl get pvc -n permit-platform
+NAME                        STATUS   VOLUME                CAPACITY   
+celery-beat-pvc             Bound    pvc-8f0fa786...       1Gi       # Scheduled tasks storage
+keycloak-postgres-pvc       Bound    pvc-34bd30c8...       5Gi       # Auth database storage
+opensearch-pvc              Bound    pvc-79ae4354...       20Gi      # Search & audit logs (production size)
+postgres-pvc                Bound    pvc-49f9ac5e...       10Gi      # Main database storage
+postgres-read-replica-pvc   Bound    pvc-24bedd24...       5Gi       # Read replica storage
+rabbitmq-pvc                Bound    pvc-ca19a3be...       5Gi       # Message queue storage
+redis-pvc                   Bound    pvc-52340e83...       5Gi       # Cache storage
+```
+
+### Error Handling and Recovery
+
+The script includes comprehensive error handling:
+
+#### Automatic Retries
+- **Image loading failures** - Retries up to 3 times
+- **Pod startup timeouts** - Waits up to 10 minutes for services
+- **Database connection** - Retries every 30 seconds for 5 minutes
+
+#### Rollback on Failure
+- **Helm deployment failures** - Automatically rolls back to previous state
+- **Image loading issues** - Cleans up partial image loads
+- **Network configuration errors** - Reverts ingress changes
+
+#### Detailed Logging
+```bash
+# Installation logs show:
+[INFO] Step 1/7: Validating configuration...
+[INFO] ✅ Frontend domain: permit.yourcompany.com
+[INFO] ✅ Policy sync configured (placeholders replaced)
+[INFO] Step 2/7: Loading images...
+[INFO] ✅ Loaded permit-backend-v2:latest (1.2GB)
+[INFO] ✅ Loaded permit-frontend:latest (800MB)
+[ERROR] ❌ Failed to load postgres:15-alpine - retrying...
+[INFO] ✅ Loaded postgres:15-alpine (350MB) on retry 2/3
+```
+
+This comprehensive breakdown helps you understand exactly what the installer does, making it easier to troubleshoot issues, customize deployments, and explain the process to your team.
+
+## Step 1: Extract and Prepare
+
+```bash
+# Extract the installer package
+tar -xzf permit-platform-on-prem-installer-*.tar.gz
+cd permit-platform-on-prem-installer-*
+
+# Make installation script executable
+chmod +x scripts/install-permit-platform.sh
+```
+
+## Step 2: Configure Frontend Domain
+
+<div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-yellow-700">
+        <strong>Required:</strong> You must configure the frontend domain before installation.
+      </p>
+    </div>
+  </div>
+</div>
+
+Edit the `charts/permit-platform/values.yaml` file and replace the placeholder:
+
+```yaml
+global:
+  # CHANGE THIS: Replace with your actual domain
+  frontendDomain: "CHANGEME_FRONTEND_DOMAIN"
+  
+  # TO SOMETHING LIKE:
+  frontendDomain: "permit.yourcompany.com"
+  # OR
+  frontendDomain: "permit-platform.internal.corp"
+  # OR  
+  frontendDomain: "permit.local"
+```
+
+**This single change configures ALL services automatically:**
+- Frontend application URLs
+- Keycloak authentication endpoints
+- Backend cookie origins
+- Ingress rules and TLS certificates
+
+## Step 3: Configure Policy Sync (Required)
+
+The installer package includes placeholder values that you **must replace** with your actual configuration:
+
+**In your `charts/permit-platform/values.yaml` file, replace these placeholders:**
+
+```yaml
+permitServices:
+  policySync:
+    enabled: true
+    # BEFORE: placeholder value (will cause installation to fail)
+    policyRepoUrl: "CHANGEME_GIT_REPO_URL"
+    
+    # AFTER: your actual Git repository URL
+    policyRepoUrl: "git@github.com:yourorg/permit-policies.git"
+    
+    # BEFORE: placeholder value (will cause installation to fail)
+    sshPrivateKey: |  # ← DO NOT DELETE THIS "|" SYMBOL!
+      CHANGEME_SSH_PRIVATE_KEY
+    
+    # AFTER: your actual SSH private key content
+    sshPrivateKey: |  # ← DO NOT DELETE THIS "|" SYMBOL!
+      -----BEGIN OPENSSH PRIVATE KEY-----
+      b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAA...
+      -----END OPENSSH PRIVATE KEY-----
+```
+
+**How to get your SSH private key:**
+```bash
+# Generate a new SSH key pair (if needed)
+ssh-keygen -t rsa -b 4096 -C "permit-platform@yourcompany.com"
+
+# Copy your private key content
+cat ~/.ssh/id_rsa  # or your specific key file
+```
+
+<div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-yellow-700">
+        <strong>Required:</strong> Policy Sync configuration is mandatory for the platform to function properly. The platform requires a Git repository to store and synchronize authorization policies.
+      </p>
+    </div>
+  </div>
+</div>
+
+## Step 3.5: Push Images to Private Registry (GKE Example)
+
+<div className="bg-blue-50 border-l-4 border-blue-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-blue-700">
+        <strong>Optional:</strong> If you're deploying to Google Kubernetes Engine (GKE) and want to use Google Artifact Registry (GAR) or Google Container Registry (GCR), you can push the images to your private registry before installation. Skip this step if using Docker Hub or if images are already in your registry.
+      </p>
+    </div>
+  </div>
+</div>
+
+### Prerequisites for GKE Registry
+
+Before pushing images, you need to:
+
+1. **Create a Google Artifact Registry repository** (this is NOT done by the script):
+
+```bash
+# Authenticate with Google Cloud
+gcloud auth login
+
+# Set your project
+gcloud config set project YOUR_PROJECT_ID
+
+# Create Artifact Registry repository
+gcloud artifacts repositories create permit-platform \
+  --repository-format=docker \
+  --location=us-central1 \
+  --project=YOUR_PROJECT_ID
+
+# Configure Docker authentication
+gcloud auth configure-docker us-central1-docker.pkg.dev
+```
+
+2. **Verify authentication**:
+
+```bash
+# Test that Docker can authenticate to GAR
+docker pull us-central1-docker.pkg.dev/YOUR_PROJECT_ID/permit-platform/hello-world || echo "Authentication configured"
+```
+
+### Push Images to Google Artifact Registry
+
+The installer package includes a convenience script to push all images to your GKE registry:
+
+```bash
+# Navigate to scripts directory
+cd scripts
+
+# Push to Google Artifact Registry (example for us-central1)
+./push-images-to-registry.sh us-central1-docker.pkg.dev/YOUR_PROJECT_ID/permit-platform
+```
+
+**What this script does:**
+
+1. Loads all ~35 images from the tar files in the `images/` directory
+2. Tags each image for your target registry (preserving original version tags)
+3. Pushes both the original tag and `:latest` tag to your registry
+4. **Automatically updates** `charts/permit-platform/values.yaml` with your registry URL
+5. Creates a timestamped backup of your original values.yaml
+
+**Expected output:**
+
+```bash
+╔══════════════════════════════════════════════════════════════╗
+║     Permit Platform Image Push Script                      ║
+╚══════════════════════════════════════════════════════════════╝
+
+Target Registry: us-central1-docker.pkg.dev/my-project/permit-platform
+Images Directory: ../images
+
+Found 35 images to push
+
+[1/35] Processing permit-backend-v2.tar
+  Loading image from tar...
+  Loaded: permitio/permit-backend-v2:latest
+  Tagging as us-central1-docker.pkg.dev/my-project/permit-platform/permit-backend-v2:latest
+  Pushing...
+  ✓ Done
+
+[2/35] Processing permit-frontend.tar
+  ...
+
+╔══════════════════════════════════════════════════════════════╗
+║     All images pushed successfully!                         ║
+╚══════════════════════════════════════════════════════════════╝
+
+Updating values.yaml with registry: us-central1-docker.pkg.dev/my-project/permit-platform
+✅ Updated values.yaml with imageRegistry: "us-central1-docker.pkg.dev/my-project/permit-platform"
+
+Next steps:
+1. Update charts/permit-platform/values.yaml with your frontend domain:
+   frontendDomain: "your-domain.company.com"
+
+2. Run the installer with --skip-images flag:
+   cd scripts
+   ./install-permit-platform.sh --gke --skip-images
+```
+
+**Time and storage requirements:**
+- **Time**: 10-20 minutes depending on network speed
+- **Bandwidth**: ~12GB upload
+- **Registry storage**: ~12GB required in GAR
+
+### Verify Images in Registry
+
+After pushing, verify images are accessible:
+
+```bash
+# List all images in your GAR repository
+gcloud artifacts docker images list us-central1-docker.pkg.dev/YOUR_PROJECT_ID/permit-platform
+
+# Check a specific image
+gcloud artifacts docker images describe \
+  us-central1-docker.pkg.dev/YOUR_PROJECT_ID/permit-platform/permit-backend-v2:latest
+```
+
+### Using Other Private Registries
+
+While this guide focuses on GKE with Google Artifact Registry, the `push-images-to-registry.sh` script works with any Docker-compatible registry:
+
+- **AWS ECR**: `123456789012.dkr.ecr.us-east-1.amazonaws.com/permit-platform`
+- **Azure ACR**: `myregistry.azurecr.io/permit-platform`
+- **JFrog Artifactory**: `artifactory.company.com/permit-platform`
+- **Harbor**: `harbor.company.com/permit-platform`
+
+For non-GKE registries, authenticate to your registry using the appropriate method before running the push script, and manually update the `imageRegistry` field in `charts/permit-platform/values.yaml`.
+
+#### Important: Registry Authentication for Kubernetes
+
+<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-red-700">
+        <strong>⚠️ Critical:</strong> If your private registry requires authentication (Artifactory, Harbor, private Docker registries), you MUST create a Kubernetes imagePullSecret and configure it in the Helm chart before installation. Without this, pods will fail to pull images with "ImagePullBackOff" errors.
+      </p>
+    </div>
+  </div>
+</div>
+
+**When you need imagePullSecrets:**
+- ✅ **GKE with GAR/GCR**: Not needed (GKE nodes authenticate automatically via Workload Identity)
+- ✅ **EKS with ECR**: Not needed (EKS nodes authenticate automatically via IAM roles)
+- ✅ **AKS with ACR**: Not needed (AKS nodes authenticate automatically via managed identity)
+- ❌ **JFrog Artifactory**: Required (needs username/password or token)
+- ❌ **Harbor**: Required (needs username/password)
+- ❌ **Private Docker registries**: Required (needs authentication)
+
+**How to configure imagePullSecrets:**
+
+1. **Create the Kubernetes secret** before installation:
+
+```bash
+# For registries requiring username/password (Artifactory, Harbor, etc.)
+kubectl create secret docker-registry registry-credentials \
+  --docker-server=artifactory.company.com \
+  --docker-username=YOUR_USERNAME \
+  --docker-password=YOUR_PASSWORD_OR_TOKEN \
+  --docker-email=your-email@company.com \
+  --namespace permit-platform
+
+# Verify secret was created
+kubectl get secret registry-credentials -n permit-platform
+```
+
+2. **Configure imagePullSecrets in your values.yaml** file:
+
+The Helm chart now supports `global.imagePullSecrets`. Add this to your `charts/permit-platform/values.yaml`:
+
+```yaml
+global:
+  imageRegistry: "artifactory.company.com/permit-platform"
+  imagePullPolicy: "IfNotPresent"
+
+  # Add your image pull secrets here
+  imagePullSecrets:
+    - registry-credentials
+```
+
+**That's it!** The Helm chart will automatically apply the imagePullSecrets to all deployments and jobs.
+
+**Multiple secrets example:**
+
+```yaml
+global:
+  imagePullSecrets:
+    - registry-credentials
+    - backup-registry-credentials
+```
+
+<div className="bg-green-50 border-l-4 border-green-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-green-700">
+        <strong>✅ Simplified:</strong> As of January 2026, the Helm chart includes built-in support for <code>global.imagePullSecrets</code>. No manual template editing required!
+      </p>
+    </div>
+  </div>
+</div>
+
+**Alternative: Use node-level registry authentication** (if supported by your Kubernetes distribution)
+
+### Important: Skip Image Loading When Using Private Registry
+
+<div className="bg-blue-50 border-l-4 border-blue-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-blue-700">
+        <strong>Note:</strong> If you pushed images to a private registry (GKE/GAR, Artifactory, Harbor, etc.) using the <code>push-images-to-registry.sh</code> script, you MUST use the <code>--skip-images</code> flag when running the installer. This prevents the installer from trying to load images from local tar files.
+      </p>
+    </div>
+  </div>
+</div>
+
+**Correct usage when images are in your registry:**
+
+```bash
+# After pushing images to your private registry, run installer with --skip-images
+cd scripts
+./install-permit-platform.sh --gke --skip-images              # For GKE
+./install-permit-platform.sh --skip-images                    # For EKS/AKS/on-prem
+./install-permit-platform.sh --openshift --skip-images        # For OpenShift
+```
+
+**When NOT to use --skip-images:**
+- Installing from the tar.gz package for the first time
+- Using Docker Hub public images
+- Images are loaded to local Docker daemon (Kind clusters)
+
+<div className="bg-green-50 border-l-4 border-green-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-green-700">
+        <strong>✅ Ready:</strong> After pushing images to your registry and configuring values.yaml with imagePullSecrets, proceed to Step 4 to run the installation with <code>--skip-images</code> flag.
+      </p>
+    </div>
+  </div>
+</div>
+
+## Step 4: Run Installation
+
+### Complete Installation Options Reference
+
+The installer script `./scripts/install-permit-platform.sh` provides comprehensive deployment options:
+
+```bash
+# Display all available options and examples
+./scripts/install-permit-platform.sh --help
+```
+
+### Deployment Target Options
+
+#### Standard Production Kubernetes (Default)
+```bash
+# Deploy to existing Kubernetes cluster (EKS, GKE, AKS, on-premise)
+./scripts/install-permit-platform.sh
+
+# What it does:
+# - Uses existing Kubernetes cluster via kubectl
+# - Expects customer to handle TLS (AWS ACM, cert-manager, etc.)
+# - Loads images from tar files to cluster
+# - Deploys using Helm charts
+```
+
+#### OpenShift Deployment
+```bash
+# Deploy to OpenShift cluster (ROSA, OCP)
+./scripts/install-permit-platform.sh --openshift
+
+# What it does:
+# - Configures for OpenShift security contexts
+# - Uses OpenShift internal registry by default
+# - Creates ServiceAccount with anyuid SCC
+# - Handles OpenShift-specific networking
+```
+
+#### Google GKE Deployment
+```bash
+# Deploy to Google Kubernetes Engine
+./scripts/install-permit-platform.sh --gke
+
+# What it does:
+# - Configures for GKE-specific settings
+# - Handles GKE networking and storage
+# - Compatible with both GKE Standard and Autopilot
+# - Works with Google Artifact Registry (GAR) or GCR
+# - Installs nginx-ingress-controller (if not present)
+```
+
+<div className="bg-blue-50 border-l-4 border-blue-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-blue-700">
+        <strong>Note:</strong> GKE deployments require nginx-ingress-controller for ingress routing. The installer will set this up if not already installed in your cluster.
+      </p>
+    </div>
+  </div>
+</div>
+
+#### Local Development (Kind)
+```bash
+# Deploy to local Kind cluster for development
+./scripts/install-permit-platform.sh --kind
+
+# What it does:
+# - Creates local Kind cluster if not exists
+# - Installs NGINX ingress controller
+# - Auto-generates self-signed certificates
+# - Configures port forwarding (80, 443)
+# - NOT for production use
+```
+
+### TLS/Certificate Options
+
+#### Auto-Generate TLS Certificates
+```bash
+# Generate certificates automatically
+./scripts/install-permit-platform.sh --generate-tls
+
+# What it does:
+# - Uses mkcert if available (preferred)
+# - Falls back to OpenSSL if mkcert not found
+# - Creates self-signed certificates
+# - Configures ingress with TLS
+# - Good for internal/development use
+```
+
+#### Skip TLS Configuration
+```bash
+# Skip TLS setup (handle externally)
+./scripts/install-permit-platform.sh --skip-tls-check
+
+# What it does:
+# - Skips all TLS configuration
+# - Assumes external TLS termination
+# - For use with:
+#   - AWS ALB with ACM certificates
+#   - cert-manager
+#   - External load balancers
+#   - Cloud provider TLS
+```
+
+### Registry Options
+
+#### Skip OpenShift Registry
+```bash
+# OpenShift without internal registry
+./scripts/install-permit-platform.sh --openshift --skip-openshift-registry
+
+# What it does:
+# - Skips OpenShift internal registry configuration
+# - Uses images from values.yaml registry setting
+# - For using external registries:
+#   - AWS ECR
+#   - Docker Hub
+#   - Azure Container Registry
+#   - Private registries
+```
+
+### Namespace Configuration
+
+#### Custom Namespace
+```bash
+# Deploy to custom namespace
+./scripts/install-permit-platform.sh --namespace my-namespace
+# or
+./scripts/install-permit-platform.sh -n my-namespace
+
+# What it does:
+# - Creates specified namespace if not exists
+# - Deploys all resources to that namespace
+# - Default: permit-platform
+```
+
+### Testing and Debug Options
+
+#### Dry Run Mode
+```bash
+# Preview without applying changes
+./scripts/install-permit-platform.sh --dry-run
+
+# What it does:
+# - Shows what would be deployed
+# - Validates configuration
+# - Checks prerequisites
+# - No actual deployment
+# - Good for testing configuration
+```
+
+#### Skip Image Loading
+```bash
+# Skip Docker image loading phase
+./scripts/install-permit-platform.sh --skip-images
+
+# What it does:
+# - Skips loading images from tar files
+# - Useful for:
+#   - Re-running failed deployments
+#   - Testing Helm chart changes
+#   - When images already in registry
+# - Speeds up installation
+```
+
+### Common Installation Combinations
+
+#### Production with Custom Domain and TLS
+```bash
+# Production K8s with auto-generated certificates
+./scripts/install-permit-platform.sh --generate-tls
+```
+
+#### OpenShift with External Registry
+```bash
+# OpenShift using AWS ECR instead of internal registry
+./scripts/install-permit-platform.sh \
+  --openshift \
+  --skip-openshift-registry \
+  --namespace permit-prod
+```
+
+#### Development with Quick Iteration
+```bash
+# Kind cluster, skip images for faster testing
+./scripts/install-permit-platform.sh \
+  --kind \
+  --skip-images \
+  --namespace test-permit
+```
+
+#### Production with External TLS
+```bash
+# AWS EKS with ALB and ACM certificates
+./scripts/install-permit-platform.sh \
+  --skip-tls-check \
+  --namespace production
+```
+
+### Infrastructure Requirements by Target
+
+#### Production Kubernetes
+- **Requires**: kubectl, helm, docker
+- **Cluster**: Existing K8s 1.21+
+- **TLS**: Customer-managed or --generate-tls
+- **Registry**: Any accessible registry
+
+#### OpenShift
+- **Requires**: oc, kubectl, helm, docker
+- **Cluster**: Existing OpenShift 4.8+
+- **TLS**: Auto-generated or customer-managed
+- **Registry**: Internal or external
+
+#### Kind (Development)
+- **Requires**: docker, kind, kubectl, helm
+- **Cluster**: Created by installer
+- **TLS**: Auto-generated
+- **Registry**: Local Docker daemon
+
+### Help Command Output
+
+Running `--help` displays:
+```
+Permit Platform On-Prem Deployment Script
+
+Usage: ./scripts/install-permit-platform.sh [OPTIONS]
+
+Deployment Targets:
+    --openshift         Deploy to OpenShift (ROSA, OCP, etc.)
+    --kind             Deploy to local Kind cluster (development)
+    (no flags)         Deploy to production Kubernetes (EKS, GKE, AKS)
+
+Options:
+    -n, --namespace    Kubernetes namespace (default: permit-platform)
+    --generate-tls     Auto-generate TLS certificates
+    --skip-tls-check   Skip TLS verification (external termination)
+    --skip-openshift-registry  Skip OpenShift internal registry
+    --dry-run          Preview deployment without applying
+    --skip-images      Skip loading Docker images
+    -h, --help         Show this help message
+
+Examples provided for each scenario...
+```
+
+## Installation Process
+
+### What Happens During Installation
+
+The installation script performs these steps automatically:
+
+1. **Pre-flight Validation** (1-2 minutes)
+   - Validates frontend domain configuration in values.yaml
+   - Checks Kubernetes cluster connectivity
+   - Verifies Docker and required tools
+   - Validates image registry configuration
+
+2. **Image Loading** (3-5 minutes)
+   - Loads all Docker images from tar files
+   - Tags images for local registry
+   - Configures registry authentication (if needed)
+
+3. **Namespace Setup** (30 seconds)
+   - Creates permit-platform namespace
+   - Sets up RBAC permissions
+
+4. **Third-party Services Deployment** (2-3 minutes)
+   **Helm Chart: `third-party-services`**
+   - PostgreSQL database (with read replica)
+   - Redis cache
+   - OpenSearch for audit logs (3 shards, ISM policies)
+   - RabbitMQ message queue
+   - Keycloak authentication server
+
+5. **Database Migrations** (1-2 minutes)
+   **Helm Chart: `migrations`**
+   - Backend database schema initialization
+   - OPAL relay database schema setup
+   - OpenSearch index templates and ISM policies
+   - Initial data seeding
+
+6. **Platform Services Deployment** (2-4 minutes)
+   **Helm Chart: `permit-platform`**
+   - Permit backend services (permit-backend-v2, celery workers)
+   - OPAL policy management (opal-server, relay components)
+   - Frontend application (permit-frontend)
+   - Policy sync service (permit-policy-sync-v2)
+   - All 35 services total
+
+7. **Ingress and Networking** (1 minute)
+   - Nginx ingress controller
+   - TLS certificate generation
+   - Service discovery configuration
+
+<div className="bg-blue-50 border-l-4 border-blue-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-blue-700">
+        <strong>Total installation time:</strong> 8-15 minutes depending on your environment and hardware.
+      </p>
+    </div>
+  </div>
+</div>
+
+### Installation Output
+
+During installation, you'll see colored log output showing progress:
+
+```bash
+[INFO] Starting Permit Platform deployment...
+[INFO] Validating frontend domain configuration...
+✅ Frontend domain configured: permit.yourcompany.com
+[INFO] Loading Docker images...
+✅ Loaded 12 platform images successfully
+[INFO] Deploying third-party services...
+✅ PostgreSQL ready
+✅ Redis ready  
+✅ OpenSearch ready
+[INFO] Running database migrations...
+✅ Backend migrations completed
+✅ OPAL relay migrations completed
+[INFO] Deploying platform services...
+✅ All services deployed and healthy
+[SUCCESS] Permit Platform installed successfully!
+```
+
+### Automatic Password Generation
+
+The installer automatically generates secure passwords for all services and updates your values.yaml file:
+
+- **PostgreSQL**: Database password
+- **RabbitMQ**: Message queue password  
+- **Keycloak Admin**: Administrator password for authentication server
+- **Keycloak Database**: Keycloak's database password
+
+**Your login credentials will be displayed at the end of installation.**
+
+### Installation Complete Message
+
+When installation finishes successfully, you'll see detailed access information:
+
+```bash
+[SUCCESS] 🎉 Permit Platform On-Prem deployed successfully!
+[INFO] Access your Permit Platform at:
+[INFO]   • Frontend: https://permit-frontend.local
+[INFO]     - Admin user: admin/[Generated Password]
+[INFO]     - Or register a new account
+[INFO] Additional services:
+[INFO]   • OpenSearch Dashboard: https://permit-frontend.local/opensearch/ (no authentication required)
+[INFO]   • RabbitMQ Dashboard: https://permit-frontend.local/rabbitmq/ (permit/[Generated Password])
+[INFO]   • Keycloak Admin: https://permit-frontend.local/auth (admin/[Same Admin Password])
+[INFO]   • SCIM Service: https://permit-frontend.local/scim
+[INFO] Important:
+[INFO]   • For Kind clusters (development), add to /etc/hosts:
+[INFO]     127.0.0.1 permit-frontend.local
+[INFO]   • For OpenShift ROSA (development), find router IP and add to /etc/hosts:
+[INFO]     $(nslookup $(oc get ingress -n permit-platform -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}') | grep Address | tail -1 | awk '{print $2}') permit-frontend.local
+[INFO]   • Certificate warnings are normal for self-signed certificates
+[INFO]   • Click 'Advanced' → 'Proceed to site' in browser
+[INFO] For troubleshooting, run: kubectl get pods -n permit-platform
+✅ Deployment completed successfully
+```
+
+<div className="bg-blue-50 border-l-4 border-blue-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-blue-700">
+        <strong>Save these credentials!</strong> The installer generates unique passwords for each service. Make sure to save them securely before closing the terminal.
+      </p>
+    </div>
+  </div>
+</div>
+
+## Post-Installation
+
+### Access Your Platform
+
+Once installation completes, you can access the Permit Platform and its services:
+
+#### Main Platform
+```bash
+# Frontend application
+https://[your-frontend-domain]
+# Login: admin / [Generated Password]
+```
+
+#### Additional Services
+
+The platform provides access to several administrative dashboards:
+
+1. **OpenSearch Dashboard** - View audit logs and search analytics
+   - URL: `https://[your-frontend-domain]/opensearch/`
+   - Access: No authentication required (internal use only)
+
+2. **RabbitMQ Management** - Monitor message queues
+   - URL: `https://[your-frontend-domain]/rabbitmq/`
+   - Login: `permit` / [Generated Password]
+
+3. **Keycloak Admin Console** - Manage authentication
+   - URL: `https://[your-frontend-domain]/auth`
+   - Login: `admin` / [Same as Platform Admin Password]
+
+4. **SCIM Service** - User provisioning API
+   - URL: `https://[your-frontend-domain]/scim`
+   - API endpoint for SCIM 2.0 integration
+
+### Initial Login Options
+
+You have two options for accessing the platform:
+
+1. **Use Admin Credentials**: Login with the `admin` user and generated password shown in installation output
+2. **Register New Account**: Create a new user account through the registration process
+
+<div className="bg-green-50 border-l-4 border-green-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-green-700">
+        <strong>First time setup:</strong> After login, the platform will guide you through creating your first organization and project.
+      </p>
+    </div>
+  </div>
+</div>
+
+### DNS and Hosts File Configuration
+
+#### Production Deployments
+
+For production with real domains, configure your DNS:
+
+```bash
+# Point your domain to the server where Permit is installed
+permit.yourcompany.com A <server-ip>
+```
+
+#### Development/Local Deployments
+
+For `.local` domains or development environments, update your hosts file:
+
+##### Kind Clusters (Local Development)
+```bash
+# Add to /etc/hosts (Linux/Mac) or C:\Windows\System32\drivers\etc\hosts (Windows)
+127.0.0.1 permit-frontend.local
+```
+
+##### OpenShift ROSA
+```bash
+# Find the router IP and add to hosts file
+ROUTER_IP=$(nslookup $(oc get ingress -n permit-platform -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}') | grep Address | tail -1 | awk '{print $2}')
+echo "$ROUTER_IP permit-frontend.local" | sudo tee -a /etc/hosts
+```
+
+##### Standard Kubernetes
+```bash
+# Get the LoadBalancer/NodePort IP
+kubectl get svc -n ingress-nginx
+# Add the external IP to hosts file
+echo "<EXTERNAL-IP> permit-frontend.local" | sudo tee -a /etc/hosts
+```
+
+### TLS/SSL Certificates
+
+The installer provides several TLS certificate options:
+
+1. **Auto-generated certificates** (using `--generate-tls` flag):
+   - Uses **mkcert** (preferred) or **OpenSSL** (fallback)
+   - Creates self-signed certificates automatically
+   - Suitable for development and internal use
+
+2. **Custom certificates** (configured in `values.yaml`):
+   ```yaml
+   ingress:
+     tls:
+       enabled: true
+       certificate:
+         cert: |
+           -----BEGIN CERTIFICATE-----
+           [Your certificate content]
+           -----END CERTIFICATE-----
+         key: |
+           -----BEGIN PRIVATE KEY-----
+           [Your private key content]  
+           -----END PRIVATE KEY-----
+   ```
+
+3. **External TLS termination** (using `--skip-tls-check` flag):
+   - For AWS ALB, cert-manager, or other external TLS handlers
+   - Platform runs without TLS configuration
+
+### Handling Self-Signed Certificate Warnings
+
+When using self-signed certificates (development or internal deployments), browsers will show security warnings:
+
+<div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-yellow-700">
+        <strong>Certificate Warning:</strong> This is normal and expected for self-signed certificates. The connection is still encrypted and secure for internal use.
+      </p>
+    </div>
+  </div>
+</div>
+
+**To proceed in different browsers:**
+
+- **Chrome**: Click "Advanced" → "Proceed to [domain] (unsafe)"
+- **Firefox**: Click "Advanced" → "Accept the Risk and Continue"
+- **Safari**: Click "Show Details" → "visit this website"
+- **Edge**: Click "Advanced" → "Continue to [domain] (unsafe)"
+
+**For production deployments**, replace self-signed certificates with certificates from a trusted Certificate Authority (CA) to eliminate these warnings.
+
+## Verification and Health Checks
+
+### Check Platform Status
+
+The installer provides several ways to verify your deployment:
+
+```bash
+# Check all pods are running
+kubectl get pods -n permit-platform
+
+# Check services and endpoints
+kubectl get services -n permit-platform
+
+# View deployment status
+kubectl get deployments -n permit-platform
+```
+
+Expected output - all pods should show "Running" status:
+```
+NAME                                        READY   STATUS    
+permit-backend-v2-xxx                       1/1     Running   
+permit-frontend-xxx                         1/1     Running   
+opal-server-xxx                             1/1     Running   
+postgres-xxx                                1/1     Running   
+redis-xxx                                   1/1     Running   
+keycloak-xxx                                1/1     Running   
+```
+
+### Verify Web Access
+
+1. **Open your browser** to `https://[your-frontend-domain]`
+2. **Accept the self-signed certificate** (for development/internal use)
+3. **You should see the Permit login page**
+4. **Login with admin credentials** shown during installation
+5. **Complete organization setup** if prompted
+
+### Check Service Logs
+
+If you encounter issues, check service logs:
+
+```bash
+# Backend service logs
+kubectl logs -n permit-platform deployment/permit-backend-v2
+
+# Frontend service logs  
+kubectl logs -n permit-platform deployment/permit-frontend
+
+# Authentication service logs
+kubectl logs -n permit-platform deployment/keycloak
+
+# Database logs
+kubectl logs -n permit-platform deployment/postgres
+```
+
+### Network Connectivity
+
+Verify ingress is working:
+
+```bash
+# Check ingress controller
+kubectl get pods -n ingress-nginx
+
+# Test internal connectivity
+kubectl exec -n permit-platform deployment/permit-backend-v2 -- curl -k https://permit-frontend/health
+```
+
+## Common Configuration Adjustments
+
+### Resource Scaling
+
+If you need to adjust resources after installation:
+
+```bash
+# Scale backend replicas
+kubectl scale deployment permit-backend-v2 -n permit-platform --replicas=3
+
+# Scale celery workers
+kubectl scale deployment celery-general -n permit-platform --replicas=2
+```
+
+### Storage Configuration
+
+For production deployments, ensure persistent storage:
+
+```bash
+# Check persistent volumes
+kubectl get pv
+
+# Check storage classes
+kubectl get storageclass
+```
+
+## Troubleshooting Installation Issues
+
+### Installation Fails at Image Loading
+
+```bash
+# Check Docker service
+systemctl status docker
+
+# Check available disk space
+df -h
+
+# Check image registry connectivity
+docker pull hello-world
+```
+
+### Frontend Domain Resolution Issues
+
+```bash
+# Test DNS resolution
+nslookup [your-frontend-domain]
+
+# Check hosts file (for .local domains)
+cat /etc/hosts
+
+# Verify ingress configuration
+kubectl get ingress -n permit-platform
+```
+
+### Database Connection Issues
+
+```bash
+# Check PostgreSQL pod
+kubectl logs -n permit-platform deployment/postgres
+
+# Test database connectivity
+kubectl exec -n permit-platform deployment/postgres -- pg_isready
+```
+
+### Policy Sync Issues (if configured)
+
+```bash
+# Check Policy Sync service logs
+kubectl logs -n permit-platform deployment/permit-policy-sync-v2
+
+# Verify SSH key configuration
+kubectl get secret policy-sync-ssh-key -n permit-platform -o yaml
+```
+
+## Next Steps
+
+<div className="bg-blue-50 border-l-4 border-blue-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-blue-700">
+        <strong>Installation complete!</strong> Continue to the <a href="/how-to/deploy/on-prem/management" className="underline">Management Guide</a> to learn about day-to-day operations and maintenance.
+      </p>
+    </div>
+  </div>
+</div>
+
+### Recommended Next Steps
+
+1. **[Management Guide](/how-to/deploy/on-prem/management)** - Learn daily operations
+2. **[Troubleshooting Guide](/how-to/deploy/on-prem/troubleshooting)** - Common issues and solutions
+3. **Create your first project** - Set up authorization policies
+4. **Configure Policy Sync** - Connect to your Git repository (if not done during installation)
+5. **Set up monitoring** - Configure log aggregation and alerting
+
+## Support
+
+Need help with installation issues?
+
+- 📧 **Email**: support@permit.io
+- 💬 **Slack**: [Join our community](https://io.permit.io/slack)

@@ -29,7 +29,14 @@ const config = {
   favicon: "logo/favicon.ico",
   organizationName: "permitio", // Usually your GitHub org/user name.
   projectName: "docs", // Usually your repo name.
-  markdown: { mermaid: true },
+  markdown: {
+    mermaid: true,
+    mdx1Compat: {
+      comments: true,
+      admonitions: true,
+      headingIds: false,
+    },
+  },
   themes: ["@docusaurus/theme-mermaid"],
   presets: [
     [
@@ -63,7 +70,6 @@ const config = {
       "@docusaurus/plugin-client-redirects",
       {
         redirects: [
-          // Backwards support - We moved multitenancy into features
           {
             from: "/concepts/multi-tenancy",
             to: "/how-to/build-policies/policy-basics",
@@ -168,16 +174,20 @@ const config = {
           },
           {
             from: "/tutorials/deploying/on-prem",
-            to: "/how-to/deploy/on-prem",
+            to: "/concepts/deployment-options",
           },
           {
             from: "/tutorials/deploying/overview",
             to: "/how-to/deploy/overview",
           },
-          // FOAZ FIX
+          // Legacy URL Mapping redirect
           {
             from: "/frontend-only-authz/overview",
-            to: "/foaz/overview",
+            to: "/how-to/enforce-permissions/url-mapping/url-mapping-check",
+          },
+          {
+            from: "/foaz/overview",
+            to: "/how-to/enforce-permissions/url-mapping/url-mapping-check",
           },
           {
             from: "/features/policy-editor/editor-overview",
@@ -282,7 +292,7 @@ const config = {
           },
           {
             from: "/getting-started/deploying/on-prem",
-            to: "/how-to/deploy/on-prem",
+            to: "/concepts/deployment-options",
           },
           {
             from: "/features/projects-and-env",
@@ -338,8 +348,8 @@ const config = {
             to: "/embeddable-uis/user-preview",
           },
           {
-            from: "/features/multitenancy",
-            to: "/concepts/multitenancy",
+            from: ["/features/multitenancy", "/concepts/multitenancy"],
+            to: "/concepts/multi-tenant-authorization",
           },
           {
             from: "/features/loading-data/via-api",
@@ -348,10 +358,6 @@ const config = {
           {
             from: "/features/loading-data/via-opal",
             to: "/how-to/manage-data/loading-data",
-          },
-          {
-            from: "/concepts/pdp-sharding",
-            to: "/how-to/manage-data/pdp-sharding",
           },
           // Docs restructure iteration 1 - 5th March 2024
           {
@@ -518,7 +524,7 @@ const config = {
           { from: "/category/elements", to: "/embeddable-uis/overview" },
           { from: "/category/erlang-beta", to: "/sdk/erlang/quickstart-erlang" },
           { from: "/category/php-beta", to: "/sdk/php/quickstart-php" },
-          { from: "/category/rust-coming-soon", to: "/sdk/rust/quickstart-rust" },
+          { from: "/category/rust-coming-soon", to: "/sdk/sdks-overview" },
           {
             from: "/category/kotlin-beta",
             to: "/sdk/kotlin/quickstart-kotlin",
@@ -536,12 +542,18 @@ const config = {
             from: "/category/work-with-authentication",
             to: "/how-to/sync-users",
           },
+          {
+            from: [
+              "/mcp-permissions/index"
+            ],
+            to: "/ai-security/mcp-permissions/guide/"
+          },
         ],
       },
     ],
     "docusaurus-plugin-sass",
     "docusaurus-plugin-hotjar",
-    "plugin-image-zoom",
+    "docusaurus-plugin-image-zoom",
     async function TailwindCSSPlugin(context, options) {
       return {
         name: "docusaurus-tailwindcss",
@@ -553,12 +565,31 @@ const config = {
         },
       };
     },
+    [
+      "@inkeep/cxkit-docusaurus",
+      {
+        ChatButton: {
+          baseSettings: {
+            apiKey: "446287e718c0fd535135e7e51147a028a61120d17fd74d2f",
+            primaryBrandColor: "#7542B5",
+            organizationDisplayName: "Permit.io",
+          },
+        },
+        SearchBar: {
+          baseSettings: {
+            apiKey: "446287e718c0fd535135e7e51147a028a61120d17fd74d2f",
+            primaryBrandColor: "#7542B5",
+            organizationDisplayName: "Permit.io",
+          },
+        },
+      },
+    ],
   ],
 
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
-      imageZoom: {
+      zoom: {
         selector: ".markdown :not(em) > img",
       },
       hotjar: {
@@ -582,8 +613,9 @@ const config = {
             className: "algolia-search",
           },
           {
-            type: "docsVersionDropdown",
+            type: "docsVersion",
             position: "right",
+            className: "version",
           },
           {
             alt: "twitter logo",
@@ -616,7 +648,7 @@ const config = {
       },
       prism: {
         theme: require("prism-react-renderer/themes/dracula"),
-        additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl", "php"],
+        additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl", "php", "bash"],
       },
       colorMode: {
         defaultMode: "light",
