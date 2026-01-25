@@ -1,0 +1,305 @@
+---
+title: Implementing Fine-grained Authorization in Rails Application
+sidebar_position: 10
+---
+
+import TimelineStep from "../../src/components/timeline/TimelineStep";
+import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
+
+Integrate fine-grained authorization into your Rails application to enable collaborative features where users can create, modify, and manage resources according to their assigned roles.
+
+<br />
+
+This guide shows you how to add fine-grained authorization to a Rails application using Permit.io. You will set up a policy for creating posts and comments, register users, assign them roles (like Author, Moderator, or Reader), and enforce permissions directly in your app's endpoints.
+
+By the end, you will have a working example where only authorized users can access protected endpoints, and you will understand how to integrate Permit.io into your own Rails applications.
+
+## Prerequisites
+
+- [Rails](https://rubyonrails.org/) application
+- [Docker](https://www.docker.com/) (for running the PDP server)
+- [Node.js](https://nodejs.org/en) (for running the Permit CLI)
+- [Permit.io](https://permit.io) account (Follow [this](/quickstart) guide to create an account)
+
+## Policy Configuration
+
+Before integrating Permit.io with your Rails application, you need to configure a policy. If you already have a policy configured, you can skip this section and proceed directly to the [integration guide](#integration-guide).
+
+<details open>
+<summary>Configure Policy in Permit</summary>
+
+<TimelineWrapper>
+<TimelineStep>
+
+### Installing the Permit CLI
+
+First, install the [Permit CLI](https://github.com/permitio/permit-cli). The Permit CLI is a command-line tool that allows you to create policies, run the PDP server, and perform other tasks. To install the CLI, run the following command in your terminal:
+
+```bash
+npm install -g @permitio/cli
+```
+
+Once the installation is complete, run `permit` to confirm the installation.
+
+</TimelineStep>
+<TimelineStep>
+
+### Authenticating the CLI
+
+To use the CLI, authenticate it with your Permit account. Run:
+
+```bash
+permit login
+```
+
+This command opens a browser window and prompts you to log in with your Permit account. After logging in, the CLI is authenticated and ready to use. This also logs you into the default environment (a project can have multiple environments).
+
+You can change the environment by running `permit env select` and then selecting the environment you want to use.
+
+</TimelineStep>
+<TimelineStep>
+
+### Creating a policy with a template
+
+The Permit CLI offers various templates to create a policy with predefined roles and resources using best practices. This simplifies policy creation compared to starting from scratch.
+
+To check the available templates, run `permit template list`. You can also visit the [Permit CLI repo](https://github.com/permitio/permit-cli/tree/main/source/templates) to see the templates and the actual terraform code for each template.
+
+![permit template list](/img/quick-start-guide/permit-template-list.png)
+
+Use the **blogging-platform** template to create the policy. This template helps you set up a policy for a blogging platform with roles and resources. The policy is explained in detail in the next step.
+
+To apply the template, run the following command:
+
+```bash
+permit template apply --template blogging-platform
+```
+
+You will see a success message in the terminal.
+
+</TimelineStep>
+<TimelineStep>
+
+### Understanding and accessing the policy from the dashboard
+
+Next, go to the Permit dashboard, select your project, and click on the **Policy** tab in the left sidebar. You will see the policy you just created.
+
+![permit policy](/img/quick-start-guide/policy-editor-dash.png)
+
+- For the blog application, there are two resources: **Posts** and **Comments**. Depending on the role and action, the user will have access to the resource. New users accessing the blog are assigned the **Reader** role and have permission to read posts.
+- As users become **Authors**, they gain access to create and update blog posts and manage comments.
+- There is also a relationship between **Post** and **Comment** resources: the person who creates a post automatically becomes a **Comment Moderator**.
+- A **Free Post** resource set filters non-premium posts, allowing **Readers** to access only free content. This is a ReBAC setup.
+
+This setup combines ABAC and ReBAC to enforce flexible and secure permissions. You can easily add or remove permissions by checking or unchecking them in the policy editor.
+
+</TimelineStep>
+</TimelineWrapper>
+
+</details>
+
+## Integration Guide
+
+Now that you have a policy configured, you can integrate Permit.io with your Rails application. The following steps will guide you through the integration process.
+
+<TimelineWrapper>
+<TimelineStep>
+
+### Getting the API key
+
+To get the API key:
+
+1. Click on **Projects** in the left sidebar.
+2. Click on the three dots for the environment you want to use.
+3. Click on **Copy API Key** and store it in a safe place. You will use this API key to authenticate your application with Permit.io. If you have any difficulty getting the API key, follow this [guide](/overview/connecting-your-app/#1-get-your-permit-environment-api-key).
+
+Once you have the API key, proceed to integrate Permit.io with your Rails application.
+
+</TimelineStep>
+<TimelineStep>
+
+### Installing the Ruby SDK
+
+Once your Rails application is ready (or you can create a new one for this guide), install the Permit Ruby SDK. Add the following to your `Gemfile`:
+
+```ruby
+gem 'permit-sdk'
+```
+
+Then run the following command to install the package:
+
+```bash
+bundle install
+```
+
+Read more about the Ruby on Rails SDK [here](/sdk/ruby/quickstart-ruby).
+
+</TimelineStep>
+<TimelineStep>
+
+### Setting up the Rails application with Permit.io
+
+Start by creating a Permit helper file. This file initializes the Permit SDK and exports the instance. Create a new file called `permit.rb` in the `config/initializers` directory and add the following code:
+
+```ruby
+# config/initializers/permit.rb
+require 'permit'
+
+raise "PERMIT_API_KEY is not set" unless ENV['PERMIT_API_KEY']
+raise "PDP_URL is not set" unless ENV['PDP_URL']
+
+PERMIT = Permit.new(
+  ENV['PERMIT_API_KEY'],
+  ENV['PDP_URL']
+)
+```
+
+The Permit SDK is initialized with the `PERMIT_API_KEY` (the API key you copied from the Permit dashboard) and the `PDP_URL` (the URL of the PDP server). You will set these up later.
+
+</TimelineStep>
+<TimelineStep>
+
+### Creating a controller
+
+Create a new file called `permit_controller.rb` in the `app/controllers` directory and add the following code:
+
+```ruby
+# app/controllers/permit_controller.rb
+class PermitController < ApplicationController
+  skip_before_action :verify_authenticity_token
+
+  def register
+    user = PERMIT.api.users.sync(
+      key: params[:email],
+      email: params[:email],
+      first_name: params[:first_name],
+      last_name: params[:last_name]
+    )
+    assigned_role = {
+      user: params[:email],
+      role: 'Reader',
+      tenant: 'default'
+    }
+    response = PERMIT.api.users.assignRole(assigned_role)
+    render json: {
+      message: 'User registered and role assigned',
+      user,
+      role_assignment: response
+    }, status: :created
+  rescue => e
+    render json: { error: e.message }, status: :internal_server_error
+  end
+
+  def posts
+    permitted = PERMIT.check(
+      params[:user],
+      'create',
+      'Post'
+    )
+    if permitted
+      render json: { message: "User is permitted" }
+    else
+      render json: { message: "User is not permitted" }, status: :forbidden
+    end
+  rescue => e
+    render json: { error: e.message }, status: :internal_server_error
+  end
+end
+```
+
+- The `register` handler allows new users to register for the blog application and assigns them the **Reader** role, giving them access to read posts.
+
+- The `posts` handler checks if a user has access to the **Post** resource. Since the blog application can have various elements like creating a post, commenting, editing, etc., create a new endpoint `/posts` to demonstrate access control. Only users with the **Author** role can create a post.
+
+</TimelineStep>
+<TimelineStep>
+
+### Adding routes configuration
+
+Add the routes for the above controller. Open the `config/routes.rb` file and add the following code:
+
+```ruby
+# config/routes.rb
+Rails.application.routes.draw do
+  post '/register', to: 'permit#register'
+  post '/posts', to: 'permit#posts'
+end
+```
+
+</TimelineStep>
+<TimelineStep>
+
+### Setting up the PDP server
+
+At this point, your application is ready with the user synced and the policy created. To enforce the policy, use [Permit's PDP](/concepts/pdp/overview) (Policy Decision Point) to check if the user has access to the resource. First, set up the PDP.
+
+Run the following command to spin up your environment PDP in a Docker container:
+
+```bash
+permit pdp run
+```
+
+After you run the above command, you will see output with information such as container ID, name, etc.
+
+![permit pdp run](/img/quick-start-guide/create-pdp.png)
+
+The PDP server runs on port `7766` by default. You can change the port if needed. Finally, update the `PDP_URL` environment variable in your application.
+
+</TimelineStep>
+<TimelineStep>
+
+### Testing the registration process
+
+To demonstrate the registration process, use the `curl` command to make a request to the `/register` endpoint. Register two users **John** and **Emma**. Both of these users will be automatically assigned the **Reader** role.
+
+![curl create user](/img/quick-start-guide/next-register-user.png)
+
+As shown in the image above, the users are created successfully and you receive information about the users in the response, such as `id`, `project_id`, `key`, etc.
+
+In the next step, we will assign **John** with the **Author** role to allow them to create a post.
+
+</TimelineStep>
+<TimelineStep>
+
+### Giving the user access to the resource
+
+By default, users are assigned the **Reader** role. To allow John to create posts, assign him the **Author** role:
+
+1. Select **Directory** from the left sidebar in the Permit dashboard.
+2. Beside the user, click on the **Add Instance Role** button.
+3. Select tenant **(default)** from the dropdown.
+4. Select the **Author** role and **Save** button.
+
+You will verify this later when you check the access.
+
+![user access](/img/quick-start-guide/user-access.png)
+
+</TimelineStep>
+<TimelineStep>
+
+### Checking the access
+
+Now, check the policy enforcement. Since you have added the **John** user as an **Author**, you can check if the user has **create** access to the **Post** resource. To do this, use the `curl` command to make a request to the `/posts` endpoint.
+
+![curl check access](/img/quick-start-guide/rails-user-permitted.png)
+
+As shown in the image above, the user is permitted to access the resource. 
+
+Now, check the access for **Emma**. Since she is not assigned the **Author** role, she should not be able to create a post and access the resource.
+
+![curl check access](/img/quick-start-guide/rails-user-not-permitted.png)
+
+As shown in the image above, the user is not permitted to access the resource. This is how you can enforce policies using Permit.io with Rails.
+
+</TimelineStep>
+</TimelineWrapper>
+
+## Conclusion
+
+In this guide, you learned how to integrate Permit.io with Rails. You created a simple Rails application that syncs users and tenants with Permit.io. You also created endpoints to control user access to resources. You used the Permit SDK to enforce policies and check authorization. You also set up the PDP server locally using Docker.
+
+## Further Reading
+
+- [Ruby SDK Documentation](/sdk/ruby/quickstart-ruby) - Explore advanced features and API methods
+- [Building RBAC Policies](/how-to/build-policies/rbac/building-rbac-policy) - Create and manage role-based authorization policies
+- [Authentication Integrations](/authentication/permit-and-authentication) - Connect your authentication provider with Permit

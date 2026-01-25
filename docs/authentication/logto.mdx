@@ -1,0 +1,538 @@
+---
+sidebar_position: 10
+title: Fine-Grained Authorization with Logto.io and Permit.io
+sidebar_label: Logto.io
+---
+
+import TimelineStep from "../../src/components/timeline/TimelineStep";
+import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
+
+Logto is an identity solution designed for secure authentication. This guide will show you how to integrate it into your [Permit.io](http://Permit.io) implementation to create a complete authentication and authorization system for your Next.js application.
+
+This guide will show you a simple method using the Next.js framework to get you started. Logto also supports multiple other frameworks and programming languages to suit your specific needs.
+
+## What You'll Build
+In this tutorial, you'll learn how to integrate Logto with [Permit.io](http://permit.io/) to:
+-   Authenticate users with Logto
+-   Automatically sync users to [Permit.io](http://permit.io/) upon registration
+-   Implement permission checks in your UI components
+-   Create role-based access control for your application
+
+## Prerequisites
+-   A Logto account (sign up at [logto.io](https://cloud.logto.io/))
+-   A [Permit.io](http://permit.io/) account (sign up at [permit.io](https://permit.io/))
+-   Basic familiarity with Next.js (Pages Router)
+
+:::note
+There are several ways to use Logto, and the best approach for you will depend on what you need and how your technology is set up.
+:::
+
+<TimelineWrapper>
+<TimelineStep>
+
+### Set Up Logto
+
+First, create and configure your Logto application:
+
+1.  Sign up or log in to your Logto account
+2.  Navigate to the "Applications" section in the dashboard
+3.  Create a new application:
+    -   Select "Next.js (Pages Router)" as the framework
+    -   Name your application (e.g., "Next.js Demo")
+    -   Set the redirect URI to: `http://localhost:3000/api/logto/sign-in-callback`
+    -   Add a post sign-out redirect URI: `http://localhost:3000/`
+4.  Copy your App ID, App Secret, Endpoint, and generate a Cookie Secret
+
+</TimelineStep>
+<TimelineStep>
+
+### Install and Configure Logto SDK
+
+Create a new Next.js project if you don't have one already:
+
+```bash
+npx create-next-app my-auth-app
+cd my-auth-app
+```
+
+Install the Logto SDK and SWR for data fetching:
+
+```bash
+npm install @logto/next swr
+```
+
+Create a `.env.local` file in your project root with your Logto credentials:
+
+```bash
+LOGTO_ENDPOINT=your-logto-endpoint
+LOGTO_APP_ID=your-app-id
+LOGTO_APP_SECRET=your-app-secret
+LOGTO_COOKIE_SECRET=complex_password_at_least_32_characters_long
+PERMIT_API_KEY=your-permit-api-key
+NODE_ENV="development"
+```
+
+</TimelineStep>
+<TimelineStep>
+
+### Set Up Logto Client
+
+Create a configuration file for Logto:
+
+```js
+// libraries/logto.js
+import LogtoClient, { UserScope } from "@logto/next";
+
+export const logtoClient = new LogtoClient({
+  scopes: [UserScope.Email], // Request email scope for user identification
+  endpoint: process.env.LOGTO_ENDPOINT,
+  appId: process.env.LOGTO_APP_ID,
+  appSecret: process.env.LOGTO_APP_SECRET,
+  baseUrl: "<http://localhost:3000>",
+  cookieSecret: process.env.LOGTO_COOKIE_SECRET,
+  cookieSecure: process.env.NODE_ENV === "production",
+});
+```
+
+</TimelineStep>
+<TimelineStep>
+
+### Create API Routes for Authentication
+
+Set up the necessary API routes for Logto:
+
+```js
+// pages/api/logto/[action].js
+import { logtoClient } from "../../../libraries/logto";
+
+export default logtoClient.handleAuthRoutes();
+
+```
+
+This creates multiple endpoints:
+
+-   `/api/logto/sign-in`: Initiates the login flow
+-   `/api/logto/sign-in-callback`: Handles the redirect after successful authentication
+-   `/api/logto/sign-out`: Logs users out
+-   `/api/logto/user`: Returns the current user's information
+
+</TimelineStep>
+<TimelineStep>
+
+### Set Up Authorization in [Permit.io](http://Permit.io)
+
+Before implementing the integration, set up your authorization structure in [Permit.io](http://Permit.io):
+
+> To get started with [Permit.io](http://Permit.io), refer to their [Quickstart guide](/quickstart). This guide provides step-by-step instructions for setting up a workspace, defining roles and resources, and assigning permissions to roles.
+
+1.  Sign up or log in to your [Permit.io](http://permit.io/) account
+2.  Create a new project from the dashboard
+3.  Set up your resources and actions:
+    -   Create a resource (e.g., `Reports`)
+    -   Add actions for that resource (e.g., `view`, `edit`, `delete`)
+4.  Define roles (e.g., `admin`, `editor`, `viewer`)
+5.  Configure permissions by assigning actions to roles in the Policy Editor
+6.  Copy your API key from the project settings
+
+![Creating policies in Permit.io](/img/authentication/logto/create-policy.png)
+
+Creating policies in [Permit.io](http://Permit.io)
+
+</TimelineStep>
+<TimelineStep>
+
+### Create the [Permit.io](http://Permit.io) Integration
+
+Create a file for [Permit.io](http://Permit.io) integration:
+
+```js
+// libraries/permit.js
+const { Permit } = require("permitio");
+
+// Initialize the Permit.io client
+const permit = new Permit({
+  pdp: "<https://cloudpdp.api.permit.io>",
+  token: process.env.PERMIT_API_KEY,
+});
+
+// Sync a user with Permit.io
+export const syncUserToPermit = async (
+  userId,
+  email,
+  firstName,
+  lastName,
+  role
+) => {
+  // First, sync the user
+  await permit.api.syncUser({
+    key: userId,
+    email: email || undefined,
+    first_name: firstName || undefined,
+    last_name: lastName || undefined,
+  });
+
+  // Then assign a role to the user (in the default tenant)
+  if (role) {
+    await permit.api.assignRole({
+      user: userId,
+      role: role,
+      tenant: "default",
+    });
+  }
+
+  return true;
+};
+
+// Check if a user has permission to perform an action on a resource
+export const checkPermission = async (userId, action, resource) => {
+  return await permit.check(userId, action, resource);
+};
+```
+
+</TimelineStep>
+<TimelineStep>
+
+### Create a Permission Check API Endpoint
+
+Add an API endpoint to check permissions:
+
+```
+// pages/api/check-permission.js
+import { checkPermission } from "../../libraries/permit";
+
+export default async function handler(req, res) {
+  const { userId, action, resource } = req.query;
+
+  if (!userId || !action || !resource) {
+    return res.status(400).json({ error: "Missing required parameters" });
+  }
+
+  try {
+    const isPermitted = await checkPermission(userId, action, resource);
+    return res.status(200).json({ isPermitted });
+  } catch (error) {
+    console.error("Error checking permission:", error);
+    return res.status(500).json({ error: "Failed to check permission" });
+  }
+}
+```
+
+</TimelineStep>
+<TimelineStep>
+
+### Set Up User Synchronization with Webhooks
+
+Create an API endpoint to receive Logto webhooks:
+
+```js
+// pages/api/webhooks/logto.js
+import { syncUserToPermit } from "../../../libraries/permit";
+
+export default async function handler(req, res) {
+  // Log the webhook payload for debugging
+  console.log("Webhook payload:", req.body);
+
+  const { event, user } = req.body;
+
+  // Only process user registration events
+  if (event === "PostRegister") {
+    try {
+      // Assign a default role - customize this logic as needed
+      let role = "viewer";
+
+      // Sync the user to Permit.io
+      await syncUserToPermit(
+        user.id,
+        user.primaryEmail,
+        user.name,
+        undefined,
+        role
+      );
+
+      return res.status(200).json({ success: true });
+    } catch (error) {
+      console.error("Error syncing user:", error);
+      return res.status(500).json({ error: "Failed to sync user" });
+    }
+  }
+
+  return res.status(200).json({ message: "Event ignored" });
+}
+```
+
+</TimelineStep>
+<TimelineStep>
+
+### Configure the Webhook in Logto
+
+Set up the webhook in your Logto dashboard:
+
+1.  Navigate to the "Webhooks" section
+2.  Click "Create Webhook"
+3.  Enter a name and description for your webhook
+4.  Add your webhook URL (e.g., `https://your-domain.com/api/webhooks/logto`)
+    -   For local development, use a tool like ngrok to create a public URL
+5.  Select the "PostRegister" event
+6.  Save your webhook
+
+![Registering a webhook in Logto](/img/authentication/logto/logto-dashboard.png)
+
+Registering a webhook in Logto
+
+</TimelineStep>
+<TimelineStep>
+
+### Create a Permission Hook for UI Components
+
+Add a custom hook to check permissions in your UI components:
+
+```js
+// hooks/usePermission.js
+import { useState, useEffect } from "react";
+
+export function usePermission(userId, action, resource) {
+  const [isAllowed, setIsAllowed] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+
+    const checkPermission = async () => {
+      try {
+        const response = await fetch(
+          `/api/check-permission?userId=${userId}&action=${action}&resource=${resource}`
+        );
+        const data = await response.json();
+        setIsAllowed(data.isPermitted);
+      } catch (err) {
+        console.error("Error checking permission:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkPermission();
+  }, [userId, action, resource]);
+
+  return { isAllowed, loading };
+}
+```
+
+</TimelineStep>
+<TimelineStep>
+
+### Create Login and Dashboard Pages
+
+Create a simple login page:
+
+```js
+// pages/login.js
+import { useEffect } from "react";
+import { useRouter } from "next/router";
+import useSWR from "swr";
+
+export default function Login() {
+  const router = useRouter();
+  const fetcher = url => fetch(url).then(r => r.json());
+  const { data, error } = useSWR("/api/logto/user", fetcher);
+
+  useEffect(() => {
+    if (data?.isAuthenticated) {
+      router.push("/dashboard");
+    }
+  }, [data, router]);
+
+  const handleSignIn = () => {
+    window.location.assign("/api/logto/sign-in");
+  };
+
+  if (error) return <div>Error loading user data</div>;
+  if (!data) return <div>Loading...</div>;
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="max-w-md w-full space-y-8 p-10 bg-white rounded-lg shadow-md">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">Welcome</h1>
+          <p className="mt-2 text-gray-600">Please sign in to continue</p>
+        </div>
+        <button
+          onClick={handleSignIn}
+          className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">
+          Sign in with Logto
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+Create a dashboard page with permission-based UI elements:
+
+```js
+// pages/dashboard.js
+import { useEffect } from "react";
+import { useRouter } from "next/router";
+import useSWR from "swr";
+import { usePermission } from "../hooks/usePermission";
+
+export default function Dashboard() {
+  const router = useRouter();
+  const fetcher = url => fetch(url).then(r => r.json());
+  const { data, error } = useSWR("/api/logto/user", fetcher);
+
+  const userId = data?.claims?.sub;
+
+  // Check different permissions
+  const { isAllowed: canViewReports, loading: viewLoading } = usePermission(
+    userId,
+    "view",
+    "Reports"
+  );
+  const { isAllowed: canEditReports } = usePermission(
+    userId,
+    "edit",
+    "Reports"
+  );
+  const { isAllowed: canDeleteReports } = usePermission(
+    userId,
+    "delete",
+    "Reports"
+  );
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (data && !data.isAuthenticated) {
+      router.push("/login");
+    }
+  }, [data, router]);
+
+  const handleSignOut = () => {
+    window.location.assign("/api/logto/sign-out");
+  };
+
+  if (error) return <div>Error loading user data</div>;
+  if (!data || viewLoading) return <div>Loading...</div>;
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <header className="bg-white shadow p-4">
+        <div className="max-w-4xl mx-auto flex justify-between">
+          <h1 className="text-xl font-bold">Dashboard</h1>
+          <button onClick={handleSignOut} className="text-blue-600">
+            Sign Out
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto p-4 mt-4">
+        {canViewReports ? (
+          <div className="bg-white p-6 rounded shadow">
+            <h2 className="text-lg font-medium mb-4">Monthly Report</h2>
+            <p className="mb-4">
+              This is a report that you have permission to view.
+            </p>
+
+            <div className="flex space-x-2">
+              {canEditReports && (
+                <button className="px-4 py-2 bg-blue-600 text-white rounded">
+                  Edit Report
+                </button>
+              )}
+
+              {canDeleteReports && (
+                <button className="px-4 py-2 bg-red-600 text-white rounded">
+                  Delete Report
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white p-6 rounded shadow">
+            <p>You don't have permission to view reports.</p>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+```
+
+</TimelineStep>
+<TimelineStep>
+
+### Testing and Verification
+
+1.  Start your Next.js application:
+
+    ```bash
+    npm run dev
+    ```
+
+2.  Visit `http://localhost:3000/login` and sign in with Logto
+
+3.  After signing in, check the [Permit.io](http://Permit.io) dashboard to verify that your user has been synced and assigned the correct role
+
+4.  Test different permission scenarios by creating users with different roles and observing how the UI adapts
+
+![Logto Users Synced to Permit.io with Role Assignments](/img/authentication/logto/permit-users.png)
+
+Logto Users Synced to [Permit.io](http://Permit.io) with Role Assignments
+
+</TimelineStep>
+</TimelineWrapper>
+
+### Using [Permit.io](http://Permit.io) in Your Application Logic
+
+Now that you've set up the integration, you can use [Permit.io](http://Permit.io)'s permission checks throughout your application:
+
+```js
+// Example of a server-side permission check
+export async function getServerSideProps(context) {
+  // Get user ID from session
+  const session = await getSession(context.req);
+  const userId = session?.user.sub;
+
+  // Check permission
+  const canAccessData = await permit.check(userId, "view", "data");
+
+  if (!canAccessData) {
+    return {
+      redirect: {
+        destination: "/unauthorized",
+        permanent: false,
+      },
+    };
+  }
+
+  // Fetch data and return props if authorized
+  return {
+    props: {
+      /* your data */
+    },
+  };
+}
+```
+
+## Conclusion
+
+You've successfully integrated Logto for authentication with [Permit.io](http://Permit.io) for authorization in your Next.js application. This combination provides:
+
+1.  **Seamless user authentication** through Logto
+2.  **Automatic user synchronization** to [Permit.io](http://Permit.io)
+3.  **Fine-grained permission controls** for your application
+4.  **Flexible UI rendering** based on user permissions
+
+By keeping authentication and authorization separate but integrated, you can easily adapt your security model as your application evolves without changing your code.
+
+For more advanced use cases, consider exploring:
+
+-   Multi-tenancy support in [Permit.io](http://Permit.io)
+-   Attribute-based access control (ABAC)
+-   Role inheritance and hierarchies
+-   Custom permission checks based on user attributes
+
+If you need help, reach out through the [Permit.io](http://Permit.io) [Slack Community](https://io.permit.io/docs-to-slack) or Logto's [Discord server](https://discord.com/invite/UEPaF3j5e6).

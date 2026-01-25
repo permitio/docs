@@ -1,1 +1,0 @@
-sqlite3 ./pdp-backup/factdb/fact.[id].db

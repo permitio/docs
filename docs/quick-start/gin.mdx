@@ -1,0 +1,382 @@
+---
+title: Implementing Fine-grained Authorization in Gin Server Application
+sidebar_position: 7
+---
+
+import TimelineStep from "../../src/components/timeline/TimelineStep";
+import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
+
+Integrate fine-grained authorization into your Gin application to build high-performance Go services where users can access endpoints and resources based on precisely controlled permissions.
+
+<br />
+
+This guide shows you how to add fine-grained authorization for a Gin server application using Permit.io. You will set up a policy for creating posts and comments, register users, assign them roles (like Author, Moderator, or Reader), and enforce permissions directly in your app's API routes and middleware.
+
+By the end, you will have a working example where only authorized users can access protected endpoints, and you will understand how to integrate Permit.io into your own Gin applications.
+
+## Prerequisites
+
+- [Gin (Go)](https://github.com/gin-gonic/gin) application
+- [Docker](https://www.docker.com/) (for running the PDP server)
+- [Node.js](https://nodejs.org/en) (for installing and running the Permit CLI)
+- [Permit.io](https://permit.io) account (Follow [this](/quickstart) guide to create an account)
+
+## Policy Configuration
+
+Before integrating Permit.io with your Gin application, you need to configure a policy. If you already have a policy configured, you can skip this section and proceed directly to the [integration guide](#integration-guide).
+
+<details open>
+<summary>Configure Policy in Permit</summary>
+
+<TimelineWrapper>
+<TimelineStep>
+
+### Installing the Permit CLI
+
+First, install the [Permit CLI](https://github.com/permitio/permit-cli). The Permit CLI is a command-line tool that allows you to create policies, run the PDP server, and perform other tasks. To install the CLI, run the following command in your terminal:
+
+```bash
+npm install -g @permitio/cli
+```
+
+Once the installation is complete, run `permit` to confirm the installation. 
+
+</TimelineStep>
+<TimelineStep>
+
+### Authenticating the CLI
+
+To use the CLI, authenticate it with your Permit account. Run:
+
+```bash
+permit login
+```
+
+This command opens a browser window and prompts you to log in with your Permit account. After logging in, the CLI is authenticated and ready to use. This also logs you into the default environment (a project can have multiple environments). 
+
+You can change the environment by running `permit env select` and then selecting the environment you want to use.
+
+</TimelineStep>
+<TimelineStep>
+
+### Creating a policy with a template
+
+The Permit CLI offers various templates to create a policy with predefined roles and resources using best practices. This simplifies policy creation compared to starting from scratch.
+
+To check the available templates, run `permit template list`. You can also visit the [Permit CLI repo](https://github.com/permitio/permit-cli/tree/main/source/templates) to see the templates and the actual terraform code for each template.
+
+![permit template list](/img/quick-start-guide/permit-template-list.png)
+
+Use the **blogging-platform** template to create the policy. This template helps you set up a policy for a blogging platform with roles and resources. The policy is explained in detail in the next step.
+
+To apply the template, run the following command:
+
+```bash
+permit template apply --template blogging-platform
+```
+
+You will see a success message in the terminal.
+
+</TimelineStep>
+<TimelineStep>
+
+### Understanding and accessing the policy from the dashboard
+
+Next, go to the Permit dashboard, select your project, and click on the **Policy** tab in the left sidebar. You will see the policy you just created.
+
+![permit policy](/img/quick-start-guide/policy-editor-dash.png)
+
+- For the blog application, there are two resources: **Posts** and **Comments**. Depending on the role and action, the user will have access to the resource. New users accessing the blog are assigned the **Reader** role and have permission to read posts. 
+- As users become **Authors**, they gain access to create and update blog posts and manage comments.
+- There is also a relationship between **Post** and **Comment** resources: the person who creates a post automatically becomes a **Comment Moderator**.
+- A **Free Post** resource set filters non-premium posts, allowing **Readers** to access only free content. This is a ReBAC setup.
+
+This setup combines ABAC and ReBAC to enforce flexible and secure permissions. You can easily add or remove permissions by checking or unchecking them in the policy editor.
+
+</TimelineStep>
+</TimelineWrapper>
+
+</details>
+
+## Integration Guide
+
+Now that you have a policy configured, you can integrate Permit.io with your Gin application. The following steps will guide you through the integration process.
+
+<TimelineWrapper>
+<TimelineStep>
+
+### Getting the API key
+
+To get the API key:
+
+1. Click on **Projects** in the left sidebar.
+2. Click on the three dots for the environment you want to use.
+3. Click on **Copy API Key** and store it in a safe place. You will use this API key to authenticate your application with Permit.io. If you have any difficulty getting the API key, follow this [guide](/overview/connecting-your-app/#1-get-your-permit-environment-api-key).
+
+Once you have the API key, proceed to integrate Permit.io with your Gin application.
+
+</TimelineStep>
+<TimelineStep>
+
+### Installing the Golang SDK
+
+Once you have a Gin application ready (or you can create a new one for this guide), install the Permit Golang SDK. To install the SDK, run the following command in your terminal:
+
+```bash
+go get github.com/permitio/permit-golang
+```
+
+Read more about the Golang SDK [here](/sdk/golang/quickstart-golang).
+
+</TimelineStep>
+<TimelineStep>
+
+### Setting up the Gin application
+
+Below is a sample implementation of the Permit SDK in a Gin application. Each part of the code is explained in detail below.
+
+```go
+import (
+	"context"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/gin-gonic/gin"
+	"github.com/permitio/permit-golang/pkg/config"
+	"github.com/permitio/permit-golang/pkg/enforcement"
+	"github.com/permitio/permit-golang/pkg/models"
+	"github.com/permitio/permit-golang/pkg/permit"
+	"go.uber.org/zap"
+)
+
+var permitClient *permit.Client
+
+// struct for user input
+type UserIn struct {
+	Email     string `json:"email" binding:"required,email"`
+	FirstName string `json:"first_name" binding:"required"`
+	LastName  string `json:"last_name" binding:"required"`
+}
+```
+
+You create a `permitClient` instance to interact with the Permit API. The `UserIn` struct is used to bind the incoming JSON request.
+
+</TimelineStep>
+<TimelineStep>
+
+### Defining the routes
+
+Initialize the Permit SDK and create routes for your application.
+
+```go
+// main.go
+func main() {
+	_ = godotenv.Load()
+
+	apiKey := os.Getenv("PERMIT_API_KEY")
+	pdpURL := os.Getenv("PDP_URL")
+
+	permitClient = permit.NewPermit(
+		config.NewConfigBuilder(apiKey).
+			WithLogger(zap.NewExample()).
+			WithPdpUrl(pdpURL).
+			Build(),
+	)
+
+	router := gin.Default()
+
+	// health check endpoint
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "Hello, Gin with Permit!"})
+	})
+
+	// register new user
+	router.POST("/register", registerUserHandler)
+
+	// protected endpoint: only authors can create posts
+	router.POST("/posts", CreatePostMiddleware(), func(c *gin.Context) {
+		c.JSON(http.StatusCreated, gin.H{
+			"message": "Post created successfully",
+		})
+	})
+
+	log.Println(" 680 Server running on http://localhost:8000")
+	router.Run(":8000")
+}
+```
+
+You create a Permit client instance and initialize it using two environment variables: `PERMIT_API_KEY` (the API key you copied from the Permit dashboard) and `PDP_URL` (the URL of the PDP server). You will set these up later.
+
+Next, create a new Gin router and define the routes. The application has three routes: `/` (health check), `/register` (user registration), and `/posts` (protected endpoint for creating posts). The `/posts` route uses middleware to check access.
+
+</TimelineStep>
+<TimelineStep>
+
+### Registering a new user
+
+This handler creates a `/register` endpoint that allows new users to register for the blog application and assigns them the **Reader** role, giving them access to read posts.
+
+```go
+// handler for /register endpoint
+func registerUserHandler(c *gin.Context) {
+	var user UserIn
+	if err := c.ShouldBindJSON(&user); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	createUser := models.NewUserCreate(user.Email)
+	createUser.SetFirstName(user.FirstName)
+	createUser.SetLastName(user.LastName)
+	createUser.SetEmail(user.Email)
+
+	newUser, err := permitClient.Api.Users.SyncUser(context.Background(), *createUser)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sync user"})
+		return
+	}
+	if newUser == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User not found"})
+		return
+	}
+
+	// Assign the Reader role to the user in the 'default' tenant
+	roleAssignment, err := permitClient.Api.Users.AssignRole(context.Background(), user.Email, "Reader", "default")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to assign role"})
+		return
+	}
+
+	// ... proceed with your app's registration logic
+	// For example, create a user record in your database here
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message":         "User registered and role assigned",
+		"user":            newUser,
+		"role_assignment": roleAssignment,
+	})
+}
+```
+
+</TimelineStep>
+<TimelineStep>
+
+### Limiting the access to the resource using middleware
+
+Since the blog application can have various elements like creating a post, commenting, editing, etc., create a new endpoint `/posts` to demonstrate access control. Only users with the **Author** role can create a post.
+
+```go
+// middleware for checking if the user can create a post
+func CreatePostMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := c.GetHeader("X-User")
+		if user == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing permission header: X-User"})
+			c.Abort()
+			return
+		}
+
+		action := "create"
+		resource := "Post"
+
+		enfUser := enforcement.UserBuilder(user).Build()
+		enfResource := enforcement.ResourceBuilder(resource).Build()
+
+		permitted, err := permitClient.Check(enfUser, enforcement.Action(action), enfResource)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Permission check failed"})
+			c.Abort()
+			return
+		}
+		if !permitted {
+			c.JSON(http.StatusForbidden, gin.H{"message": "You are not authorized to create a post"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+```
+
+You can use the same pattern to protect other endpoints, such as commenting, editing, or accessing premium content, by adjusting the action and resource values accordingly.
+
+</TimelineStep>
+<TimelineStep>
+
+### Setting up the PDP server
+
+At this point, your application is ready with the user synced and the policy created. To enforce the policy, use [Permit's PDP](/concepts/pdp/overview) (Policy Decision Point) to check if the user has access to the resource. First, set up the PDP.
+
+Run the following command to spin up your environment PDP in a Docker container:
+
+```bash
+permit pdp run
+```
+
+After you run the above command, you will see output with information such as container ID, name, etc.
+
+![permit pdp run](/img/quick-start-guide/create-pdp.png)
+
+The PDP server runs on port `7766` by default. You can change the port if needed. Finally, update the `PDP_URL` environment variable in your application.
+
+</TimelineStep>
+<TimelineStep>
+
+### Testing the registration process
+
+To demonstrate the registration process, use the `curl` command to make a request to the `/register` endpoint. Register two users **John** and **Emma**. Both of these users will be automatically assigned the **Reader** role.
+
+![curl create user](/img/quick-start-guide/python-register-user.png)
+
+As shown in the image above, the users are created successfully and you receive information about the users in the response, such as `id`, `project_id`, `key`, etc. 
+
+In the next step, we will assign **John** with the **Author** role to allow them to create a post.
+
+</TimelineStep>
+<TimelineStep>
+
+### Giving the user access to the resource
+
+By default, users are assigned the **Reader** role. To allow John to create posts, assign him the **Author** role:
+
+1. Select **Directory** from the left sidebar in the Permit dashboard.
+2. Beside the user, click on the **Add Instance Role** button.
+3. Select tenant **(default)** from the dropdown.
+4. Select the **Author** role and **Save** button.
+
+You will verify this later when you check the access.
+
+![user access](/img/quick-start-guide/user-access.png)
+
+</TimelineStep>
+<TimelineStep>
+
+### Checking the access
+
+Now, check the policy enforcement. Since you have added the **John** user as an **Author**, you can check if the user has **create** access to the **Post** resource. To do this, use the `curl` command to make a request to the `/posts` endpoint.
+
+![curl check access](/img/quick-start-guide/python-user-permitted.png)
+
+As shown in the image above, the user is permitted to access the resource. 
+
+Now, check the access for **Emma**. Since she is not assigned the **Author** role, she should not be able to create a post and access the resource.
+
+![curl check access](/img/quick-start-guide/python-user-not-permitted.png)
+
+As shown in the image above, the user is not permitted to access the resource. This is how you can enforce policies using Permit.io with Gin.
+
+</TimelineStep>
+</TimelineWrapper>
+
+
+## Conclusion
+
+In this guide, you learned how to integrate Permit.io with a Gin application. You created a policy using the Permit CLI template, synced users, and set up tenants with Permit.io. You also set up the PDP server locally using Docker and checked access using the `/posts` route. This is how you can enforce policies using Permit.io with Gin.
+
+## Further Reading
+
+- [Go SDK Documentation](/sdk/golang/quickstart-golang) - Explore advanced features and API methods
+- [Building RBAC Policies](/how-to/build-policies/rbac/overview) - Learn how to create and manage role-based policies
+- [Deploy to Production](/how-to/deploy/deploy-to-production) - Best practices for production deployment
+

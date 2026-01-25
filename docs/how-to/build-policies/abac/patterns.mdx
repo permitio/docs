@@ -20,11 +20,10 @@ There are three easy ways (in addition to writing policy directly as code) to im
 - ### Ownership via list on resource
 
   The resource has an attribute listing all the user ids that own it.
-  Use a [resource-set](/how-to/build-policies/abac/building-abac-policy#define-a-resource-set) to check against the list.
+  Use a [dynamic resource (resource-set)](/how-to/build-policies/abac/building-abac-policy#step-5-defining-dynamic-resource-resource-set) to check against the list.
 
   It would look something like this:
-
-  <img src="/img/resource_ownership.jpg" style={{ maxHeight: "45vh" }} />
+  <img src="/img/resource_ownership.png" style={{ maxHeight: "45vh" }} />
 
   And the permission check (assuming loading the attribute as part of the check) would look something like this:
 
@@ -42,7 +41,7 @@ There are three easy ways (in addition to writing policy directly as code) to im
 
 - ### Ownership via list on user profile
   The user profile has an attribute listing all the resource ids that it owns.
-  Use a [user-set](/how-to/build-policies/abac/building-abac-policy#define-a-user-set) to check against the list.
+  Use a [user-set](/how-to/build-policies/abac/building-abac-policy#step-3-defining-dynamic-role-user-set) to check against the list.
 
 ## Belonging to a group
 
@@ -64,36 +63,79 @@ Once we add ReBAC and groups natively to Permit.io - those would be the default 
 
 ## Combining your own OPA Rego code with Permit.io generated ABAC code
 
-You can generate a custom attributes in Rego, and then use them in an ABAC [Userset](/how-to/build-policies/abac/building-abac-policy#define-a-user-set).
-For example, when defining a new attribute on users representing whether there is an intersection, instead of using static values in the user editor,
-we can add something like this in the custom/ directory in your [gitops](/integrations/gitops/overview) repo:
+Permit.io allows you to **extend its ABAC capabilities** by writing custom Rego code. This enables you to create **dynamic attributes** that can be used in your ABAC policies.
+
+### How it works
+
+1. Write **custom Rego code** that generates attributes
+2. Use these attributes in your ABAC policies just like static attributes
+3. The custom code runs alongside Permit.io's generated ABAC code
+
+### Example: Creating a Dynamic Intersection Attribute
+
+Let's say you want to check if there's an intersection between user and resource attributes. Instead of using static values, you can create a dynamic attribute using Rego.
+
+Add this code to your [gitops](/integrations/gitops/overview) repository in the `custom/` directory:
 
 ```rego
 package permit.custom
 import future.keywords.in
 
+# Default value if no conditions are met
 default custom_user_attributes["has_intersection"] = false
+
+# Set to true if there's an intersection between user and resource attributes
 custom_user_attributes["has_intersection"] := true {
-    # Convert the two attributes to sets so we can test for intersections
+    # Convert attributes to sets for intersection testing
     user_attr_set = {x | some x in data.users[input.user.key].attributes["attr_in_user"]}
     res_attr_set = {x | some x in input.resource.attributes["attr_in_resource"]}
-    # Test for an intersection
+    # Check if there's at least one common value
     count(user_attr_set & res_attr_set) > 0
 }
 ```
 
-You can then use the new attribute to define a userset, just like with static attributes.
-:::info
-Note that the package name must be `permit.custom` and the rule name must be `custom_user_attributes`, as that's where the Permit generated code looks for custom attributes. Other than these two requirements, you can do whatever you want.
+:::info Important Requirements
+
+- The package name **must** be `permit.custom`
+- The rule name **must** be `custom_user_attributes`
+- These are the **only requirements** - you can write any Rego logic you need
 :::
 
-### Testing locally
+### Using the Custom Attribute
 
-Here is a [OPA playground link with the above example](https://play.openpolicyagent.org/p/115vpZj3ow)
-If you want to play directly with the OPA instance in a PDP, simply expose its port, which is 8181 by default.
-The API key would be the same one as the regular port. For example:
+Once defined, you can use this attribute in your ABAC policies just like any other attribute:
 
-`docker run -it -p 7767:7000 -p 8181:8181 -e PDP_API_KEY=permit_key_XXXXX permitio/pdp-v2:latest`
+```javascript
+const permitted = await permit.check(userKey, "read", {
+  type: "document",
+  attributes: {
+    attr_in_resource: ["tag1", "tag2"],
+  },
+});
+```
 
-With this, you can send a POST with the input data to `http://localhost:8181/v1/data/permit` and get all the raw outputs, including policy debug data we use to develop our internal policy.
-To speed up iteration on the Rego code (when you feel you've done what you can with the playground), you can update your custom policy directly on your local OPA without going through git, for example, `http://localhost:8181/v1/policies/custom/example.rego` using the same API key.
+### Testing Your Custom Code
+
+1. **Using the OPA Playground**
+
+   - [Try this example in the OPA Playground](https://play.openpolicyagent.org/p/115vpZj3ow)
+   - Great for initial development and testing
+
+2. **Testing with Local PDP**
+
+   ```bash
+   docker run -it -p 7767:7000 -p 8181:8181 -e PDP_API_KEY=permit_key_XXXXX permitio/pdp-v2:latest
+   ```
+
+   Then you can:
+
+   - Send **POST requests** to `http://localhost:8181/v1/data/permit` with your input data
+   - Get raw outputs including **policy debug data**
+   - **Update custom policies directly** at `http://localhost:8181/v1/policies/custom/example.rego`
+
+:::tip Development Workflow
+
+1. Start with the **OPA Playground** for quick iterations
+2. Move to **local PDP** for more realistic testing
+3. Once satisfied, **commit to your gitops repository**
+   :::

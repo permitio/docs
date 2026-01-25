@@ -1,0 +1,800 @@
+---
+title: "Troubleshooting Guide"
+description: "Common issues and solutions for Permit Platform"
+---
+
+:::info Enterprise Only
+This section is only relevant to Enterprise customers who acquired an on-prem license.
+:::
+
+# Troubleshooting Guide
+
+Solutions for common issues you might encounter with Permit Platform.
+
+## Installation Issues
+
+### Frontend Domain Configuration Error
+
+<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-red-700">
+        <strong>❌ Problem:</strong> "Frontend domain not configured in values.yaml"
+      </p>
+    </div>
+  </div>
+</div>
+
+**Error message:**
+```bash
+[ERROR] ❌ Frontend domain not configured in values.yaml
+Please edit charts/permit-platform/values.yaml and replace:
+  frontendDomain: "CHANGEME_FRONTEND_DOMAIN"
+```
+
+**Solution:**
+1. Edit `charts/permit-platform/values.yaml`
+2. Replace `CHANGEME_FRONTEND_DOMAIN` with your actual domain:
+   ```yaml
+   global:
+     frontendDomain: "permit.yourcompany.com"  # Your domain here
+   ```
+3. Re-run the installation script
+
+### Docker Image Loading Failures
+
+<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-red-700">
+        <strong>❌ Problem:</strong> Images fail to load during installation
+      </p>
+    </div>
+  </div>
+</div>
+
+**Error symptoms:**
+```bash
+[ERROR] Failed to load permit-backend-v2.tar after 3 attempts
+Error loading image: docker: Error response from daemon
+```
+
+**Diagnostic steps:**
+```bash
+# Check Docker service status
+systemctl status docker
+
+# Check available disk space
+df -h
+
+# Check Docker daemon logs
+journalctl -u docker --tail=20
+
+# Test Docker manually
+docker pull hello-world
+```
+
+**Solutions:**
+1. **Insufficient disk space:**
+   ```bash
+   # Free up space
+   docker system prune -f
+   sudo apt-get clean
+   ```
+
+2. **Docker service issues:**
+   ```bash
+   # Restart Docker
+   sudo systemctl restart docker
+   
+   # Check Docker is running
+   sudo systemctl status docker
+   ```
+
+3. **Permission issues:**
+   ```bash
+   # Add user to docker group
+   sudo usermod -aG docker $USER
+   # Log out and back in, then retry
+   ```
+
+### Kubernetes Access Issues
+
+<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-red-700">
+        <strong>❌ Problem:</strong> "Unable to connect to Kubernetes cluster"
+      </p>
+    </div>
+  </div>
+</div>
+
+**Error symptoms:**
+```bash
+[ERROR] Kubernetes cluster not accessible
+error: couldn't get current server API group list
+```
+
+**Diagnostic steps:**
+```bash
+# Check kubectl configuration
+kubectl cluster-info
+
+# Check kubeconfig
+echo $KUBECONFIG
+ls -la ~/.kube/config
+
+# Test basic connectivity
+kubectl get nodes
+```
+
+**Solutions:**
+1. **Configure kubectl:**
+   ```bash
+   # Set kubeconfig if not configured
+   export KUBECONFIG=/path/to/your/kubeconfig
+   
+   # Or copy config to default location
+   mkdir -p ~/.kube
+   cp /path/to/kubeconfig ~/.kube/config
+   ```
+
+2. **Check cluster status:**
+   ```bash
+   # For managed clusters (EKS, GKE, AKS)
+   # Ensure cluster is running and accessible
+   
+   # For on-premise clusters
+   systemctl status kubelet
+   systemctl status kube-apiserver
+   ```
+
+### Helm Installation Issues
+
+<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-red-700">
+        <strong>❌ Problem:</strong> Helm deployment fails
+      </p>
+    </div>
+  </div>
+</div>
+
+**Error symptoms:**
+```bash
+Error: failed to install chart: context deadline exceeded
+Error: UPGRADE FAILED: another operation is in progress
+```
+
+**Diagnostic steps:**
+```bash
+# Check Helm status
+helm list -n permit-platform
+
+# Check pending releases
+helm list --pending -n permit-platform
+
+# Check namespace
+kubectl get all -n permit-platform
+```
+
+**Solutions:**
+1. **Rollback failed release:**
+   ```bash
+   # If upgrade failed
+   helm rollback permit-platform -n permit-platform
+   
+   # Or uninstall and retry
+   helm uninstall permit-platform -n permit-platform
+   ./scripts/install-permit-platform.sh
+   ```
+
+2. **Check resource constraints:**
+   ```bash
+   # Check cluster resources
+   kubectl top nodes
+   kubectl describe nodes
+   
+   # Check for failed pods
+   kubectl get pods -n permit-platform --field-selector=status.phase=Failed
+   ```
+
+## Post-Installation Issues
+
+### Cannot Access Web Interface
+
+<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-red-700">
+        <strong>❌ Problem:</strong> Cannot reach the web interface
+      </p>
+    </div>
+  </div>
+</div>
+
+**Diagnostic steps:**
+
+1. **Check pod status:**
+   ```bash
+   kubectl get pods -n permit-platform
+   kubectl get ingress -n permit-platform
+   ```
+
+2. **Test internal connectivity:**
+   ```bash
+   # Check if services are responding
+   kubectl port-forward -n permit-platform svc/permit-frontend 3000:3000 &
+   curl http://localhost:3000
+   ```
+
+3. **Check ingress controller:**
+   ```bash
+   kubectl get pods -n ingress-nginx
+   kubectl logs -n ingress-nginx deployment/ingress-nginx-controller
+   ```
+
+4. **Verify DNS resolution:**
+   ```bash
+   # Test domain resolution
+   nslookup [your-frontend-domain]
+   
+   # Check hosts file (for .local domains)
+   cat /etc/hosts
+   ```
+
+**Solutions:**
+
+1. **DNS issues:**
+   ```bash
+   # For development (.local domains), add to hosts file
+   echo "127.0.0.1 permit-frontend.local" | sudo tee -a /etc/hosts
+   
+   # For production, ensure DNS points to server IP
+   ```
+
+2. **Ingress issues:**
+   ```bash
+   # Check ingress status
+   kubectl describe ingress permit-frontend -n permit-platform
+   
+   # Restart ingress controller if needed
+   kubectl rollout restart deployment/ingress-nginx-controller -n ingress-nginx
+   ```
+
+3. **Service issues:**
+   ```bash
+   # Check if frontend pod is running
+   kubectl get pods -n permit-platform -l app=permit-frontend
+   
+   # Check frontend logs
+   kubectl logs -n permit-platform deployment/permit-frontend
+   ```
+
+### Service Startup Issues
+
+<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-red-700">
+        <strong>❌ Problem:</strong> Services failing to start or crashing
+      </p>
+    </div>
+  </div>
+</div>
+
+**Check service health:**
+```bash
+# Check all pods status
+kubectl get pods -n permit-platform
+
+# Check specific service logs
+kubectl logs -n permit-platform deployment/permit-backend-v2
+kubectl logs -n permit-platform deployment/celery-general
+kubectl logs -n permit-platform deployment/opal-server
+
+# Check events for issues
+kubectl get events -n permit-platform --sort-by='.lastTimestamp'
+```
+
+**Common solutions:**
+
+1. **Restart failing services:**
+   ```bash
+   # Restart specific deployment
+   kubectl rollout restart deployment/permit-backend-v2 -n permit-platform
+   
+   # Restart all deployments
+   kubectl rollout restart deployment -n permit-platform
+   ```
+
+2. **Check resource constraints:**
+   ```bash
+   # Check node resources
+   kubectl top nodes
+   kubectl describe nodes
+   
+   # Check for OOMKilled pods
+   kubectl get pods -n permit-platform -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[0].lastState.terminated.reason}{"\n"}{end}' | grep OOMKilled
+   ```
+
+3. **Scale resources if needed:**
+   ```bash
+   # Scale backend replicas
+   kubectl scale deployment permit-backend-v2 -n permit-platform --replicas=2
+   
+   # Scale celery workers
+   kubectl scale deployment celery-general -n permit-platform --replicas=1
+   ```
+
+### ImagePullBackOff Errors
+
+<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-red-700">
+        <strong>❌ Problem:</strong> Pods stuck in ImagePullBackOff state - cannot pull container images
+      </p>
+    </div>
+  </div>
+</div>
+
+**Error symptoms:**
+```bash
+kubectl get pods -n permit-platform
+NAME                              READY   STATUS             RESTARTS   AGE
+permit-backend-v2-xxx             0/1     ImagePullBackOff   0          2m
+permit-frontend-xxx               0/1     ImagePullBackOff   0          2m
+```
+
+**Diagnostic steps:**
+```bash
+# Check pod events for detailed error message
+kubectl describe pod permit-backend-v2-xxx -n permit-platform
+
+# Common error messages you'll see:
+# - "Failed to pull image... unauthorized: authentication required"
+#   → Missing or incorrect imagePullSecrets
+#
+# - "Failed to pull image... not found" or "manifest unknown"
+#   → Images not pushed to registry, or wrong imageRegistry in values.yaml
+#
+# - "Failed to pull image... denied: Permission denied"
+#   → GKE/EKS/AKS node doesn't have permission to pull from registry
+```
+
+**Solutions by Root Cause:**
+
+**1. Missing imagePullSecrets (Artifactory/Harbor/Private Registries)**
+
+If using Artifactory, Harbor, or private Docker registry:
+```bash
+# Step 1: Create the Kubernetes secret
+kubectl create secret docker-registry registry-credentials \
+  --docker-server=artifactory.company.com \
+  --docker-username=YOUR_USERNAME \
+  --docker-password=YOUR_TOKEN \
+  --namespace=permit-platform
+
+# Step 2: Verify secret was created
+kubectl get secret registry-credentials -n permit-platform
+
+# Step 3: Update values.yaml
+vi charts/permit-platform/values.yaml
+
+# Add this to global section:
+# global:
+#   imageRegistry: "artifactory.company.com/permit-platform"
+#   imagePullSecrets:
+#     - registry-credentials
+
+# Step 4: Upgrade the Helm release
+helm upgrade permit-platform charts/permit-platform -n permit-platform
+```
+
+**2. Forgot to Use --skip-images Flag**
+
+If you pushed images to a private registry but ran the installer WITHOUT `--skip-images`:
+```bash
+# Problem: Installer loaded wrong images from local tar files!
+# Solution: Re-run installer with --skip-images flag
+
+# For GKE:
+./scripts/install-permit-platform.sh --gke --skip-images
+
+# For other Kubernetes with private registry:
+./scripts/install-permit-platform.sh --skip-images
+
+# For OpenShift with private registry:
+./scripts/install-permit-platform.sh --openshift --skip-images
+```
+
+**3. Wrong imageRegistry Configuration**
+
+Check your `values.yaml` has the correct registry URL:
+```bash
+# View current configuration
+kubectl get cm -n permit-platform
+
+# Verify imageRegistry matches where you pushed images
+cat charts/permit-platform/values.yaml | grep imageRegistry
+
+# Should match your push command:
+# If you ran: ./scripts/push-images-to-registry.sh us-central1-docker.pkg.dev/project/repo
+# Then values.yaml must have: imageRegistry: "us-central1-docker.pkg.dev/project/repo"
+```
+
+**4. Images Not Pushed to Registry**
+
+Verify images actually exist in your registry:
+```bash
+# For GKE/Google Artifact Registry:
+gcloud artifacts docker images list us-central1-docker.pkg.dev/PROJECT/REPO
+
+# For Artifactory:
+curl -u username:password https://artifactory.company.com/v2/_catalog
+
+# For Harbor:
+curl -u username:password https://harbor.company.com/v2/_catalog
+
+# For AWS ECR:
+aws ecr describe-repositories --region us-east-1
+aws ecr list-images --repository-name permit-platform --region us-east-1
+```
+
+**If images are missing, push them:**
+```bash
+cd permit-platform-installer
+./scripts/push-images-to-registry.sh YOUR_REGISTRY_URL
+```
+
+**5. GKE Workload Identity / IAM Permissions**
+
+For GKE with Google Artifact Registry, ensure nodes have pull permissions:
+```bash
+# Grant Artifact Registry Reader role to GKE service account
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+  --role="roles/artifactregistry.reader"
+
+# Or for specific node pool service account:
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:SA_NAME@PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/artifactregistry.reader"
+
+# Verify permissions
+gcloud projects get-iam-policy PROJECT_ID \
+  --flatten="bindings[].members" \
+  --filter="bindings.role:roles/artifactregistry.reader"
+```
+
+**6. EKS with ECR - Missing IAM Role**
+
+For EKS with AWS ECR:
+```bash
+# Verify node IAM role has ECR pull permissions
+aws iam get-role --role-name YOUR_NODE_ROLE_NAME
+
+# Add ECR read policy if missing
+aws iam attach-role-policy \
+  --role-name YOUR_NODE_ROLE_NAME \
+  --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+```
+
+**7. AKS with ACR - Missing Role Assignment**
+
+For AKS with Azure Container Registry:
+```bash
+# Get AKS cluster identity
+az aks show -g RESOURCE_GROUP -n CLUSTER_NAME --query identityProfile
+
+# Grant AcrPull role to AKS
+az aks update -g RESOURCE_GROUP -n CLUSTER_NAME --attach-acr ACR_NAME
+
+# Verify access
+az acr check-access --name ACR_NAME
+```
+
+**Quick Verification Commands:**
+
+```bash
+# Check which images are failing
+kubectl get pods -n permit-platform -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[*].image}{"\t"}{.status.containerStatuses[*].state.waiting.reason}{"\n"}{end}' | grep ImagePull
+
+# Check all imagePullSecrets are configured
+kubectl get deployment -n permit-platform -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.template.spec.imagePullSecrets[*].name}{"\n"}{end}'
+
+# Test pulling an image manually (on a cluster node)
+kubectl run test-pull --image=YOUR_REGISTRY/permit-backend-v2:TAG --namespace=permit-platform --dry-run=client
+```
+
+<div className="bg-blue-50 border-l-4 border-blue-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-blue-700">
+        <strong>💡 Prevention Tip:</strong> When using private registries, always follow this order:
+        <ol className="mt-2 space-y-1 text-sm">
+          <li>1. Push images to registry (<code>push-images-to-registry.sh</code>)</li>
+          <li>2. Create imagePullSecrets if needed (Artifactory/Harbor only)</li>
+          <li>3. Configure values.yaml with imageRegistry and imagePullSecrets</li>
+          <li>4. Run installer with <code>--skip-images</code> flag</li>
+        </ol>
+        See <a href="/how-to/deploy/on-prem/installation#step-35-push-images-to-private-registry-gke-example" className="underline">Installation Guide Step 3.5</a> for complete workflow.
+      </p>
+    </div>
+  </div>
+</div>
+
+### Authentication and Login Issues
+
+<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-red-700">
+        <strong>❌ Problem:</strong> Cannot login with admin credentials
+      </p>
+    </div>
+  </div>
+</div>
+
+**Error symptoms:**
+- "Invalid username or password"
+- Login form keeps reloading
+- Authentication redirect loops
+
+**Diagnostic steps:**
+```bash
+# Check Keycloak status
+kubectl get pods -n permit-platform -l app=keycloak
+kubectl logs -n permit-platform deployment/keycloak
+
+# Check backend authentication logs
+kubectl logs -n permit-platform deployment/permit-backend-v2 | grep -i auth
+
+# Verify admin password
+kubectl get secret keycloak-admin-secret -n permit-platform -o jsonpath='{.data.password}' | base64 -d
+```
+
+**Solutions:**
+
+1. **Reset admin password:**
+   ```bash
+   # Get current admin password from secret
+   kubectl get secret keycloak-admin-secret -n permit-platform -o jsonpath='{.data.password}' | base64 -d
+   
+   # If password doesn't work, check if Keycloak initialized properly
+   kubectl logs -n permit-platform deployment/keycloak | grep -i "admin user"
+   ```
+
+2. **Check Keycloak configuration:**
+   ```bash
+   # Verify Keycloak is accessible
+   kubectl port-forward -n permit-platform svc/keycloak 8080:8080 &
+   curl http://localhost:8080/auth/realms/permit-platform
+   ```
+
+3. **Authentication configuration issues:**
+   ```bash
+   # Check backend authentication environment variables
+   kubectl describe deployment permit-backend-v2 -n permit-platform | grep -A 20 Environment
+   
+   # Verify cookie configuration
+   kubectl logs -n permit-platform deployment/permit-backend-v2 | grep -i cookie
+   ```
+
+### Database Connection Issues
+
+<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-red-700">
+        <strong>❌ Problem:</strong> Services cannot connect to database
+      </p>
+    </div>
+  </div>
+</div>
+
+**Check database status:**
+```bash
+# Check PostgreSQL pod
+kubectl get pods -n permit-platform -l app=postgres
+kubectl logs -n permit-platform deployment/postgres
+
+# Test database connectivity from backend
+kubectl exec -n permit-platform deployment/permit-backend-v2 -- psql -h postgres -U permit -d permit -c "SELECT 1;"
+```
+
+**Solutions:**
+
+1. **Restart database:**
+   ```bash
+   kubectl rollout restart deployment/postgres -n permit-platform
+   
+   # Wait for database to be ready
+   kubectl wait --for=condition=ready pod -l app=postgres -n permit-platform --timeout=300s
+   ```
+
+2. **Check database initialization:**
+   ```bash
+   # Check if database initialized properly
+   kubectl logs -n permit-platform deployment/postgres | grep -i "database system is ready"
+   
+   # Check database size and connections
+   kubectl exec -n permit-platform deployment/postgres -- psql -U permit -c "\l"
+   ```
+
+3. **Verify database secrets:**
+   ```bash
+   # Check database password in secret
+   kubectl get secret postgres-secret -n permit-platform -o jsonpath='{.data.password}' | base64 -d
+   ```
+
+### Policy Sync Issues
+
+<div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-yellow-700">
+        <strong>⚠️ Problem:</strong> Policy sync failing from Git repository
+      </p>
+    </div>
+  </div>
+</div>
+
+**Policy Sync is required for platform operation.**
+
+**Test Git connectivity:**
+```bash
+# Check Policy Sync pod status
+kubectl get pods -n permit-platform -l app=permit-policy-sync-v2
+
+# Check Policy Sync logs
+kubectl logs -n permit-platform deployment/permit-policy-sync-v2
+
+# Verify SSH key secret
+kubectl get secret policy-sync-ssh-key -n permit-platform -o jsonpath='{.data.private-key}' | base64 -d | head -1
+```
+
+**Solutions:**
+
+1. **Verify Git credentials in secret:**
+   ```bash
+   # Check if SSH key is properly configured
+   kubectl describe secret policy-sync-ssh-key -n permit-platform
+   
+   # Test SSH connection manually (if possible)
+   ssh -T git@github.com -i /path/to/permit-policy-key
+   ```
+
+2. **Restart Policy Sync service:**
+   ```bash
+   kubectl rollout restart deployment/permit-policy-sync-v2 -n permit-platform
+   ```
+
+## Log Collection and Monitoring
+
+### Collecting Diagnostic Information
+
+For troubleshooting or support requests:
+
+```bash
+# Get all pod logs
+kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres > permit-platform-logs.txt
+
+# Get pod status and descriptions
+kubectl get pods -n permit-platform -o wide > pod-status.txt
+kubectl describe pods -n permit-platform > pod-descriptions.txt
+
+# Get events
+kubectl get events -n permit-platform --sort-by='.lastTimestamp' > events.txt
+
+# Get service and ingress info
+kubectl get svc,ingress -n permit-platform -o yaml > networking.yaml
+
+# Check resource usage
+kubectl top pods -n permit-platform > resource-usage.txt
+```
+
+### Performance Monitoring
+
+**Check resource consumption:**
+```bash
+# Monitor pod resources
+kubectl top pods -n permit-platform
+
+# Monitor node resources
+kubectl top nodes
+
+# Check for resource limits being hit
+kubectl describe pods -n permit-platform | grep -A 5 -B 5 "resource\|limit\|request"
+```
+
+**Scale services if needed:**
+```bash
+# Scale backend for more capacity
+kubectl scale deployment permit-backend-v2 -n permit-platform --replicas=3
+
+# Scale celery workers
+kubectl scale deployment celery-general -n permit-platform --replicas=2
+
+# Check horizontal pod autoscaler (if configured)
+kubectl get hpa -n permit-platform
+```
+
+## Advanced Troubleshooting
+
+### Clean Installation Reset
+
+If you need to completely reset the installation:
+
+```bash
+# 1. Uninstall all 3 Helm releases (in reverse order)
+helm uninstall permit-platform -n permit-platform 2>/dev/null || true        # Platform services (35 services)
+helm uninstall migrations -n permit-platform 2>/dev/null || true             # Database migrations
+helm uninstall third-party-services -n permit-platform 2>/dev/null || true   # Infrastructure (PostgreSQL, Redis, etc.)
+
+# 2. Delete namespace (removes all resources)
+kubectl delete namespace permit-platform
+
+# 3. Clean up any persistent volumes (careful!)
+kubectl get pv | grep permit-platform  # Check before deleting
+kubectl delete pv $(kubectl get pv -o jsonpath='{.items[?(@.spec.claimRef.namespace=="permit-platform")].metadata.name}')
+
+# 4. Re-run installation
+./scripts/install-permit-platform.sh
+```
+
+### Manual Service Recovery
+
+If specific services are failing:
+
+```bash
+# Force delete stuck pods
+kubectl delete pod <pod-name> -n permit-platform --force --grace-period=0
+
+# Patch deployment to fix issues
+kubectl patch deployment permit-backend-v2 -n permit-platform -p '{"spec":{"template":{"spec":{"containers":[{"name":"permit-backend-v2","image":"new-image-tag"}]}}}}'
+
+# Check and fix persistent volume claims
+kubectl get pvc -n permit-platform
+kubectl describe pvc <pvc-name> -n permit-platform
+```
+
+## Getting Support
+
+When contacting support, please provide:
+
+**Required Information:**
+- **Installation method**: Kubernetes cluster type (EKS, GKE, AKS, on-premise)
+- **Platform version**: From installer package filename
+- **Error description**: What you were trying to do and what happened
+- **Timeline**: When did the issue start?
+
+**Helpful Diagnostics:**
+```bash
+# Create comprehensive diagnostic bundle
+{
+  echo "=== CLUSTER INFO ==="
+  kubectl cluster-info
+  echo "=== NODES ==="
+  kubectl get nodes -o wide
+  echo "=== PERMIT PLATFORM PODS ==="
+  kubectl get pods -n permit-platform -o wide
+  echo "=== RECENT EVENTS ==="
+  kubectl get events -n permit-platform --sort-by='.lastTimestamp' | tail -20
+  echo "=== INGRESS STATUS ==="
+  kubectl get ingress -n permit-platform
+  echo "=== STORAGE ==="
+  kubectl get pv,pvc -n permit-platform
+} > permit-support-info.txt
+```
+
+**Contact Information:**
+- **📧 Email:** support@permit.io
+- **💬 Slack:** [Join our community](https://io.permit.io/slack)
+
+---
+
+**Need more help?** Our support team has experience with all major Kubernetes platforms and can assist with advanced troubleshooting scenarios.

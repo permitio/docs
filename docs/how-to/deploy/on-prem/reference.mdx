@@ -1,0 +1,667 @@
+---
+title: "Reference Documentation"
+description: "Command reference and configuration options for Permit Platform"
+---
+
+:::info Enterprise Only
+This section is only relevant to Enterprise customers who acquired an on-prem license.
+:::
+
+# Reference Documentation
+
+Reference materials for Permit Platform on-premise deployment.
+
+## Installation Command Reference
+
+### Basic Installation
+
+```bash
+# Standard production Kubernetes installation
+./scripts/install-permit-platform.sh
+
+# Get help and see all options
+./scripts/install-permit-platform.sh --help
+```
+
+### Deployment Targets
+
+```bash
+# Production Kubernetes (EKS, AKS, on-premise)
+./scripts/install-permit-platform.sh
+
+# Google Kubernetes Engine (GKE)
+./scripts/install-permit-platform.sh --gke
+
+# OpenShift (ROSA, OCP)
+./scripts/install-permit-platform.sh --openshift
+
+# Local Kind cluster (development)
+./scripts/install-permit-platform.sh --kind
+```
+
+### TLS Certificate Options
+
+```bash
+# Auto-generate certificates (mkcert/OpenSSL)
+./scripts/install-permit-platform.sh --generate-tls
+
+# Skip TLS configuration (external termination)
+./scripts/install-permit-platform.sh --skip-tls-check
+
+# Use custom certificates (configure in values.yaml)
+./scripts/install-permit-platform.sh
+```
+
+### Advanced Options
+
+```bash
+# Custom namespace
+./scripts/install-permit-platform.sh --namespace my-namespace
+
+# Preview without applying
+./scripts/install-permit-platform.sh --dry-run
+
+# Skip image loading (REQUIRED when using pushed images to private registry)
+./scripts/install-permit-platform.sh --skip-images
+
+# OpenShift with custom registry
+./scripts/install-permit-platform.sh --openshift --skip-openshift-registry
+```
+
+### When to Use --skip-images Flag
+
+**Use `--skip-images` when:**
+- ✅ Images are already pushed to your private registry (GKE/GAR, Artifactory, Harbor, ECR, ACR)
+- ✅ Re-running installation after initial image load
+- ✅ Testing Helm chart changes without reloading images
+
+**Do NOT use `--skip-images` when:**
+- ❌ First-time installation from tar.gz package
+- ❌ Images need to be loaded to Docker daemon (Kind clusters)
+- ❌ Using Docker Hub and images aren't pre-loaded
+
+**Example workflows:**
+
+```bash
+# Workflow 1: GKE with Google Artifact Registry
+./scripts/push-images-to-registry.sh us-central1-docker.pkg.dev/project/permit-platform
+./scripts/install-permit-platform.sh --gke --skip-images
+
+# Workflow 2: Artifactory with imagePullSecrets
+./scripts/push-images-to-registry.sh artifactory.company.com/permit-platform
+kubectl create secret docker-registry registry-credentials --docker-server=artifactory.company.com ...
+./scripts/install-permit-platform.sh --skip-images
+
+# Workflow 3: Standard K8s, first install with local tar files
+./scripts/install-permit-platform.sh  # NO --skip-images flag
+```
+
+## Kubernetes Management Commands
+
+### Pod and Service Management
+
+```bash
+# Check all pods status
+kubectl get pods -n permit-platform
+
+# Check services and endpoints
+kubectl get services -n permit-platform
+
+# View deployment status
+kubectl get deployments -n permit-platform
+
+# Check ingress configuration
+kubectl get ingress -n permit-platform
+```
+
+### Log Viewing
+
+```bash
+# View backend logs
+kubectl logs -n permit-platform deployment/permit-backend-v2
+
+# View frontend logs
+kubectl logs -n permit-platform deployment/permit-frontend
+
+# View authentication logs
+kubectl logs -n permit-platform deployment/keycloak
+
+# View database logs
+kubectl logs -n permit-platform deployment/postgres
+
+# View all logs
+kubectl logs -n permit-platform --all-containers=true
+```
+
+### Service Management
+
+```bash
+# Restart specific deployment
+kubectl rollout restart deployment/permit-backend-v2 -n permit-platform
+
+# Restart all deployments
+kubectl rollout restart deployment -n permit-platform
+
+# Scale services
+kubectl scale deployment permit-backend-v2 -n permit-platform --replicas=3
+kubectl scale deployment celery-general -n permit-platform --replicas=2
+
+# Check rollout status
+kubectl rollout status deployment/permit-backend-v2 -n permit-platform
+```
+
+### Troubleshooting Commands
+
+```bash
+# Check events for issues
+kubectl get events -n permit-platform --sort-by='.lastTimestamp'
+
+# Describe problematic pods
+kubectl describe pod <pod-name> -n permit-platform
+
+# Check resource usage
+kubectl top pods -n permit-platform
+kubectl top nodes
+
+# Check persistent volumes
+kubectl get pv,pvc -n permit-platform
+
+# Check secrets
+kubectl get secrets -n permit-platform
+```
+
+## Helm Chart Architecture
+
+### Three-Phase Deployment
+
+The Permit Platform uses **3 separate Helm charts** deployed in sequence:
+
+| Chart | Purpose | Components |
+|-------|---------|------------|
+| **`third-party-services`** | Infrastructure layer | PostgreSQL, Redis, OpenSearch, RabbitMQ, Keycloak |
+| **`migrations`** | Database initialization | Schema setup, indices, initial data |
+| **`permit-platform`** | Application layer | All 35 Permit services (backend, frontend, OPAL, etc.) |
+
+### Managing Individual Charts
+
+```bash
+# View all installed charts
+helm list -n permit-platform
+
+# Upgrade specific chart component
+helm upgrade third-party-services charts/permit-platform \
+  --set permitServices.enabled=false \
+  --set thirdPartyServices.enabled=true \
+  -n permit-platform
+
+# Check chart status
+helm status permit-platform -n permit-platform
+helm status third-party-services -n permit-platform
+helm status migrations -n permit-platform
+```
+
+## Configuration Reference
+
+### Complete values.yaml Configuration Options
+
+The `charts/permit-platform/values.yaml` file provides extensive customization options for your deployment:
+
+### Global Configuration
+
+```yaml
+global:
+  # REQUIRED: Your platform domain
+  frontendDomain: "permit.yourcompany.com"  # CHANGEME_FRONTEND_DOMAIN
+  
+  # Image registry configuration
+  # This field is automatically set when using push-images-to-registry.sh script
+  imageRegistry: ""  # Empty for Docker Hub (public images)
+                     # Or: "us-central1-docker.pkg.dev/project/repo" for Google Artifact Registry
+                     # Or: "gcr.io/project-id" for Google Container Registry
+                     # Or: "123456789.dkr.ecr.region.amazonaws.com/repo" for AWS ECR
+                     # Or: "myregistry.azurecr.io/repo" for Azure ACR
+                     # Or: "artifactory.company.com/repo" for JFrog Artifactory
+  imagePullPolicy: "IfNotPresent"  # Always, Never, IfNotPresent
+
+  # Note: The push-images-to-registry.sh script automatically updates this field
+  # when you push images to your private registry. See installation guide Step 3.5.
+
+  # Image pull secrets for private registries (optional)
+  # Required for registries that need authentication (Artifactory, Harbor, private registries)
+  # Not needed for GKE/GAR, EKS/ECR, or AKS/ACR (automatic node authentication)
+  #
+  # IMPORTANT: You must create the Kubernetes secret BEFORE installation:
+  # kubectl create secret docker-registry registry-credentials \
+  #   --docker-server=artifactory.company.com \
+  #   --docker-username=USERNAME \
+  #   --docker-password=PASSWORD \
+  #   --namespace=permit-platform
+  #
+  # Then reference the secret name here:
+  imagePullSecrets: []
+  # Example:
+  # imagePullSecrets:
+  #   - registry-credentials
+  #   - backup-registry-credentials
+
+  # Database configuration
+  postgres:
+    enabled: true
+    host: "postgres"
+    port: 5432
+    database: "permit"
+    username: "permit"
+    password: "CHANGEME_POSTGRES_PASSWORD"  # Auto-generated if not set
+    
+  # Redis cache configuration
+  redis:
+    enabled: true
+    host: "redis"
+    port: 6379
+    password: ""  # Leave empty for no authentication
+    
+  # Message queue configuration
+  rabbitmq:
+    enabled: true
+    host: "rabbitmq"
+    port: 5672
+    managementPort: 15672
+    username: "permit"
+    password: "CHANGEME_RABBITMQ_PASSWORD"  # Auto-generated if not set
+    
+  # OpenSearch configuration
+  opensearch:
+    enabled: true
+    host: "opensearch"
+    port: 9200
+    username: "admin"
+    password: "CHANGEME_OPENSEARCH_PASSWORD"  # Auto-generated if not set
+    
+  # Keycloak authentication
+  keycloak:
+    enabled: true
+    host: "keycloak"
+    port: 8080
+    adminUsername: "admin"
+    adminPassword: "CHANGEME_KEYCLOAK_ADMIN_PASSWORD"  # Auto-generated
+    realm: "permit-platform"
+    clientId: "permit-backend"
+    clientSecret: "permit-client-secret"
+    db:
+      password: "CHANGEME_KEYCLOAK_DB_PASSWORD"  # Auto-generated
+```
+
+### OpenShift-Specific Configuration
+
+```yaml
+openshift:
+  enabled: false  # Set to true for OpenShift deployments
+  
+  # ServiceAccount for privileged operations
+  serviceAccount:
+    create: true
+    name: "permit-privileged-sa"
+    sccName: "anyuid"  # Security Context Constraint
+    
+  # OpenShift Route (alternative to Ingress)
+  route:
+    enabled: false  # Use Ingress by default
+    termination: "edge"  # edge, passthrough, or reencrypt
+    insecureEdgeTerminationPolicy: "Redirect"
+    
+  # Security contexts for OpenShift
+  securityContext:
+    defaultUser: null  # Let OpenShift assign
+    defaultGroup: null
+    defaultFsGroup: null
+```
+
+### Ingress and TLS Configuration
+
+```yaml
+ingress:
+  enabled: true
+  className: "nginx"  # nginx, traefik, alb, etc.
+  annotations: {}  # Custom ingress annotations
+  
+  # TLS/SSL configuration
+  tls:
+    enabled: true
+    # Option 1: Provide certificates directly
+    certificate:
+      cert: |
+        -----BEGIN CERTIFICATE-----
+        [Your certificate content]
+        -----END CERTIFICATE-----
+      key: |
+        -----BEGIN PRIVATE KEY-----
+        [Your private key content]
+        -----END PRIVATE KEY-----
+    
+    # Option 2: Reference certificate files
+    certificateFiles:
+      certFile: "/path/to/cert.pem"
+      keyFile: "/path/to/key.pem"
+```
+
+### Third-Party Services Configuration
+
+```yaml
+thirdPartyServices:
+  enabled: true
+  
+  # PostgreSQL database
+  postgres:
+    enabled: true
+    image: "postgres_15-alpine"
+    persistence:
+      enabled: true
+      size: "10Gi"  # Minimum, 20Gi+ for production
+      storageClass: ""  # Use default if empty
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+    # PostgreSQL tuning parameters
+    config:
+      maxConnections: "150"
+      sharedBuffers: "128MB"
+      effectiveCacheSize: "384MB"
+      workMem: "8MB"
+      maintenanceWorkMem: "64MB"
+      checkpointCompletionTarget: "0.9"
+      walBuffers: "4MB"
+      randomPageCost: "1.1"  # SSD optimization
+      
+  # Redis cache
+  redis:
+    enabled: true
+    image: "redis_7-alpine"
+    persistence:
+      enabled: true
+      size: "5Gi"
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "200m"
+        
+  # OpenSearch for audit logs
+  opensearch:
+    enabled: true
+    image: "opensearchproject_opensearch_2.11.0"
+    persistence:
+      enabled: true
+      size: "15Gi"  # Minimum for 3 shards
+    resources:
+      requests:
+        memory: "3Gi"
+        cpu: "750m"
+      limits:
+        memory: "6Gi"
+        cpu: "1500m"
+    # Index State Management (ISM)
+    ism:
+      enabled: true
+      rollover:
+        minSize: "15gb"  # Rollover at 15GB
+        minAge: "7d"     # Or after 7 days
+      transitions:
+        toReadOnly: "7d"
+        toDelete: "30d"  # Adjust for compliance
+    # Index configuration
+    indexSettings:
+      auditLogs:
+        numberOfShards: 3  # Default for multi-node
+        numberOfReplicas: 0  # No replicas for on-premise
+        
+  # RabbitMQ message queue
+  rabbitmq:
+    enabled: true
+    image: "rabbitmq_3.12.10-management-alpine"
+    persistence:
+      enabled: true
+      size: "5Gi"
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+        
+  # Keycloak authentication
+  keycloak:
+    enabled: true
+    image: "quay.io_keycloak_keycloak_20.0.5"
+    persistence:
+      enabled: true
+      size: "5Gi"
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+```
+
+### Permit Platform Services Configuration
+
+```yaml
+permitServices:
+  # Backend API service
+  backend:
+    enabled: true
+    replicas: 1  # Scale as needed
+    image: "permit-backend-v2"
+    tag: "latest"
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+    env:  # Environment variable overrides
+      LOG_LEVEL: "INFO"
+      ENABLE_MONITORING: "true"
+      
+  # Frontend application
+  frontend:
+    enabled: true
+    replicas: 1
+    image: "permit-frontend"
+    tag: "latest"
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+        
+  # OPAL policy server
+  opalServer:
+    enabled: true
+    replicas: 1
+    image: "permitio/opal-server"
+    tag: "0.7.5-rc.7"
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+        
+  # Policy synchronization (REQUIRED)
+  policySync:
+    enabled: true
+    policyRepoUrl: "git@github.com:yourorg/permit-policies.git"
+    sshPrivateKey: |
+      -----BEGIN OPENSSH PRIVATE KEY-----
+      [Your SSH private key content]
+      -----END OPENSSH PRIVATE KEY-----
+    branch: "main"  # Git branch to sync from
+    syncInterval: "60s"  # How often to check for updates
+    
+  # Celery workers
+  celeryGeneral:
+    enabled: true
+    replicas: 1  # Scale based on workload
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+```
+
+### Advanced Configuration Options
+
+```yaml
+# Database migrations
+migrations:
+  enabled: true
+  runOnInstall: true
+  runOnUpgrade: true
+  
+# Security contexts
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  
+# Resource quotas (optional)
+resourceQuota:
+  enabled: false
+  limits:
+    cpu: "100"
+    memory: "200Gi"
+    persistentvolumeclaims: "20"
+    
+# Network policies (optional)
+networkPolicy:
+  enabled: false
+  ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: permit-platform
+            
+# Monitoring and observability (optional)
+monitoring:
+  enabled: false
+  prometheus:
+    enabled: false
+    port: 9090
+  grafana:
+    enabled: false
+    port: 3000
+```
+
+### Performance Tuning Options
+
+```yaml
+# Connection pooling
+pgBouncer:
+  enabled: true
+  maxClientConnections: 200
+  defaultPoolSize: 25
+  minPoolSize: 10
+  reservePoolSize: 5
+  
+# Horizontal Pod Autoscaling
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilization: 80
+  targetMemoryUtilization: 80
+```
+
+### Backup and Recovery Configuration
+
+```yaml
+backup:
+  enabled: false
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention: 30  # Days to keep backups
+  storageLocation: "s3://backup-bucket/permit"
+  
+restore:
+  enabled: false
+  backupName: ""  # Specific backup to restore from
+```
+
+## Uninstallation
+
+### Complete Removal
+
+```bash
+# Remove all 3 Helm releases (the platform uses 3 separate charts)
+helm uninstall permit-platform -n permit-platform 2>/dev/null || true        # 35 Permit services
+helm uninstall migrations -n permit-platform 2>/dev/null || true             # Database schema
+helm uninstall third-party-services -n permit-platform 2>/dev/null || true   # PostgreSQL, Redis, OpenSearch, etc.
+
+# Delete namespace (removes all resources)
+kubectl delete namespace permit-platform
+
+# Clean up persistent volumes (careful!)
+kubectl get pv | grep permit-platform
+kubectl delete pv $(kubectl get pv -o jsonpath='{.items[?(@.spec.claimRef.namespace=="permit-platform")].metadata.name}')
+```
+
+### Selective Removal
+
+```bash
+# Remove only platform services (keep data)
+helm uninstall permit-platform -n permit-platform
+
+# Remove specific deployments
+kubectl delete deployment permit-backend-v2 -n permit-platform
+kubectl delete deployment permit-frontend -n permit-platform
+```
+
+## Support Information
+
+### Diagnostic Collection
+
+Create comprehensive diagnostic bundle for support:
+
+```bash
+{
+  echo "=== CLUSTER INFO ==="
+  kubectl cluster-info
+  echo "=== PERMIT PLATFORM PODS ==="
+  kubectl get pods -n permit-platform -o wide
+  echo "=== RECENT EVENTS ==="
+  kubectl get events -n permit-platform --sort-by='.lastTimestamp' | tail -20
+  echo "=== SERVICES ==="
+  kubectl get svc,ingress -n permit-platform
+  echo "=== STORAGE ==="
+  kubectl get pv,pvc -n permit-platform
+} > permit-support-bundle.txt
+```
+
+### Log Collection
+
+```bash
+# Collect all pod logs
+kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres > all-logs.txt
+
+# Collect specific service logs
+kubectl logs -n permit-platform deployment/permit-backend-v2 > backend-logs.txt
+kubectl logs -n permit-platform deployment/keycloak > auth-logs.txt
+```
+
+---
+
+**Need help?** Contact support@permit.io with your diagnostic bundle and system information, or [join our Slack community](https://io.permit.io/slack).
