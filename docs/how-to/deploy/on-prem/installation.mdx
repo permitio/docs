@@ -550,6 +550,246 @@ cat ~/.ssh/id_rsa  # or your specific key file
   </div>
 </div>
 
+## Step 3.5: Push Images to Private Registry (GKE Example)
+
+<div className="bg-blue-50 border-l-4 border-blue-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-blue-700">
+        <strong>Optional:</strong> If you're deploying to Google Kubernetes Engine (GKE) and want to use Google Artifact Registry (GAR) or Google Container Registry (GCR), you can push the images to your private registry before installation. Skip this step if using Docker Hub or if images are already in your registry.
+      </p>
+    </div>
+  </div>
+</div>
+
+### Prerequisites for GKE Registry
+
+Before pushing images, you need to:
+
+1. **Create a Google Artifact Registry repository** (this is NOT done by the script):
+
+```bash
+# Authenticate with Google Cloud
+gcloud auth login
+
+# Set your project
+gcloud config set project YOUR_PROJECT_ID
+
+# Create Artifact Registry repository
+gcloud artifacts repositories create permit-platform \
+  --repository-format=docker \
+  --location=us-central1 \
+  --project=YOUR_PROJECT_ID
+
+# Configure Docker authentication
+gcloud auth configure-docker us-central1-docker.pkg.dev
+```
+
+2. **Verify authentication**:
+
+```bash
+# Test that Docker can authenticate to GAR
+docker pull us-central1-docker.pkg.dev/YOUR_PROJECT_ID/permit-platform/hello-world || echo "Authentication configured"
+```
+
+### Push Images to Google Artifact Registry
+
+The installer package includes a convenience script to push all images to your GKE registry:
+
+```bash
+# Navigate to scripts directory
+cd scripts
+
+# Push to Google Artifact Registry (example for us-central1)
+./push-images-to-registry.sh us-central1-docker.pkg.dev/YOUR_PROJECT_ID/permit-platform
+```
+
+**What this script does:**
+
+1. Loads all ~35 images from the tar files in the `images/` directory
+2. Tags each image for your target registry (preserving original version tags)
+3. Pushes both the original tag and `:latest` tag to your registry
+4. **Automatically updates** `charts/permit-platform/values.yaml` with your registry URL
+5. Creates a timestamped backup of your original values.yaml
+
+**Expected output:**
+
+```bash
+╔══════════════════════════════════════════════════════════════╗
+║     Permit Platform Image Push Script                      ║
+╚══════════════════════════════════════════════════════════════╝
+
+Target Registry: us-central1-docker.pkg.dev/my-project/permit-platform
+Images Directory: ../images
+
+Found 35 images to push
+
+[1/35] Processing permit-backend-v2.tar
+  Loading image from tar...
+  Loaded: permitio/permit-backend-v2:latest
+  Tagging as us-central1-docker.pkg.dev/my-project/permit-platform/permit-backend-v2:latest
+  Pushing...
+  ✓ Done
+
+[2/35] Processing permit-frontend.tar
+  ...
+
+╔══════════════════════════════════════════════════════════════╗
+║     All images pushed successfully!                         ║
+╚══════════════════════════════════════════════════════════════╝
+
+Updating values.yaml with registry: us-central1-docker.pkg.dev/my-project/permit-platform
+✅ Updated values.yaml with imageRegistry: "us-central1-docker.pkg.dev/my-project/permit-platform"
+
+Next steps:
+1. Update charts/permit-platform/values.yaml with your frontend domain:
+   frontendDomain: "your-domain.company.com"
+
+2. Run the installer with --skip-images flag:
+   cd scripts
+   ./install-permit-platform.sh --gke --skip-images
+```
+
+**Time and storage requirements:**
+- **Time**: 10-20 minutes depending on network speed
+- **Bandwidth**: ~12GB upload
+- **Registry storage**: ~12GB required in GAR
+
+### Verify Images in Registry
+
+After pushing, verify images are accessible:
+
+```bash
+# List all images in your GAR repository
+gcloud artifacts docker images list us-central1-docker.pkg.dev/YOUR_PROJECT_ID/permit-platform
+
+# Check a specific image
+gcloud artifacts docker images describe \
+  us-central1-docker.pkg.dev/YOUR_PROJECT_ID/permit-platform/permit-backend-v2:latest
+```
+
+### Using Other Private Registries
+
+While this guide focuses on GKE with Google Artifact Registry, the `push-images-to-registry.sh` script works with any Docker-compatible registry:
+
+- **AWS ECR**: `123456789012.dkr.ecr.us-east-1.amazonaws.com/permit-platform`
+- **Azure ACR**: `myregistry.azurecr.io/permit-platform`
+- **JFrog Artifactory**: `artifactory.company.com/permit-platform`
+- **Harbor**: `harbor.company.com/permit-platform`
+
+For non-GKE registries, authenticate to your registry using the appropriate method before running the push script, and manually update the `imageRegistry` field in `charts/permit-platform/values.yaml`.
+
+#### Important: Registry Authentication for Kubernetes
+
+<div className="bg-red-50 border-l-4 border-red-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-red-700">
+        <strong>⚠️ Critical:</strong> If your private registry requires authentication (Artifactory, Harbor, private Docker registries), you MUST create a Kubernetes imagePullSecret and configure it in the Helm chart before installation. Without this, pods will fail to pull images with "ImagePullBackOff" errors.
+      </p>
+    </div>
+  </div>
+</div>
+
+**When you need imagePullSecrets:**
+- ✅ **GKE with GAR/GCR**: Not needed (GKE nodes authenticate automatically via Workload Identity)
+- ✅ **EKS with ECR**: Not needed (EKS nodes authenticate automatically via IAM roles)
+- ✅ **AKS with ACR**: Not needed (AKS nodes authenticate automatically via managed identity)
+- ❌ **JFrog Artifactory**: Required (needs username/password or token)
+- ❌ **Harbor**: Required (needs username/password)
+- ❌ **Private Docker registries**: Required (needs authentication)
+
+**How to configure imagePullSecrets:**
+
+1. **Create the Kubernetes secret** before installation:
+
+```bash
+# For registries requiring username/password (Artifactory, Harbor, etc.)
+kubectl create secret docker-registry registry-credentials \
+  --docker-server=artifactory.company.com \
+  --docker-username=YOUR_USERNAME \
+  --docker-password=YOUR_PASSWORD_OR_TOKEN \
+  --docker-email=your-email@company.com \
+  --namespace permit-platform
+
+# Verify secret was created
+kubectl get secret registry-credentials -n permit-platform
+```
+
+2. **Configure imagePullSecrets in your values.yaml** file:
+
+The Helm chart now supports `global.imagePullSecrets`. Add this to your `charts/permit-platform/values.yaml`:
+
+```yaml
+global:
+  imageRegistry: "artifactory.company.com/permit-platform"
+  imagePullPolicy: "IfNotPresent"
+
+  # Add your image pull secrets here
+  imagePullSecrets:
+    - registry-credentials
+```
+
+**That's it!** The Helm chart will automatically apply the imagePullSecrets to all deployments and jobs.
+
+**Multiple secrets example:**
+
+```yaml
+global:
+  imagePullSecrets:
+    - registry-credentials
+    - backup-registry-credentials
+```
+
+<div className="bg-green-50 border-l-4 border-green-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-green-700">
+        <strong>✅ Simplified:</strong> As of January 2026, the Helm chart includes built-in support for <code>global.imagePullSecrets</code>. No manual template editing required!
+      </p>
+    </div>
+  </div>
+</div>
+
+**Alternative: Use node-level registry authentication** (if supported by your Kubernetes distribution)
+
+### Important: Skip Image Loading When Using Private Registry
+
+<div className="bg-blue-50 border-l-4 border-blue-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-blue-700">
+        <strong>Note:</strong> If you pushed images to a private registry (GKE/GAR, Artifactory, Harbor, etc.) using the <code>push-images-to-registry.sh</code> script, you MUST use the <code>--skip-images</code> flag when running the installer. This prevents the installer from trying to load images from local tar files.
+      </p>
+    </div>
+  </div>
+</div>
+
+**Correct usage when images are in your registry:**
+
+```bash
+# After pushing images to your private registry, run installer with --skip-images
+cd scripts
+./install-permit-platform.sh --gke --skip-images              # For GKE
+./install-permit-platform.sh --skip-images                    # For EKS/AKS/on-prem
+./install-permit-platform.sh --openshift --skip-images        # For OpenShift
+```
+
+**When NOT to use --skip-images:**
+- Installing from the tar.gz package for the first time
+- Using Docker Hub public images
+- Images are loaded to local Docker daemon (Kind clusters)
+
+<div className="bg-green-50 border-l-4 border-green-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-green-700">
+        <strong>✅ Ready:</strong> After pushing images to your registry and configuring values.yaml with imagePullSecrets, proceed to Step 4 to run the installation with <code>--skip-images</code> flag.
+      </p>
+    </div>
+  </div>
+</div>
+
 ## Step 4: Run Installation
 
 ### Complete Installation Options Reference
@@ -586,6 +826,29 @@ The installer script `./scripts/install-permit-platform.sh` provides comprehensi
 # - Creates ServiceAccount with anyuid SCC
 # - Handles OpenShift-specific networking
 ```
+
+#### Google GKE Deployment
+```bash
+# Deploy to Google Kubernetes Engine
+./scripts/install-permit-platform.sh --gke
+
+# What it does:
+# - Configures for GKE-specific settings
+# - Handles GKE networking and storage
+# - Compatible with both GKE Standard and Autopilot
+# - Works with Google Artifact Registry (GAR) or GCR
+# - Installs nginx-ingress-controller (if not present)
+```
+
+<div className="bg-blue-50 border-l-4 border-blue-400 p-4 my-4">
+  <div className="flex">
+    <div className="ml-3">
+      <p className="text-sm text-blue-700">
+        <strong>Note:</strong> GKE deployments require nginx-ingress-controller for ingress routing. The installer will set this up if not already installed in your cluster.
+      </p>
+    </div>
+  </div>
+</div>
 
 #### Local Development (Kind)
 ```bash
