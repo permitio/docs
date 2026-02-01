@@ -472,7 +472,7 @@ const sidebars = {
             "api/pdp-webhooks",
             {
               type: "doc",
-              id: "how-to/monitoring-pdps/monitoring-pdps",
+              id: "how-to/monitoring-pdps",
               label: "Monitoring PDPs",
             },
           ],
