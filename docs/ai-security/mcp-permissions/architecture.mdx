@@ -1,27 +1,22 @@
 ---
-title: MCP Permissions Architecture
+title: Agent Security Architecture
 sidebar_label: Architecture
-description: A comprehensive guide to MCPermit's architecture, explaining how it delivers permissions-as-a-service for Model Context Protocol servers.
+description: A comprehensive guide to Agent Security's architecture, explaining how it delivers permissions-as-a-service for Model Context Protocol servers.
 sidebar_position: 2
 ---
 
-# MCP Permissions Architecture
+# Agent Security Architecture
 
-:::info
-This pages describes an upcoming product; details are subject to change.
-To get early access to MCPermit, contact us via [email](mailto:support@permit.io) or via [Slack](https://io.permit.io/slack).
-:::
+## What is Agent Security?
 
-## What is MCPermit?
-
-MCPermit delivers **permissions-as-a-service** for any Model Context Protocol (MCP) server-hosted or self-managed. It acts as a proxy/gateway between AI agents and the resources they invoke, providing:
+Agent Security delivers **permissions-as-a-service** for any Model Context Protocol (MCP) server. It acts as a proxy/gateway between AI agents and the resources they invoke, providing:
 
 * **Fine-grained ReBAC** (relationship-based access control) powered by Permit.io, OPA, and OPAL
-* **Five-stage authentication & authorization** that binds user, agent, MCP server, and downstream service identities
-* **Comprehensive auditing and anomaly detection** covering every call, scope, and actor
+* **Authentication & authorization** that binds user, agent, MCP server, and downstream service identities
+* **Comprehensive auditing** covering every call, scope, and actor
 * **Flexible delivery models** that share identical policy semantics
 
-A single URL switch yields consistent enforcement, instant visibility, and human-in-the-loop (HITL) approvals-**no code changes** to agents or servers.
+A single URL switch yields consistent enforcement, instant visibility, and human-in-the-loop (HITL) approvals — **no code changes** to agents or servers.
 
 ## Core Components
 
@@ -29,25 +24,25 @@ A single URL switch yields consistent enforcement, instant visibility, and human
 graph LR
     subgraph Client Side
         UA[Originator<br/>User]
-        AGT[n8n-email-workflow-agent<br/>MCP Client]
+        AGT[MCP Client<br/>Cursor / Claude / VS Code]
     end
 
-    subgraph MCPermit Gateway / Middleware
-        GW[MCPermit<br/>Gateway]
+    subgraph Agent Security Gateway
+        GW[Gateway]
         PDP[Permit.io PDP<br/>OPA + OPAL]
         LOGS[Audit Store]
-        HIL[HITL Approvals]
+        HIL[HITL Approvals<br/>coming soon]
     end
 
     subgraph Resource Side
         MCP1[Google-Gsuite-MCP]
-        MCP2[Calendly-MCP-sorter]
+        MCP2[Calendly-MCP]
         SVC1[Google APIs]
         SVC2[Calendly API]
     end
 
-    UA -->|OAuth / SSO| GW
-    AGT -->|identify_self| GW
+    UA -->|OAuth| GW
+    AGT -->|MCP Streamable HTTP| GW
     GW --> PDP
     GW --> LOGS
     GW --> HIL
@@ -58,137 +53,144 @@ graph LR
 ```
 
 Key components:
-- **Gateway**: Can be SaaS, self-hosted proxy, or in-process middleware
-- **Permit.io PDP**: Runs embedded (WASM) for µ-latency or remotely via OPAL
-- **Audit Store**: Feeds live anomaly detection
-- **HITL service**: Issues approval links and manages step-up auth
+- **Gateway**: Managed proxy at `*.agent.security`
+- **Permit.io PDP**: Policy decision point for real-time authorization
+- **Audit Store**: Records every authorization decision
+- **HITL service** *(coming soon)*: Issues approval links and manages step-up auth
 
 ## Integration Patterns
 
-MCPermit offers three deployment patterns:
+Agent Security currently offers a hosted gateway deployment. Additional patterns are planned:
 
-| Pattern                   | When to Use                      | How It Works                                                      |
-| ------------------------- | -------------------------------- | ----------------------------------------------------------------- |
-| **Hosted Gateway**        | Fastest rollout; SaaS workloads  | Point agents/servers to `https://<org>.mcpermit.io`               |
-| **Side-car / Middleware** | Low-latency, on-prem AI          | Drop a lightweight proxy library in front of the MCP server       |
-| **Hosting Platform**      | Building a multi-tenant MCP SaaS | MCPermit baked into ingress; tenants consume via hosted endpoints |
+| Pattern                   | When to Use                      | How It Works                                                      | Status |
+| ------------------------- | -------------------------------- | ----------------------------------------------------------------- | ------ |
+| **Hosted Gateway**        | Fastest rollout; SaaS workloads  | Point agents/servers to `https://<host>.agent.security`           | Available |
+| **Side-car / Middleware** | Low-latency, on-prem AI          | Drop a lightweight proxy library in front of the MCP server       | *Coming soon* |
+| **Hosting Platform**      | Building a multi-tenant MCP SaaS | Agent Security baked into ingress; tenants consume via hosted endpoints | *Coming soon* |
 
-All patterns share one control plane, policy model, and log format.
+All patterns will share one control plane, policy model, and log format.
 
 ## Policy Model
 
-### Five-Stages of Access Control
+### Trust-Level Access Control
 
-MCPermit provides five levels of policy control:
+Agent Security provides trust-level-based policy control where each tool is classified by risk:
 
-1. **Organization Policy** – controls *agent-type ↔ server-type* pairings
-2. **User Policy** – user delegates a concrete agent
-3. **Agent Permission** – coarse scopes (`read_emails`, `create_event`)
-4. **Operation Approval** – per-call HITL step-up
-5. **Org-Wide Constraints** – DLP masks, region pinning, rate limits
+1. **Low trust** — read-only operations (`get_*`, `list_*`, `read_*`)
+2. **Medium trust** — write operations (`create_*`, `update_*`, `send_*`)
+3. **High trust** — destructive operations (`delete_*`, `remove_*`, `destroy_*`)
+
+Trust levels are hierarchical: higher levels inherit all permissions from lower levels.
+
+### Planned Policy Enhancements *(coming soon)*
+
+- **Organization Policy** — control agent-type ↔ server-type pairings
+- **Operation Approval** — per-call HITL step-up
+- **Org-Wide Constraints** — DLP masks, region pinning, rate limits
 
 ### Policy Architecture
 
-MCPermit automatically generates Google-Zanzibar-inspired ReBAC (Relationship based Access Control) policies based on:
+Agent Security automatically generates Google-Zanzibar-inspired ReBAC (Relationship based Access Control) policies based on:
 - Defined roles for users and agents
-- MCP Server types (e.g. Personal, Corporate, sensitive, pro-active)
-- Role derivation from user profiles to agents
+- MCP server resource instances
+- Role derivation from user consent to agent permissions
 
 ```mermaid
 graph TD
-    A[Agent] --Role--> O[Originator User Profile -RI-]
-    O --Relation--> M[MCP Server -RI-]
-    O --Relation--> M1[MCP Server -RI-]
-    O --Relation--> M2[MCP Server -RI-]
-    M --Relation--> F[MCP Function -RI-]
-    M1 --Relation--> F1[MCP Function -RI-]
-    M2 --Relation--> F2[MCP Function -RI-]
+    A[Agent] --Trust Level Role--> M[MCP Server Instance]
+    M --Has Actions--> F1[Tool: get_issues]
+    M --Has Actions--> F2[Tool: create_issue]
+    M --Has Actions--> F3[Tool: delete_repo]
 ```
 
 ## Authentication & Authorization
 
-### Token Taxonomy
+### How it Works
 
-| Stage | Actor                    | Carrier                          | Purpose                 |
-| ----: | ------------------------ | -------------------------------- | ----------------------- |
-| **1** | User (Originator)        | OIDC JWT (`sub`)                 | Enterprise identity     |
-| **2** | Agent                    | Client creds / mTLS (`agent_id`) | Agent identity          |
-| **3** | Agent → Gateway          | MCPOAuth (`azp`, `scp`)          | Requested scopes        |
-| **4** | Gateway → MCP            | **On-demand** service token      | Least-privilege         |
-| **5** | Agent OBO User → Service | [RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693) token exchange          | User context downstream |
+When a user connects an MCP client through the gateway for the first time:
 
-### Sequence Flows
+1. The MCP client discovers the gateway's OAuth endpoints
+2. The user authenticates and completes the consent flow
+3. The user selects a trust level for the MCP server
+4. The gateway issues a JWT access token to the MCP client
 
-#### First-Run Delegation
+On subsequent tool calls:
+
+1. The gateway verifies the JWT and identifies the agent
+2. The gateway checks Permit: *"Can this agent call this tool on this MCP server?"*
+3. Allowed calls are proxied; denied calls return an error
+
+### Sequence: First-Time Connection
 
 ```mermaid
 sequenceDiagram
-    participant U as Originator
-    participant A as Agent
-    participant G as MCPermit Gateway
-    participant H as HITL Approval
-    participant P as PDP
+    participant U as User
+    participant C as MCP Client
+    participant G as Agent Security Gateway
+    participant CS as Consent Service
 
-    U->>A: Configure agent URL Gateway
-    A->>G: identify_self
-    G-->>A: 302 approval_link
-    A->>U: Show consent UI
-    U->>H: Login + approve
-    H--)G: grant_delegation
-    G->>P: upsert user agent
-    G-->>A: 200 agent_token
+    C->>G: POST /mcp (no token)
+    G-->>C: 401 + OAuth discovery
+    C->>CS: Authorization request
+    CS-->>C: Redirect to login
+    U->>CS: Login + consent + trust level
+    CS-->>C: Authorization code
+    C->>CS: Exchange for token
+    CS-->>C: JWT access token
+    C->>G: POST /mcp (Bearer token)
+    G-->>C: MCP response
 ```
 
-#### Authorized Call
+### Sequence: Authorized Tool Call
 
 ```mermaid
 sequenceDiagram
-    participant A as Agent
+    participant C as MCP Client
     participant G as Gateway
-    participant P as PDP
-    participant M as MCP Server
-    participant S as Downstream Service
+    participant P as Permit PDP
+    participant M as Upstream MCP Server
 
-    A->>G: invoke read_emails
-    G->>P: is_allowed?
-    P-->>G: PERMIT
-    G->>M: read_emails with JWT user+agent
-    M->>S: Gmail API with OBO token
-    S-->>M: data
-    M-->>G: data
-    G-->>A: data
-    G->>Audit: log event
+    C->>G: call_tool(name=create_issue)
+    G->>P: permit.check(agent, create_issue, mcp_server)
+    alt allowed
+        P-->>G: PERMIT
+        G->>M: call_tool (proxied)
+        M-->>G: tool result
+        G-->>C: tool result
+    else denied
+        P-->>G: DENY
+        G-->>C: Permission denied
+    end
+    G->>G: Log to audit
 ```
 
-## Deployment Options
+## Deployment
 
-### Gateway PDP Options
+Agent Security is currently available as a **hosted gateway** at `*.agent.security`. Each host (tenant) gets a unique subdomain with isolated policies, users, and sessions.
+
+### Planned Deployment Options *(coming soon)*
 
 | Deployment        | Latency (P95) | Isolation   | Updates               |
 | ----------------- | ------------- | ----------- | --------------------- |
 | **Embedded WASM** | < 10 ms        | Per-gateway | Rego/Data via OPAL |
 | **Remote PDP**    | 10-30 ms RTT  | Centralized | Horizontal scale      |
 
-Choose *Embedded* for air-gapped or ultra-low-latency; *Remote* for central governance.
-
-:::info
-With MCPermit hybrid mode, you can start with embedded PDP for low-latency enforcement and then connect it to remote control plane for centralized policy management.
-:::
-
 ## Key Advantages
 
-* **Single control point** for authZ, audit, anomaly detection
-* **Drop-in**-no code changes, SDK optional
-* **Fine-grained ReBAC**-captures true user-agent-resource relationships
-* **Policy-as-code**-Rego, GitOps, unit tests
-* **Short-lived creds**-minimize blast radius
-* **HITL safety net**-step-up approvals for risky ops
-* **DLP hooks**-mask/redact before LLM exposure
+* **Single control point** for authZ, audit, and anomaly detection
+* **Drop-in** — no code changes, SDK optional
+* **Fine-grained ReBAC** — captures true user-agent-resource relationships
+* **Policy-as-code** — Rego, GitOps, unit tests
+* **Short-lived creds** — minimize blast radius
+* **HITL safety net** *(coming soon)* — step-up approvals for risky ops
+* **DLP hooks** *(coming soon)* — mask/redact before LLM exposure
 
-## Future Roadmap
+## Roadmap
 
 | Area                   | Next Step                                          |
 | ---------------------- | -------------------------------------------------- |
+| **HITL Approvals**     | Configurable step-up approvals for sensitive operations |
+| **Enterprise SSO**     | OIDC, SAML, LDAP integration                      |
 | **DLP**                | Client-side classifiers, inline redaction          |
 | **Secrets-on-Demand**  | Vault-backed token minting                         |
 | **Policy Analytics**   | Graph-diff to flag over-permissioned agents        |
@@ -205,7 +207,6 @@ Below is an example of how different agents can be configured with various roles
 | Security Monitor | security_analyst, alert_manager | security_team_789 | ambient | security_mcp_1, security_mcp_2 |
 | Code Review Bot | code_reviewer, pr_assistant | dev_team_101 | proactive | dev_mcp_1 |
 | Data Analyst | data_processor, report_generator | analytics_team_202 | chat | analytics_mcp_1, analytics_mcp_2 |
-| System Monitor | system_admin, health_checker | ops_team_303 | ambient | ops_mcp_1, ops_mcp_2, ops_mcp_3 |
 
 ## Glossary
 
@@ -213,7 +214,7 @@ Below is an example of how different agents can be configured with various roles
 | -------------- | ---------------------------------------------------- |
 | **MCP**        | Model Context Protocol (tool/agent interoperability) |
 | **Originator** | Human delegating authority                           |
-| **Agent**      | Autonomous MCP client acting OBO the user            |
+| **Agent**      | Autonomous MCP client acting on behalf of the user   |
 | **HITL**       | Human-in-the-loop                                    |
 | **ReBAC**      | Relationship-based access control                    |
 | **OPAL**       | Open Policy Administration Layer                     |
