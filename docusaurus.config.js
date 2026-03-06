@@ -589,6 +589,13 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
+      mermaid: {
+        options: {
+          themeVariables: {
+            edgeLabelBackground: '#EEEEEE',
+          },
+        },
+      },
       zoom: {
         selector: ".markdown :not(em) > img",
       },
