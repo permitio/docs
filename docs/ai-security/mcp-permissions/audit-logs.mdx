@@ -1,0 +1,137 @@
+---
+title: Audit Logs
+sidebar_label: Audit Logs
+description: Understand where audit logs live, what they contain, and how to use them for debugging, compliance, and monitoring in Agent Security.
+sidebar_position: 7
+---
+
+# Audit Logs
+
+Every authorization decision in Agent Security — every tool call allowed or denied — is logged automatically. This page explains where logs live, what each entry contains, and how to use them.
+
+## Where Audit Logs Live
+
+Audit logs are accessible in two places:
+
+| Location | What it shows | Best for |
+| --- | --- | --- |
+| **Platform UI** ([app.agent.security](https://app.agent.security)) | Activity views on Agent, Human, and MCP Server detail pages — pulled from Permit's API | Day-to-day monitoring, quick lookups |
+| **Permit.io Dashboard** ([app.permit.io](https://app.permit.io)) | Raw `permit.check()` decision log with full policy evaluation details | Deep debugging, compliance exports, policy analysis |
+
+Both show the same underlying data — the Platform UI reads from the Permit Audit Logs API and presents it in context (per agent, per human, or per server).
+
+### Platform UI: Activity Views
+
+The Platform surfaces audit logs on three detail pages:
+
+- **Agent detail page** — shows every tool call made by that specific agent (MCP client), with allow/deny status
+
+{/* ![Agent audit logs](/img/agent-security/agent-audit-logs.png) */}
+
+- **Human detail page** — aggregates activity from **all agents** acting on that human's behalf, not just the human's own actions. This gives a complete view of what happened under a user's authority.
+
+{/* ![Human audit logs](/img/agent-security/human-audit-logs.png) */}
+
+- **MCP Server detail page** — shows all tool calls targeting that specific server, across all agents and users
+
+{/* ![Server audit logs](/img/agent-security/server-audit-logs.png) */}
+
+### Permit.io Dashboard: Raw Audit Log
+
+For deeper analysis, use the Audit Log in the [Permit.io dashboard](https://app.permit.io):
+
+1. Log in to [app.permit.io](https://app.permit.io)
+2. Select the project and environment that matches your Agent Security host
+3. Navigate to the **Audit Log** section
+
+{/* ![Permit audit log](/img/agent-security/permit-audit-log.png) */}
+
+The Permit dashboard shows the full policy evaluation chain, including which derived roles were checked and why a decision was made — detail that the Platform UI summarizes.
+
+## Understanding Audit Log Entries
+
+Each audit log entry represents a single `permit.check()` call made by the Gateway when an agent invokes a tool. Here's what each entry contains:
+
+| Field | Description | Example |
+| --- | --- | --- |
+| **Timestamp** | When the authorization check occurred | `2026-03-10T14:32:05Z` |
+| **User key** | The agent's identity (Permit user key) | `agent\|cursor_abc123` |
+| **Action** | The tool name (slugified) | `create_issue` |
+| **Resource** | The MCP server (resource type and instance) | `linear:linear` |
+| **Decision** | Whether the call was allowed or denied | `Allow` or `Deny` |
+| **Reason** | For denials: why the check failed | `No permission for 'delete_repo'` |
+
+### How Decisions Map to the Policy Model
+
+When you see an audit log entry, here's how to read it against the [policy model](/ai-security/mcp-permissions/permit-integration):
+
+```
+permit.check("agent|cursor_abc123", "create_issue", "linear:linear")
+```
+
+1. **User**: `agent|cursor_abc123` — the MCP client (e.g., Cursor) identified by its OAuth client ID
+2. **Action**: `create_issue` — the tool being called, which requires a specific trust level (e.g., medium)
+3. **Resource**: `linear:linear` — the MCP server, where the resource type and instance share the same key
+4. **Evaluation**: Permit checks the agent's derived role on the server (via the [min() trust ceiling](/ai-security/mcp-permissions/permit-integration#the-userprofile-indirection-rebac)) and whether that role has permission for the action
+
+### Denial Reasons
+
+When a tool call is denied, the audit log includes a human-readable reason extracted from Permit's policy evaluation. Common reasons:
+
+| Reason | What it means |
+| --- | --- |
+| No permission for `{tool_name}` | The agent's effective trust level doesn't include this tool |
+| User not found | The agent hasn't been provisioned in Permit (consent may not have completed) |
+| Resource not found | The MCP server hasn't been imported in the Platform |
+
+## Filtering Audit Logs
+
+### In the Platform UI
+
+Each detail page (Agent, Human, MCP Server) automatically scopes the logs:
+
+- **Agent page**: filters by the agent's user key (`agent|{client_id}`)
+- **Human page**: fetches all connected agents and shows their combined activity
+- **MCP Server page**: filters by the server's resource type
+
+### In the Permit Dashboard
+
+The Permit Audit Log supports filtering by:
+
+- **User** — search by agent key (e.g., `agent|cursor_abc123`) or human key (e.g., `human|alice`)
+- **Resource** — filter by MCP server key (e.g., `linear`)
+- **Action** — filter by tool name (e.g., `create_issue`)
+- **Decision** — show only allowed or only denied entries
+
+## Common Scenarios
+
+### "Which tools did agent X call today?"
+
+1. Go to [app.agent.security/agents](https://app.agent.security/agents)
+2. Click on the agent
+3. Open the **Audit Logs** tab — all tool calls for that agent are listed with timestamps and decisions
+
+### "Was this tool call allowed or denied, and why?"
+
+1. Find the entry in the agent's or server's audit log
+2. Check the **Decision** column (Allow/Deny)
+3. For denials, the **Reason** column explains why (e.g., trust level too low for that tool)
+4. For deeper debugging, check the same entry in the Permit dashboard to see the full derived role evaluation
+
+### "Show me all denied requests for debugging"
+
+1. In the **Permit dashboard**, open the Audit Log
+2. Filter by **Decision: Deny**
+3. Optionally narrow by user, resource, or time range
+4. Review the denial reasons to identify misconfigured trust levels or missing access grants
+
+### "Compliance report: all agent activity for the last 30 days"
+
+1. In the **Permit dashboard**, open the Audit Log
+2. Set the date range to the last 30 days
+3. Export or review the entries — each shows who (agent), what (tool), where (server), when (timestamp), and the decision
+4. For human-centric reports, use the **Human detail page** in the Platform to see all activity under a specific user's authority
+
+:::tip Cross-referencing logs
+The Permit audit log shows the raw `permit.check()` parameters — user key, action, and resource — making it easy to correlate with the activity views in the [Platform UI](https://app.agent.security). Use the agent's user key (e.g., `agent|cursor_abc123`) to search across both.
+:::

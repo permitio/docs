@@ -191,7 +191,11 @@ const sidebars = {
             "ai-security/mcp-permissions/guide",
             "ai-security/mcp-permissions/managing-humans-and-agents",
             "ai-security/mcp-permissions/platform",
+            "ai-security/mcp-permissions/authentication-methods",
+            "ai-security/mcp-permissions/audit-logs",
             "ai-security/mcp-permissions/host-setup",
+            "ai-security/mcp-permissions/on-prem-deployment",
+            "ai-security/mcp-permissions/consent-service",
           ],
         },
         {
