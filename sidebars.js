@@ -186,8 +186,10 @@ const sidebars = {
           link: { type: "doc", id: "ai-security/mcp-permissions/index" },
           items: [
             "ai-security/mcp-permissions/overview",
+            "ai-security/mcp-permissions/permit-integration",
             "ai-security/mcp-permissions/architecture",
             "ai-security/mcp-permissions/guide",
+            "ai-security/mcp-permissions/platform",
           ],
         },
         {
