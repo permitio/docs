@@ -94,15 +94,36 @@ The effective permission is: **min(agent's role on profile, profile's relation t
 | `{server}-low` | `medium` | **low** |
 | `{server}-low` | `low` | **low** |
 
-This is implemented using **9 derived role rules per MCP server** in Permit's ReBAC engine.
+This is implemented using **9 derived role rules per MCP server** in Permit's ReBAC engine. The rules break down as follows:
+
+**HIGH role (2 derivation rules):**
+- `user_profile#owner` + `high` relation → `{server}#high`
+- `user_profile#{server}-high` + `high` relation → `{server}#high`
+
+**MEDIUM role (3 derivation rules):**
+- `user_profile#owner` + `medium` relation → `{server}#medium`
+- `user_profile#{server}-medium` + `medium` relation → `{server}#medium`
+- `user_profile#{server}-high` + `medium` relation → `{server}#medium` *(min logic — high capped to medium)*
+
+**LOW role (4 derivation rules):**
+- `user_profile#owner` + `low` relation → `{server}#low`
+- `user_profile#{server}-low` + `low` relation → `{server}#low`
+- `user_profile#{server}-medium` + `low` relation → `{server}#low` *(min logic)*
+- `user_profile#{server}-high` + `low` relation → `{server}#low` *(min logic)*
+
+The `owner` role rules allow the human user (who owns the profile) to also have derived permissions on the server — this is used for admin-side permission discovery.
+
+:::note Permit Dashboard display
+Derived roles are configured via `PATCH` on the MCP server roles, but Permit's UI displays the derivation rules on the **source resource roles** (`user_profile`), not on the target MCP server roles. This is correct behavior — if the MCP server roles' DERIVATIONS column appears empty in the UI, check the `user_profile` roles instead.
+:::
 
 ### Max Trust Level: Three Layers of Enforcement
 
 The admin-configured max trust level is enforced at three layers to prevent bypass:
 
 1. **Permit policy** — the profile-to-server relation in Permit acts as the ceiling in the `min()` calculation
-2. **Consent UI** — the frontend disables trust levels above the admin's maximum, so users cannot select them
-3. **Consent API** — the backend rejects consent requests that exceed the max, even if the frontend is bypassed
+2. **Consent UI** — the trust level slider always shows all three levels for context, but levels beyond the max are **visually muted** and cannot be selected. The slider gradient fades out past the max level, and if a user somehow drags past the max, the value clamps back. A tooltip on disabled levels indicates they are restricted.
+3. **Consent API** — `POST /api/consent/accept` validates the requested trust level server-side. It fetches all relationship tuples for the user's profile to the server, determines the highest allowed trust level, and **rejects with 403** if the requested trust level exceeds the max. For example: `Trust level "medium" exceeds your maximum allowed level "low" for server "deepwiki"`. This prevents bypassing the frontend cap via direct API calls.
 
 ## The Sync Flow
 
@@ -239,6 +260,73 @@ Every `permit.check()` call is logged by Permit. Use the **Audit Log** in the Pe
 :::tip
 The Permit audit log shows the raw `permit.check()` parameters — user key, action, and resource — making it easy to correlate with the [Agent Security audit logs](/ai-security/mcp-permissions/guide#9-audit-logs) visible in [app.agent.security](https://app.agent.security).
 :::
+
+## Server Metadata and Allow-List
+
+### Upstream URL Storage
+
+Each preconfigured MCP server stores its upstream URL as an attribute on the Permit resource instance:
+
+```text
+resource_instance.attributes.upstream_url = "https://mcp.linear.app/mcp"
+```
+
+This is used by the **Consent Service** (to resolve a server key to its upstream URL), the **Platform** (to display the URL in server details), and for **allow-list enforcement**.
+
+### Allow-List Enforcement
+
+All consent API routes validate that the upstream URL belongs to a preconfigured server the human has access to:
+
+| Route | Validation |
+| --- | --- |
+| `POST /api/mcp/connect` | Upstream URL must match an allowed server |
+| `POST /api/mcp/oauth/start` | Upstream URL must match an allowed server |
+| `POST /api/mcp/preprovisioned-clients` | Upstream URL must match an allowed server |
+| `POST /api/consent/accept` | Human must have a profile→server relation |
+
+Ad-hoc upstream URLs are not accepted — MCP servers must be preconfigured in the Platform with an `upstream_url`, and users must have a `user_profile` → server relation before consent is allowed.
+
+## Tenant Model
+
+All resource instances are created in the **`default` Permit tenant**. This simplifies the authorization model by:
+
+- Avoiding multi-tenant complexity in Permit — multi-tenancy is handled at the Gateway level via subdomains, not in Permit
+- Ensuring consistent resource instance lookups across the system
+- Allowing the same MCP server resource to be shared across tenants if needed
+
+The `default` tenant is automatically created in Permit environments and requires no additional setup.
+
+## Default Policy: Deny by Default
+
+A fresh Agent Security environment starts with **zero permissions**. No user or agent can call any tool until the full setup sequence is completed:
+
+1. **Admin imports an MCP server** → creates resource type, actions, and instance in Permit
+2. **Admin grants a human access** → creates the profile-to-server relation (sets the max trust ceiling)
+3. **Human consents** → creates the agent's role on the user profile (within the ceiling)
+4. **Agent calls a tool** → `permit.check()` evaluates the derived role and tool trust requirements
+
+No step can be skipped. If an admin imports a server but never grants anyone access, no user can consent. If a user has access but hasn't consented, no agent has a role. Every `permit.check()` for an unconfigured combination returns **DENY**.
+
+## Customizing Policies
+
+### Overriding Auto-Classified Trust Levels
+
+When an MCP server is imported, tools are auto-classified by naming heuristics (e.g., `delete_*` → high trust, `create_*` → medium trust). Admins can override these classifications in the Platform UI:
+
+- Navigate to the MCP server detail page
+- Each tool shows its current trust level
+- Click a tool's trust level to change it
+- Changes update the action-to-role mapping in Permit and take effect immediately on the next tool call
+
+### What Changes Take Effect Immediately vs. Require Re-Consent
+
+| Change | Effect | Re-consent needed? |
+| --- | --- | --- |
+| Override a tool's trust level | Immediate — next `permit.check()` uses new mapping | No |
+| Lower a human's max trust level | Immediate — existing agents are capped by the new ceiling on next call | No |
+| Raise a human's max trust level | Immediate — but agents keep their current role until user re-consents at a higher level | User must re-consent to get higher access |
+| Revoke a human's access entirely | Immediate — all agents lose derived permissions | N/A |
+| Revoke a specific agent | Immediate — agent's role is removed from profile | User must re-consent to restore |
 
 ## Key Takeaways
 

@@ -189,7 +189,9 @@ const sidebars = {
             "ai-security/mcp-permissions/permit-integration",
             "ai-security/mcp-permissions/architecture",
             "ai-security/mcp-permissions/guide",
+            "ai-security/mcp-permissions/managing-humans-and-agents",
             "ai-security/mcp-permissions/platform",
+            "ai-security/mcp-permissions/host-setup",
           ],
         },
         {
