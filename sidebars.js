@@ -188,6 +188,7 @@ const sidebars = {
             "ai-security/mcp-permissions/overview",
             "ai-security/mcp-permissions/architecture",
             "ai-security/mcp-permissions/guide",
+            "ai-security/mcp-permissions/advanced-features",
           ],
         },
         {
