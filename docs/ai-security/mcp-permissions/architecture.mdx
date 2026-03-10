@@ -18,33 +18,44 @@ Agent Security delivers **permissions-as-a-service** for any Model Context Proto
 
 A single URL switch yields consistent enforcement, instant visibility, and human-in-the-loop (HITL) approvals *(coming soon)* — **no code changes** to agents or servers.
 
-## Core Components
+## System Architecture
+
+The following diagram shows all major components and how they interact:
 
 ```mermaid
 graph LR
-    subgraph Client Side
+    subgraph Actors
+        Admin[Admin]
         UA[Originator<br/>User]
         AGT[MCP Client<br/>Cursor / Claude / VS Code]
     end
 
-    subgraph Agent Security Gateway
-        GW[Gateway]
+    subgraph "Agent Security"
+        Platform["Platform UI<br/>app.agent.security"]
+        GW[Gateway<br/>*.agent.security]
+        CS[Consent Service]
         LOGS[Audit Store]
         HIL[HITL Approvals<br/>coming soon]
+        PG[(PostgreSQL)]
+        RD[(Redis)]
     end
 
     subgraph Authorization
         PDP[Permit.io PDP<br/>OPA + OPAL]
+        PERMIT[Permit.io Cloud]
     end
 
-    subgraph Resource Side
+    subgraph "Upstream MCP Servers"
         MCP1[Google-Gsuite-MCP]
         MCP2[Calendly-MCP]
         SVC1[Google APIs]
         SVC2[Calendly API]
     end
 
-    UA -->|OAuth| GW
+    Admin -->|Manage hosts, servers, users| Platform
+    Platform --> GW
+    Platform --> PERMIT
+    UA -->|Consent flow| CS
     AGT -->|MCP Streamable HTTP| GW
     GW --> PDP
     GW --> LOGS
@@ -53,11 +64,18 @@ graph LR
     GW --> MCP2
     MCP1 --> SVC1
     MCP2 --> SVC2
+    CS --> PERMIT
+    GW --> PG
+    GW --> RD
+    PDP --> PERMIT
 ```
 
 Key components:
-- **Gateway**: Managed proxy/gateway at `*.agent.security`
+- **Platform UI**: Admin dashboard at [app.agent.security](https://app.agent.security) for managing hosts, MCP servers, users, and monitoring activity
+- **Gateway**: Managed proxy/gateway at `*.agent.security` that enforces authorization on every tool call
+- **Consent Service**: Handles user authentication, MCP server selection, and trust-level consent
 - **Permit.io PDP**: Policy decision point for real-time authorization
+- **Permit.io Cloud**: Central policy store and management API
 - **Audit Store**: Records every authorization decision
 - **HITL service** *(coming soon)*: Issues approval links and manages step-up auth
 
@@ -118,11 +136,11 @@ graph TD
 
 ### How it Works
 
-**Admin setup (one-time):**
+**Admin setup (one-time via Platform UI):**
 
-1. Admin creates a host at [app.agent.security](https://app.agent.security), linked to a Permit environment
-2. Admin imports upstream MCP servers, classifies tools by trust level, and sets max trust levels per user
-3. Admin grants specific users permission to connect to specific MCP servers
+1. Admin signs in to the Platform UI at [app.agent.security](https://app.agent.security) and creates a host linked to a Permit environment
+2. Admin imports upstream MCP servers through the Platform, which configures the Gateway and syncs policies to Permit
+3. Admin grants specific users permission to connect to specific MCP servers via the Platform's Humans page
 
 **User connection (first time):**
 
@@ -147,16 +165,24 @@ graph TD
 ```mermaid
 sequenceDiagram
     participant A as Admin
+    participant PL as Platform UI
     participant U as User
     participant C as MCP Client
     participant G as Agent Security Gateway
     participant CS as Consent Service
+    participant PM as Permit.io
 
-    Note over A,CS: Admin setup (one-time)
-    A->>G: Create host + import MCP servers
-    A->>G: Grant user access to MCP servers
+    Note over A,PM: Admin setup (one-time via Platform UI)
+    A->>PL: Sign in to app.agent.security
+    PL->>G: Create host
+    PL->>PM: Link Permit environment
+    A->>PL: Import MCP servers + set trust levels
+    PL->>G: Configure server routes
+    PL->>PM: Sync policies + resource types
+    A->>PL: Grant user access to MCP servers
+    PL->>PM: Create user roles + relationships
 
-    Note over U,CS: User connection
+    Note over U,PM: User connection
     C->>G: POST /mcp (no token)
     G-->>C: 401 + OAuth discovery
     C->>CS: Authorization request
@@ -164,6 +190,7 @@ sequenceDiagram
     U->>CS: Login
     CS-->>U: Show granted MCP server list
     U->>CS: Select MCP server + trust level
+    CS->>PM: Save consent + agent role
     CS-->>C: Authorization code
     C->>CS: Exchange for token
     CS-->>C: JWT access token
@@ -197,13 +224,6 @@ sequenceDiagram
 ## Deployment
 
 Agent Security is currently available as a **hosted gateway** at `*.agent.security`. Each host (tenant) gets a unique subdomain with isolated policies, users, and sessions.
-
-### Planned Deployment Options *(coming soon)*
-
-| Deployment        | Isolation   | Updates               |
-| ----------------- | ----------- | --------------------- |
-| **Embedded WASM** | Per-gateway | Rego/Data via OPAL    |
-| **Remote PDP**    | Centralized | Horizontal scale      |
 
 ## Key Advantages
 
