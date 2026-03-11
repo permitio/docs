@@ -1,8 +1,8 @@
 ---
 title: Agent Security Architecture
-sidebar_label: Architecture
+sidebar_label: Architecture Deep Dive
 description: A comprehensive guide to Agent Security's architecture, explaining how it delivers permissions-as-a-service for Model Context Protocol servers.
-sidebar_position: 2
+sidebar_position: 7
 ---
 
 # Agent Security Architecture
@@ -11,73 +11,122 @@ sidebar_position: 2
 
 Agent Security delivers **permissions-as-a-service** for any Model Context Protocol (MCP) server. It acts as a proxy/gateway between AI agents and the MCP server resources they interact with, providing:
 
-* **Fine-grained ReBAC** (relationship-based access control) powered by Permit.io, OPA, and OPAL
+* **Fine-grained ReBAC** (relationship-based access control) powered by Permit.io (which uses OPA and OPAL under the hood)
 * **Authentication & authorization** that binds user, agent, MCP server, and downstream service identities
 * **Comprehensive auditing** covering every tool call, user, and agent
 * **Flexible deployment options** *(hosted gateway available; additional patterns coming soon)*, all using the same policy rules
 
 A single URL switch yields consistent enforcement, instant visibility, and human-in-the-loop (HITL) approvals *(coming soon)* — **no code changes** to agents or servers.
 
-## System Architecture
-
-The following diagram shows all major components and how they interact:
+## System Architecture Overview
 
 ```mermaid
-graph LR
-    subgraph Actors
-        Admin[Admin]
-        UA[Originator<br/>User]
-        AGT[MCP Client<br/>Cursor / Claude / VS Code]
-    end
+flowchart LR
+  Client["MCP Client<br/>(Cursor / Claude / VS Code)"]
+  Admin["System Admin"]
 
-    subgraph "Agent Security"
-        Platform["Platform UI<br/>app.agent.security"]
-        GW[Gateway<br/>*.agent.security]
-        CS[Consent Service]
-        LOGS[Audit Store]
-        HIL[HITL Approvals<br/>coming soon]
-        PG[(PostgreSQL)]
-        RD[(Redis)]
-    end
+  subgraph Tenant["*.agent.security"]
+    Edge["Edge Router<br/>(NGINX)"]
+    GW["Gateway"]
+    GWAdmin["Gateway<br/>(Admin API)"]
+    CS["Consent Service"]
+    PG[(PostgreSQL)]
+    REDIS[(Redis)]
+  end
 
-    subgraph Authorization
-        PDP[Permit.io PDP<br/>OPA + OPAL]
-        PERMIT[Permit.io Cloud]
-    end
+  subgraph Permit["Permit.io"]
+    PermitPDP["Permit PDP<br/>(Cloud or On-Prem)"]
+    PermitAPI["Permit Platform API"]
+    PermitPDP --> PermitAPI
+  end
 
-    subgraph "Upstream MCP Servers"
-        MCP1[Google-Gsuite-MCP]
-        MCP2[Calendly-MCP]
-        SVC1[Google APIs]
-        SVC2[Calendly API]
-    end
+  subgraph Platform["app.agent.security"]
+    PlatformUI["Platform UI"]
+  end
 
-    Admin -->|Manage hosts, servers, users| Platform
-    Platform --> GW
-    Platform --> PERMIT
-    UA -->|Consent flow| CS
-    AGT -->|MCP Streamable HTTP| GW
-    GW --> PDP
-    GW --> LOGS
-    GW --> HIL
-    GW --> MCP1
-    GW --> MCP2
-    MCP1 --> SVC1
-    MCP2 --> SVC2
-    CS --> PERMIT
-    GW --> PG
-    GW --> RD
-    PDP --> PERMIT
+  Admin -->|"Manage hosts + users"| PlatformUI
+  PlatformUI -->|"Create host"| PermitAPI
+  PlatformUI -->|"POST /hosts"| GWAdmin
+
+  Client -- "MCP Streamable HTTP" --> Edge
+  Edge -- "UI + OAuth APIs" --> CS
+  Edge -- "/mcp, /oauth/*, /.well-known/*" --> GW
+
+  GWAdmin -->|"All Redis access"| REDIS
+  CS -->|"Session + OAuth state<br/>(via Admin API)"| GWAdmin
+  REDIS -->|"Host config +<br/>app session state"| GW
+
+  CS -- "Users, sessions, OAuth clients" --> PG
+  GW -- "JWT verification (JWKS)" --> CS
+  GW -- "permit.check() per tool call" --> PermitPDP
+  CS -->|"Sync consent → roles/relations"| PermitAPI
+
+  GW -- "Proxy Streamable HTTP" --> Upstream
+
+  Upstream["Upstream MCP Server"]
 ```
 
-Key components:
-- **Platform UI**: Admin dashboard at [app.agent.security](https://app.agent.security) for managing hosts, MCP servers, users, and monitoring activity
-- **Gateway**: Managed proxy/gateway at `*.agent.security` that enforces authorization on every tool call
-- **Consent Service**: Handles user authentication, MCP server selection, and trust-level consent
-- **Permit.io PDP**: Policy decision point for real-time authorization
-- **Permit.io Cloud**: Central policy store and management API
-- **Audit Store**: Records every authorization decision
-- **HITL service** *(coming soon)*: Issues approval links and manages step-up auth
+**Key components:**
+- **Platform** (`app.agent.security`): Admin interface for managing hosts, MCP servers, and user access
+- **Edge Router** (NGINX): Routes requests by path to Gateway or Consent Service
+- **Gateway** (`*.agent.security/mcp`): MCP proxy that enforces authorization on every tool call
+- **Consent Service** (`*.agent.security`): Handles OAuth login, user consent, and upstream MCP OAuth
+- **Permit.io PDP**: Policy decision point for real-time authorization checks
+- **Redis**: Session and host configuration store (accessed only by Gateway)
+- **PostgreSQL**: User accounts, OAuth clients, and auth sessions
+
+:::info Architecture constraint
+The Consent Service does **not** access Redis directly. All state persistence goes through the Gateway Admin API, centralizing Redis schema and logic in the Gateway.
+:::
+
+## Data Flow
+
+The diagram below shows where data lives and how it flows between components:
+
+```mermaid
+flowchart TD
+  subgraph Storage["Data Storage"]
+    REDIS[("Redis<br/>Sessions, host config")]
+    PG[("PostgreSQL<br/>Users, OAuth clients")]
+    PERMIT[("Permit.io<br/>Policies, audit logs")]
+  end
+
+  subgraph Services["Services"]
+    GW["Gateway<br/>port 8001"]
+    GWAdmin["Gateway Admin API<br/>port 8002"]
+    CS["Consent Service<br/>port 3000"]
+    NGINX["NGINX<br/>port 8080"]
+  end
+
+  subgraph External["External"]
+    ALB["AWS ALB<br/>(TLS termination)"]
+    MCP["Upstream MCP Servers"]
+  end
+
+  ALB -->|"HTTP/1.1"| NGINX
+  NGINX -->|"/mcp, /oauth/*, /.well-known/*"| GW
+  NGINX -->|"/api/auth/*, /api/consent/*,<br/>/api/mcp/*, /login, /consent"| CS
+  CS -->|"HTTP + Bearer token<br/>sessions, oauth-states"| GWAdmin
+  GWAdmin -->|"RESP protocol"| REDIS
+  CS -->|"PostgreSQL protocol"| PG
+  GW -->|"JWKS fetch (cached)"| CS
+  GW -->|"permit.check()"| PERMIT
+  CS -->|"Policy sync on consent"| PERMIT
+  GW -->|"Streamable HTTP +<br/>upstream OAuth tokens"| MCP
+```
+
+| From | To | Protocol | Notes |
+| --- | --- | --- | --- |
+| ALB | NGINX | HTTP/1.1 | TLS terminated at ALB |
+| NGINX | Gateway | HTTP/1.1 (port 8001) | Routes: `/mcp`, `/oauth/*`, `/.well-known/*` |
+| NGINX | Consent Service | HTTP/1.1 (port 3000) | Routes: `/api/auth/*`, `/api/consent/*`, `/api/mcp/*`, `/login`, `/consent` |
+| Consent Service | Gateway Admin API | HTTP/1.1 + Bearer (port 8002) | Sessions, OAuth states, pending tokens |
+| Gateway | Redis | RESP (port 6379) | **Only** Gateway has direct Redis access |
+| Consent Service | PostgreSQL | PostgreSQL (port 5432) | Users, sessions, OAuth clients |
+| Gateway | Consent Service (JWKS) | HTTP (port 3000) | JWT signature verification |
+| Gateway | Permit.io | HTTPS | Authorization checks (Cloud PDP or On-Prem) |
+| Consent Service | Permit.io | HTTPS | Policy sync during consent |
+| Gateway | Upstream MCP | HTTPS | Streamable HTTP with upstream OAuth tokens |
 
 ## Integration Patterns
 
@@ -147,8 +196,9 @@ graph TD
 1. The MCP client discovers the gateway's OAuth endpoints
 2. The user authenticates and signs in
 3. The user selects an MCP server from the list of servers the admin has granted them access to
-4. The user chooses the trust level they want to grant their agent, up to the maximum the admin configured
-5. The user clicks **Accept**, and the consent service issues an authorization code. The MCP client exchanges the code for a JWT access token.
+4. If the upstream MCP server requires OAuth, the user authorizes with the upstream provider
+5. The user chooses the trust level they want to grant their agent, up to the maximum the admin configured
+6. The gateway issues a JWT access token to the MCP client
 
 **On subsequent tool calls:**
 
@@ -160,70 +210,188 @@ graph TD
 - **Human users**: `human|{subject}` — where `subject` is the authenticated user's identity. This format is used by the consent service and platform for policy management (e.g., granting a user access to MCP servers).
 - **Agents**: `agent|{client_id}` — where `client_id` identifies the agent acting on behalf of the user. This format is used at runtime by the gateway for tool-call authorization checks.
 
-### Sequence: First-Time Connection
+### Sequence: Admin Setup Flow
+
+The admin creates a host through the Platform UI, which resolves the Permit API key, provisions the host configuration in the Gateway, and stores it in Redis.
 
 ```mermaid
 sequenceDiagram
     participant A as Admin
-    participant PL as Platform UI
-    participant U as User
-    participant C as MCP Client
-    participant G as Agent Security Gateway
-    participant CS as Consent Service
-    participant PM as Permit.io
+    participant Platform as Platform UI
+    participant PermitAPI as Permit Platform API
+    participant GW as Gateway (Admin API)
+    participant R as Redis
 
-    Note over A,PM: Admin setup (one-time via Platform UI)
-    A->>PL: Sign in to app.agent.security
-    PL->>G: Create host
-    PL->>PM: Link Permit environment
-    A->>PL: Import MCP servers + set trust levels
-    PL->>G: Configure server routes
-    PL->>PM: Sync policies + resource types
-    A->>PL: Grant user access to MCP servers
-    PL->>PM: Create user roles + relationships
+    A->>Platform: Create host (select Permit environment)
+    Platform->>PermitAPI: GET /v2/api-key/{proj_id}/{env_id}
+    PermitAPI-->>Platform: { secret: "permit_key_..." }
+    Platform->>GW: POST /hosts { subdomain, permit_api_key }
+    GW->>PermitAPI: GET /v2/api-key/scope
+    PermitAPI-->>GW: { organization_id, project_id, environment_id }
+    GW->>R: SET host_lookup:{subdomain}
+    GW-->>Platform: 201 Created
+    Platform-->>A: Host created
 
-    Note over U,PM: User connection
-    C->>G: POST /mcp (no token)
-    G-->>C: 401 + OAuth discovery
-    C->>CS: Authorization request
-    CS-->>C: Redirect to login
-    U->>CS: Login
-    CS-->>U: Show granted MCP server list
-    U->>CS: Select MCP server + trust level
-    CS->>PM: Save consent + agent role
-    CS-->>C: Authorization code
-    C->>CS: Exchange for token
-    CS-->>C: JWT access token
-    C->>G: POST /mcp (Bearer token)
-    G-->>C: MCP response
+    Note over A,R: Admin then imports MCP servers and grants user access
+    A->>Platform: Import MCP servers + set trust levels
+    A->>Platform: Grant users access to MCP servers
+    Platform->>PermitAPI: Create resource types, instances, relations
 ```
 
-### Sequence: Authorized Tool Call
+### Sequence: User Consent Flow
+
+When a user connects for the first time, the MCP client discovers OAuth endpoints, the user authenticates and consents, and if the upstream MCP server requires OAuth, that flow is handled transparently.
 
 ```mermaid
 sequenceDiagram
     participant C as MCP Client
-    participant G as Gateway
-    participant P as Permit PDP
-    participant M as Upstream MCP Server
+    participant GW as Gateway
+    participant CS as Consent Service
+    participant PermitAPI as Permit Platform
+    participant Up as Upstream MCP Server
 
-    C->>G: call_tool(name=create_issue)
-    G->>P: permit.check("agent|{client_id}", "create_issue", "{server_key}:{server_key}")
-    alt allowed
-        P-->>G: PERMIT
-        G->>M: call_tool (proxied)
-        M-->>G: tool result
-        G-->>C: tool result
-    else denied
-        P-->>G: DENY
-        G-->>C: Permission denied
+    Note over C,Up: OAuth Discovery + Authentication
+    C->>GW: POST /mcp (no token)
+    GW-->>C: 401 + WWW-Authenticate
+    C->>GW: GET /.well-known/oauth-protected-resource
+    GW-->>C: Resource metadata (points to Consent Service)
+    C->>CS: GET /.well-known/oauth-authorization-server
+    CS-->>C: AS metadata (endpoints)
+    C->>GW: POST /oauth/register (DCR)
+    GW-->>C: client_id
+    C->>CS: Authorization request (PKCE)
+    CS-->>C: Redirect to login
+
+    Note over C,Up: User Login + Consent
+    C->>CS: User authenticates (login)
+    CS-->>C: Redirect to consent UI
+    CS-->>C: Show admin-granted MCP server list
+
+    Note over C,Up: Upstream OAuth (if required)
+    C->>CS: Select MCP server
+    CS->>Up: Probe upstream + initialize/list_tools
+    alt Upstream requires OAuth
+        Up-->>CS: 401 + WWW-Authenticate
+        CS->>Up: Discover auth server + DCR + build auth URL
+        CS->>GW: Store OAuth state (short TTL)
+        CS-->>C: Redirect to upstream auth provider
+        C->>CS: GET /api/mcp/oauth/callback?code=...
+        CS->>GW: Exchange code for tokens
+        CS->>GW: Store upstream token (keyed by consent_id)
+        CS-->>C: Redirect back to consent
     end
-    G->>G: Log to audit
+    CS->>Up: list_tools (with upstream token if applicable)
+    Up-->>CS: Tools list + server info
+
+    Note over C,Up: Trust Selection + Policy Sync
+    CS-->>C: Show tools + trust level controls
+    C->>CS: Accept consent + trust level selection
+    CS->>PermitAPI: Create resource instances + assign roles
+    CS->>GW: Store MCP session info
+    CS-->>C: Authorization code
+    C->>CS: POST /api/auth/token (exchange code)
+    CS-->>C: JWT access token
+    C->>GW: POST /mcp (Bearer token)
+    GW-->>C: MCP response
 ```
+
+:::info Server allow-list
+Users can only connect to MCP servers that the admin has pre-configured and granted them access to. Ad-hoc upstream URLs are not accepted — the consent service validates that every upstream URL matches a server the user is authorized to use.
+:::
+
+### Sequence: Authorization Decision Flow
+
+When a tool call arrives at the Gateway, it passes through a multi-step middleware chain before reaching the upstream MCP server.
+
+```mermaid
+sequenceDiagram
+    participant C as MCP Client
+    participant GW as Gateway
+    participant R as Redis
+    participant PDP as Permit PDP
+    participant Up as Upstream MCP Server
+
+    C->>GW: call_tool(name=create_issue, Bearer token)
+
+    Note over GW: 1. Extract tenant from Host header
+    Note over GW: Host: acme.agent.security → tenant "acme"
+
+    GW->>R: GET host_lookup:acme
+    Note over GW,R: 2. Load tenant config (permit_api_key, oauth config)
+
+    Note over GW: 3. JWT Validation
+    Note over GW: Verify Ed25519 signature (JWKS cached)
+    Note over GW: Validate claims: iss, aud, exp, tenant_subdomain
+    Note over GW: Extract: subject (user ID), client_id (agent ID)
+
+    Note over GW: 4. Transport session lookup (in-memory)
+    Note over GW: MCP-Session-Id → local HashMap
+
+    GW->>R: GET mcp:session:{client_id}:{subject}
+    R-->>GW: {upstream_url, tokens, trust_level}
+    Note over GW,R: 5. Application session lookup
+
+    Note over GW: 6. Token refresh (if upstream token expires within 5 min)
+
+    GW->>PDP: permit.check("agent|{client_id}", "create_issue", "{server_key}:{server_key}")
+    Note over GW,PDP: 7. Authorization check
+
+    alt allowed
+        PDP-->>GW: ALLOW
+        GW->>Up: call_tool (proxied with upstream token)
+        Up-->>GW: tool result
+        GW-->>C: tool result
+    else denied
+        PDP-->>GW: DENY
+        GW-->>C: MCP error (-32004 Permission denied)
+    end
+    GW->>GW: Log to audit
+```
+
+### Authorization: Trust Ceiling (min logic)
+
+The effective permission on an MCP server is determined by the **minimum** of the agent's trust level and the human's profile relation to the server. This ensures a human's profile relation acts as a ceiling on what any agent can exercise.
+
+```mermaid
+flowchart LR
+    Agent["Agent<br/>agent|client_id"]
+    Profile["UserProfile<br/>user_profile:subject"]
+    Server["MCP Server<br/>server_key:server_key"]
+    Result["Effective Role<br/>= min(agent_role, profile_relation)"]
+
+    Agent -->|"role: {server}-medium"| Profile
+    Profile -->|"relation: medium"| Server
+    Server --> Result
+
+    style Result fill:#f9f,stroke:#333,stroke-width:2px
+```
+
+**How it works:**
+
+The system uses 9 derived role rules per MCP server to implement the `min()` logic through Permit's ReBAC:
+
+| Agent role on profile | Profile relation to server | Effective server role |
+| --- | --- | --- |
+| `{server}-high` | `high` | **high** |
+| `{server}-high` | `medium` | **medium** (capped) |
+| `{server}-high` | `low` | **low** (capped) |
+| `{server}-medium` | `high` | **medium** |
+| `{server}-medium` | `medium` | **medium** |
+| `{server}-medium` | `low` | **low** (capped) |
+| `{server}-low` | `high` | **low** |
+| `{server}-low` | `medium` | **low** |
+| `{server}-low` | `low` | **low** |
+
+The derived role then determines which tools are allowed:
+- **Low** trust tools: available to `low`, `medium`, and `high` roles
+- **Medium** trust tools: available to `medium` and `high` roles
+- **High** trust tools: available to `high` role only
 
 ## Deployment
 
-Agent Security is currently available as a **hosted gateway** at `*.agent.security`. Each host (tenant) gets a unique subdomain with isolated policies, users, and sessions.
+Agent Security is available as a **hosted gateway** at `*.agent.security`. Each host (tenant) gets a unique subdomain with isolated policies, users, and sessions.
+
+Point your MCP clients to `https://<host>.agent.security/mcp` and the gateway handles the rest — authentication, authorization, and audit logging are all built in.
 
 ## Key Advantages
 

@@ -1,0 +1,363 @@
+---
+title: Authentication Methods Reference
+sidebar_label: Authentication Methods
+description: Configure how users sign in to Agent Security — email/password, OTP, passkeys, social OAuth, SAML 2.0, and OIDC SSO with IdP-specific setup instructions.
+sidebar_position: 4.5
+---
+
+# Authentication Methods Reference
+
+Each Agent Security host has its own authentication configuration, controlling how users sign in during the [consent flow](/ai-security/mcp-permissions/guide#7-user-consent-flow). Authentication is per-tenant — different hosts can use different methods, credentials, and domain restrictions.
+
+By default, new hosts have **email/password** enabled and all other methods disabled.
+
+## Available Methods
+
+### Email / Password
+
+Database-backed credentials. Enabled by default on all new hosts.
+
+- **Configuration required:** None
+- **How it works:** Users create an account with an email and password, then sign in with those credentials
+- **Notes:** This is the fallback default — if all auth configuration is removed, the host reverts to email/password only
+
+### Email OTP
+
+Passwordless sign-in via a one-time passcode sent to the user's email.
+
+- **Configuration required:** None (uses the host's built-in email delivery)
+- **How it works:** Users enter their email, receive a 6-digit code (5-minute expiry), and enter it to sign in
+- **Notes:** Can be enabled alongside email/password — users see both options on the login screen
+
+### Passkeys (WebAuthn)
+
+Standards-based credential management using FIDO2/WebAuthn.
+
+- **Configuration required:** None
+- **How it works:** Users register a passkey (biometric, security key, etc.) and use it for subsequent sign-ins
+- **Browser support:** Requires a browser that supports the [Web Authentication API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Authentication_API) (all modern browsers)
+- **Notes:** Passkeys require an initial registration via another method (email/password or social login) — you cannot use passkeys as the sole method for new users who haven't registered one yet
+
+### Google OAuth
+
+Sign in with Google.
+
+- **Configuration required:** Google OAuth client ID and client secret
+- **Redirect URI:** `https://{subdomain}.agent.security/api/auth/callback/google`
+
+#### Setup steps
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Navigate to **APIs & Services > Credentials**
+3. Click **Create Credentials > OAuth client ID**
+4. Select **Web application** as the application type
+5. Under **Authorized redirect URIs**, add:
+   ```
+   https://{subdomain}.agent.security/api/auth/callback/google
+   ```
+   Replace `{subdomain}` with your host's full subdomain (e.g., `acme-pink-panda-6942`)
+6. Copy the **Client ID** and **Client Secret**
+7. In Agent Security, go to your host's **Settings** and enable **Google OAuth**
+8. Paste the Client ID and Client Secret
+
+:::info Per-host credentials
+Each host needs its own OAuth app registration. If you have multiple hosts, create a separate Google OAuth app for each one with the correct redirect URI.
+:::
+
+### GitHub OAuth
+
+Sign in with GitHub.
+
+- **Configuration required:** GitHub OAuth client ID and client secret
+- **Redirect URI:** `https://{subdomain}.agent.security/api/auth/callback/github`
+
+#### Setup steps
+
+1. Go to [GitHub Developer Settings > OAuth Apps](https://github.com/settings/developers)
+2. Click **New OAuth App**
+3. Fill in:
+   - **Application name:** e.g., "Agent Security — acme"
+   - **Homepage URL:** `https://{subdomain}.agent.security`
+   - **Authorization callback URL:**
+     ```
+     https://{subdomain}.agent.security/api/auth/callback/github
+     ```
+4. Click **Register application**
+5. Copy the **Client ID**, then generate and copy a **Client Secret**
+6. In Agent Security, go to your host's **Settings** and enable **GitHub OAuth**
+7. Paste the Client ID and Client Secret
+
+### Microsoft OAuth
+
+Sign in with Microsoft (Azure AD / Entra ID). Supports single-tenant and multi-tenant configurations.
+
+- **Configuration required:** Microsoft OAuth client ID, client secret, and optionally a tenant ID
+- **Redirect URI:** `https://{subdomain}.agent.security/api/auth/callback/microsoft`
+
+#### Setup steps
+
+1. Go to the [Azure Portal > App Registrations](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
+2. Click **New registration**
+3. Fill in:
+   - **Name:** e.g., "Agent Security — acme"
+   - **Supported account types:** Choose based on your needs:
+     - *Single tenant* — only users in your Azure AD directory
+     - *Multitenant* — users in any Azure AD directory
+     - *Multitenant + personal Microsoft accounts* — broadest access
+   - **Redirect URI:** Select **Web** and enter:
+     ```
+     https://{subdomain}.agent.security/api/auth/callback/microsoft
+     ```
+4. Click **Register**
+5. Copy the **Application (client) ID**
+6. Go to **Certificates & secrets > New client secret**, create one, and copy the **Value**
+7. In Agent Security, go to your host's **Settings** and enable **Microsoft OAuth**
+8. Paste the Client ID and Client Secret
+9. *(Optional)* Set the **Tenant ID** to restrict sign-in to a specific Azure AD directory. If omitted, defaults to `common` (multi-tenant — accepts any Azure AD account)
+
+#### Tenant ID values
+
+| Value | Meaning |
+| --- | --- |
+| *(empty / omitted)* | Defaults to `common` — any Azure AD or personal Microsoft account |
+| `common` | Any Azure AD or personal Microsoft account |
+| `organizations` | Any Azure AD account (no personal accounts) |
+| `consumers` | Personal Microsoft accounts only |
+| A specific UUID | Only users from that specific Azure AD directory |
+
+### SAML 2.0 SSO
+
+Enterprise single sign-on via SAML. Agent Security acts as the **Service Provider (SP)** and your identity provider (Okta, Azure AD/Entra ID, Google Workspace, etc.) acts as the **Identity Provider (IdP)**.
+
+- **Configuration required:** IdP entry point URL, IdP entity ID, and X.509 signing certificate (PEM format)
+
+#### Service Provider details
+
+Provide these to your IdP when configuring the SAML app:
+
+| Field | Value |
+| --- | --- |
+| **SP Entity ID / Audience URI** | `https://{subdomain}.agent.security/api/auth/sso/saml2/sp/metadata` |
+| **ACS URL** | `https://{subdomain}.agent.security/api/auth/sso/saml2/callback/sso-{subdomain}` |
+| **SP Metadata XML** | Download from the host settings page, or fetch from: `https://{subdomain}.agent.security/api/auth/sso/saml2/sp/metadata?providerId=sso-{subdomain}` |
+
+#### Attribute mapping
+
+Configure your IdP to send the following SAML attributes:
+
+| Attribute | SAML claim URI |
+| --- | --- |
+| **Email** | `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress` |
+| **Name** | `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name` |
+
+#### Security posture
+
+- **SP-initiated SSO only** — IdP-initiated SSO is disabled for security hardening
+- **InResponseTo validation** is enabled — the SAML response must reference the original authentication request
+- **Certificate format** — must be PEM format (starts with `-----BEGIN CERTIFICATE-----`, ends with `-----END CERTIFICATE-----`)
+
+#### Okta setup
+
+1. In the Okta Admin Console, go to **Applications > Create App Integration**
+2. Select **SAML 2.0** and click **Next**
+3. Fill in:
+   - **App name:** e.g., "Agent Security"
+4. Configure SAML settings:
+   - **Single sign-on URL (ACS URL):** `https://{subdomain}.agent.security/api/auth/sso/saml2/callback/sso-{subdomain}`
+   - **Audience URI (SP Entity ID):** `https://{subdomain}.agent.security/api/auth/sso/saml2/sp/metadata`
+   - **Name ID format:** EmailAddress
+   - **Application username:** Email
+5. Add attribute statements:
+   - `email` → `user.email` (URI: `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress`)
+   - `name` → `user.displayName` (URI: `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name`)
+6. Click **Next**, then **Finish**
+7. On the app's **Sign On** tab, copy:
+   - **IdP SSO URL** (entry point)
+   - **IdP Entity ID** (issuer)
+   - **X.509 Certificate** (download and paste as PEM)
+8. In Agent Security, go to your host's **Settings** and enable **SAML 2.0 SSO**
+9. Paste the entry point URL, entity ID, and certificate
+
+#### Azure AD (Entra ID) setup
+
+1. In the [Azure Portal](https://portal.azure.com), go to **Enterprise Applications > New Application > Create your own application**
+2. Select **Integrate any other application you don't find in the gallery (Non-gallery)**
+3. Name it (e.g., "Agent Security") and click **Create**
+4. Go to **Single sign-on > SAML**
+5. In **Basic SAML Configuration**:
+   - **Identifier (Entity ID):** `https://{subdomain}.agent.security/api/auth/sso/saml2/sp/metadata`
+   - **Reply URL (ACS URL):** `https://{subdomain}.agent.security/api/auth/sso/saml2/callback/sso-{subdomain}`
+6. In **Attributes & Claims**, verify:
+   - `emailaddress` → `user.mail`
+   - `name` → `user.displayname`
+7. In **SAML Certificates**, download **Certificate (Base64)** — this is the PEM-format certificate
+8. In **Set up Agent Security**, copy:
+   - **Login URL** (entry point)
+   - **Azure AD Identifier** (entity ID)
+9. In Agent Security, go to your host's **Settings** and enable **SAML 2.0 SSO**
+10. Paste the entry point URL, entity ID, and certificate
+
+#### Google Workspace setup
+
+1. In the [Google Admin Console](https://admin.google.com), go to **Apps > Web and mobile apps > Add app > Add custom SAML app**
+2. Name it (e.g., "Agent Security") and click **Continue**
+3. On the **Google Identity Provider details** page, copy:
+   - **SSO URL** (entry point)
+   - **Entity ID**
+   - **Certificate** (download)
+4. Click **Continue**
+5. Fill in **Service provider details**:
+   - **ACS URL:** `https://{subdomain}.agent.security/api/auth/sso/saml2/callback/sso-{subdomain}`
+   - **Entity ID:** `https://{subdomain}.agent.security/api/auth/sso/saml2/sp/metadata`
+   - **Name ID format:** EMAIL
+   - **Name ID:** Basic Information > Primary email
+6. Add attribute mapping:
+   - `email` → Basic Information > Primary email
+   - `name` → Basic Information > First name + Last name
+7. Click **Finish**, then turn the app **ON** for the relevant organizational units
+8. In Agent Security, go to your host's **Settings** and enable **SAML 2.0 SSO**
+9. Paste the entry point URL, entity ID, and certificate
+
+### OIDC SSO
+
+Enterprise single sign-on via OpenID Connect.
+
+- **Configuration required:** Issuer URL, client ID, and client secret
+- **Callback URL:** `https://{subdomain}.agent.security/api/auth/callback/sso-{subdomain}`
+- **Scopes requested:** `openid`, `profile`, `email`
+
+#### How it works
+
+Agent Security auto-discovers your IdP's endpoints using the standard OpenID Connect Discovery URL:
+
+```
+{issuerUrl}/.well-known/openid-configuration
+```
+
+You only need to provide the issuer URL — Agent Security handles the rest.
+
+#### Setup steps
+
+1. In your identity provider, register a new **Web Application** (or "OIDC app")
+2. Set the **redirect URI / callback URL** to:
+   ```
+   https://{subdomain}.agent.security/api/auth/callback/sso-{subdomain}
+   ```
+3. Note the **Issuer URL** (e.g., `https://accounts.google.com`, `https://login.microsoftonline.com/{tenant}/v2.0`, `https://{domain}.okta.com`)
+4. Copy the **Client ID** and **Client Secret**
+5. In Agent Security, go to your host's **Settings** and enable **OIDC SSO**
+6. Paste the Issuer URL, Client ID, and Client Secret
+
+:::note One SSO method per host
+Each host can have either SAML 2.0 **or** OIDC SSO enabled, but not both simultaneously. If you need to switch SSO methods, disable the current one before enabling the other.
+:::
+
+## Domain Restrictions
+
+Domain restrictions limit which email addresses can use specific authentication methods. They are configured in the host's **Settings**.
+
+### Global vs. Per-Method
+
+- **Global restrictions** apply to **all** authentication methods on the host
+- **Per-method restrictions** apply to a **single** authentication method
+
+### Intersection Semantics
+
+When both global and per-method restrictions are configured, they use **intersection** logic — the email domain must be allowed by **both** the global list AND the per-method list.
+
+| Global allows | Per-method allows | `user@acme.com` | `user@partner.io` | `user@outsider.com` |
+| --- | --- | --- | --- | --- |
+| `acme.com`, `partner.io` | *(not set)* | Allowed | Allowed | Blocked |
+| *(not set)* | `acme.com` | Allowed | Blocked | Blocked |
+| `acme.com`, `partner.io` | `acme.com` | Allowed | **Blocked** (not in per-method) | Blocked |
+| `acme.com` | `acme.com`, `outsider.com` | Allowed | Blocked | **Blocked** (not in global) |
+
+:::warning
+Per-method restrictions do **not** override global restrictions — they narrow them further. If the global list allows `acme.com` and `partner.io`, a per-method restriction of `acme.com` means only `acme.com` users can use that method. A per-method list that adds `outsider.com` does not bypass the global block on that domain.
+:::
+
+### Examples
+
+**Single organization — restrict all methods to your domain:**
+- Set **global** allowed domains to `acme.com`
+- All methods only accept `@acme.com` emails
+
+**Organization with contractors:**
+- Set **global** allowed domains to `acme.com`, `contractor.acme.com`
+- Set **SSO per-method** allowed domains to `acme.com` (only employees use SSO)
+- Contractors with `@contractor.acme.com` can use email/password but not SSO
+
+**Multiple partner organizations:**
+- Set **global** allowed domains to `acme.com`, `partner1.com`, `partner2.com`
+- All three domains can use any enabled method
+- Optionally restrict SSO to `acme.com` only
+
+### Force-Redirect Domains
+
+For SSO methods (SAML or OIDC), you can configure **force-redirect domains**. When a user enters an email with a matching domain, they are automatically redirected to the SSO provider — skipping the login screen entirely.
+
+**How it works:**
+
+1. User enters their email on the login screen
+2. If the email domain matches a force-redirect domain, the user is immediately sent to the SSO provider
+3. After SSO authentication, the user is redirected back to complete the consent flow
+
+**Fallback behavior:** If the SSO redirect fails (e.g., the IdP is down or the user cancels), the user is returned to the login screen with a warning message: *"SSO sign-in was unsuccessful. Please try another method or contact your administrator."* They can then use any other enabled authentication method.
+
+## Multi-Method Configuration
+
+### Enabling multiple methods
+
+You can enable any combination of methods simultaneously (with the restriction that only one SSO type — SAML or OIDC — can be active per host).
+
+### What users see
+
+The login screen dynamically adapts to the enabled methods. When domain restrictions are configured, users enter their email first, and only the methods available for their domain are shown.
+
+The methods appear in this order on the login screen:
+
+1. Passkeys
+2. Social login buttons (Google, GitHub, Microsoft)
+3. SSO button (SAML or OIDC)
+4. Email/password form
+5. Email OTP form
+
+The "Create Account" option only appears if email/password or email OTP is enabled.
+
+### Recommended configurations
+
+| Organization type | Recommended methods | Notes |
+| --- | --- | --- |
+| **Small team / startup** | Email/password | Simple, no external setup required |
+| **Developer team** | GitHub OAuth + email/password | GitHub for daily use, email/password as fallback |
+| **Google Workspace org** | Google OAuth + email/password | Restrict Google OAuth to your domain |
+| **Microsoft 365 org** | Microsoft OAuth or OIDC SSO | Use tenant ID to restrict to your directory |
+| **Enterprise with IdP** | SAML 2.0 or OIDC SSO + email/password | SSO for employees, email/password for exceptions. Use force-redirect domains for a seamless SSO experience |
+| **Multi-org with contractors** | SSO + email/password with domain restrictions | SSO restricted to employee domain, email/password for contractor domain |
+
+## Configuration Rules
+
+These validation rules are enforced when saving authentication settings:
+
+| Rule | Description |
+| --- | --- |
+| **At least one method** | At least one authentication method must be enabled at all times. You cannot disable all methods. |
+| **One SSO type per host** | A host can have SAML 2.0 **or** OIDC SSO, but not both. Disable one before enabling the other. |
+| **SAML requires all fields** | Enabling SAML requires the entry point URL, entity ID, **and** X.509 certificate (PEM format). |
+| **OIDC requires all fields** | Enabling OIDC requires the issuer URL, client ID, **and** client secret. |
+| **Social providers require credentials** | Enabling a social provider (Google, GitHub, Microsoft) requires both the client ID **and** client secret. |
+| **PEM format validation** | SAML certificates are validated on save — must start with `-----BEGIN CERTIFICATE-----` and end with `-----END CERTIFICATE-----`. |
+
+## Callback URL Reference
+
+When registering OAuth apps or configuring IdPs, use these callback URLs:
+
+| Method | Callback URL |
+| --- | --- |
+| **Google OAuth** | `https://{subdomain}.agent.security/api/auth/callback/google` |
+| **GitHub OAuth** | `https://{subdomain}.agent.security/api/auth/callback/github` |
+| **Microsoft OAuth** | `https://{subdomain}.agent.security/api/auth/callback/microsoft` |
+| **OIDC SSO** | `https://{subdomain}.agent.security/api/auth/callback/sso-{subdomain}` |
+| **SAML 2.0 ACS** | `https://{subdomain}.agent.security/api/auth/sso/saml2/callback/sso-{subdomain}` |
+
+Replace `{subdomain}` with your host's full subdomain (e.g., `acme-pink-panda-6942`).
