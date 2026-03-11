@@ -14,7 +14,6 @@ It authenticates users, enforces per-tool permissions through trust levels, and 
 
 - A [Permit.io](https://app.permit.io) account
 - An **organization-scoped** API key from [Permit.io Settings &gt; API Keys](https://app.permit.io/settings/api-keys) — you'll use this once in [Step 1](#1-sign-up-and-connect-your-organization) to connect your organization
-- A **project/environment-scoped** API key for each host you create — you'll use this in [Step 2](#2-create-a-host) to link the host to a specific Permit environment
 
 ## 1. Sign up and connect your organization
 
@@ -33,8 +32,9 @@ A **host** is a named instance of the Agent Security Gateway, with its own subdo
 
 1. Go to the [**Dashboard**](https://app.agent.security/) and select **Hosts**, then click **Create Host**
 2. Fill in:
-   - **Subdomain prefix** — e.g., `acme` (a unique suffix like `pink-panda-6942` is auto-generated)
-   - **Permit API Key** — a project/environment-scoped key that determines which Permit environment this host uses
+   - **Subdomain** — choose a prefix (e.g., `my-tenant`). A unique suffix like `round-moccasin-19` is auto-generated.
+   - **Project** — select the Permit project that contains the environment you want to use.
+   - **Environment** — select the Permit environment this host will use. The environment cannot be changed after the host is created.
 3. Click **Create Host**
 
 ![Create Host](/img/agent-security/create-host.png)
@@ -107,13 +107,17 @@ When the user later completes the [consent flow](#7-user-consent-flow), they wil
 
 Agents are MCP clients that connect through the gateway. They appear automatically on the [**Agents**](https://app.agent.security/agents) page after a user completes the [consent flow](#7-user-consent-flow).
 
-For each agent you can:
+The table lists each agent's **Name**, **Client ID**, **Email**, **URI**, and **Type**.
+
+![Agent Users page — list of registered MCP client agents](/img/agent-security/agents.png)
+
+Click on an agent to open its detail page, where you can:
 
 - View which MCP servers it has access to and at what trust level
 - Change its max trust level per server
 - Revoke access to specific servers
 
-![Agent Users page](/img/agent-security/agents.png)
+![Agent detail page — MCP server permissions and trust level](/img/agent-security/agent-detail.png)
 
 ### Humans
 
@@ -197,11 +201,13 @@ When a user connects an MCP client for the first time, they complete a one-time 
 3. **Authenticate with the upstream server** — if the MCP server requires OAuth, the user is redirected to sign in with the upstream provider (e.g., GitHub, Linear)
 4. **Set trust level** — the user chooses the trust level they want to grant their agent, up to the maximum level the admin configured in [Step 4](#4-grant-user-access-to-mcp-servers). The consent screen shows which tools are allowed or denied at each level.
 
-5. **Accept** — permissions are saved to Permit and the MCP client receives an access token
+![Consent flow — authorize agent](/img/agent-security/authorize_agent_screen.png)
+
+5. **Accept** — the user clicks **Accept** to confirm. Permissions are saved to Permit and the MCP client receives an access token.
 
 If the user has not been granted access to any MCP servers, the list will be empty and they won't be able to proceed until an admin grants them access.
 
-On subsequent connections the existing session is reused until it expires or is revoked.
+On subsequent connections the existing session is reused until it expires or is revoked. When a session expires, the MCP client will receive a token-expired error and the user must reconnect — the consent flow runs again automatically, letting them re-authenticate and confirm their trust level. No data or permissions are lost; the new session picks up the same access grants the admin has configured. See [Troubleshooting](#troubleshooting) if you encounter token-expired errors.
 
 ## 8. Runtime authorization
 
@@ -217,10 +223,10 @@ Authorization is based on the trust level assigned during consent. For example, 
 
 ## 9. Audit logs
 
-Every authorization decision — allowed or denied — is recorded and accessible in two places:
+Every authorization decision — allowed or denied — is recorded in two places:
 
-- **Platform UI** ([app.agent.security](https://app.agent.security)) — activity views on the [Agents](https://app.agent.security/agents), [Humans](https://app.agent.security/humans), and MCP Server detail pages
-- **Permit.io Dashboard** ([app.permit.io](https://app.permit.io)) — raw `permit.check()` decision log with full policy evaluation details
+- **Agent Security platform** ([app.agent.security](https://app.agent.security)) — the [**Humans**](https://app.agent.security/humans) page shows activity per user and the [**Agents**](https://app.agent.security/agents) page shows activity per agent, including every tool call and whether it was allowed or denied
+- **Permit.io dashboard** ([app.permit.io](https://app.permit.io)) — the **Audit Log** page in the linked environment shows the same authorization decisions alongside your other Permit policy logs
 
 Each log entry includes the agent identity, the tool called, the MCP server targeted, and whether the request was allowed or denied.
 
@@ -248,9 +254,13 @@ Tools that don't match any medium or high pattern default to **low** trust. The 
 | No MCP servers in the consent screen | Admin hasn't granted the user access to any servers | Grant the user access on the [**Humans**](https://app.agent.security/humans) page |
 | "Permission denied" on a tool call | Agent's trust level is too low for that tool | The user can re-consent with a higher trust level by disconnecting the MCP server in their client and reconnecting — the consent flow will run again, letting them choose a new trust level. Alternatively, the admin can adjust trust levels on the [**Agents**](https://app.agent.security/agents) page. |
 | OAuth redirect fails during consent | Upstream MCP server requires manual OAuth credentials | Re-import the server and provide Client ID / Secret when prompted |
+| OAuth redirect fails with "invalid client" or discovery error | Upstream OAuth credentials are wrong or the provider's PKCE/discovery URL has changed | Verify the Client ID and Secret on the server detail page in [**MCP Servers**](https://app.agent.security/mcp-servers). If the provider changed its discovery URL, delete and re-import the server with the updated URL (see [Step 3](#3-import-mcp-servers)). |
 | Tools not appearing after import | Tools may be disabled | Check the server detail page and enable the missing tools |
 | User can't complete consent flow | Browser blocks pop-ups from the MCP client | Allow pop-ups for the `agent.security` domain |
-| Token expired errors | Session has expired | The user needs to reconnect — the consent flow will run again |
+| Re-consent doesn't offer a higher trust level | The user's max trust level is too low | An admin must first increase the user's max trust level on the [**Humans**](https://app.agent.security/humans) page (see [Step 4](#4-grant-user-access-to-mcp-servers)) before the user re-consents |
+| Token expired errors | Session has expired | The user needs to reconnect — disconnect the MCP server in the client and reconnect. The [consent flow](#7-user-consent-flow) runs again, letting the user re-authenticate and confirm their trust level. |
+| `upstream_mcp` parameter used but server doesn't appear in consent | The user has not been granted access to that server | The pre-selection parameter is silently ignored when the user lacks access. Grant the user access on the [**Humans**](https://app.agent.security/humans) page (see [Step 4](#4-grant-user-access-to-mcp-servers)), then have them retry. |
+| Can't find audit logs | Checking only one of the two log locations | Audit logs are available both in the Agent Security platform ([app.agent.security](https://app.agent.security)) on the Humans and Agents pages, and in the Permit.io dashboard ([app.permit.io](https://app.permit.io)) under Audit Log in the linked environment. See [Audit logs](#9-audit-logs) for details. |
 
 ## Authentication methods
 
@@ -274,7 +284,16 @@ Go to the host's **Authentication** settings in [app.agent.security](https://app
 
 ### Domain restrictions
 
-Each authentication method supports **allowed email domain** restrictions. For example, you can limit Google OAuth to `@acme.com` addresses only. Domain restrictions can be set globally (applied to all methods) or per method.
+Each authentication method supports **allowed email domain** restrictions. Domain restrictions can be configured at two levels:
+
+- **Global** — applies to **all** authentication methods
+- **Per method** — applies only to a specific method (e.g., Google OAuth)
+
+These two levels use **intersection semantics**: a domain must be allowed by **both** the global list and the method-specific list for a user to sign in. Adding a domain to a method-specific list does **not** bypass the global list.
+
+:::warning
+If you set a global domain restriction to `@acme.com`, adding `@partner.com` to the Google OAuth method-specific list will **not** allow `@partner.com` users to sign in via Google — the domain must also appear in the global list. To allow `@partner.com` for Google OAuth only, add it to **both** the global list and the Google OAuth method list.
+:::
 
 For SSO methods, you can also configure **force-redirect domains** — users with matching email domains are automatically redirected to the SSO provider instead of seeing the login screen.
 
