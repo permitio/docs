@@ -195,6 +195,7 @@ const sidebars = {
             "ai-security/mcp-permissions/audit-logs",
             "ai-security/mcp-permissions/architecture",
             "ai-security/mcp-permissions/permit-integration",
+            "ai-security/mcp-permissions/advanced-features",
           ],
         },
         {
