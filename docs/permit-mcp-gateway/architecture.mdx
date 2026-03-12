@@ -254,9 +254,9 @@ sequenceDiagram
     C->>GW: POST /mcp (no token)
     GW-->>C: 401 + WWW-Authenticate
     C->>GW: GET /.well-known/oauth-protected-resource
-    GW-->>C: Resource metadata (points to Consent Service)
-    C->>CS: GET /.well-known/oauth-authorization-server
-    CS-->>C: AS metadata (endpoints)
+    GW-->>C: Resource metadata (points to Gateway AS)
+    C->>GW: GET /.well-known/oauth-authorization-server
+    GW-->>C: AS metadata (endpoints on Consent Service)
     C->>GW: POST /oauth/register (DCR)
     GW-->>C: client_id
     C->>CS: Authorization request (PKCE)
@@ -296,7 +296,7 @@ sequenceDiagram
 ```
 
 :::info Server allow-list
-Users can only connect to MCP servers that the admin has pre-configured and granted them access to. Ad-hoc upstream URLs are not accepted — the consent service validates that every upstream URL matches a server the user is authorized to use.
+By default, users can only connect to MCP servers that the admin has pre-configured and granted them access to — the consent service validates that every upstream URL matches a server the user is authorized to use. However, if the admin enables **Dynamic MCPs** on the host, users can also enter arbitrary upstream MCP server URLs during the consent flow. See [Dynamic MCPs](#dynamic-mcps) below.
 :::
 
 ### Sequence: Authorization Decision Flow
@@ -314,9 +314,9 @@ sequenceDiagram
     C->>GW: call_tool(name=create_issue, Bearer token)
 
     Note over GW: 1. Extract tenant from Host header
-    Note over GW: Host: acme.agent.security → tenant "acme"
+    Note over GW: Host: acme-pink-panda-6942.agent.security
 
-    GW->>R: GET host_lookup:acme
+    GW->>R: GET host_lookup:acme-pink-panda-6942
     Note over GW,R: 2. Load tenant config (permit_api_key, oauth config)
 
     Note over GW: 3. JWT Validation
@@ -347,6 +347,10 @@ sequenceDiagram
     end
     GW->>GW: Log to audit
 ```
+
+:::note Tool visibility vs. enforcement
+The gateway returns **all tools** in `list_tools` responses regardless of the agent's trust level. Authorization enforcement happens exclusively at `call_tool` time — agents may see tools they cannot invoke.
+:::
 
 ### Authorization: Trust Ceiling (min logic)
 
@@ -398,7 +402,7 @@ Point your MCP clients to `https://<host>.agent.security/mcp` and the gateway ha
 * **Single control point** for authorization and audit
 * **Drop-in** — no code changes, SDK optional
 * **Fine-grained ReBAC** — captures true user-agent-resource relationships
-* **Policy-as-code** — Rego, GitOps, unit tests
+* **Policy-as-code** — policies managed via UI and API, powered by OPA/Rego under the hood
 * **Short-lived creds** — minimize blast radius
 
 ## Agent Configuration Examples
@@ -415,6 +419,30 @@ Below is an example of how different agents end up with permissions based on the
 | Claude Desktop | alice | `github_mcp` | Low | `list_repos`, `get_file` | `create_issue`, `delete_repo` |
 | VS Code Copilot | bob | `github_mcp` | High | `get_file`, `create_issue`, `delete_repo` | *(none — high includes all)* |
 | Claude Code | carol | `slack_mcp` | Medium | `search_messages`, `send_message` | `remove_member` |
+
+## Dynamic MCPs
+
+By default, users can only connect to MCP servers that the admin has pre-configured (static servers). **Dynamic MCPs** is an opt-in feature that allows users to enter any upstream MCP server URL during the consent flow — useful for teams that need flexibility to connect to ad-hoc or personal MCP servers.
+
+### How it works
+
+1. An admin enables the **Allow Dynamic MCPs** toggle on the host settings page in the Platform
+2. During the consent flow, users see an option to enter a custom MCP server URL in addition to the pre-configured server list
+3. The user manages their own trust level for the dynamic server (there is no admin-set ceiling for dynamic servers)
+4. The Consent Service creates per-user Permit resources for dynamic MCP servers, keyed as `{serverKey}-{userId}` with an `mcp_server_type: "dynamic"` attribute to distinguish them from static servers
+
+### When to use
+
+- **Development teams** that frequently spin up new MCP servers and need quick access without waiting for admin provisioning
+- **Power users** who need to connect to niche or personal MCP servers
+- **Evaluation scenarios** where users are testing multiple MCP servers before requesting admin provisioning
+
+### Security considerations
+
+- Dynamic MCPs bypass the admin allow-list — users can connect to any URL
+- The admin can disable dynamic MCPs at any time by toggling the setting off
+- All dynamic MCP tool calls are still authorized via Permit and logged in the audit trail
+- The host-level `allow_dynamic_mcps` policy is enforced via a `connect_dynamic_mcp` action on the `user_profile` resource in Permit
 
 ## Glossary
 
