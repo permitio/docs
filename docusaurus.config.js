@@ -544,9 +544,12 @@ const config = {
           },
           {
             from: [
-              "/mcp-permissions/index"
+              "/mcp-permissions/index",
+              "/ai-security/mcp-permissions/guide/",
+              "/ai-security/mcp-permissions/overview/",
+              "/ai-security/mcp-permissions/",
             ],
-            to: "/ai-security/mcp-permissions/guide/"
+            to: "/permit-mcp-gateway/guide/"
           },
         ],
       },
@@ -589,6 +592,13 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
+      mermaid: {
+        options: {
+          themeVariables: {
+            edgeLabelBackground: '#EEEEEE',
+          },
+        },
+      },
       zoom: {
         selector: ".markdown :not(em) > img",
       },

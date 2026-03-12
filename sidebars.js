@@ -182,21 +182,38 @@ const sidebars = {
         },
         {
           type: "category",
-          label: "MCP Permissions",
-          link: { type: "doc", id: "ai-security/mcp-permissions/index" },
-          items: [
-            "ai-security/mcp-permissions/overview",
-            "ai-security/mcp-permissions/architecture",
-            "ai-security/mcp-permissions/guide",
-          ],
-        },
-        {
-          type: "category",
           label: "Access Request MCP",
           items: [
             "ai-security/access-request-mcp/overview",
             "ai-security/access-request-mcp/implementation-guide",
             "ai-security/access-request-mcp/food-ordering-demo-example",
+          ],
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Permit MCP Gateway",
+      className: "category-as-header",
+      collapsed: false,
+      collapsible: false,
+      items: [
+        {
+          type: "category",
+          label: "Permit MCP Gateway",
+          link: { type: "doc", id: "permit-mcp-gateway/index" },
+          items: [
+            "permit-mcp-gateway/overview",
+            "permit-mcp-gateway/guide",
+            "permit-mcp-gateway/platform",
+            "permit-mcp-gateway/managing-humans-and-agents",
+            "permit-mcp-gateway/host-setup",
+            "permit-mcp-gateway/authentication-methods",
+            "permit-mcp-gateway/consent-service",
+            "permit-mcp-gateway/audit-logs",
+            "permit-mcp-gateway/architecture",
+            "permit-mcp-gateway/permit-integration",
+            "permit-mcp-gateway/advanced-features",
           ],
         },
       ],
