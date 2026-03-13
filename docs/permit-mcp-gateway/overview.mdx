@@ -1,112 +1,162 @@
 ---
-title: Agent Security Overview
+title: Overview
 sidebar_label: Overview
-description: A comprehensive guide to Agent Security - the security gateway that provides identity-based access control, audit trails, and human-in-the-loop approvals for AI agent platforms.
+description: How Permit MCP Gateway works — the enforcement proxy that adds authentication, authorization, consent, and audit to MCP server access for AI agents.
 sidebar_position: 1
 ---
 
-# Agent Security – The Permissions Gateway for Agentic AI Tools (MCPs)
+# Permit MCP Gateway Overview
 
-Agent Security is a security gateway that provides instant control and visibility over every Model Context Protocol (MCP) server interaction. With a single configuration change, it wraps AI agents' tool access in enterprise-grade security, offering identity-based access checks, comprehensive audit trails, and human-in-the-loop approvals—all without requiring SDKs or code changes.
+Permit MCP Gateway is an enforcement proxy between MCP clients and MCP servers. It authenticates users, authorizes agent tool calls against fine-grained policy, collects explicit consent, and logs every decision — all without modifying your existing MCP servers or AI tools.
 
 :::info New to MCP?
-The **Model Context Protocol (MCP)** is an open standard that lets AI tools connect to external services. MCP **clients** are the AI tools your team uses daily — Cursor, Claude Desktop, VS Code Copilot, Claude Code. MCP **servers** are the services they connect to — GitHub, Linear, Slack, Jira, and hundreds more. Agent Security sits between the two, giving you control over those connections.
+The **Model Context Protocol (MCP)** is an open standard that lets AI tools connect to external services. MCP **clients** are AI tools like Cursor, Claude Desktop, VS Code, and Claude Code. MCP **servers** are the services they connect to — GitHub, Linear, Slack, Jira, and hundreds more. Permit MCP Gateway sits between the two, adding security controls to those connections.
 :::
 
-## The Challenge: Uncontrolled AI Agents and Invisible Risks
+## The Problem
 
-Enterprise adoption of agentic AI is surging, but security controls haven't kept pace. Teams deploy and consume MCP servers — the "USB-C for AI" that lets LLM agents plug into apps and data — without consistent oversight. Traditional API gateways and IAM tools were never designed for autonomous, context-driven agents.
+Enterprise adoption of AI agents is accelerating, but security controls have not kept pace:
 
-Organizations and CISOs face critical questions:
-- Which AI agents are touching which systems?
-- What data are they accessing?
-- Who ultimately authorized those actions?
+- **No visibility** — AI agents interact with production systems, but most organizations cannot answer basic questions: which agents are accessing which systems? What data are they reading or modifying? Who authorized those actions?
+- **No per-tool control** — traditional API gateways and IAM tools were not designed for MCP. They do not model the human-to-agent delegation chain or provide per-tool access controls for autonomous agents.
+- **Shadow MCP connections** — teams connect MCP servers in minutes, creating unvetted access paths to sensitive systems that bypass standard review.
+- **Compliance gaps** — unchecked agent activity risks violating data-privacy regulations (GDPR, HIPAA) and weakening audit posture (SOC 2). When agents act on behalf of humans, regulators expect the same traceability that applies to human actions.
+- **Privilege accumulation** — agents often run with overly broad access because there is no practical way to apply least privilege at the tool level.
 
-## The Solution: Agent Security Gateway
+## How Permit MCP Gateway Works
 
-Agent Security acts as a smart proxy between AI agents (MCP clients) and the tools or data they seek (MCP servers). It authenticates, authorizes, and audits every interaction, functioning as a zero-trust checkpoint for AI actions:
+The gateway operates as a transparent proxy. Adopting it requires a single configuration change — pointing your MCP client at the gateway URL instead of directly at the upstream MCP server.
 
-1. **Authenticate** the originator (human) and the agent acting on their behalf
-2. **Authorize** the requested action against fine-grained policy
-3. **Audit** the outcome for compliance and threat-hunting
+### Setup (Admin)
 
-All this happens transparently — no modification to AI agents or MCP servers, just a URL switch.
+1. **Create a host** — a named gateway instance with its own subdomain, policies, and users
+2. **Import MCP servers** — connect to upstream servers, discover their tools, and classify each tool by risk level
+3. **Grant user access** — specify which users can connect to which MCP servers and set a per-user trust ceiling
+
+### Connection (User)
+
+4. **Connect and authenticate** — the MCP client connects to the gateway URL; the user signs in via the configured authentication method (SSO, OAuth, email)
+5. **Consent** — the user selects an MCP server, reviews available tools, and chooses a trust level for their agent (up to the admin-defined ceiling)
+6. **Use tools** — the MCP client operates normally; allowed tool calls pass through to the upstream server, and denied calls return a clear permission error
+
+### Runtime (Every Tool Call)
+
+7. **Authenticate** — the gateway verifies the agent's JWT and identifies the calling agent and its authorizing human
+8. **Authorize** — the gateway checks Permit.io policy: *"Can this agent call this tool on this MCP server?"*
+9. **Audit** — the authorization decision (allow or deny) is logged with full context: agent identity, human identity, tool name, MCP server, timestamp, and result
+
+All of this is transparent to the upstream MCP server, which receives proxied requests with the user's upstream credentials as usual.
 
 ## Key Capabilities
 
-### Fine-Grained ReBAC, Identity-Based Access Control
-- Combine user identity, agent identity, and resource scope in one policy
-- Enforce true least-privilege down to individual MCP functions
+### Authentication
 
-### Unified Policy Management
-- One central policy layer instead of scattered configs
-- Rules consistently apply to internal or third-party MCP servers
+Users authenticate through the consent flow before any agent can access MCP servers. Each gateway host supports configurable authentication methods:
 
-### Complete Visibility & Auditing
-- Real-time logs of every agent action with rich context
-- Immediate traceability for incident response and compliance reporting
+- Email/password, email OTP, passkeys
+- Social OAuth (Google, GitHub, Microsoft)
+- Enterprise SSO (SAML 2.0, OIDC)
+- Domain restrictions and force-redirect for streamlined enterprise sign-in
 
-### Human-in-the-Loop Workflows
-- Configurable step-up approvals for sensitive operations
-- Optional but critical when AI touches high-risk data or funds
+### Authorization
 
-### Enterprise Integration
-- Leverages existing SSO (OIDC, SAML) and social providers (Google, GitHub, Microsoft)
-- Configurable per host with email domain restrictions and forced SSO redirect
+Every tool call is authorized in real time against fine-grained policy:
 
-### Zero-Code Deployment
-- Works as a proxy; adopt by routing MCP traffic to the gateway
-- Roll out governance in minutes, even across dozens of AI integrations
+- **Trust-level classification** — tools are auto-classified as low (read), medium (write), or high (destructive) during import, with manual overrides available
+- **Per-user trust ceilings** — admins set the maximum trust level each user can grant their agents
+- **Consent-based delegation** — users choose how much access to grant, within admin-defined boundaries
+- **Relationship-based access control (ReBAC)** — authorization flows through a human → agent → server chain, enforced by Permit.io using a `min()` trust ceiling
 
-### Compliance Assurance
-- Enforce data-privacy rules (GDPR, HIPAA) and strengthen SOC 2 controls
-- Stop unauthorized PII access or data exfiltration before it happens
+### Consent
 
-## Current Security Risks & Compliance Gaps
+A one-time consent flow ensures that humans explicitly authorize agent access:
 
-1. **Lack of Visibility & Oversight**
-   - AI agents often act with powerful access yet leave no usable logs
-   - Makes malicious or mistaken actions hard to detect
+- Users see which tools are available at each trust level before granting access
+- Trust levels above the admin ceiling are disabled
+- Consent is enforced at three layers: UI, API validation, and policy engine
+- Sessions persist across client restarts, with configurable expiry (30-day inactivity / 90-day absolute)
 
-2. **Unauthorized Actions & Privilege Abuse**
-   - Over-permissive agents can delete data, transfer funds, or leak secrets
-   - Risks from error, prompt injection, or insider threat
+### Audit
 
-3. **Shadow IT in AI Form**
-   - Teams spin up MCP integrations in minutes
-   - Bypasses standard review and creates unvetted connections
+Every authorization decision is logged automatically:
 
-4. **Compliance & Data-Privacy Violations**
-   - Unchecked agent activities risk breaching GDPR, HIPAA, and SOC 2
-   - Particularly concerning for PII or regulated data access
-
-5. **Operational Chaos & Security Drift**
-   - Manual processes can't keep pace with agent sprawl
-   - Leads to mismatched policies and difficulty in incident forensics
-
-## How It Works
-
-1. **Admin** connects to [app.agent.security](https://app.agent.security) and creates a host linked to their Permit environment
-2. **Admin** imports upstream MCP servers and defines the trust policy for each tool
-3. **Admin** grants specific users permission to connect to specific MCP servers
-4. **User** connects their MCP client (e.g., Cursor) to the gateway and signs in
-
-![Consent flow — sign in](/img/agent-security/consent-flow/login.png)
-
-5. **User** picks an MCP server from their allowed list, chooses a trust level, and consents
-
-![Consent flow — select MCP server](/img/agent-security/consent-flow/select-server.png)
-
-![Consent flow — set trust level and review tools](/img/agent-security/consent-flow/trust-level-slider.png)
-
-6. **Gateway** enforces per-tool authorization on every call — denied actions return a permissions error
-7. **Admin** monitors all activity on the Humans and Agents pages in [app.agent.security](https://app.agent.security)
+- Logged in both the [Permit MCP Gateway dashboard](https://app.agent.security) and the [Permit.io dashboard](https://app.permit.io)
+- Each entry includes: agent identity, human identity, tool name, MCP server, timestamp, and allow/deny decision
+- Filterable by agent, user, server, action, or decision
+- Supports compliance reporting, incident investigation, and access pattern analysis
 
 ---
 
-Agent Security delivers the visibility and control you need to safely enable AI innovation. The centralized gateway enforces policy, logs actions, and ensures compliance — all with minimal setup.
+## Security and Trust Model
 
-Ready to secure your AI operations? Get in touch:
-- Email us at [support@permit.io](mailto:support@permit.io)
-- Join our [Slack community](https://io.permit.io/slack)
-- Schedule a [demo](https://calendly.com/permit-io/demo)
+This section describes what Permit MCP Gateway enforces, what it logs, and what remains the responsibility of other components in your environment.
+
+### What the Gateway Sees
+
+| Data | Description |
+| --- | --- |
+| **User identity** | Authenticated via the consent flow (SSO, OAuth, email) |
+| **Agent identity** | The MCP client (e.g., Cursor, Claude Desktop) identified by its OAuth client ID |
+| **Tool calls** | The name and parameters of every `call_tool` request |
+| **MCP server identity** | Which upstream server the call is destined for |
+| **Authorization decisions** | Whether each tool call was allowed or denied, and why |
+
+### What the Gateway Enforces
+
+- **Authentication** — users must sign in before any agent can access MCP servers
+- **Authorization** — every tool call is checked against policy; denied calls are blocked before reaching the upstream server
+- **Trust ceilings** — agents cannot exceed the trust level granted by the human, and humans cannot exceed the ceiling set by the admin
+- **Consent** — agents only receive access after the human completes the consent flow
+- **Session management** — sessions expire after inactivity or absolute time limits, and can be revoked immediately by admins
+
+### What the Gateway Logs
+
+- Every `call_tool` authorization decision (allow or deny) with full context
+- User sign-in and consent events
+- Agent-to-server session creation and expiry
+- All logs are available via the Permit MCP Gateway dashboard and the Permit.io audit log API
+
+### Hosted vs. Customer-Controlled Deployment
+
+| Aspect | Hosted | Customer-Controlled |
+| --- | --- | --- |
+| **Gateway location** | Managed by Permit at `*.agent.security` | Runs in your environment (VPC, on-prem) |
+| **Policy decisions** | Evaluated by Permit.io cloud PDP | Can be evaluated by a local PDP |
+| **Data in transit** | MCP traffic flows through the hosted gateway | MCP traffic stays within your network |
+| **Best for** | Fast adoption, SaaS workloads, evaluation | Regulated environments, data residency requirements |
+
+:::note
+Customer-controlled deployment is available for enterprise plans. [Contact us](mailto:support@permit.io) for architecture details. The hosted deployment is available for all plans and is the recommended starting point.
+:::
+
+### What Risks the Gateway Mitigates
+
+- **Unauthorized tool access** — agents can only call tools they are explicitly permitted to use
+- **Privilege escalation** — the `min()` trust ceiling prevents agents from exceeding admin-defined boundaries
+- **Invisible agent activity** — every tool call is logged and traceable to a specific human and agent
+- **Unvetted MCP connections** — by default, users can only connect to admin-approved MCP servers
+- **Credential exposure to agents** — upstream OAuth tokens are managed by the gateway, not exposed to MCP clients
+
+### What the Gateway Does Not Fully Solve
+
+The gateway enforces access control and audit at the MCP protocol layer. These areas remain the responsibility of the surrounding environment:
+
+- **Upstream server security** — the gateway does not validate what the upstream MCP server does with authorized requests. Server-side input validation, data access controls, and business logic remain the server's responsibility.
+- **Prompt injection and adversarial inputs** — the gateway authorizes tool calls based on identity and policy, not on the content or intent of prompts. Defending against prompt injection is the responsibility of the MCP client and LLM layer.
+- **Data classification** — the gateway classifies tools by risk level (read/write/destructive) based on naming patterns. It does not inspect the data returned by tool calls or classify data sensitivity.
+- **Network-level controls** — the gateway operates at the application layer. Network segmentation, firewall rules, and transport security for upstream connections are managed separately.
+
+---
+
+## How It Compares to Existing Tools
+
+| Approach | Limitation for MCP use cases |
+| --- | --- |
+| **API gateways** (Kong, Apigee, etc.) | Designed for REST/gRPC APIs, not MCP protocol. No model of human-to-agent delegation or per-tool trust levels. |
+| **IAM platforms** (Okta, Azure AD, etc.) | Handle user authentication but do not enforce per-tool authorization for autonomous agents or model consent-based delegation. |
+| **Manual MCP server access** | No authentication, no authorization, no audit. Agents connect directly with whatever credentials are available. |
+| **Permit MCP Gateway** | Purpose-built for MCP: identity-aware per-tool authorization, human-to-agent trust delegation, consent, and audit in one enforcement point. |
+
+---
+
+Ready to get started? Follow the [Getting Started Guide](/permit-mcp-gateway/guide/) to set up your first gateway in minutes.
