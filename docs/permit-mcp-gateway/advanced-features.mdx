@@ -13,6 +13,58 @@ Permit MCP Gateway's Enterprise plan includes additional security controls for o
 The features on this page are available on **Enterprise** plans. Some features described below may be in early access or under active development. [Schedule a demo](https://calendly.com/permit-io/demo) to discuss availability, maturity, and fit for your use case.
 :::
 
+## Agent Interrogation
+
+Traditional identity systems were built for humans and static services. Agents are different — they are non-deterministic, their prompts and toolchains can change between sessions, and a single MCP client connection may multiplex multiple contexts. Standard OAuth client IDs identify *the tool*, not *the agent's actual identity and intent*.
+
+Agent Interrogation is an agentic-native identity mechanism built into the gateway. Before any tools are unlocked, the gateway directly engages the connecting agent through the MCP protocol itself — requiring it to identify itself and its purpose. This produces a **persistent, composite agent identity** that goes beyond client credentials to capture *who the agent is, who it acts for, and what it intends to do*.
+
+### How It Works
+
+When an agent connects to the gateway, it initially sees only a single tool: `identify_self`. All other tools are gated behind this step. The agent must complete an interrogation exchange before the full tool catalog is unlocked. This approach is agentic-native — it uses the same MCP protocol the agent already speaks, requiring no additional SDKs, side channels, or client modifications.
+
+The interrogation produces a **composite agent identity** that binds three dimensions:
+
+- **The delegating human** — the authenticated user accountable for the agent's actions
+- **The workflow context** — the operational frame in which the agent acts (e.g., "code review assistant for the platform team" vs. "personal research assistant")
+- **The agent fingerprint** — a stable, probabilistic identity signature derived from the agent's own responses, representing its behavioral characteristics and intent
+
+This composite identity becomes the subject used for all subsequent policy evaluation, audit logging, and drift detection.
+
+### Value for Policy Enforcement
+
+Agent Interrogation gives the policy engine a richer identity to reason about than a bare client ID:
+
+- **Hard-gate tool access** — no tools are accessible until the agent has identified itself. This ensures that every tool call in the system is tied to a verified agent identity.
+- **Per-workflow policy** — because the interrogation captures the agent's operational context, admins can define different trust levels and tool access for the same MCP client operating in different workflows.
+- **Drift-triggered policy reactions** — if an agent's fingerprint deviates meaningfully from its established baseline (indicating a changed system prompt, model swap, or prompt injection), the gateway can automatically respond: downgrade trust, require re-consent, block execution, or route to human approval. These reactions are policy-driven and configurable per workflow.
+- **Step-up consent on intent mismatch** — when an agent declares destructive or sensitive capabilities during interrogation, policy can require additional human approval before granting access.
+
+### Value for Auditing and Governance
+
+Every agent session begins with a declarative record of who the agent is and what it intends to do:
+
+- **Persistent identity across sessions** — the fingerprint provides continuity. Security teams can track a specific agent's behavior over time, even across client restarts and re-connections.
+- **Declared intent vs. observed behavior** — during interrogation, the agent declares what tools it expects to call and what data it expects to access. This declared intent is logged and can be compared against actual tool call patterns during the session, surfacing unexpected deviations for review.
+- **Full identity chain in audit logs** — every tool call is attributed to the composite identity: the human who delegated, the workflow context, the verified agent fingerprint, and the session. This gives compliance and security teams the full chain of accountability.
+- **Drift history** — fingerprint changes over time are tracked, giving admins visibility into when and how agent behavior shifts.
+
+### Value for Prompt Injection Protection
+
+Agent Interrogation provides a detection layer against prompt injection and agent manipulation:
+
+- **Baseline fingerprinting** — a legitimate agent produces a consistent identity signature across sessions. If a prompt injection alters the agent's system prompt or behavioral context, the resulting fingerprint will diverge from the established baseline, triggering a drift alert.
+- **Multi-dimensional drift detection** — the fingerprint captures multiple independent dimensions (agent intent, delegator context, operational environment). An attack that manipulates one dimension — for example, injecting instructions to impersonate a different workflow — is likely to cause measurable drift even if other dimensions remain stable.
+- **Session isolation** — by binding identity to the specific agent context rather than just the client connection, interrogation reduces the risk of session confusion in multiplexed MCP client connections, where a compromised context could otherwise access permissions granted to a different context on the same connection.
+
+Agent Interrogation does not fully prevent prompt injection — that remains a defense-in-depth challenge across the agent stack. It provides an additional detection and enforcement layer at the gateway boundary that is particularly valuable because it operates on the agent's own self-reported identity, making it sensitive to the kinds of behavioral shifts that prompt injections cause.
+
+:::note Maturity
+Agent Interrogation is under active development as an Enterprise capability. The interrogation protocol, fingerprinting methodology, and drift detection thresholds are being refined. [Contact us](mailto:support@permit.io) for current status, early access, and roadmap details.
+:::
+
+---
+
 ## Human-in-the-Loop Approvals (HITL)
 
 Require human approval for high-risk agent actions. When an agent requests a sensitive operation — such as deleting records, modifying production data, or accessing restricted resources — the gateway pauses execution and routes an approval request to a designated reviewer. Routine operations continue without interruption.
@@ -31,6 +83,8 @@ All plans include built-in session expiry (90-day hard / 30-day inactivity). Ent
 
 Verify that connecting agents match expected behavioral and identity characteristics. Agent verification builds a profile when an agent connects, which can be used to detect unexpected changes in agent identity or behavior over time.
 
+[Agent Interrogation](#agent-interrogation) provides the underlying mechanism for agent verification — the fingerprint generated during interrogation serves as the persistent identity baseline against which subsequent connections are compared.
+
 :::note Maturity
 Agent verification capabilities (including behavioral profiling and drift detection) are under active development. Specific detection capabilities and accuracy characteristics may vary. [Contact us](mailto:support@permit.io) for current status and roadmap details.
 :::
@@ -38,6 +92,8 @@ Agent verification capabilities (including behavioral profiling and drift detect
 ## Session Monitoring
 
 Gain visibility into what agents do during a session, not just at the gateway boundary. Session monitoring tracks tool call patterns within a session, providing additional context for security review and incident investigation.
+
+When combined with [Agent Interrogation](#agent-interrogation), session monitoring can compare an agent's declared intent (captured during interrogation) against its actual tool call behavior, surfacing deviations for review.
 
 :::note Maturity
 Session monitoring capabilities (including anomaly detection and behavioral analysis) are under active development. [Contact us](mailto:support@permit.io) for current status and availability.
@@ -51,6 +107,8 @@ Get auditable records of every permission grant — who approved it, which agent
 
 Define what each agent is allowed to do by declaring its intended purpose up front. The gateway can evaluate the agent's declared intent against policy before execution begins — enabling access checks that consider the overall workflow, not just individual tool calls.
 
+[Agent Interrogation](#agent-interrogation) is the mechanism through which intent is captured — during the interrogation exchange, the agent declares its purpose and expected tool usage, which policy can then use for access decisions.
+
 :::note Maturity
 Intent-based access control is an emerging capability. [Contact us](mailto:support@permit.io) for current status and roadmap.
 :::
@@ -61,12 +119,13 @@ Intent-based access control is an emerging capability. [Contact us](mailto:suppo
 
 | Feature | Status | Notes |
 | --- | --- | --- |
+| **Agent Interrogation** | Enterprise, active development | Agentic-native identity, fingerprinting, drift detection, and prompt injection defense |
 | **Human-in-the-Loop Approvals** | Enterprise | Available for enterprise plans |
 | **Time-Limited Consent** | Enterprise | Available for enterprise plans |
-| **Agent Verification** | Enterprise, early access | Behavioral profiling and drift detection under active development |
+| **Agent Verification** | Enterprise, early access | Behavioral profiling and drift detection, powered by Agent Interrogation |
 | **Session Monitoring** | Enterprise, early access | Anomaly detection capabilities under active development |
 | **Permission Receipts** | Enterprise | Available for enterprise plans |
-| **Intent-Based Access Control** | Enterprise, roadmap | Emerging capability, contact for details |
+| **Intent-Based Access Control** | Enterprise, roadmap | Declared intent captured via Agent Interrogation, policy evaluation emerging |
 
 :::info Items flagged on the marketing site but not yet detailed in documentation
 The following capabilities have been referenced in marketing materials but are not yet fully documented. Contact us for current status:
