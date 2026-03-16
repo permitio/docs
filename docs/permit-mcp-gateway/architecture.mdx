@@ -440,6 +440,55 @@ The derived role then determines which tools are allowed:
 - **Medium** trust tools: available to `medium` and `high` roles
 - **High** trust tools: available to `high` role only
 
+## Rate Limiting & WAF
+
+The gateway is protected by an AWS Web Application Firewall (WAF) attached to the load balancer. The WAF provides two layers of protection: managed rules that detect common attack patterns, and per-IP rate limits that prevent abuse.
+
+### Rate Limits
+
+All rate limits are enforced per source IP address. Requests that exceed a threshold receive an **HTTP 429** response with a JSON body:
+
+```json
+{
+  "error": "rate_limited",
+  "message": "You have exceeded the rate limit. Please try again later."
+}
+```
+
+| Endpoint | Method | Limit | Window | Purpose |
+| --- | --- | --- | --- | --- |
+| `/api/auth/sign-in` | POST | 100 | 5 min | Brute-force and credential-stuffing protection |
+| `/api/auth/sign-up` | POST | 100 | 10 min | Mass account creation prevention |
+| `/oauth/register` | POST | 100 | 1 min | Dynamic Client Registration abuse prevention |
+| `/mcp` | POST | 1000 | 1 min | MCP endpoint protection (~30 concurrent agents behind a corporate NAT) |
+| All write operations | POST/PUT/DELETE | 1200 | 1 min | Global write ceiling |
+| All traffic | All methods | 2000 | 1 min | Final catch-all (includes GET for SSE, discovery, UI) |
+
+:::note Corporate NAT
+Rate limits are designed to accommodate corporate networks where many users share a single public IP. If you encounter rate limiting in a large deployment, contact support.
+:::
+
+### Managed Rules
+
+AWS Managed Rule groups provide defense-in-depth against common web attacks:
+
+- **SQL injection** — detected in headers, query strings, and URI paths
+- **Cross-site scripting (XSS)** — detected in headers, query strings, and URI paths
+- **Path traversal and bad inputs** — blocked at the request level
+- **Known exploits** (Log4j, JNDI injection) — blocked in headers and URI
+
+:::info Body inspection
+Request body inspection rules run in **monitoring mode** (count, not block) because MCP JSON-RPC payloads legitimately contain code snippets, SQL queries, and HTML that trigger false positives. Header, URI, and query string inspection rules are active and blocking.
+:::
+
+### Handling 429 Responses in MCP Clients
+
+If your MCP client or agent receives an HTTP 429 response, it should:
+
+1. **Wait and retry** — back off for a few seconds before retrying the request
+2. **Reduce concurrency** — if multiple agents share the same IP, reduce parallel requests
+3. **Check the response body** — the JSON error body confirms the rate limit was triggered (as opposed to an application-level error)
+
 ## Deployment
 
 Permit MCP Gateway is available as a **hosted gateway** at `*.agent.security`. Each host (tenant) gets a unique subdomain with isolated policies, users, and sessions.
