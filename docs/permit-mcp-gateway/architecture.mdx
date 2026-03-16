@@ -1,24 +1,73 @@
 ---
-title: Agent Security Architecture
-sidebar_label: Architecture Deep Dive
-description: A comprehensive guide to Agent Security's architecture, explaining how it delivers permissions-as-a-service for Model Context Protocol servers.
+title: Architecture
+sidebar_label: Architecture
+description: Technical architecture of Permit MCP Gateway — components, data flows, authorization model, and deployment patterns.
 sidebar_position: 7
 ---
 
 import ZoomableDiagram from '@site/src/components/ZoomableDiagram';
 
-# Agent Security Architecture
+# Permit MCP Gateway Architecture
 
-## What is Agent Security?
+## Executive Summary
 
-Agent Security delivers **permissions-as-a-service** for any Model Context Protocol (MCP) server. It acts as a proxy/gateway between AI agents and the MCP server resources they interact with, providing:
+Permit MCP Gateway is a proxy that sits between MCP clients and upstream MCP servers. When an MCP client connects, the gateway handles authentication (via a consent service), checks every tool call against fine-grained policy (via Permit.io), and logs every decision for audit.
+
+**The key architectural properties are:**
+
+- **Transparent proxy** — MCP clients connect to the gateway URL instead of the upstream server URL. The upstream MCP server receives proxied requests and does not need to be modified.
+- **Identity binding** — every tool call is tied to a specific human (who authenticated) and agent (the MCP client acting on their behalf), using a relationship-based access control model.
+- **Real-time policy enforcement** — the gateway calls `permit.check()` on every `call_tool` request. Decisions are based on the agent's trust level, the human's trust ceiling, and the tool's risk classification.
+- **Stateful sessions** — upstream OAuth tokens and consent state are stored server-side (in Redis), so users do not re-authenticate on every connection.
+- **Multi-tenant isolation** — each host (gateway instance) has its own subdomain, policies, users, and sessions.
+
+The rest of this page covers the detailed component architecture, data flows, and authorization model.
+
+---
+
+## Permit.io as Control Plane and Data Plane
+
+Permit.io serves as both the **control plane** and the **default data plane** for Permit MCP Gateway.
+
+- **Control plane**: Permit.io is where the authorization model is defined — resource types, actions, roles, relations, derived roles, and role assignments. The gateway dashboard ([app.agent.security](https://app.agent.security)) and the Consent Service write policy changes to Permit via its Platform API. Admins can also inspect and manage policies directly in the Permit dashboard ([app.permit.io](https://app.permit.io)).
+- **Data plane**: The Permit PDP (Policy Decision Point) evaluates every `permit.check()` call from the gateway at runtime. In the hosted deployment, the cloud PDP handles these evaluations. In customer-controlled deployments, a local PDP can be used so that authorization decisions stay within your network.
+
+Every gateway **host** maps 1:1 to a **Permit environment**. This binding is established when the admin creates a host and selects a Permit project and environment. All resources, users, roles, and audit logs for that host live in the linked environment.
+
+```mermaid
+flowchart LR
+  subgraph "Gateway (*.agent.security)"
+    Host["Host<br/>acme-brave-coral-37"]
+    GW["Gateway"]
+    CS["Consent Service"]
+  end
+
+  subgraph "Permit.io (Control Plane + Data Plane)"
+    Env["Permit Environment<br/>(linked to host)"]
+    PDP["Permit PDP"]
+    Audit["Audit Logs"]
+  end
+
+  Host --- Env
+  CS -->|"Write policy<br/>(roles, relations)"| Env
+  GW -->|"permit.check()<br/>(every tool call)"| PDP
+  PDP -->|"Log decision"| Audit
+```
+
+This means the full power of Permit's policy engine is available to the gateway — including RBAC, ABAC, and ReBAC models, real-time policy updates via OPAL, and the complete audit log API.
+
+---
+
+## Technical Architecture
+
+Permit MCP Gateway delivers **permissions-as-a-service** for any MCP server. It provides:
 
 * **Fine-grained ReBAC** (relationship-based access control) powered by Permit.io (which uses OPA and OPAL under the hood)
-* **Authentication & authorization** that binds user, agent, MCP server, and downstream service identities
+* **Authentication and authorization** that binds user, agent, MCP server, and downstream service identities
 * **Comprehensive auditing** covering every tool call, user, and agent
-* **Flexible deployment options** (hosted gateway available), all using the same policy rules
+* **Hosted gateway deployment**, with all components using the same policy rules
 
-A single URL switch yields consistent enforcement, instant visibility, and human-in-the-loop (HITL) approvals — **no code changes** to agents or servers.
+Adopting the gateway requires a single configuration change — pointing your MCP client at the gateway URL instead of directly at the upstream server.
 
 ## System Architecture Overview
 
@@ -74,11 +123,11 @@ flowchart LR
 
 **Key components:**
 - **Platform** (`app.agent.security`): Admin interface for managing hosts, MCP servers, and user access
-- **Edge Router** (NGINX): Routes requests by path to Gateway or Consent Service
+- **Edge Router** (NGINX): Routes requests by path to the Gateway or Consent Service
 - **Gateway** (`*.agent.security/mcp`): MCP proxy that enforces authorization on every tool call
 - **Consent Service** (`*.agent.security`): Handles OAuth login, user consent, and upstream MCP OAuth
 - **Permit.io PDP**: Policy decision point for real-time authorization checks
-- **Redis**: Session and host configuration store (accessed only by Gateway)
+- **Redis**: Session and host configuration store (accessed only by the Gateway)
 - **PostgreSQL**: User accounts, OAuth clients, and auth sessions
 
 :::info Architecture constraint
@@ -140,7 +189,7 @@ flowchart TD
 
 ## Integration Patterns
 
-Agent Security is available as a hosted gateway deployment:
+Permit MCP Gateway is available as a hosted gateway deployment:
 
 | Pattern                   | When to Use                      | How It Works                                                      |
 | ------------------------- | -------------------------------- | ----------------------------------------------------------------- |
@@ -150,7 +199,7 @@ Agent Security is available as a hosted gateway deployment:
 
 ### Trust-Level Access Control
 
-Agent Security classifies each tool into a trust level based on its risk:
+Permit MCP Gateway classifies each tool into a trust level based on its risk:
 
 1. **Low trust** — everything else (read-only by convention); this is the default for tools not matching medium or high patterns
 2. **Medium trust** — write operations (tools containing: `create`, `write`, `update`, `set`, `modify`, `edit`, `put`, `post`, `insert`, `add`, `send`, `execute`, `run`, `invoke`, `submit`, `push`, `publish`, `deploy`, `apply`, `patch`)
@@ -160,7 +209,7 @@ Trust levels are hierarchical: higher levels inherit all permissions from lower 
 
 ### Policy Architecture
 
-Agent Security automatically generates [Google-Zanzibar](/modeling/google-drive)-inspired ReBAC (Relationship-based Access Control) policies based on:
+Permit MCP Gateway automatically generates [Google-Zanzibar](/modeling/google-drive)-inspired ReBAC (Relationship-based Access Control) policies based on:
 - Defined roles for users and agents
 - MCP server resource instances
 - Agent roles derived from the user's consent choices
@@ -296,7 +345,7 @@ sequenceDiagram
 ```
 
 :::info Server allow-list
-By default, users can only connect to MCP servers that the admin has pre-configured and granted them access to — the consent service validates that every upstream URL matches a server the user is authorized to use. However, if the admin enables **Dynamic MCPs** on the host, users can also enter arbitrary upstream MCP server URLs during the consent flow. See [Dynamic MCPs](#dynamic-mcps) below.
+By default, users can only connect to MCP servers that the admin has pre-configured and granted them access to — the Consent Service validates that every upstream URL matches a server the user is authorized to use. However, if the admin enables **Dynamic MCPs** on the host, users can also enter arbitrary upstream MCP server URLs during the consent flow. See [Dynamic MCPs](#dynamic-mcps) below.
 :::
 
 ### Sequence: Authorization Decision Flow
@@ -314,9 +363,9 @@ sequenceDiagram
     C->>GW: call_tool(name=create_issue, Bearer token)
 
     Note over GW: 1. Extract tenant from Host header
-    Note over GW: Host: acme-pink-panda-6942.agent.security
+    Note over GW: Host: acme-brave-coral-37.agent.security
 
-    GW->>R: GET host_lookup:acme-pink-panda-6942
+    GW->>R: GET host_lookup:acme-brave-coral-37
     Note over GW,R: 2. Load tenant config (permit_api_key, oauth config)
 
     Note over GW: 3. JWT Validation
@@ -393,17 +442,17 @@ The derived role then determines which tools are allowed:
 
 ## Deployment
 
-Agent Security is available as a **hosted gateway** at `*.agent.security`. Each host (tenant) gets a unique subdomain with isolated policies, users, and sessions.
+Permit MCP Gateway is available as a **hosted gateway** at `*.agent.security`. Each host (tenant) gets a unique subdomain with isolated policies, users, and sessions.
 
 Point your MCP clients to `https://<host>.agent.security/mcp` and the gateway handles the rest — authentication, authorization, and audit logging are all built in.
 
 ## Key Advantages
 
-* **Single control point** for authorization and audit
-* **Drop-in** — no code changes, SDK optional
-* **Fine-grained ReBAC** — captures true user-agent-resource relationships
+* **Single enforcement point** for authentication, authorization, consent, and audit
+* **Drop-in proxy** — no code changes to MCP clients or servers
+* **Fine-grained ReBAC** — models the full user → agent → server → tool relationship chain
 * **Policy-as-code** — policies managed via UI and API, powered by OPA/Rego under the hood
-* **Short-lived creds** — minimize blast radius
+* **Credential isolation** — upstream OAuth tokens managed by the gateway, not exposed to MCP clients
 
 ## Agent Configuration Examples
 

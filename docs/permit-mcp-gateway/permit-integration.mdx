@@ -1,35 +1,56 @@
 ---
-title: How Agent Security Works with Permit.io
-sidebar_label: Permit.io Integration Deep Dive
-description: Understand the deep integration between Agent Security and Permit.io — the policy engine, authorization model, sync flow, and dashboard tools that power every tool-call decision.
+title: How Permit MCP Gateway Works with Permit.io
+sidebar_label: Permit.io Integration
+description: Understand the deep integration between Permit MCP Gateway and Permit.io — the policy engine, authorization model, sync flow, and dashboard tools that power every tool-call decision.
 sidebar_position: 8
 ---
 
-# How Agent Security Works with Permit.io
+# How Permit MCP Gateway Works with Permit.io
 
-Agent Security uses [Permit.io](https://www.permit.io) as its **policy engine** — every authorization decision for every tool call is evaluated by Permit. This isn't a loose integration; Permit is the core of how permissions are modeled, enforced, and audited.
+Permit MCP Gateway uses [Permit.io](https://www.permit.io) as its **control plane** and **default data plane**. Permit is not a peripheral integration — it is the core of how permissions are modeled, enforced, and audited. Every authorization decision for every tool call is evaluated by Permit.
 
 This page explains **why** Permit is central, **how** the policy model maps to Permit primitives, **what** happens during each sync step, and **where** to find everything in the Permit dashboard.
 
+## The Relationship Between Permit and the Gateway
+
+Permit.io and Permit MCP Gateway form a single system with two dashboards:
+
+| | Permit.io | Permit MCP Gateway |
+| --- | --- | --- |
+| **Role** | Control plane and policy engine | Enforcement layer and MCP proxy |
+| **Dashboard** | [app.permit.io](https://app.permit.io) | [app.agent.security](https://app.agent.security) |
+| **What it manages** | Authorization model, policy evaluation (PDP), audit logs, resource schemas, role assignments | Hosts, MCP server imports, user consent, authentication, session management |
+| **What it stores** | Policies, users, roles, relations, derived roles, audit log entries | Host configurations, sessions, upstream OAuth tokens |
+
+**Every gateway host maps to a Permit environment.** When an admin creates a host and selects a Permit project and environment, that environment becomes the host's authorization boundary. All resources, users, roles, and audit logs for that host live in the linked Permit environment.
+
+Because the gateway builds on standard Permit primitives, you get the full power of Permit's policy engine through this connection:
+
+- **RBAC, ABAC, and ReBAC** policy models
+- **Real-time policy updates** via OPAL — changes take effect on the next tool call with no restart
+- **Complete audit trail** — every `permit.check()` call is logged
+- **Policy-as-code** — policies manageable via the Permit UI, API, or Terraform provider
+- **Local PDP option** — for customer-controlled deployments, the PDP can run in your environment so authorization decisions stay within your network
+
 ## Why Permit.io?
 
-Agent Security needs a policy engine that can:
+Permit MCP Gateway needs a policy engine that can:
 
 - **Evaluate fine-grained, relationship-based access control (ReBAC)** — decisions depend on who the user is, which agent is acting, and which MCP server and tool are involved
 - **Apply changes instantly** — when an admin adjusts a trust level or revokes access, the change takes effect on the next tool call with no restart or redeployment
 - **Provide a full audit trail** — every `permit.check()` call is logged, giving complete visibility into what was allowed or denied and why
 
-Permit.io provides all three. Agent Security builds its authorization model using Permit's resource types, actions, roles, relations, and derived roles — and the Permit PDP (Policy Decision Point) evaluates every tool call in real time.
+Permit.io provides all three. Permit MCP Gateway builds its authorization model using Permit's resource types, actions, roles, relations, and derived roles — and the Permit PDP (Policy Decision Point) evaluates every tool call in real time.
 
 ## The Policy Model
 
-Agent Security maps its concepts directly to Permit primitives. Understanding this mapping is the key to understanding how authorization works.
+Permit MCP Gateway maps its concepts directly to Permit primitives. Understanding this mapping is the key to understanding how authorization works.
 
 ### Resources and Actions
 
 Each imported MCP server becomes a **resource type** in Permit. The server's tools become **actions** on that resource type.
 
-| Agent Security concept | Permit primitive | Example |
+| Gateway concept | Permit primitive | Example |
 | --- | --- | --- |
 | MCP server | Resource type | `linear` |
 | MCP server instance | Resource instance | `linear:linear` (type and instance share the same key) |
@@ -230,15 +251,15 @@ Each component owns specific Permit operations:
 
 ## Using the Permit Dashboard
 
-Since Agent Security builds on standard Permit primitives, you can inspect and debug everything from the [Permit dashboard](https://app.permit.io).
+Since Permit MCP Gateway builds on standard Permit primitives, you can inspect and debug everything from the [Permit dashboard](https://app.permit.io).
 
 ### Finding Your Environment
 
-Each Agent Security [host](/permit-mcp-gateway/guide#2-create-a-host) is linked to a specific Permit project and environment. To find it:
+Each Permit MCP Gateway [host](/permit-mcp-gateway/guide#2-create-a-host) is linked to a specific Permit project and environment. To find it:
 
 1. Log in to [app.permit.io](https://app.permit.io)
 2. Select the project and environment that matches your host's configuration
-3. The environment name typically matches the host name you set in Agent Security
+3. The environment name typically matches the host name you set in the Permit MCP Gateway dashboard
 
 ### Viewing the Schema
 
@@ -258,7 +279,7 @@ Every `permit.check()` call is logged by Permit. Use the **Audit Log** in the Pe
 - **Monitor tool-call patterns** — identify which tools are most used, which agents are most active, and whether any unexpected denials are occurring
 
 :::tip
-The Permit audit log shows the raw `permit.check()` parameters — user key, action, and resource — making it easy to correlate with the [Agent Security audit logs](/permit-mcp-gateway/guide#9-audit-logs) visible in [app.agent.security](https://app.agent.security).
+The Permit audit log shows the raw `permit.check()` parameters — user key, action, and resource — making it easy to correlate with the [Permit MCP Gateway audit logs](/permit-mcp-gateway/guide#9-audit-logs) visible in [app.agent.security](https://app.agent.security).
 :::
 
 ## Server Metadata and Allow-List
@@ -298,7 +319,7 @@ The `default` tenant is automatically created in Permit environments and require
 
 ## Default Policy: Deny by Default
 
-A fresh Agent Security environment starts with **zero permissions**. No user or agent can call any tool until the full setup sequence is completed:
+A fresh Permit MCP Gateway environment starts with **zero permissions**. No user or agent can call any tool until the full setup sequence is completed:
 
 1. **Admin imports an MCP server** → creates resource type, actions, and instance in Permit
 2. **Admin grants a human access** → creates the profile-to-server relation (sets the max trust ceiling)
@@ -334,4 +355,4 @@ When an MCP server is imported, tools are auto-classified by naming heuristics (
 - **Changes are instant** — update a trust level or revoke access in Permit, and the next tool call reflects it
 - **The `user_profile` indirection** is the core pattern — it enables the `min()` ceiling logic that separates admin control from user consent
 - **Three components, clear boundaries** — Platform writes policy, Consent Service writes agent roles, Gateway reads policy
-- **Full auditability** — every decision is logged in both Agent Security and Permit
+- **Full auditability** — every decision is logged in both Permit MCP Gateway and Permit.io
