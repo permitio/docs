@@ -214,6 +214,7 @@ const sidebars = {
             "permit-mcp-gateway/architecture",
             "permit-mcp-gateway/permit-integration",
             "permit-mcp-gateway/advanced-features",
+            "permit-mcp-gateway/usage-examples-and-demos",
           ],
         },
       ],
