@@ -203,6 +203,7 @@ const sidebars = {
           label: "Permit MCP Gateway",
           link: { type: "doc", id: "permit-mcp-gateway/index" },
           items: [
+            "permit-mcp-gateway/quickstart",
             "permit-mcp-gateway/overview",
             "permit-mcp-gateway/guide",
             "permit-mcp-gateway/platform",
