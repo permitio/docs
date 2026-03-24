@@ -157,18 +157,28 @@ When using `<HOST_BACKUP_DIR>` instead of a volume, use `chmod` to set the permi
 :::
 
 
-If you need to delibrately run PDP with static offline data (e.g. in a CI environment), first generate the 2 backup files (configuration & policy store) by running your PDP in an online environment. Then you can run the PDP again in the offline environment - just make sure to use the same configuration and have those backup files in the directory/volume you mount onto `/app/backup`.
+If you need to deliberately run PDP with static offline data (e.g. in a CI environment), first generate the 2 backup files (configuration & policy store) by running your PDP in an online environment. Then you can run the PDP again in the offline environment - just make sure to use the same configuration and have those backup files in the directory/volume you mount onto `/app/backup`.
 
 ### How it works
-PDP always starts in online mode, trying to fetch its configuration from Permit's cloud.
+By default, PDP starts in online mode, trying to fetch its configuration from Permit's cloud.
 In case of `PDP_CONFIG_FETCH_MAX_RETRIES` failed fetching attempts, and if `PDP_ENABLE_OFFLINE_MODE` is set to true - the PDP will switch to offline mode and load its configuration from the backup file (if it exists).
 Once PDP is up and running (whether loaded from cloud or from local backup) - it won't try to fetch or load its configuration again from cloud until it's restarted.
 
+If `PDP_OFFLINE_MODE_RESTORE_ONLY` is set to true and valid backup files are available, the PDP will start from the local backup and will not connect to Permit Cloud for configuration or policy updates. This effectively pins the PDP to the restored local snapshot until it is restarted without that flag.
+
 For backing up the policy store's state (both policy rules/code & data), PDP internally uses [OPAL's offline mode](https://docs.opal.ac/getting-started/running-opal/run-opal-client/opa-runner-parameters/#policy-store-backup) 
 (no need to explicitly enable OPAL's offline mode, PDP would do it automatically).
-OPAL uses policy and data from a backup file (if exists) to initialy load the policy store, but it never gives up on syncing with cloud - so once Permit cloud is reachable again, the most updated policy data could be fetched.
+In the standard offline-mode flow, OPAL uses policy and data from a backup file (if it exists) to initially load the policy store, but it never gives up on syncing with cloud - so once Permit cloud is reachable again, the most updated policy data could be fetched.
 
-Policy store's backup is is done periodically (See "Advanced Configuration" below for customizing the interval), and also on a graceful shutdown of the PDP. This backup file is written to the same directory as the PDP configuration backup.
+Policy store's backup is done periodically (See "Advanced Configuration" below for customizing the interval), and also on a graceful shutdown of the PDP. This backup file is written to the same directory as the PDP configuration backup.
+
+### Backup and Restore Resiliency
+
+For stronger resilience, it is recommended to back up the volume or host directory mounted to the path configured by `PDP_OFFLINE_MODE_BACKUP_DIR` (default: `/app/backup`) frequently. This gives you an additional recovery point if the local backup files become corrupted or if policy data is deleted accidentally, allowing you to restore the PDP locally while the corresponding state is being restored in the Permit control plane.
+
+When restoring the backup directory to an earlier point in time, and the Permit control plane is still reachable, start the PDP with `PDP_OFFLINE_MODE_RESTORE_ONLY=true`. When this mode is enabled and valid backup files are present, the PDP will continue serving decisions from the restored local snapshot and will not connect to the control plane for further configuration or policy updates. This prevents the restored snapshot from being overwritten by newer state that still exists in the control plane.
+
+After the desired state has also been restored in the control plane, restart the PDP without `PDP_OFFLINE_MODE_RESTORE_ONLY` so normal synchronization can resume.
 
 
 ### Advanced Configuration
@@ -176,6 +186,7 @@ Policy store's backup is is done periodically (See "Advanced Configuration" belo
 * `PDP_OFFLINE_MODE_BACKUP_DIR` Sets the directory path of the PDP's configuration backup file (default "/app/backup")
 * `PDP_OFFLINE_MODE_BACKUP_FILENAME` Sets the file name of the PDP's configuration backup file (default "pdp_cloud_config_backup.json")
 * `PDP_OFFLINE_MODE_POLICY_BACKUP_FILENAME` Sets the file name of the policy store's backup (holds both data & code) within the PDP's backup dir. This replaces OPAL's `OPAL_STORE_BACKUP_PATH`. (default "policy_store_backup.json")
+* `PDP_OFFLINE_MODE_RESTORE_ONLY` - If set to true and valid backup files exist, forces the PDP to use the local backup as the active snapshot and skip synchronization with Permit Cloud. Useful for point-in-time restores and controlled recovery scenarios. (default: false)
 * `PDP_CONFIG_FETCH_MAX_RETRIES` - Would determine after how many retries (to fetch cloud configuration) the PDP should switch to offline mode (default: 6)
 * `OPAL_STORE_BACKUP_INTERVAL` - Determines how often would the policy store backup be saved. (default: 1m)
 
