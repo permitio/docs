@@ -74,6 +74,55 @@ The following helper APIs are **container PDP only** and are **not supported** b
   (see [`Local Enforcement APIs`](/how-to/enforce-permissions/list-role-assignments))
 :::
 
+## Rate Limiting & WAF
+
+The Cloud PDP is protected by a Web Application Firewall (WAF) that provides two layers of protection: managed rules that detect common attack patterns, and per-IP rate limits that prevent abuse.
+
+### Rate Limits
+
+All rate limits are enforced **per source IP address** over a **60-second window**. Requests that exceed a threshold receive an **HTTP 429** response with a JSON body:
+
+```json
+{
+  "error": "rate_limited",
+  "message": "You have exceeded the rate limit. Please try again later."
+}
+```
+
+| Endpoint | Rate Limit | Purpose |
+| --- | --- | --- |
+| `POST /allowed/bulk` | 200 req/min per IP | Bulk permission checks are expensive (each request evaluates many permissions at once) |
+| `POST /access/v1/evaluations` | 200 req/min per IP | AuthZen batch evaluation — same cost profile as `/allowed/bulk` |
+| `POST /access/v1/search/*` | 300 req/min per IP | AuthZen search endpoints scan across multiple entities, heavier than single evaluations |
+| `POST /user-permissions`, `POST /authorized_users` | 500 req/min per IP | Queries across multiple resources/roles — protects against enumeration attacks |
+| `POST /allowed`, `POST /access/v1/evaluation` | 1000 req/min per IP | Authorization hot path — high limit to support multi-service fleets behind corporate NAT (~16 req/s) |
+| All `POST` requests | 1500 req/min per IP | Catch-all to bound total POST volume across endpoints |
+| All traffic (any method) | 3000 req/min per IP | Final safety net covering GET (health checks, docs) and everything else |
+
+:::note Corporate NAT
+Rate limits are designed to accommodate corporate networks where many users share a single public IP. If you encounter rate limiting in a large deployment, contact support.
+:::
+
+### Managed Rules
+
+Managed rule groups provide defense-in-depth against common web attacks:
+
+- **SQL injection** — detected in headers, query strings, and URI paths. Body inspection is set to monitor mode to avoid false positives from authorization payloads that may contain attribute values resembling SQL (e.g., resource names like `SELECT_role`).
+- **Cross-site scripting (XSS) and common exploits** — path traversal, invalid inputs, and other OWASP patterns are blocked at the request level.
+- **Known exploits** (Log4j, JNDI injection) — blocked in headers and URI.
+
+:::info Body inspection
+Request body inspection is tuned to avoid false positives from legitimate authorization payloads. Large request bodies (common in bulk checks with complex attribute objects) and missing `User-Agent` headers (common in SDK and PDP-to-PDP calls) are monitored rather than blocked.
+:::
+
+### Handling 429 Responses
+
+If your application or SDK receives an HTTP 429 response, it should:
+
+1. **Wait and retry** — back off for a few seconds before retrying the request.
+2. **Reduce concurrency** — if multiple services share the same IP, reduce parallel requests.
+3. **Check the response body** — the JSON error body confirms the rate limit was triggered (as opposed to an application-level error).
+
 ## Observability & Logs
 
 - **Audit logs & decision logs**
@@ -140,6 +189,7 @@ then you should use the **container PDP** instead.
 | Metrics & APM                                | ❌ Not supported                        | ✅ Exposed metrics / APM integrations (Datadog, etc.) |
 | Updates & maintenance                        | Continuously updated and operated by Permit | You manage container versions, rollouts, and maintenance |
 | Send Consistent Updates (read‑your‑own‑writes) | ❌ Not supported                        | ✅ Supported via Local Facts / `proxy_facts_via_pdp` |
+| WAF & rate limiting                          | ✅ Built-in WAF with managed rules and per-IP rate limits | You manage your own WAF / rate limiting |
 
 ## When to Use Which?
 
