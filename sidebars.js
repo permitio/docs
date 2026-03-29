@@ -439,6 +439,7 @@ const sidebars = {
           label: "Deploy",
           link: { type: "doc", id: "how-to/deploy/deploy-to-production" },
           items: [
+            "how-to/deploy/offline-mode",
             "how-to/SDLC/CI-CD",
             {
               type: "category",
