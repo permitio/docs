@@ -215,6 +215,7 @@ const sidebars = {
             "permit-mcp-gateway/architecture",
             "permit-mcp-gateway/permit-integration",
             "permit-mcp-gateway/advanced-features",
+            "permit-mcp-gateway/enterprise-deployment",
             {
               type: "category",
               label: "Usage Examples and Demos",
@@ -438,6 +439,7 @@ const sidebars = {
           label: "Deploy",
           link: { type: "doc", id: "how-to/deploy/deploy-to-production" },
           items: [
+            "how-to/deploy/offline-mode",
             "how-to/SDLC/CI-CD",
             {
               type: "category",
