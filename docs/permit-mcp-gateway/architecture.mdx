@@ -449,7 +449,7 @@ The feature is **always on** and requires no configuration on the gateway. Upstr
 
 ### How it works
 
-At startup, the gateway generates an ephemeral Ed25519 key pair and exposes the public key at `GET /.well-known/gateway-jwks.json` (unauthenticated, cached for 5 minutes). On each upstream request, the gateway signs a short-lived JWT with the authenticated user's identity, the upstream URL as audience, and the tenant subdomain. The JWT is cached and reused until it is within 30 seconds of expiry, then re-signed — avoiding per-request signing overhead while ensuring long-lived MCP sessions always send a valid token.
+The gateway maintains an Ed25519 signing key that is cached in Redis and shared across all gateway replicas. The public key is exposed at `GET /.well-known/gateway-jwks.json` (unauthenticated, cached by clients for 5 minutes). On each upstream request, the gateway signs a short-lived JWT with the authenticated user's identity, the upstream URL as audience, and the tenant subdomain. The JWT is cached and reused until it is within 30 seconds of expiry, then re-signed — avoiding per-request signing overhead while ensuring long-lived MCP sessions always send a valid token.
 
 ```mermaid
 sequenceDiagram
@@ -533,7 +533,7 @@ const { payload } = await jwtVerify(
 Reject any request without a valid `X-Gateway-Auth` header. The `aud` claim must match the exact URL the gateway uses to reach your upstream server.
 
 :::info Key rotation
-The `kid` header on each JWT identifies which key signed it. Because the key pair is ephemeral (regenerated at gateway startup), upstream servers should rely on the JWT library's JWKS caching — most libraries automatically re-fetch the JWKS when they encounter an unknown `kid`, so rotation is transparent.
+The signing key is cached in Redis (encrypted at rest) and shared across all gateway replicas, so JWTs remain valid across pod restarts and the JWKS endpoint returns the same key regardless of which replica serves it. Keys are expected to rotate on roughly a 90-day cadence. The `kid` header on each JWT identifies which key signed it — upstream servers should rely on their JWT library's JWKS caching, which automatically re-fetches the JWKS on unknown `kid`, making rotation transparent.
 :::
 
 ### Configuration
