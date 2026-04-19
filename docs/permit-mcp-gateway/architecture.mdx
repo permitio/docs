@@ -114,7 +114,8 @@ flowchart LR
   GW -- "permit.check() per tool call" --> PermitPDP
   CS -->|"Sync consent → roles/relations"| PermitAPI
 
-  GW -- "Proxy Streamable HTTP" --> Upstream
+  GW -- "Proxy MCP +<br/>X-Gateway-Auth JWT" --> Upstream
+  Upstream -.->|"Verify JWT (optional)<br/>GET /.well-known/gateway-jwks.json"| GW
 
   Upstream["Upstream MCP Server"]
 ```
@@ -185,7 +186,7 @@ flowchart TD
 | Gateway | Consent Service (JWKS) | HTTP (port 3000) | JWT signature verification |
 | Gateway | Permit.io | HTTPS | Authorization checks (Cloud PDP) |
 | Consent Service | Permit.io | HTTPS | Policy sync during consent |
-| Gateway | Upstream MCP | HTTPS | Streamable HTTP with upstream OAuth tokens |
+| Gateway | Upstream MCP | HTTPS | Streamable HTTP with upstream OAuth tokens + signed `X-Gateway-Auth` JWT (see [Upstream Authentication](#upstream-authentication-gateway-jwt)) |
 
 ## Integration Patterns
 
@@ -439,6 +440,111 @@ The derived role then determines which tools are allowed:
 - **Low** trust tools: available to `low`, `medium`, and `high` roles
 - **Medium** trust tools: available to `medium` and `high` roles
 - **High** trust tools: available to `high` role only
+
+## Upstream Authentication (Gateway JWT)
+
+When the gateway proxies a request to an upstream MCP server, it attaches a short-lived, gateway-signed JWT in an `X-Gateway-Auth` header alongside the upstream OAuth token. This lets upstream servers verify that a request came through the gateway — preventing agents from bypassing the gateway's authN/authZ/consent layer by connecting directly to the upstream URL.
+
+The feature is **always on** and requires no configuration on the gateway. Upstream servers opt in to verification — those that don't simply ignore the extra header, so behavior is unchanged for servers that don't need this guarantee.
+
+### How it works
+
+At startup, the gateway generates an ephemeral Ed25519 key pair and exposes the public key at `GET /.well-known/gateway-jwks.json` (unauthenticated, cached for 5 minutes). On each upstream request, the gateway signs a short-lived JWT with the authenticated user's identity, the upstream URL as audience, and the tenant subdomain. The JWT is cached and reused until it is within 30 seconds of expiry, then re-signed — avoiding per-request signing overhead while ensuring long-lived MCP sessions always send a valid token.
+
+```mermaid
+sequenceDiagram
+    participant Client as MCP Client
+    participant GW as Gateway
+    participant JWKS as Gateway JWKS<br/>/.well-known/gateway-jwks.json
+    participant Up as Upstream MCP Server
+
+    Note over GW: Startup: generate ephemeral<br/>Ed25519 key pair
+
+    Client->>GW: POST /mcp (tool call)
+    GW->>GW: Auth + Permit check
+
+    rect rgb(240, 248, 255)
+        Note over GW: JWT signing (per-request)
+        GW->>GW: Is cached JWT still valid?
+        alt JWT expired or near expiry (within 30s)
+            GW->>GW: Sign fresh JWT<br/>{iss, sub, aud, exp, iat, jti, tenant}
+            GW->>GW: Cache JWT
+        else JWT still valid
+            GW->>GW: Reuse cached JWT
+        end
+    end
+
+    GW->>Up: POST (MCP request)<br/>Authorization: Bearer <upstream_oauth_token><br/>X-Gateway-Auth: Bearer <gateway_jwt>
+
+    opt Upstream wants to verify
+        Up->>JWKS: GET /.well-known/gateway-jwks.json
+        JWKS-->>Up: {keys: [{kty: "OKP", crv: "Ed25519", ...}]}
+        Up->>Up: Verify JWT signature + claims
+    end
+
+    Up-->>GW: MCP response
+    GW-->>Client: MCP response
+```
+
+### JWT claims
+
+| Claim    | Value                       | Purpose                              |
+| -------- | --------------------------- | ------------------------------------ |
+| `iss`    | `agent-security-gateway`    | Identifies the issuer                |
+| `sub`    | Authenticated user ID       | Who the request is being made for    |
+| `aud`    | Upstream MCP server URL     | Intended recipient                   |
+| `exp`    | `now + TTL` (default 5 min) | Token expiry                         |
+| `iat`    | Current timestamp           | When the token was issued            |
+| `nbf`    | Current timestamp           | Not valid before this time           |
+| `jti`    | Unique UUID                 | Unique ID (enables replay detection) |
+| `tenant` | Host subdomain              | Which tenant the request belongs to  |
+
+### Two auth headers coexist
+
+The gateway sends two distinct headers on upstream requests — they serve different purposes and don't conflict:
+
+| Header              | Who issues it  | What it proves                                  |
+| ------------------- | -------------- | ----------------------------------------------- |
+| `Authorization: Bearer <token>` | The upstream's OAuth provider | The user authorized this request with the upstream service |
+| `X-Gateway-Auth: Bearer <jwt>`  | The gateway                   | The request originated from this gateway instance |
+
+### Verifying on the upstream side
+
+Upstream servers that want to reject direct (non-gateway) traffic fetch the gateway's public key from the JWKS endpoint and verify the `X-Gateway-Auth` header on every request. Using a standard JWT library (which handles JWKS caching and key rotation automatically) this is typically ~5 lines of code:
+
+```js
+import { createRemoteJWKSet, jwtVerify } from 'jose';
+
+const JWKS = createRemoteJWKSet(
+  new URL('https://<tenant>.agent.security/.well-known/gateway-jwks.json')
+);
+
+const { payload } = await jwtVerify(
+  req.headers['x-gateway-auth'].slice(7),  // strip 'Bearer '
+  JWKS,
+  {
+    issuer: 'agent-security-gateway',
+    audience: 'https://your-mcp-server.example.com',
+    algorithms: ['EdDSA'],
+  }
+);
+```
+
+Reject any request without a valid `X-Gateway-Auth` header. The `aud` claim must match the exact URL the gateway uses to reach your upstream server.
+
+:::info Key rotation
+The `kid` header on each JWT identifies which key signed it. Because the key pair is ephemeral (regenerated at gateway startup), upstream servers should rely on the JWT library's JWKS caching — most libraries automatically re-fetch the JWKS when they encounter an unknown `kid`, so rotation is transparent.
+:::
+
+### Configuration
+
+There is nothing to configure on the gateway to enable this feature. The only optional tunable is the JWT lifetime:
+
+| Env var                   | Default | Description             |
+| ------------------------- | ------- | ----------------------- |
+| `GATEWAY_JWT_TTL_SECONDS` | `300`   | JWT lifetime in seconds |
+
+The JWKS URL for each host is available in the platform under **Settings > Upstream Authentication (JWT)**, along with a sample verification snippet.
 
 ## Rate Limiting
 
