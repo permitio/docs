@@ -362,6 +362,7 @@ const sidebars = {
           items: [
             "concepts/pdp/configuration",
             "concepts/pdp/cloud-pdp-capabilities",
+            "concepts/pdp/cloud-pdp-benchmarks",
             "how-to/manage-data/local-facts-uploader",
           ],
         },
