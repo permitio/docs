@@ -93,6 +93,9 @@ gcloud auth configure-docker us-central1-docker.pkg.dev
 
 # Push all images and update values.yaml with your registry paths
 ./scripts/load-images.sh --registry <your-registry>
+
+# See all options
+./scripts/load-images.sh --help
 ```
 
 Registry-specific examples:
@@ -133,6 +136,10 @@ permitPlatform:
 ```
 
 **Option B — Plaintext value:**
+
+:::caution
+Avoid storing passwords in plaintext in your values file. If you must use this option, ensure `my-values.yaml` is not committed to version control.
+:::
 
 ```yaml
 permitPlatform:
@@ -193,12 +200,10 @@ You can deploy multiple PDPs (e.g., one per environment or per tenant) and assig
 The authentication flow requires HTTPS (cookies use `secure: true`). Create a TLS secret from your certificate:
 
 ```bash
-kubectl create namespace agent-security
-
 kubectl create secret tls agent-security-tls \
   --cert=path/to/tls.crt \
   --key=path/to/tls.key \
-  -n agent-security
+  -n agent-security --create-namespace
 ```
 
 Alternatively, use [cert-manager](https://cert-manager.io/) with your ingress annotations for automatic certificate management.
@@ -278,6 +283,10 @@ Add these DNS records with your DNS provider:
 | `*.mcp.yourcompany.com` | A | `<ingress-ip>` |
 | `app.mcp.yourcompany.com` | A | `<ingress-ip>` |
 
+:::note
+Some DNS providers do not resolve wildcard records for their own apex (e.g., `*.mcp.yourcompany.com` may not match `app.mcp.yourcompany.com`). If the Platform UI is unreachable but tenant subdomains work, add the explicit `app.mcp.yourcompany.com` record.
+:::
+
 ### Step 9 — Patch ingresses for TLS
 
 If you're not using cert-manager, manually attach the TLS secret to the ingresses:
@@ -325,6 +334,13 @@ You should see:
 | `agent-security-platform` | `app.mcp.yourcompany.com` | Admin dashboard |
 
 Open `https://app.mcp.yourcompany.com` in your browser — you should see the MCP Gateway Platform login page with a "Sign in with Keycloak" button.
+
+Verify the gateway health endpoint:
+
+```bash
+curl -s https://app.mcp.yourcompany.com/api/health
+# Expected: {"status":"healthy"}
+```
 
 ## Configuration Options
 
@@ -391,12 +407,12 @@ The `mailgun` email provider is not available in on-premises mode to prevent acc
 
 ### Cross-Cluster Deployment
 
-If Permit Platform runs in a different cluster, set the Keycloak URL explicitly:
+If the Permit Platform runs in a different cluster, the Helm Job cannot discover Keycloak via Kubernetes DNS. Set the Keycloak URL explicitly:
 
 ```yaml
 permitPlatform:
   keycloakUrl: "https://permit.yourcompany.com/auth"
-  keycloakAdminPassword: "<password>"
+  keycloakAdminPassword: "<password>"   # or use keycloakAdminPasswordSecret (see Step 3)
 ```
 
 ## Upgrading
@@ -409,6 +425,12 @@ helm upgrade agent-security ./charts/agent-security \
 ```
 
 All secrets and data are preserved across upgrades.
+
+If an upgrade fails and pods are unhealthy, roll back to the previous working release:
+
+```bash
+helm rollback agent-security -n agent-security --wait --timeout=10m
+```
 
 ## Troubleshooting
 
