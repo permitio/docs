@@ -458,7 +458,7 @@ sequenceDiagram
     participant JWKS as Gateway JWKS<br/>/.well-known/gateway-jwks.json
     participant Up as Upstream MCP Server
 
-    Note over GW: Startup: generate ephemeral<br/>Ed25519 key pair
+    Note over GW: Startup: load shared Ed25519 key<br/>from Redis (or generate + store if none exists)
 
     Client->>GW: POST /mcp (tool call)
     GW->>GW: Auth + Permit check
@@ -488,16 +488,24 @@ sequenceDiagram
 
 ### JWT claims
 
-| Claim    | Value                       | Purpose                              |
-| -------- | --------------------------- | ------------------------------------ |
-| `iss`    | `agent-security-gateway`    | Identifies the issuer                |
-| `sub`    | Authenticated user ID       | Who the request is being made for    |
-| `aud`    | Upstream MCP server URL     | Intended recipient                   |
-| `exp`    | `now + TTL` (default 5 min) | Token expiry                         |
-| `iat`    | Current timestamp           | When the token was issued            |
-| `nbf`    | Current timestamp           | Not valid before this time           |
-| `jti`    | Unique UUID                 | Unique ID (enables replay detection) |
-| `tenant` | Host subdomain              | Which tenant the request belongs to  |
+| Claim    | Value                                                                                            | Purpose                           |
+| -------- | ------------------------------------------------------------------------------------------------ | --------------------------------- |
+| `iss`    | `agent-security-gateway`                                                                         | Identifies the issuer             |
+| `sub`    | Authenticated user ID                                                                            | Who the request is being made for |
+| `aud`    | Canonicalized upstream URL — host lowercased, all trailing slashes (including root `/`) stripped | Intended recipient                |
+| `exp`    | `now + TTL` (default 5 min)                                                                      | Token expiry                      |
+| `iat`    | `now − 30s` (clock-skew leeway)                                                                  | When the token was issued         |
+| `nbf`    | `now − 30s` (clock-skew leeway)                                                                  | Not valid before this time        |
+| `jti`    | Unique UUID                                                                                      | Unique token ID                   |
+| `tenant` | Host subdomain                                                                                   | Which tenant the request belongs to |
+
+:::note Clock-skew leeway
+`iat` and `nbf` are intentionally backdated 30 seconds so upstream verifiers with small clock drift don't reject otherwise-valid tokens. Configure your JWT library with a clock tolerance of at least 30 seconds (e.g. `clockTolerance: 30` in `jose`).
+:::
+
+:::note Audience canonicalization
+The `aud` claim is the canonicalized form of your upstream URL — host lowercased, all trailing slashes (including root `/`) stripped. Configure your verifier's `audience` option with the canonicalized form, e.g. `https://MCP.Example.com/` becomes `https://mcp.example.com`, and `https://your-server.example.com/v1/` becomes `https://your-server.example.com/v1`.
+:::
 
 ### Two auth headers coexist
 
@@ -510,7 +518,7 @@ The gateway sends two distinct headers on upstream requests — they serve diffe
 
 ### Verifying on the upstream side
 
-Upstream servers that want to reject direct (non-gateway) traffic fetch the gateway's public key from the JWKS endpoint and verify the `X-Gateway-Auth` header on every request. Using a standard JWT library (which handles JWKS caching and key rotation automatically) this is typically ~5 lines of code:
+Upstream servers that want to reject direct (non-gateway) traffic fetch the gateway's public key from the JWKS endpoint and verify the `X-Gateway-Auth` header on every request. Using a standard JWT library (which handles JWKS caching and key rotation automatically) the verifier is short — under 10 lines of meaningful code:
 
 ```js
 import { createRemoteJWKSet, jwtVerify } from 'jose';
@@ -519,30 +527,50 @@ const JWKS = createRemoteJWKSet(
   new URL('https://<tenant>.agent.security/.well-known/gateway-jwks.json')
 );
 
+const auth = req.headers['x-gateway-auth'];
+if (typeof auth !== 'string' || !auth.startsWith('Bearer ')) {
+  return res.status(401).end();
+}
+
 const { payload } = await jwtVerify(
-  req.headers['x-gateway-auth'].slice(7),  // strip 'Bearer '
+  auth.slice(7).trim(),
   JWKS,
   {
     issuer: 'agent-security-gateway',
-    audience: 'https://your-mcp-server.example.com',
+    audience: 'https://your-mcp-server.example.com', // canonical: lowercase host, no trailing slash
     algorithms: ['EdDSA'],
+    clockTolerance: 30,
   }
 );
 ```
 
-Reject any request without a valid `X-Gateway-Auth` header. The `aud` claim must match the exact URL the gateway uses to reach your upstream server.
+Reject any request without a valid `X-Gateway-Auth` header. The `aud` claim is the **canonicalized form** of your upstream URL — host lowercased, all trailing slashes (including the root `/`) stripped — so configure `audience` with the canonicalized form (e.g. `https://MCP.Example.com/` becomes `https://mcp.example.com`).
+
+:::note Replay protection (opt-in)
+The `jti` claim is unique per token but `jose.jwtVerify` does not deduplicate it. If you need replay protection, track recently-seen `jti` values for at least the JWT TTL plus your clock-skew window — e.g. a Redis `SET` with `TTL = GATEWAY_JWT_TTL_SECONDS + 30` and reject any `jti` already in the set.
+:::
 
 :::info Key rotation
-The signing key is cached in Redis (encrypted at rest) and shared across all gateway replicas, so JWTs remain valid across pod restarts and the JWKS endpoint returns the same key regardless of which replica serves it. Keys are expected to rotate on roughly a 90-day cadence. The `kid` header on each JWT identifies which key signed it — upstream servers should rely on their JWT library's JWKS caching, which automatically re-fetches the JWKS on unknown `kid`, making rotation transparent.
+The signing key is stored in Redis and shared across all gateway replicas, so JWTs remain valid across pod restarts and the JWKS endpoint returns the same key regardless of which replica serves it. When the token vault is enabled (`VAULT_ENABLED=true` + `AWS_KMS_KEY_ID`), the key is encrypted at rest using AES-256-GCM with AWS KMS envelope encryption; without vault it is stored as plaintext JSON (the gateway logs a warning). Set `GATEWAY_JWT_REQUIRE_VAULT=true` in production to refuse the plaintext fallback.
+
+Rotation is **manual** — the gateway logs a warning and emits a `gateway_jwt_signing_key_age_seconds` metric after 90 days, but does not rotate on its own. To rotate, delete the Redis key and trigger a rolling restart:
+
+```bash
+redis-cli DEL gateway:jwt:signing_key
+# then: kubectl rollout restart deployment/gateway
+```
+
+The `kid` header on each JWT identifies which key signed it — upstream servers should rely on their JWT library's JWKS caching, which automatically re-fetches the JWKS on unknown `kid`, making rotation transparent to verifiers.
 :::
 
 ### Configuration
 
-There is nothing to configure on the gateway to enable this feature. The only optional tunable is the JWT lifetime:
+There is nothing to configure on the gateway to enable this feature. Two optional tunables are available:
 
-| Env var                   | Default | Description             |
-| ------------------------- | ------- | ----------------------- |
-| `GATEWAY_JWT_TTL_SECONDS` | `300`   | JWT lifetime in seconds |
+| Env var                     | Default | Description                                                                                                                              |
+| --------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `GATEWAY_JWT_TTL_SECONDS`   | `300`   | JWT lifetime in seconds. Must be between `60` and `3600`; values outside that range fail config validation at startup.                   |
+| `GATEWAY_JWT_REQUIRE_VAULT` | `false` | Refuse to start if the token vault is not configured. Prevents plaintext private-key storage in Redis. Recommended `true` in production. |
 
 The JWKS URL for each host is available in the platform under **Settings > Upstream Authentication (JWT)**, along with a sample verification snippet.
 
