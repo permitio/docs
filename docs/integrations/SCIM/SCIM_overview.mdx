@@ -18,7 +18,7 @@ SCIM streamlines and secures user account management by automating tasks such as
 - **Efficiency:** Manages increasing numbers of user accounts efficiently and handles provisioning and permissions without manual intervention.
 - **Consistency:** Standardizes how user data is stored and communicated, ensuring information remains consistent across applications.
 - **Error Reduction:** Minimizes the risk of mistakes from manual data entry or custom integrations.
-- **Security:** Reduces risks by ensuring users don’t need multiple passwords and keeps data synchronized, aiding in policy enforcement.
+- **Security:** Reduces risks by ensuring users don't need multiple passwords and keeps data synchronized, aiding in policy enforcement.
 
 ### How SCIM Works
 
@@ -27,3 +27,25 @@ SCIM operates over REST and JSON protocols, involving:
 - **Service Providers (SPs):** Applications such as Slack or Box that require user data from IdPs.
 
 When changes occur in the IdP (e.g., user profiles created or updated), these changes are automatically synced to the SP, keeping user information up-to-date and providing seamless access to applications and resources.
+
+### Multi-tenant SCIM
+
+The SCIM server supports a tenant-aware URL form so a single Permit environment can back multiple isolated customer tenants. Two URL shapes are supported:
+
+- **Legacy (single-tenant):** `/scim/v2/{PROJ_ID}/{ENV_ID}/Users` and `/Groups`. All role assignments land in the `default` tenant. Existing integrations continue to work unchanged.
+- **Tenant-aware:** `/scim/v2/{PROJ_ID}/{ENV_ID}/v2/{TENANT_ID}/Users` and `/Groups`. The `TENANT_ID` segment is required — there is no tenant-less `/v2/Users`. SCIM clients (Okta, Entra) bake the tenant into their endpoint configuration, so each tenant points its IdP at its own URL.
+
+`TENANT_ID` must match `[A-Za-z0-9_-]{1,64}` (1–64 chars: alphanumerics, underscore, hyphen). Invalid values return a 404 at the routing layer before any handler runs.
+
+#### How users, groups, and tenants relate
+
+- **Users are environment-scoped.** A SCIM User created via any tenant URL is provisioned once in the Permit environment. The `TENANT_ID` segment is accepted in the URL but does not partition users — `userName` remains globally unique within the environment.
+- **Groups (roles) are environment-scoped definitions.** A Group with `displayName: "Engineering"` resolves to a single role in the environment. If two tenants both create a Group with the same `displayName`, they share the same underlying role definition; the second `POST /Groups` reuses the existing role rather than failing.
+- **Group membership (role assignment) is tenant-scoped.** Adding a user to a Group via `/v2/{TENANT_ID}/Groups/...` grants that user the role *within that tenant*. The same user can hold the `Engineering` role in tenant `acme` and not in tenant `globex`. Membership in one tenant has no effect on membership in another.
+
+This matches Permit's data model: roles are defined per environment, and assignments carry a tenant. It avoids duplicating role definitions per tenant while keeping each tenant's user-to-role bindings fully independent.
+
+#### Choosing between the two URLs
+
+- Use the **legacy URL** for existing single-tenant integrations or when all users share one logical tenant.
+- Use the **tenant-aware URL** when one Permit environment serves multiple customers and each must have its own isolated set of role assignments. Provision one SCIM connection per tenant in your IdP, each pointing at its own `/v2/{TENANT_ID}/...` endpoint.
