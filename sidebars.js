@@ -213,9 +213,11 @@ const sidebars = {
             "permit-mcp-gateway/consent-service",
             "permit-mcp-gateway/audit-logs",
             "permit-mcp-gateway/architecture",
+            "permit-mcp-gateway/human-in-the-loop",
             "permit-mcp-gateway/permit-integration",
             "permit-mcp-gateway/advanced-features",
             "permit-mcp-gateway/enterprise-deployment",
+            "permit-mcp-gateway/on-prem-installation",
             {
               type: "category",
               label: "Usage Examples and Demos",
