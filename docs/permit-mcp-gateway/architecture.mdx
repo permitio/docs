@@ -170,7 +170,7 @@ flowchart TD
   GW -->|"JWKS fetch (cached)"| CS
   GW -->|"permit.check()"| PERMIT
   CS -->|"Policy sync on consent"| PERMIT
-  GW -->|"Streamable HTTP +<br/>upstream OAuth tokens"| MCP
+  GW -->|"Streamable HTTP + upstream OAuth tokens<br/>+ X-Gateway-Auth JWT"| MCP
 ```
 
 </ZoomableDiagram>
@@ -464,17 +464,17 @@ sequenceDiagram
     GW->>GW: Auth + Permit check
 
     rect rgb(240, 248, 255)
-        Note over GW: JWT signing (per-request)
+        Note over GW: JWT signing (lazy — cached, re-signed near expiry)
         GW->>GW: Is cached JWT still valid?
         alt JWT expired or near expiry (within 30s)
-            GW->>GW: Sign fresh JWT<br/>{iss, sub, aud, exp, iat, jti, tenant}
+            GW->>GW: Sign fresh JWT<br/>{iss, sub, aud, exp, iat, nbf, jti, tenant}
             GW->>GW: Cache JWT
         else JWT still valid
             GW->>GW: Reuse cached JWT
         end
     end
 
-    GW->>Up: POST (MCP request)<br/>Authorization: Bearer <upstream_oauth_token><br/>X-Gateway-Auth: Bearer <gateway_jwt>
+    GW->>Up: POST (MCP request)<br/>Authorization: Bearer {upstream_oauth_token}<br/>X-Gateway-Auth: Bearer {gateway_jwt}
 
     opt Upstream wants to verify
         Up->>JWKS: GET /.well-known/gateway-jwks.json
@@ -494,8 +494,8 @@ sequenceDiagram
 | `sub`    | Authenticated user ID                                                                            | Who the request is being made for |
 | `aud`    | Canonicalized upstream URL — host lowercased, all trailing slashes (including root `/`) stripped | Intended recipient                |
 | `exp`    | `now + TTL` (default 5 min)                                                                      | Token expiry                      |
-| `iat`    | `now − 30s` (clock-skew leeway)                                                                  | When the token was issued         |
-| `nbf`    | `now − 30s` (clock-skew leeway)                                                                  | Not valid before this time        |
+| `iat`    | `now - 30s` (clock-skew leeway)                                                                  | When the token was issued         |
+| `nbf`    | `now - 30s` (clock-skew leeway)                                                                  | Not valid before this time        |
 | `jti`    | Unique UUID                                                                                      | Unique token ID                   |
 | `tenant` | Host subdomain                                                                                   | Which tenant the request belongs to |
 
