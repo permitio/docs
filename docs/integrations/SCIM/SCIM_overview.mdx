@@ -41,6 +41,8 @@ The SCIM server supports a tenant-aware URL form so a single Permit environment 
 
 Replace `{permit_project_id}` and `{permit_env_id}` with your Permit project ID/Key and environment ID/Key respectively, and `{tenant_id}` with the target Permit tenant key.
 
+**EU users** replace the `scim.permit.io` host with `scim.eu-central-1.permit.io` in either shape — e.g. `https://scim.eu-central-1.permit.io/scim/v2/{permit_project_id}/{permit_env_id}` (legacy) or `https://scim.eu-central-1.permit.io/scim/v2/{permit_project_id}/{permit_env_id}/v2/{tenant_id}` (tenant-aware).
+
 :::note
 The second `/v2/` segment in the tenant-aware URL is a routing prefix that selects the multi-tenant SCIM API; it is **not** a SCIM protocol version. The SCIM 2.0 protocol version is the earlier `/scim/v2/` segment.
 :::
@@ -50,7 +52,7 @@ The second `/v2/` segment in the tenant-aware URL is a routing prefix that selec
 #### How users, groups, and tenants relate
 
 - **Users are environment-scoped.** A SCIM User created via any tenant URL is provisioned once in the Permit environment. The `{tenant_id}` segment is accepted in the URL but does not partition users — `userName` remains globally unique within the environment.
-- **Groups (roles) are environment-scoped definitions.** A Group with `displayName: "Engineering"` resolves to a single role in the environment. If two tenants both create a Group with the same `displayName`, they share the same underlying role definition; the second `POST /Groups` reuses the existing role rather than failing.
+- **Groups (roles) are environment-scoped definitions.** A Group with `displayName: "Engineering"` resolves to a single role in the environment. If two tenants both create a Group with the same `displayName`, they share the same underlying role definition; the second `POST /Groups` reuses the existing role rather than failing. Matching is by the normalized role key (non-alphanumeric characters other than `-` and `_` are stripped), not the raw `displayName` — so two *different* display names that normalize to the same key (e.g. `Eng Team` and `EngTeam` both → `EngTeam`) are rejected rather than merged.
 - **Group membership (role assignment) is tenant-scoped.** Adding a user to a Group via `/v2/{tenant_id}/Groups/...` grants that user the role *within that tenant*. The same user can hold the `Engineering` role in tenant `acme` and not in tenant `globex`. Membership in one tenant has no effect on membership in another.
 
 This matches Permit's data model: roles are defined per environment, and assignments carry a tenant. It avoids duplicating role definitions per tenant while keeping each tenant's user-to-role bindings fully independent.
@@ -59,3 +61,7 @@ This matches Permit's data model: roles are defined per environment, and assignm
 
 - Use the **legacy URL** for existing single-tenant integrations or when all users share one logical tenant.
 - Use the **tenant-aware URL** when one Permit environment serves multiple customers and each must have its own isolated set of role assignments. Provision one SCIM connection per tenant in your IdP, each pointing at its own `/v2/{tenant_id}/...` endpoint.
+
+:::caution
+The target Permit tenant must already exist before you provision the SCIM connection. The SCIM server validates the `{tenant_id}` format but does **not** create the tenant — it auto-creates missing *users*, but there is no equivalent tenant auto-creation. Pointing a SCIM client at a `{tenant_id}` that does not yet exist in the environment causes the role-assignment call to fail and surfaces as an error to your IdP.
+:::
