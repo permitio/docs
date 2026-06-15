@@ -2,88 +2,53 @@ import React from "react";
 
 export const CSharpLabel = () => (
   <span>
-    <img
-      className="langLabelImage"
-      src={"/img/languages/csharp.svg"}
-      style={{ width: 22 }}
-    />{" "}
-    .Net
+    <img className="langLabelImage" src={"/img/languages/csharp.svg"} style={{ width: 22 }} /> .Net
   </span>
 );
 
 export const PythonLabel = () => (
   <span>
-    <img
-      className="langLabelImage"
-      src={"/img/languages/python.svg"}
-      style={{ width: 22 }}
-    />{" "}
+    <img className="langLabelImage" src={"/img/languages/python.svg"} style={{ width: 22 }} />{" "}
     Python (asyncio)
   </span>
 );
 
 export const GolangLabel = () => (
   <span>
-    <img
-      className="langLabelImage"
-      src={"/img/languages/golang.svg"}
-      style={{ width: 22 }}
-    />{" "}
+    <img className="langLabelImage" src={"/img/languages/golang.svg"} style={{ width: 22 }} />{" "}
     Golang
   </span>
 );
 
 export const RubyLabel = () => (
   <span>
-    <img
-      className="langLabelImage"
-      src={"/img/languages/ruby.svg"}
-      style={{ width: 22 }}
-    />{" "}
-    Ruby
+    <img className="langLabelImage" src={"/img/languages/ruby.svg"} style={{ width: 22 }} /> Ruby
   </span>
 );
 
 export const SyncPythonLabel = () => (
   <span>
-    <img
-      className="langLabelImage"
-      src={"/img/languages/python.svg"}
-      style={{ width: 22 }}
-    />{" "}
+    <img className="langLabelImage" src={"/img/languages/python.svg"} style={{ width: 22 }} />{" "}
     Python (sync)
   </span>
 );
 
 export const JavaLabel = () => (
   <span>
-    <img
-      className="langLabelImage"
-      src={"/img/languages/java.svg"}
-      style={{ width: 22 }}
-    />{" "}
-    Java
+    <img className="langLabelImage" src={"/img/languages/java.svg"} style={{ width: 22 }} /> Java
   </span>
 );
 
 export const NodeJSLabel = () => (
   <span>
-    <img
-      className="langLabelImage"
-      src={"/img/languages/javascript.svg"}
-      style={{ width: 22 }}
-    />{" "}
+    <img className="langLabelImage" src={"/img/languages/javascript.svg"} style={{ width: 22 }} />{" "}
     NodeJS
   </span>
 );
 
 export const TypeScriptLabel = () => (
   <span>
-    <img
-      className="langLabelImage"
-      src={"/img/languages/typescript.svg"}
-      style={{ width: 22 }}
-    />{" "}
+    <img className="langLabelImage" src={"/img/languages/typescript.svg"} style={{ width: 22 }} />{" "}
     TypeScript
   </span>
 );

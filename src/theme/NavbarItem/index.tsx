@@ -1,8 +1,8 @@
-import OriginalNavbarItem from '@theme-original/NavbarItem';
-import React from 'react';
-import NavbarIconLink from '@theme/NavbarItem/NavbarIconLink';
-import NavbarSeparator from '@theme/NavbarItem/NavbarSeparator';
-import NavbarCta from '@theme/NavbarItem/NavbarCta';
+import OriginalNavbarItem from "@theme-original/NavbarItem";
+import React from "react";
+import NavbarIconLink from "@theme/NavbarItem/NavbarIconLink";
+import NavbarSeparator from "@theme/NavbarItem/NavbarSeparator";
+import NavbarCta from "@theme/NavbarItem/NavbarCta";
 
 const CustomNavbarItemComponents = {
   iconLink: () => NavbarIconLink,

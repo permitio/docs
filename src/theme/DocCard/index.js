@@ -4,7 +4,10 @@ import Link from "@docusaurus/Link";
 import isInternalUrl from "@docusaurus/isInternalUrl";
 import { translate } from "@docusaurus/Translate";
 import styles from "./styles.module.css";
-import { findFirstSidebarItemCategoryLink, useDocById } from "@docusaurus/plugin-content-docs/lib/client/docsUtils.js";
+import {
+  findFirstSidebarItemCategoryLink,
+  useDocById,
+} from "@docusaurus/plugin-content-docs/lib/client/docsUtils.js";
 
 function CardContainer({ href, children }) {
   return (
@@ -12,7 +15,7 @@ function CardContainer({ href, children }) {
       href={href}
       className={clsx(
         "card relative shadow transition rounded-lg h-full px-[18px] py-5 hover:opacity-100 group",
-        styles.cardContainer
+        styles.cardContainer,
       )}
     >
       <div className="flex flex-col relative z-20 gap-[14px]">{children}</div>
@@ -69,7 +72,7 @@ function CardCategory({ item }) {
             description:
               "The default description for a category card in the generated index about how many items this category includes",
           },
-          { count: item.items.length }
+          { count: item.items.length },
         )
       }
     />

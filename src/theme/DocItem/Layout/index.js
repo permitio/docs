@@ -46,7 +46,7 @@ export default function DocItemLayout({ children }) {
       <div
         className={clsx(
           `col ${isFullWidthContainer ? "!p-0" : ""}`,
-          !docTOC.hidden ? styles.docItemCol : ""
+          !docTOC.hidden ? styles.docItemCol : "",
         )}
       >
         <DocVersionBanner />

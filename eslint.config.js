@@ -6,13 +6,7 @@ const prettierRecommended = require("eslint-plugin-prettier/recommended");
 // was dropped (unmaintained, no flat-config support); cspell.json covers spelling.
 module.exports = [
   {
-    ignores: [
-      "build/**",
-      ".docusaurus/**",
-      ".cache-loader/**",
-      "node_modules/**",
-      "static/**",
-    ],
+    ignores: ["build/**", ".docusaurus/**", ".cache-loader/**", "node_modules/**", "static/**"],
   },
   {
     ...react.configs.flat.recommended,
@@ -40,10 +34,7 @@ module.exports = [
     },
     rules: {
       "react/prop-types": "off",
-      "no-unused-vars": [
-        "warn",
-        { vars: "all", args: "after-used", ignoreRestSiblings: false },
-      ],
+      "no-unused-vars": ["warn", { vars: "all", args: "after-used", ignoreRestSiblings: false }],
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },

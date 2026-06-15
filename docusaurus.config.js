@@ -551,7 +551,7 @@ const config = {
               "/ai-security/mcp-permissions/overview/",
               "/ai-security/mcp-permissions/",
             ],
-            to: "/permit-mcp-gateway/guide/"
+            to: "/permit-mcp-gateway/guide/",
           },
         ],
       },
@@ -596,7 +596,7 @@ const config = {
       mermaid: {
         options: {
           themeVariables: {
-            edgeLabelBackground: '#EEEEEE',
+            edgeLabelBackground: "#EEEEEE",
           },
         },
       },
