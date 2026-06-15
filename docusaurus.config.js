@@ -1,4 +1,3 @@
-/* eslint-disable spellcheck/spell-checker */
 // @ts-check
 // Note: type annotations allow type checking and IDEs autocompletion
 // require("@babel/register")({
@@ -59,7 +58,10 @@ const config = {
         },
         blog: false, // disables docusaurus blog
         theme: {
-          customCss: require.resolve("./src/css/custom.scss"),
+          customCss: [
+            require.resolve("./src/css/tailwind.css"),
+            require.resolve("./src/css/custom.scss"),
+          ],
         },
       },
     ],
@@ -561,9 +563,8 @@ const config = {
       return {
         name: "docusaurus-tailwindcss",
         configurePostCss(postcssOptions) {
-          // Appends TailwindCSS and AutoPrefixer.
-          postcssOptions.plugins.push(require("tailwindcss"));
-          postcssOptions.plugins.push(require("autoprefixer"));
+          // Tailwind CSS v4 PostCSS plugin (handles vendor prefixing itself).
+          postcssOptions.plugins.push(require("@tailwindcss/postcss"));
           return postcssOptions;
         },
       };

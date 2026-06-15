@@ -4,7 +4,6 @@ import anime from "animejs/lib/anime.es.js";
 // import { docco } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import { CodeBlock, tomorrowNightBlue } from "react-code-blocks";
 import "./CodeDropdown.scss";
-import { render } from "react-dom";
 
 export default function CodeDropdown(props) {
 	const [isOpen, setOpen] = useState(props.open);

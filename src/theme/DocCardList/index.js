@@ -1,4 +1,3 @@
-/* eslint-disable spellcheck/spell-checker */
 import React from "react";
 import clsx from "clsx";
 import { useCurrentSidebarCategory, filterDocCardListItems } from "@docusaurus/theme-common";

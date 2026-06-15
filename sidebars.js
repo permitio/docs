@@ -1,4 +1,3 @@
-/* eslint-disable spellcheck/spell-checker */
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
 const sidebars = {
   main: [
