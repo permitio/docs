@@ -1,0 +1,113 @@
+---
+title: Egress Rules
+sidebar_label: Egress Rules
+description: Define which outbound requests your agents may make — ordered allow, block, and require-approval rules matched by host, path, HTTP method, and the calling agent.
+sidebar_position: 3
+---
+
+# Egress Rules
+
+Egress rules are the **allow-list** for outbound traffic. They decide, for each request an agent makes, whether it is allowed, blocked, or routed to a human for approval — before any credential is injected or any connection is made.
+
+The proxy is **deny-by-default**: if no rule matches a request, the request is denied. You grant access by adding rules.
+
+## What a rule matches
+
+Each rule matches a request on up to four dimensions:
+
+| Field | Matches | Example |
+| --- | --- | --- |
+| **Host** | The target hostname (supports glob patterns). | `api.stripe.com`, `*.githubusercontent.com` |
+| **Path** | The request path (supports glob patterns). Optional — omit to match all paths. | `/v1/customers/*` |
+| **Method** | The HTTP method class: `read`, `write`, `delete`, or `all`. | `read` |
+| **Agent** | Restricts the rule to specific agents. Optional — omit to apply to all agents. | a specific agent's client ID |
+
+The **method class** groups HTTP verbs by risk so you don't have to enumerate them: `read` covers safe methods like `GET` and `HEAD`, `write` covers `POST`/`PUT`/`PATCH`, `delete` covers `DELETE`, and `all` matches any method.
+
+## What a rule does
+
+Every rule carries one of three **actions**:
+
+| Action | Effect |
+| --- | --- |
+| **`allow`** | The request proceeds to authorization and is forwarded. An `allow` rule can also name a [credential](./credentials) to inject. |
+| **`block`** | The request is denied immediately — no authorization check, no connection. Use this to carve exceptions out of a broader allow. |
+| **`require_approval`** | The request pauses and a [human-in-the-loop](#human-approval-on-egress) approval is requested. It proceeds only if a human approves. |
+
+## Ordering and precedence
+
+Rules are an **ordered list**, evaluated top to bottom; the **first matching rule wins**. Order matters: a narrow `block` must come before a broad `allow` to take effect.
+
+Two precedence guarantees help here:
+
+- **Agent-scoped rules win over unscoped rules.** A rule restricted to a specific agent is considered before general rules, so you can grant one agent extra access (or extra restriction) without rewriting your global rules.
+- **`block` is absolute for the requests it matches.** A matched `block` denies regardless of any Permit policy, trust ceiling, or rate-limit budget.
+
+Reorder rules with the CLI or by dragging them in the dashboard:
+
+```bash
+asg proxy rules reorder acme <rule-id-1> <rule-id-2> <rule-id-3>
+```
+
+## Managing rules
+
+```bash
+# List the current rules in evaluation order.
+asg proxy rules list acme
+
+# Allow read-only access to a path on one host, injecting a stored credential.
+asg proxy rules add acme \
+  --host api.stripe.com \
+  --path "/v1/customers/*" \
+  --method read \
+  --action allow \
+  --credential stripe
+
+# Block a sensitive sub-path even though the host is otherwise allowed.
+asg proxy rules add acme \
+  --host api.stripe.com \
+  --path "/v1/account*" \
+  --action block
+
+# Require human approval for deletes against a host.
+asg proxy rules add acme \
+  --host api.github.com \
+  --method delete \
+  --action require_approval
+
+# Scope a rule to a single agent.
+asg proxy rules add acme \
+  --host internal-api.example.com \
+  --action allow \
+  --agent-match <agent-client-id>
+
+# Update or delete by rule ID.
+asg proxy rules update acme <rule-id> --action block
+asg proxy rules delete acme <rule-id>
+```
+
+**Dashboard:** **Proxy → Rules** shows the same list with the evaluation order made explicit, plus inline add, edit, reorder, and delete.
+
+:::tip Start tight, then widen
+Begin with a small set of `allow` rules for the exact hosts your agents need, and let deny-by-default handle everything else. Widen only as real traffic requires it — it's far easier than starting open and trying to lock down later.
+:::
+
+## Human approval on egress
+
+A `require_approval` rule turns an outbound request into a [Human-in-the-Loop](/permit-mcp-gateway/human-in-the-loop) decision. When an agent hits such a rule:
+
+1. The request **pauses** at the proxy — it is not forwarded yet.
+2. An approval request is created and your reviewers are notified (email / Slack).
+3. If a reviewer **approves**, the request is forwarded. If they **reject** or the request **times out**, it is denied (fail-closed).
+
+This is the same approval machinery used for MCP tool calls, applied to raw HTTP egress — so you can gate, say, any `DELETE` to a production API behind a human, while routine reads flow through untouched.
+
+When an agent is driven by the CLI, approval outcomes are reported distinctly so automation can tell *"a human said no"* from *"blocked by policy"* from *"the request timed out."*
+
+---
+
+## What's next
+
+- [**Credentials & Connections**](./credentials) — what the `--credential` on an allow rule injects.
+- [**Authorization & Trust**](./authorization) — how rules combine with Permit policy and human trust ceilings.
+- [**Security**](./security) — SSRF protection and rate limiting that run alongside rule matching.

@@ -1,0 +1,94 @@
+---
+title: Connecting Agents
+sidebar_label: Connecting Agents
+description: Route an agent's outbound traffic through the HTTP Egress Proxy — shell, Docker, and Kubernetes setup, the proxy access token, HTTPS interception, and the doctor diagnostic.
+sidebar_position: 6
+---
+
+# Connecting Agents
+
+The proxy uses the standard `HTTP_PROXY` / `HTTPS_PROXY` convention, so most HTTP client libraries route through it automatically once the environment is set. Connecting an agent has two parts: **the environment variables** that point traffic at the gateway, and **a proxy access token** the agent presents to authenticate.
+
+## The pieces
+
+| Piece | What it is |
+| --- | --- |
+| `HTTP_PROXY` / `HTTPS_PROXY` | Point your agent's outbound HTTP and HTTPS at the gateway. |
+| `NO_PROXY` | Hosts that should bypass the proxy (e.g. localhost). |
+| Proxy access token | A short-lived token the agent presents to the proxy. Minted with [`asg proxy token create`](./quickstart#4-mint-an-agent-access-token) or the [consent flow](./authorization#human-consent), and referenced via a token file. |
+
+You rarely set these by hand — `asg proxy env` and `asg proxy container-config` generate them for you.
+
+## Shell / local process
+
+```bash
+eval "$(asg proxy env acme)"
+```
+
+This exports `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, and the path to the agent's token file into the current shell. Any process launched from that shell now routes its outbound traffic through the proxy. Mint the token first (step 4 of the [Quick Start](./quickstart)).
+
+## Docker and Kubernetes
+
+Generate ready-to-use container configuration:
+
+```bash
+# Docker env file or Compose snippet.
+asg proxy container-config acme --format docker-env
+asg proxy container-config acme --format docker-compose
+
+# Kubernetes ConfigMap.
+asg proxy container-config acme --format k8s-configmap
+```
+
+Mount or reference the emitted configuration in your agent's container so the proxy variables are present in its environment. Supply the proxy token through your platform's normal secret mechanism (a mounted file or secret), and point `AGENT_SECURITY_PROXY_TOKEN_FILE` at it.
+
+## HTTPS interception
+
+By default the proxy handles HTTPS in **passthrough** mode: it authenticates and applies host-level rules, but the encrypted tunnel is forwarded opaquely — the proxy does not see the request path or body, and it can't inject a credential or scrub the response inside the tunnel.
+
+To apply **full** governance to HTTPS — path-level rules, credential injection, response scrubbing, and approval gates inside the encrypted connection — enable **intercept** mode. In intercept mode the proxy terminates the agent's TLS using a **per-host certificate authority** and re-applies every check to the decrypted request. For your agent to trust those connections, it must trust the host's CA certificate.
+
+```bash
+# Inspect the host's interception CA.
+asg proxy ca status acme
+
+# Download the CA certificate to install in your agent's trust store.
+asg proxy ca download acme --output ./agent-security-ca.pem
+
+# Print a shell snippet that points common tools at the CA.
+asg proxy ca trust-shell acme
+
+# Rotate the CA, keeping the previous one valid during a grace window.
+asg proxy ca rotate acme --grace-days 7
+```
+
+:::note Choosing a mode
+Use **passthrough** when host-level control is enough, or for very large uploads, downloads, and long-lived streaming connections. Use **intercept** when you need path-level rules, credential injection, or response scrubbing on HTTPS traffic. You can mix modes across hosts.
+:::
+
+## Diagnose with `doctor`
+
+When something isn't connecting, run the built-in diagnostic:
+
+```bash
+asg proxy doctor acme
+```
+
+`doctor` checks, end to end:
+
+- Gateway reachability
+- Whether the proxy is enabled for the host
+- How many rules and credentials are configured
+- Your local proxy environment variables
+- The interception CA's status and expiry, and whether your environment trusts it
+- The token file's permissions and the token's expiry
+
+Each check reports a clear pass/fail with a suggested fix, so it's the first thing to run whenever an agent's traffic isn't behaving.
+
+---
+
+## What's next
+
+- [**Quick Start**](./quickstart) — the end-to-end setup these commands fit into.
+- [**Security**](./security) — what the proxy enforces on the traffic you route through it.
+- [**The `asg` CLI**](./cli) — full command reference.
