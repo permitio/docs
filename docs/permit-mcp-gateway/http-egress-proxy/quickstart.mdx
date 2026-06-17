@@ -83,7 +83,7 @@ eval "$(asg proxy env acme)"
 
 This sets `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, and points the proxy at the token file you created. Now any process in that shell routes its outbound HTTP/HTTPS through the gateway. For Docker and Kubernetes, see [Connecting Agents](./connecting-agents).
 
-## 6. Verify
+## 6. Verify the allow-list
 
 Confirm that the host you allowed is reachable through the proxy:
 
@@ -98,11 +98,30 @@ curl https://api.openai.com/v1/models
 # → blocked by the proxy (deny-by-default)
 ```
 
-This proves the allow-list is enforced. If both behave as expected, your host is governed.
+This proves the allow-list is enforced for **all** outbound traffic, including HTTPS, at the host level. If you only need allow/deny control over which hosts your agents can reach, you're done here.
 
-:::note Credential injection on HTTPS needs intercept mode
-By default the proxy handles HTTPS in **passthrough** mode: it enforces host-level rules (so the allow/deny test above works), but it does **not** open the encrypted tunnel — so it can't inject the credential, apply path-level rules, or scrub responses inside HTTPS. To have the proxy inject the credential you stored in step 3 on an HTTPS host, enable **intercept** mode and trust the gateway's certificate. See [HTTPS interception](./connecting-agents#https-interception). Over plain HTTP, injection works without any extra setup.
-:::
+## 7. Inject credentials into HTTPS traffic
+
+To have the proxy actually inject the credential you stored in step 3 — and apply path-level rules and response scrubbing — the proxy needs to open the encrypted connection. By default HTTPS runs in **passthrough** mode (an opaque tunnel: host-level rules only, no injection). Switch the rule to **intercept** mode to unlock the full pipeline:
+
+1. **Enable intercept on the rule.** In the [dashboard](https://app.agent.security), open **Proxy → Rules**, edit your `api.stripe.com` rule, and set **TLS mode** to **Intercept (decrypt + inject credential)**. (Intercept is configured per rule in the dashboard; the CLI creates rules in passthrough mode.)
+2. **Provision and trust the certificate.** Intercept terminates TLS with your host's own certificate authority, so your agent must trust it:
+
+   ```bash
+   asg proxy ca rotate acme          # provisions the CA on first run
+   asg proxy ca download acme -o ./agent-security-ca.pem
+   asg proxy ca trust-shell acme     # prints how to point common tools at the CA
+   ```
+
+3. **Re-verify.** Make the same request again — this time the credential is injected for you (you never send the key), and it's scrubbed from the response:
+
+   ```bash
+   curl https://api.stripe.com/v1/customers
+   ```
+
+Use intercept where you need credential injection, path rules, or scrubbing on HTTPS; keep passthrough for hosts where host-level control is enough, or for very large uploads, downloads, and long-lived streams. See [HTTPS interception](./connecting-agents#https-interception) for the full picture. (Over plain HTTP, injection works with no intercept setup at all.)
+
+## Troubleshooting
 
 If something isn't working, run the built-in diagnostics:
 
