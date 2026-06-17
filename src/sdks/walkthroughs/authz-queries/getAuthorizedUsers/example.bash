@@ -1,4 +1,4 @@
-curl https://pdp-api.permit.io/authorized_users \
+curl http://localhost:7766/authorized_users \
   --request POST \
   --header "Authorization: Bearer YOUR_SECRET_TOKEN" \
   --header "Content-Type: application/json" \
