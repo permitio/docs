@@ -1,0 +1,141 @@
+---
+title: Quick Start
+sidebar_label: Quick Start
+description: Enable the HTTP Egress Proxy for a host, add an allow rule, store an upstream credential, mint an agent token, and route an agent through the proxy — end to end.
+sidebar_position: 1
+---
+
+# Quick Start
+
+This walkthrough takes you from zero to a governed outbound API call: you'll enable the proxy for a host, allow one upstream API, store its credential, and route an agent through the proxy so its calls are authenticated, authorized, and audited.
+
+You can do every step in the [dashboard](https://app.agent.security) or with the [`asg` CLI](./cli). This guide shows the CLI because it's copy-pasteable; the dashboard equivalents are noted at each step.
+
+:::note Prerequisites
+- A host (tenant) in your [Permit MCP Gateway dashboard](https://app.agent.security). If you don't have one, follow the [gateway Quick Start](/permit-mcp-gateway/quickstart) first.
+- The proxy enabled for your account (see the availability note on the [Overview](./)).
+- The `asg` CLI installed and pointed at your gateway — see [The `asg` CLI](./cli#install).
+:::
+
+Throughout this guide, replace `acme` with your own host's subdomain.
+
+## 1. Enable the proxy for your host
+
+The proxy is off by default for every host. Turn it on:
+
+```bash
+asg proxy config acme --enable
+```
+
+**Dashboard:** go to **Proxy → Overview** and toggle the proxy on.
+
+## 2. Add an allow rule
+
+Rules are deny-by-default: until you allow a host, every outbound request to it is blocked. Allow one upstream API — here, the Stripe API:
+
+```bash
+asg proxy rules add acme \
+  --host api.stripe.com \
+  --action allow \
+  --credential stripe
+```
+
+This says: *requests to `api.stripe.com` are allowed, and the stored credential named `stripe` should be injected.* See [Egress Rules](./egress-rules) for paths, methods, ordering, and agent scoping.
+
+**Dashboard:** **Proxy → Rules → Add rule**.
+
+## 3. Store the upstream credential
+
+Store the API key the proxy should inject. Secrets are **write-only** — once stored, they can never be read back out, only overwritten.
+
+```bash
+asg proxy credentials create stripe acme \
+  --host api.stripe.com \
+  --injection header \
+  --header-name Authorization \
+  --value-template "Bearer {secret}" \
+  --secret-file ./stripe.key
+```
+
+The agent never holds this key. The proxy injects it on the way out and [scrubs it](./security#response-scrubbing) from responses on the way back. For OAuth providers like GitHub, Google, Notion, and Atlassian, use [`asg proxy connect`](./credentials#oauth-connections) instead of a static key.
+
+**Dashboard:** **Proxy → Credentials → Add credential**.
+
+## 4. Mint an agent access token
+
+The agent authenticates to the proxy with a short-lived token. For an automated agent (no human in the loop), mint one directly:
+
+```bash
+asg proxy token create acme \
+  --client-id ci-runner \
+  --out ~/.agent-security/tokens/acme.token
+```
+
+The token is written to a file with restrictive permissions. To instead let a **human** delegate access to an agent within a trust ceiling, use [`asg proxy authorize`](./authorization#human-consent) — that's the consent flow.
+
+## 5. Point your agent at the proxy
+
+The proxy speaks the standard `HTTP_PROXY` / `HTTPS_PROXY` convention, so most HTTP libraries pick it up automatically. Export the right variables for your shell:
+
+```bash
+eval "$(asg proxy env acme)"
+```
+
+This sets `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, and points the proxy at the token file you created. Now any process in that shell routes its outbound HTTP/HTTPS through the gateway. For Docker and Kubernetes, see [Connecting Agents](./connecting-agents).
+
+## 6. Verify the allow-list
+
+Confirm that the host you allowed is reachable through the proxy:
+
+```bash
+curl https://api.stripe.com/v1/customers
+```
+
+Then confirm a host you did **not** allow is denied:
+
+```bash
+curl https://api.openai.com/v1/models
+# → blocked by the proxy (deny-by-default)
+```
+
+This proves the allow-list is enforced for **all** outbound traffic, including HTTPS, at the host level. If you only need allow/deny control over which hosts your agents can reach, you're done here.
+
+## 7. Inject credentials into HTTPS traffic
+
+To have the proxy actually inject the credential you stored in step 3 — and apply path-level rules and response scrubbing — the proxy needs to open the encrypted connection. By default HTTPS runs in **passthrough** mode (an opaque tunnel: host-level rules only, no injection). Switch the rule to **intercept** mode to unlock the full pipeline:
+
+1. **Enable intercept on the rule.** In the [dashboard](https://app.agent.security), open **Proxy → Rules**, edit your `api.stripe.com` rule, and set **TLS mode** to **Intercept (decrypt + inject credential)**. (Intercept is configured per rule in the dashboard; the CLI creates rules in passthrough mode.)
+2. **Provision and trust the certificate.** Intercept terminates TLS with your host's own certificate authority, so your agent must trust it:
+
+   ```bash
+   asg proxy ca rotate acme          # provisions the CA on first run
+   asg proxy ca download acme -o ./agent-security-ca.pem
+   asg proxy ca trust-shell acme     # prints how to point common tools at the CA
+   ```
+
+3. **Re-verify.** Make the same request again — this time the credential is injected for you (you never send the key), and it's scrubbed from the response:
+
+   ```bash
+   curl https://api.stripe.com/v1/customers
+   ```
+
+Use intercept where you need credential injection, path rules, or scrubbing on HTTPS; keep passthrough for hosts where host-level control is enough, or for very large uploads, downloads, and long-lived streams. See [HTTPS interception](./connecting-agents#https-interception) for the full picture. (Over plain HTTP, injection works with no intercept setup at all.)
+
+## Troubleshooting
+
+If something isn't working, run the built-in diagnostics:
+
+```bash
+asg proxy doctor acme
+```
+
+`doctor` checks gateway reachability, whether the proxy is enabled, your rule and credential counts, your local environment variables, and your token file's permissions and expiry.
+
+---
+
+## What's next
+
+- [**Egress Rules**](./egress-rules) — refine rules with paths, methods, approval gates, and per-agent scoping.
+- [**Credentials & Connections**](./credentials) — OAuth connections, injection methods, and AWS request signing.
+- [**Authorization & Trust**](./authorization) — delegate access to agents through human consent and trust ceilings.
+- [**Connecting Agents**](./connecting-agents) — Docker, Kubernetes, and HTTPS interception setup.

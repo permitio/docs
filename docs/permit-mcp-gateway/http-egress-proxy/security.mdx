@@ -1,0 +1,67 @@
+---
+title: Security
+sidebar_label: Security
+description: The security properties of the HTTP Egress Proxy — SSRF protection, server-side credential isolation, response scrubbing, TLS modes, rate limiting, and a complete audit trail.
+sidebar_position: 7
+---
+
+# Security
+
+The egress proxy is a trust boundary for everything your agents send to the outside world. This page summarizes the protections it applies to that traffic.
+
+## Deny by default
+
+No outbound request is allowed unless an [egress rule](./egress-rules) explicitly permits it. A request that matches no rule is denied — and a denied request is never resolved to an IP address or connected to, so nothing leaks to a host you didn't allow. The cheap, fail-closed checks (authentication, SSRF, deny-by-default) all run **before** any network I/O.
+
+## SSRF protection
+
+Server-Side Request Forgery — tricking a server into calling internal addresses — is a top risk for any proxy that forwards on behalf of an agent. The proxy defends against it in two stages:
+
+- **Before any DNS lookup**, the literal target is checked against blocklists for loopback, private/internal ranges, link-local and cloud-metadata addresses (such as `169.254.169.254`), and carrier-grade NAT — including obfuscated and legacy IP encodings that attackers use to slip past naive filters.
+- **After DNS resolution**, **every** resolved address is re-checked, and the validated address is **pinned** so the connection can't be re-pointed at an internal host between the check and the connection (a DNS-rebinding / time-of-check-to-time-of-use defense).
+
+A single blocked address rejects the whole connection.
+
+## Credential isolation
+
+Upstream secrets are **encrypted at rest** in the gateway using envelope encryption, bound to specific hosts, and injected into requests **server-side**. The agent never receives them.
+
+Credentials are **write-only** — once stored they can't be read back through any interface, only overwritten or deleted. See [Credentials & Connections](./credentials).
+
+## Response scrubbing
+
+When the proxy injects a secret into a request, it also **removes that secret from the upstream response** — across response headers and the streamed body, including common encodings of the value (such as base64, hex, and percent-encoding). If a response can't be safely scrubbed, it fails closed rather than risk leaking the secret back to the agent. This keeps an injected credential from being reflected back and captured by the agent.
+
+## TLS modes
+
+`CONNECT` (HTTPS) tunnels are handled in one of two modes, chosen **per rule**:
+
+| Mode | Behavior |
+| --- | --- |
+| **`passthrough`** (default) | The encrypted tunnel is forwarded opaquely. Host-level rules and authentication apply, but the proxy does not see the path or body, and cannot inject credentials or scrub responses inside the tunnel. |
+| **`intercept`** | The proxy terminates TLS with your host's own certificate authority and re-applies the full check set — path-level rules, authorization, credential injection, response scrubbing, and approval gates — to every decrypted request. |
+
+Each rule's TLS mode is set in the [dashboard](https://app.agent.security) rule editor. See [HTTPS interception](./connecting-agents#https-interception) for how to enable intercept and trust the CA. In intercept mode the rule set is captured when a tunnel opens, so a rule change takes effect on the **next** connection — with one exception: **revoked consent is enforced live**, denying in-flight requests immediately.
+
+## Rate limiting and DoS bounds
+
+The proxy meters every request against per-agent budgets — both per **host** and per **registrable domain** — and sheds excess with a `429` and a `Retry-After`. These budgets run **before** the policy and approval checks, so a flood is rejected cheaply and can't be used to amplify load on your policy engine or your reviewers. Additional bounds — token size caps, slow-client timeouts, and a ceiling on concurrent connections — protect the proxy itself.
+
+## Audit trail
+
+Every decision the proxy makes is logged — the agent, the human it acts for, the target host, the matched rule, and the allow/deny outcome — so you can answer "which agent called which API, on whose behalf, and was it allowed?" after the fact. Proxy activity appears alongside your MCP audit data; see [Audit Logs](/permit-mcp-gateway/audit-logs).
+
+## What the proxy does and doesn't do
+
+The proxy governs the traffic that is **routed through it**. To make that governance effective:
+
+- **Route all of an agent's egress through the proxy.** An agent configured to bypass the `HTTP_PROXY` settings, or one that dials raw IPs directly, isn't governed. In production, pair the proxy with network controls that prevent agents from reaching the internet except through it.
+- **Use `intercept` mode where you need body- and path-level control over HTTPS.** In `passthrough` mode, HTTPS rules are host-level only.
+
+---
+
+## What's next
+
+- [**Egress Rules**](./egress-rules) — the allow-list these protections enforce.
+- [**Authorization & Trust**](./authorization) — the policy and consent gates.
+- [**Connecting Agents**](./connecting-agents) — routing traffic and TLS trust setup.
