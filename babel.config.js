@@ -1,3 +1,3 @@
 module.exports = {
-  presets: ['@docusaurus/babel/preset'],
+  presets: ["@docusaurus/babel/preset"],
 };

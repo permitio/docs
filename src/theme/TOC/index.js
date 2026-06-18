@@ -70,6 +70,7 @@ export default function TOC({ toc, editUrl, ...props }) {
               <a
                 href="https://io.permit.io/docs-to-slack"
                 target="_blank"
+                rel="noreferrer"
                 id="join-community"
                 className="font-semibold text-[0.875rem] hover:text-slate-900 hover:underline hover:cursor-pointer"
               >
@@ -96,6 +97,7 @@ export default function TOC({ toc, editUrl, ...props }) {
               <a
                 href="https://io.permit.io/docs-to-call"
                 target="_blank"
+                rel="noreferrer"
                 id="join-community"
                 className="font-semibold text-[0.875rem] hover:text-slate-900 hover:underline hover:cursor-pointer"
               >

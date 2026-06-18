@@ -1,19 +1,22 @@
-import React, { useEffect, useMemo } from 'react';
-import clsx from 'clsx';
+import React, { useEffect, useMemo } from "react";
+import clsx from "clsx";
 import {
   ThemeClassNames,
   useThemeConfig,
   usePrevious,
   Collapsible,
   useCollapsible,
-} from '@docusaurus/theme-common';
-import { isSamePath } from '@docusaurus/theme-common/internal';
-import Link from '@docusaurus/Link';
-import { translate } from '@docusaurus/Translate';
-import useIsBrowser from '@docusaurus/useIsBrowser';
-import DocSidebarItems from '@theme/DocSidebarItems';
-import { findFirstSidebarItemCategoryLink, isActiveSidebarItem } from '@docusaurus/plugin-content-docs/lib/client/docsUtils.js';
-import { useDocSidebarItemsExpandedState } from '@docusaurus/plugin-content-docs/lib/client/docSidebarItemsExpandedState.js';
+} from "@docusaurus/theme-common";
+import { isSamePath } from "@docusaurus/theme-common/internal";
+import Link from "@docusaurus/Link";
+import { translate } from "@docusaurus/Translate";
+import useIsBrowser from "@docusaurus/useIsBrowser";
+import DocSidebarItems from "@theme/DocSidebarItems";
+import {
+  findFirstSidebarItemCategoryLink,
+  isActiveSidebarItem,
+} from "@docusaurus/plugin-content-docs/lib/client/docsUtils.js";
+import { useDocSidebarItemsExpandedState } from "@docusaurus/plugin-content-docs/lib/client/docSidebarItemsExpandedState.js";
 // If we navigate to a category and it becomes active, it should automatically
 // expand itself
 function useAutoExpandActiveCategory({ isActive, collapsed, updateCollapsed }) {
@@ -52,10 +55,9 @@ function CollapseButton({ categoryLabel, onClick }) {
     <button
       aria-label={translate(
         {
-          id: 'theme.DocSidebarItem.toggleCollapsedCategoryAriaLabel',
+          id: "theme.DocSidebarItem.toggleCollapsedCategoryAriaLabel",
           message: "Toggle the collapsible sidebar category '{label}'",
-          description:
-            'The ARIA label to toggle the collapsible sidebar category',
+          description: "The ARIA label to toggle the collapsible sidebar category",
         },
         { label: categoryLabel },
       )}
@@ -100,12 +102,7 @@ export default function DocSidebarItemCategory({
   };
   useAutoExpandActiveCategory({ isActive, collapsed, updateCollapsed });
   useEffect(() => {
-    if (
-      collapsible &&
-      expandedItem != null &&
-      expandedItem !== index &&
-      autoCollapseCategories
-    ) {
+    if (collapsible && expandedItem != null && expandedItem !== index && autoCollapseCategories) {
       setCollapsed(true);
     }
   }, [collapsible, expandedItem, index, setCollapsed, autoCollapseCategories]);
@@ -115,43 +112,55 @@ export default function DocSidebarItemCategory({
       className={clsx(
         ThemeClassNames.docs.docSidebarItemCategory,
         ThemeClassNames.docs.docSidebarItemCategoryLevel(level),
-        'menu__list-item',
+        "menu__list-item",
         {
-          'menu__list-item--collapsed': collapsed,
+          "menu__list-item--collapsed": collapsed,
         },
         className,
-      )}>
+      )}
+    >
       <div
-        className={clsx('menu__list-item-collapsible', {
-          'menu__list-item-collapsible--active': isCurrentPage,
-        })}>
-
+        className={clsx("menu__list-item-collapsible", {
+          "menu__list-item-collapsible--active": isCurrentPage,
+        })}
+      >
         <Link
-          className={clsx('menu__link', {
-            'menu__link--sublist': collapsible,
-            'menu__link--sublist-caret': !href && collapsible,
-            'menu__link--active': isActive,
+          className={clsx("menu__link", {
+            "menu__link--sublist": collapsible,
+            "menu__link--sublist-caret": !href && collapsible,
+            "menu__link--active": isActive,
           })}
           onClick={
             collapsible
               ? (e) => {
-                onItemClick?.(item);
-                if (href) {
-                  updateCollapsed(false);
-                } else {
-                  e.preventDefault();
-                  updateCollapsed();
+                  onItemClick?.(item);
+                  if (href) {
+                    updateCollapsed(false);
+                  } else {
+                    e.preventDefault();
+                    updateCollapsed();
+                  }
                 }
-              }
               : () => {
-                onItemClick?.(item);
-              }
+                  onItemClick?.(item);
+                }
           }
-          aria-current={isCurrentPage ? 'page' : undefined}
+          aria-current={isCurrentPage ? "page" : undefined}
           aria-expanded={collapsible ? !collapsed : undefined}
-          href={collapsible ? hrefWithSSRFallback ?? '#' : hrefWithSSRFallback}
-          {...props}>
-          {item?.customProps?.icon && <i className={`ri-${item.customProps.icon}`} style={{ paddingInlineEnd: "8px", width: "16.11px", height: "16.16px", inlineSize: "inherit" }} />}
+          href={collapsible ? (hrefWithSSRFallback ?? "#") : hrefWithSSRFallback}
+          {...props}
+        >
+          {item?.customProps?.icon && (
+            <i
+              className={`ri-${item.customProps.icon}`}
+              style={{
+                paddingInlineEnd: "8px",
+                width: "16.11px",
+                height: "16.16px",
+                inlineSize: "inherit",
+              }}
+            />
+          )}
 
           {label}
         </Link>
