@@ -186,19 +186,22 @@ the cause and simply run it again. psql prints `COPY <row-count>` for each table
 ```bash
 {
   echo '\set ON_ERROR_STOP on'
+  echo 'BEGIN;'
   echo "SET session_replication_role = 'replica';"
   jq -r '.import.tables_in_order[]' manifest.json | while read -r TABLE; do
     echo "\\COPY v2.${TABLE} FROM '/tmp/import/data/${TABLE}.csv' WITH CSV HEADER"
   done
-} | kubectl exec -i -n permit-platform $PG_POD -- psql -U permit -d permit --single-transaction
+  echo 'COMMIT;'
+} | kubectl exec -i -n permit-platform $PG_POD -- psql -U permit -d permit
 ```
 
-:::info Why referential checks are deferred
+:::info Why referential checks are turned off during the import
 Some Permit tables reference each other in both directions, so no import order can satisfy
-per-row referential checks - the import therefore defers them for this session
+per-row referential checks - the import therefore turns them off for this session
 (`session_replication_role`). This is safe: your package was exported as a single consistent
-database snapshot, so the data is guaranteed to be internally consistent. Use this technique
-only for this import - not for ad-hoc database changes.
+database snapshot. The one known exception - references to members who left your organization
+before the export - is cleaned up in step 6. Use this technique only for this import - not for
+ad-hoc database changes.
 :::
 
 ### 6. Clear references to departed members
@@ -240,7 +243,8 @@ kubectl exec -n permit-platform $PG_POD -- psql -U permit -d permit -c "
 UPDATE v2.v2_member SET is_superuser = true WHERE email = '<your-admin-email>';"
 ```
 
-Log out and log back in for the change to take effect.
+After you restart the services in step 9, log out and log back in for the change to take
+effect.
 
 :::caution Superuser applies platform-wide
 A superuser can see and manage **all** organizations on your deployment, not just the imported
@@ -253,9 +257,10 @@ one. Grant it only to your installation admin account.
 # Remove the import files from the pod
 kubectl exec -n permit-platform $PG_POD -- rm -rf /tmp/import
 
-# Scale the services back up (use the replica counts you noted in step 2)
-kubectl scale deployment -n permit-platform \
-  permit-backend-v2 celery-general permit-dl-enricher-v2 --replicas=1
+# Scale each service back to the replica count you noted in step 2
+kubectl scale deployment -n permit-platform permit-backend-v2 --replicas=<count-from-step-2>
+kubectl scale deployment -n permit-platform celery-general --replicas=<count-from-step-2>
+kubectl scale deployment -n permit-platform permit-dl-enricher-v2 --replicas=<count-from-step-2>
 ```
 
 ## Verify the Import
@@ -344,10 +349,11 @@ database is unchanged. Fix the cause shown in the error (usually a missing file 
 path), then run step 5 again from the start. If you are unsure of the state, roll back using
 the backup from step 3, or contact Permit support.
 
-### The import loop prints nothing
+### The import prints no `COPY` lines
 
-Your `manifest.json` predates the `import` section. Check the package `README.md` for the
-ready-to-run import script matching your package version, or contact Permit support.
+Your package was produced before manifests included the import list
+(`.import.tables_in_order`). Check the package `README.md` for the ready-to-run import script
+matching your package version, or contact Permit support.
 
 ### The imported organization is not visible in the UI
 
