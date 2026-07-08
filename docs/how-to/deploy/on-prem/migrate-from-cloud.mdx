@@ -17,6 +17,15 @@ Migration is a coordinated process: the Permit team exports your organization's 
 Cloud and delivers it to you as a **migration data package**. You then import that package into
 your own deployment using the steps below.
 
+:::info At a glance
+The migration has five phases: **request the package** → **freeze & export** (done by Permit) →
+**import** (steps 1-9 below) → **verify** → **point your applications at on-prem**. Your on-prem
+platform is offline between steps 2 and 9 - for a typical organization the import itself takes
+well under an hour, and your Permit account team is available to assist during the window. You
+are done when the row counts match the manifest and the UI checks in
+[Verify the Import](#verify-the-import) pass.
+:::
+
 ## Requesting Your Migration Package
 
 Contact your Permit account team to schedule the migration. You will agree on:
@@ -24,13 +33,14 @@ Contact your Permit account team to schedule the migration. You will agree on:
 - **A migration window** - plan a short change freeze on your Permit Cloud workspace right before
   the export, so the package captures your final state
 - **Audit log history** (optional) - historical audit logs are not part of the standard package.
-  If you want them, request them when scheduling: Permit Cloud retains audit logs for **90 days**,
-  so history that is not exported during the migration window cannot be recovered later
+  Permit Cloud retains them for a limited period, so history that is not exported around the
+  migration window cannot be recovered later - if you want it, request it when scheduling and
+  confirm the retention window with your account team
 - **Version alignment** - Permit confirms that your on-prem installer version matches the data
   package (the package's `manifest.json` records the source schema version)
 
 Permit then performs the export and sends you a **secure, time-limited download link** to the
-package. Download it promptly - the link expires after a few days.
+package. Your Permit contact will tell you when the link expires - download it promptly.
 
 ## What Gets Migrated
 
@@ -40,14 +50,16 @@ The migration data package contains a complete snapshot of your organization's d
 - **Directory data** - users, tenants, role assignments, relationship tuples, resource instances
 - **Configuration** - PDP configurations, webhooks, proxy configs, Permit Elements, email templates
 - **Workspace members** - your team members and their access levels
-- **API keys** - your existing `permit_key_*` tokens migrate as-is, so your applications keep
-  working without code changes after you point them at the on-prem endpoint
+- **API keys** - your existing `permit_key_*` tokens migrate as-is; your applications keep using
+  the same keys and only the endpoints change (see
+  [Point Your Applications at On-Prem](#point-your-applications-at-on-prem))
 
 **What is not migrated:**
 
 - **Login credentials** - on-prem uses its own identity provider (Keycloak). Team members sign in
-  again with the **same email address** they used in Permit Cloud and automatically regain their
-  workspace access (see [Team member access](#team-member-access-after-import))
+  again and regain their workspace access on first login, provided they use the **same verified
+  email address** they used in Permit Cloud (see
+  [Team member access](#team-member-access-after-import))
 - **Audit log history** - optional, by request only (see
   [Requesting Your Migration Package](#requesting-your-migration-package)). New audit logs start
   flowing as soon as your on-prem deployment is running
@@ -64,10 +76,9 @@ delete all copies once the import is verified.
 ```
 permit-migration-<org>-<date>/
 ├── data/
-│   ├── v2_organization.csv
 │   ├── ... (one CSV per table)
 │   └── v2_identity.csv        # reference only - do NOT import (see below)
-├── manifest.json               # row counts + sha256 checksums for verification
+├── manifest.json               # row counts, checksums, and the import order
 ├── policy-repo/                # only if you used the default Permit-managed policy repo
 └── README.md
 ```
@@ -98,6 +109,8 @@ import, so make sure the repository is connected before you rely on custom polic
   `Completed`
 - The installer version confirmed by your Permit contact to match your migration data package
 - Access to the Kubernetes cluster with `kubectl` configured
+- `jq`, `tar`, and `sha256sum` (macOS: `shasum`) available on the workstation where you extract
+  the package
 - The migration data package downloaded from the secure link provided by Permit
 
 ## Step-by-Step Import
@@ -119,7 +132,14 @@ continuing.
 
 ### 2. Stop services that write to the database
 
-Pause the platform services that write to PostgreSQL, so nothing changes mid-import:
+First note the current replica counts, so you can restore them in step 9:
+
+```bash
+kubectl get deployment -n permit-platform \
+  permit-backend-v2 celery-general permit-dl-enricher-v2
+```
+
+Then pause these services so nothing changes mid-import:
 
 ```bash
 kubectl scale deployment -n permit-platform \
@@ -142,6 +162,14 @@ kubectl exec -n permit-platform $PG_POD -- rm -f /tmp/pre-migration.dump
 
 If your PostgreSQL runs outside the cluster, use your own snapshot mechanism instead.
 
+**To roll back later** (with the services still scaled to 0):
+
+```bash
+kubectl cp ./pre-migration.dump permit-platform/$PG_POD:/tmp/pre-migration.dump
+kubectl exec -n permit-platform $PG_POD -- \
+  pg_restore -U permit -d permit --clean --if-exists /tmp/pre-migration.dump
+```
+
 ### 4. Copy the data files to the PostgreSQL pod
 
 ```bash
@@ -151,27 +179,15 @@ kubectl cp data permit-platform/$PG_POD:/tmp/import/data
 
 ### 5. Import the data tables
 
-Import the tables in dependency order. Note that `v2_identity` is **not** in this list -
-that is intentional. The loop stops on the first failure instead of continuing with a partial
-import; psql prints `COPY <row-count>` for each successful table.
+The manifest lists your tables in **dependency order** - tables that others reference are
+imported first, so every reference already exists when it is needed. (`v2_identity` and two
+tables handled in step 6 are deliberately not in this list.)
+
+The loop stops on the first failure instead of continuing with a partial import; psql prints
+`COPY <row-count>` for each successful table:
 
 ```bash
-for TABLE in v2_organization v2_member v2_project v2_environment \
-             v2_resource v2_resource_action v2_resource_action_group \
-             v2_resource_action_group_association v2_resource_attribute \
-             v2_role v2_role_permission v2_role_hierarchy \
-             v2_role_derivations v2_role_derivation_rules \
-             v2_relation v2_condition_set v2_condition_set_rule \
-             v2_implicit_role_grant v2_group_role_permission \
-             v2_tenant v2_user v2_user_tenant_association \
-             v2_resource_instance v2_relationship_tuple v2_monthly_active_user \
-             v2_webhook v2_proxy_config \
-             v2_elements_config v2_elements_role_permission \
-             v2_elements_user_invite v2_email_configuration v2_email_template \
-             v2_sso_connection v2_policy_repo v2_scope_config \
-             v2_policy_guard_rule v2_policy_guard_scope \
-             v2_policy_guard_scope_detail v2_member_access \
-             v2_access_requests v2_user_invite; do
+for TABLE in $(jq -r '.import.tables_in_order[]' manifest.json); do
   kubectl exec -n permit-platform $PG_POD -- psql -U permit -d permit -c \
     "\COPY v2.${TABLE} FROM '/tmp/import/data/${TABLE}.csv' WITH CSV HEADER" \
     && echo "imported: $TABLE" \
@@ -181,13 +197,13 @@ done
 
 ### 6. Import the API key and PDP configuration tables
 
-`v2_api_key` can reference workspace members who are no longer part of your organization, and
-`v2_pdp_config` references those API keys - so both are imported with foreign-key checks
-temporarily disabled. The `SET` and the `\COPY` **must run in the same psql session**, which is
-why the commands are piped together:
+API keys can reference workspace members who left your organization before the export, and PDP
+configurations reference those API keys - so these two tables are imported with foreign-key
+checks temporarily disabled. The `SET` and the `\COPY` **must run in the same psql session**,
+which is why the commands are piped together:
 
 ```bash
-for TABLE in v2_api_key v2_pdp_config; do
+for TABLE in $(jq -r '.import.fk_disabled_tables[]' manifest.json); do
   (echo "SET session_replication_role = 'replica';" && \
    echo "\COPY v2.${TABLE} FROM '/tmp/import/data/${TABLE}.csv' WITH CSV HEADER") | \
   kubectl exec -i -n permit-platform $PG_POD -- psql -U permit -d permit \
@@ -195,6 +211,12 @@ for TABLE in v2_api_key v2_pdp_config; do
     || { echo "FAILED on $TABLE - stop here and see Troubleshooting"; break; }
 done
 ```
+
+:::caution Use this form only where shown
+`session_replication_role = 'replica'` bypasses foreign-key checks and triggers for the session.
+It is needed only for the tables listed in the manifest's `fk_disabled_tables`. If a table in
+step 5 fails, fix the cause (see Troubleshooting) - do not disable checks for it.
+:::
 
 Then clear any references to members that are not part of the imported data (these come from
 members who left your organization before the export):
@@ -209,18 +231,13 @@ WHERE member_id IS NOT NULL
 AND NOT EXISTS (SELECT 1 FROM v2.v2_member m WHERE m.id = ui.member_id);"
 ```
 
-### 7. Clear cloud-specific configuration
+### 7. Review cloud-specific configuration
 
-Remove references that only apply to Permit Cloud:
+Run the short cloud-reference cleanup included in your package (it removes settings that only
+apply to Permit Cloud) - see the **Cleanup** section of the package `README.md`.
 
-```bash
-kubectl exec -n permit-platform $PG_POD -- psql -U permit -d permit -c "
-UPDATE v2.v2_environment SET avp_policy_store_id = NULL
-WHERE avp_policy_store_id IS NOT NULL;"
-```
-
-After the import, also review these imported settings - they may carry over values that only
-made sense in Permit Cloud:
+Afterwards, review these imported settings - they may carry over values that only made sense in
+Permit Cloud:
 
 - **SSO connections** - imported SSO settings reference the Permit Cloud login integration.
   Reconfigure SSO against your on-prem Keycloak (or delete the stale entries)
@@ -240,19 +257,21 @@ UPDATE v2.v2_member SET is_superuser = true WHERE email = '<your-admin-email>';"
 
 Log out and log back in for the change to take effect.
 
+:::caution Superuser applies platform-wide
+A superuser can see and manage **all** organizations on your deployment, not just the imported
+one. Grant it only to your installation admin account.
+:::
+
 ### 9. Clean up and restart
 
 ```bash
 # Remove the import files from the pod
 kubectl exec -n permit-platform $PG_POD -- rm -rf /tmp/import
 
-# Scale the services back up
+# Scale the services back up (use the replica counts you noted in step 2)
 kubectl scale deployment -n permit-platform \
   permit-backend-v2 celery-general permit-dl-enricher-v2 --replicas=1
 ```
-
-If you customized the replica counts in your `values.yaml`, scale back to your configured values
-instead of `1`.
 
 ## Verify the Import
 
@@ -265,7 +284,7 @@ filtered to your imported organization - your deployment may already contain oth
 ORG_ID=$(jq -r '.org_id' manifest.json)
 
 kubectl exec -n permit-platform $PG_POD -- psql -U permit -d permit -c "
-SELECT 'projects' AS table, count(*) FROM v2.v2_project WHERE org_id = '$ORG_ID'
+SELECT 'projects' AS table_name, count(*) FROM v2.v2_project WHERE org_id = '$ORG_ID'
 UNION ALL SELECT 'environments', count(*) FROM v2.v2_environment WHERE org_id = '$ORG_ID'
 UNION ALL SELECT 'users', count(*) FROM v2.v2_user WHERE org_id = '$ORG_ID'
 UNION ALL SELECT 'tenants', count(*) FROM v2.v2_tenant WHERE org_id = '$ORG_ID'
@@ -302,7 +321,13 @@ with a fresh account and no access.
 
 ## Point Your Applications at On-Prem
 
-Your API keys were migrated as-is, so the only change your applications need is the endpoint:
+Your API keys were migrated as-is, so your applications keep using the same tokens - they just
+need to talk to your on-prem deployment instead of Permit Cloud. Two endpoints change:
+
+1. **The PDP address** - deploy a PDP against your on-prem platform (see
+   [PDP Deployment](./pdp-deployment.mdx)) and point your application at it
+2. **The API address** - point the SDK's API URL at your on-prem platform, so management calls
+   (like syncing users) reach your deployment and not Permit Cloud
 
 ```python
 # Before (Permit Cloud)
@@ -311,12 +336,19 @@ permit = Permit(
     token="permit_key_XXXX",
 )
 
-# After (On-Premises) - same key, new endpoint
+# After (On-Premises) - same key, new endpoints
 permit = Permit(
-    pdp="https://<your-permit-domain>",
+    pdp="http://<your-pdp-address>:7766",        # the PDP you deployed on-prem
+    api_url="https://<your-permit-domain>/api",  # your on-prem Permit API
     token="permit_key_XXXX",
 )
 ```
+
+:::caution Do not skip the API URL
+If `api_url` still points at Permit Cloud, your migrated API keys remain valid there - your
+application would silently keep writing users and permissions to your old cloud workspace
+instead of your on-prem deployment.
+:::
 
 ## Troubleshooting
 
@@ -325,8 +357,8 @@ permit = Permit(
 Each `\COPY` is atomic - a failed table imports zero rows, and the tables before it in the list
 are already fully imported. Fix the cause (usually a wrong file path or an out-of-order run),
 then resume the loop **from the table that failed**. Re-running an already-imported table fails
-with duplicate key errors without changing any data. If you are unsure of the state, restore the
-backup from step 3 and start over, or contact Permit support.
+with duplicate key errors without changing any data. If you are unsure of the state, roll back
+using the backup from step 3 and start over, or contact Permit support.
 
 ### `SET session_replication_role` appears to have no effect
 
@@ -348,8 +380,16 @@ kubectl exec -n permit-platform $PG_POD -- psql -U permit -d permit -c \
 Their login email does not match their Permit Cloud email, or their email is not verified. Check
 the email on the **Members** page, and verify your Keycloak realm has email verification enabled.
 
+## Support
+
+Need help with your migration?
+
+- 📧 **Email**: [support@permit.io](mailto:support@permit.io)
+- 💬 **Slack**: [Join our community](https://io.permit.io/slack)
+
 ## See Also
 
 - [Installation Guide](./installation.mdx)
+- [PDP Deployment](./pdp-deployment.mdx)
 - [Management Guide](./management.mdx)
 - [Troubleshooting](./troubleshooting.mdx)
