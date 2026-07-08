@@ -177,48 +177,33 @@ kubectl exec -n permit-platform $PG_POD -- mkdir -p /tmp/import
 kubectl cp data permit-platform/$PG_POD:/tmp/import/data
 ```
 
-### 5. Import the data tables
+### 5. Import the data
 
-The manifest lists your tables in **dependency order** - tables that others reference are
-imported first, so every reference already exists when it is needed. (`v2_identity` and two
-tables handled in step 6 are deliberately not in this list.)
-
-The loop stops on the first failure instead of continuing with a partial import; psql prints
-`COPY <row-count>` for each successful table:
+The manifest lists every table to import (`v2_identity` is deliberately not in the list). The
+whole import runs as **one database transaction**: if anything fails, nothing is imported - fix
+the cause and simply run it again. psql prints `COPY <row-count>` for each table as it loads:
 
 ```bash
-for TABLE in $(jq -r '.import.tables_in_order[]' manifest.json); do
-  kubectl exec -n permit-platform $PG_POD -- psql -U permit -d permit -c \
-    "\COPY v2.${TABLE} FROM '/tmp/import/data/${TABLE}.csv' WITH CSV HEADER" \
-    && echo "imported: $TABLE" \
-    || { echo "FAILED on $TABLE - stop here and see Troubleshooting"; break; }
-done
+{
+  echo '\set ON_ERROR_STOP on'
+  echo "SET session_replication_role = 'replica';"
+  jq -r '.import.tables_in_order[]' manifest.json | while read -r TABLE; do
+    echo "\\COPY v2.${TABLE} FROM '/tmp/import/data/${TABLE}.csv' WITH CSV HEADER"
+  done
+} | kubectl exec -i -n permit-platform $PG_POD -- psql -U permit -d permit --single-transaction
 ```
 
-### 6. Import the API key and PDP configuration tables
-
-API keys can reference workspace members who left your organization before the export, and PDP
-configurations reference those API keys - so these two tables are imported with foreign-key
-checks temporarily disabled. The `SET` and the `\COPY` **must run in the same psql session**,
-which is why the commands are piped together:
-
-```bash
-for TABLE in $(jq -r '.import.fk_disabled_tables[]' manifest.json); do
-  (echo "SET session_replication_role = 'replica';" && \
-   echo "\COPY v2.${TABLE} FROM '/tmp/import/data/${TABLE}.csv' WITH CSV HEADER") | \
-  kubectl exec -i -n permit-platform $PG_POD -- psql -U permit -d permit \
-    && echo "imported: $TABLE" \
-    || { echo "FAILED on $TABLE - stop here and see Troubleshooting"; break; }
-done
-```
-
-:::caution Use this form only where shown
-`session_replication_role = 'replica'` bypasses foreign-key checks and triggers for the session.
-It is needed only for the tables listed in the manifest's `fk_disabled_tables`. If a table in
-step 5 fails, fix the cause (see Troubleshooting) - do not disable checks for it.
+:::info Why referential checks are deferred
+Some Permit tables reference each other in both directions, so no import order can satisfy
+per-row referential checks - the import therefore defers them for this session
+(`session_replication_role`). This is safe: your package was exported as a single consistent
+database snapshot, so the data is guaranteed to be internally consistent. Use this technique
+only for this import - not for ad-hoc database changes.
 :::
 
-Then clear any references to members that are not part of the imported data (these come from
+### 6. Clear references to departed members
+
+Clear any references to members that are not part of the imported data (these come from
 members who left your organization before the export):
 
 ```bash
@@ -352,18 +337,17 @@ instead of your on-prem deployment.
 
 ## Troubleshooting
 
-### A `\COPY` command fails partway through the import
+### The import fails partway through
 
-Each `\COPY` is atomic - a failed table imports zero rows, and the tables before it in the list
-are already fully imported. Fix the cause (usually a wrong file path or an out-of-order run),
-then resume the loop **from the table that failed**. Re-running an already-imported table fails
-with duplicate key errors without changing any data. If you are unsure of the state, roll back
-using the backup from step 3 and start over, or contact Permit support.
+The import runs in a single transaction, so a failure means **nothing was imported** - the
+database is unchanged. Fix the cause shown in the error (usually a missing file or a wrong
+path), then run step 5 again from the start. If you are unsure of the state, roll back using
+the backup from step 3, or contact Permit support.
 
-### `SET session_replication_role` appears to have no effect
+### The import loop prints nothing
 
-Each `kubectl exec` opens a new database session, and the setting only applies to the current
-session. Use the piped form shown in step 6 so the `SET` and the `\COPY` run in the same session.
+Your `manifest.json` predates the `import` section. Check the package `README.md` for the
+ready-to-run import script matching your package version, or contact Permit support.
 
 ### The imported organization is not visible in the UI
 
