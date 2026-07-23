@@ -45,27 +45,41 @@ rejected, because the package includes your API-key secrets.
 
 ### Download the package
 
-Call the export endpoint with that key. The organization is taken from the key, so you can only
-ever export your own organization:
+The export runs as a background job: you **start** it, **poll** until it's ready, then **download**
+from a short-lived link. The organization is taken from the key, so you can only ever export your
+own organization.
 
 ```bash
-curl -fSL \
-  -H "Authorization: Bearer permit_key_<your_org_api_key>" \
-  -o permit-migration.tar.gz \
-  "https://api.permit.io/v2/data-export"
+KEY="permit_key_<your_org_api_key>"
+
+# 1. Start the export — returns a task id
+TASK=$(curl -fsS -X POST -H "Authorization: Bearer $KEY" \
+  "https://api.permit.io/v2/data-export" | jq -r .task_id)
+
+# 2. Poll until "status" is "success" (it is "processing" while the package builds)
+curl -fsS -H "Authorization: Bearer $KEY" \
+  "https://api.permit.io/v2/data-export/$TASK"
+# -> {"status":"success","result":{"download_url":"https://…","expires_in_seconds":900, ...}}
+
+# 3. Download the package from the (short-lived) URL in result.download_url
+curl -fSL -o permit-migration.tar.gz "<download_url>"
 ```
 
-The response is your package: `permit-org-export-<org>-<timestamp>.tar.gz`. Extract it to get the
-`data/` directory and `manifest.json` referenced throughout this guide.
+Your package is `permit-org-export-<org>-<timestamp>.tar.gz`. Extract it to get the `data/`
+directory and `manifest.json` referenced throughout this guide.
 
+- **The download link is short-lived and secret.** It expires in a few minutes and grants access to
+  your package (which includes your API-key secrets) — download promptly and don't share it. If it
+  expires, poll the same task again for a fresh link.
 - **Freeze writes first (recommended).** Pause changes to your Permit Cloud workspace right before
   exporting, so the package captures your final state. The archive is a single consistent snapshot,
   but anything written *after* the export won't be in it.
 - **Version alignment.** The package's `manifest.json` records the source schema version
   (`saas_alembic_version`); confirm your on-prem installer version matches it (your Permit contact
   can verify) before importing.
-- **Very large organizations.** If the export returns **413 (too large)**, contact your account team
-  — they run the export through an offline path and deliver the same package to you.
+- **Very large organizations.** If the poll returns `"status":"failure"` because the export is too
+  large, contact your account team — they run the export through an offline path and deliver the same
+  package to you.
 
 :::caution Handle the package securely
 The package contains your API-key secrets. Store it securely, restrict access, and delete all copies
