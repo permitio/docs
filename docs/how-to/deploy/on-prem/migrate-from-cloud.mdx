@@ -9,38 +9,71 @@ This section is only relevant to Enterprise customers who acquired an on-prem li
 
 # Migrate from Permit Cloud to On-Premises
 
-This guide explains how to import your existing Permit Cloud (SaaS) data into your on-premises
-Permit Platform deployment, so you can switch environments without rebuilding your authorization
-model from scratch.
+This guide explains how to export your existing Permit Cloud (SaaS) data and import it into your
+on-premises Permit Platform deployment, so you can switch environments without rebuilding your
+authorization model from scratch.
 
-Migration is a coordinated process: the Permit team exports your organization's data from Permit
-Cloud and delivers it to you as a **migration data package**. You then import that package into
-your own deployment using the steps below.
+You run the migration yourself, end to end: you **export** your organization's data from Permit
+Cloud with your own API key (it downloads as a single **migration data package**), then **import**
+that package into your own deployment using the steps below. Your Permit account team is available
+to assist — and for very large organizations they can run the export for you — but no Permit
+involvement is required.
 
 :::info At a glance
-The migration has five phases: **request the package** → **freeze & export** (done by Permit) →
+The migration has four phases: **export your data** ([Step 0](#step-0-export-your-data-from-permit-cloud)) →
 **import** (steps 1-9 below) → **verify** → **point your applications at on-prem**. Your on-prem
-platform is offline between steps 2 and 9 - for a typical organization the import itself takes
-well under an hour, and your Permit account team is available to assist during the window. You
-are done when the row counts match the manifest and the UI checks in
+platform is offline between import steps 2 and 9 - for a typical organization the import itself
+takes well under an hour. You are done when the row counts match the manifest and the UI checks in
 [Verify the Import](#verify-the-import) pass.
 :::
 
-## Requesting Your Migration Package
+## Step 0: Export Your Data from Permit Cloud
 
-Contact your Permit account team to schedule the migration. You will agree on:
+You export your organization's data yourself, using an **Organization API key**. The export streams
+a single `tar.gz` **migration data package** (one CSV per table plus a `manifest.json`), scoped to
+your organization only.
 
-- **A migration window** - plan a short change freeze on your Permit Cloud workspace right before
-  the export, so the package captures your final state
-- **Audit log history** (optional) - historical audit logs are not part of the standard package.
-  Permit Cloud retains them for a limited period, so history that is not exported around the
-  migration window cannot be recovered later - if you want it, request it when scheduling and
-  confirm the retention window with your account team
-- **Version alignment** - Permit confirms that your on-prem installer version matches the data
-  package (the package's `manifest.json` records the source schema version)
+### Generate an Organization API key
 
-Permit then performs the export and sends you a **secure, time-limited download link** to the
-package. Your Permit contact will tell you when the link expires - download it promptly.
+The export requires an **Organization-level API key with management access** — a read-only key is
+rejected, because the package includes your API-key secrets.
+
+1. In the Permit Cloud dashboard, open **Settings → API Keys**.
+2. Create an **Organization** API key (not a project- or environment-scoped one) with an
+   admin/management access level.
+3. Copy the `permit_key_...` value — you will pass it as a Bearer token below.
+
+### Download the package
+
+Call the export endpoint with that key. The organization is taken from the key, so you can only
+ever export your own organization:
+
+```bash
+curl -fSL \
+  -H "Authorization: Bearer permit_key_<your_org_api_key>" \
+  -o permit-migration.tar.gz \
+  "https://api.permit.io/v2/data-export"
+```
+
+The response is your package: `permit-org-export-<org>-<timestamp>.tar.gz`. Extract it to get the
+`data/` directory and `manifest.json` referenced throughout this guide.
+
+- **Freeze writes first (recommended).** Pause changes to your Permit Cloud workspace right before
+  exporting, so the package captures your final state. The archive is a single consistent snapshot,
+  but anything written *after* the export won't be in it.
+- **Version alignment.** The package's `manifest.json` records the source schema version
+  (`saas_alembic_version`); confirm your on-prem installer version matches it (your Permit contact
+  can verify) before importing.
+- **Audit log history is not included.** Historical audit logs are not part of this package and are
+  retained by Permit Cloud only for a limited period — if you need them, request them from your
+  account team around the migration window.
+- **Very large organizations.** If the export returns **413 (too large)**, contact your account team
+  — they run the export through an offline path and deliver the same package to you.
+
+:::caution Handle the package securely
+The package contains your API-key secrets. Store it securely, restrict access, and delete all copies
+once the import is verified.
+:::
 
 ## What Gets Migrated
 
@@ -60,27 +93,22 @@ The migration data package contains a complete snapshot of your organization's d
   again and regain their workspace access on first login, provided they use the **same verified
   email address** they used in Permit Cloud (see
   [Team member access](#team-member-access-after-import))
-- **Audit log history** - optional, by request only (see
-  [Requesting Your Migration Package](#requesting-your-migration-package)). New audit logs start
-  flowing as soon as your on-prem deployment is running
+- **Audit log history** - not part of this package; request it from your account team if needed
+  (see [Step 0](#step-0-export-your-data-from-permit-cloud)). New audit logs start flowing as soon
+  as your on-prem deployment is running
 - **Runtime state** - PDPs re-register automatically, and generated policy is rebuilt from the
   imported data on startup
 
-:::caution Handle the package securely
-The migration data package contains your API keys. Store it securely, restrict access to it, and
-delete all copies once the import is verified.
-:::
-
 ## Package Contents
 
+The exported `tar.gz` contains one CSV per table plus a manifest:
+
 ```
-permit-migration-<org>-<date>/
+permit-org-export-<org>-<timestamp>/
 ├── data/
 │   ├── ... (one CSV per table)
 │   └── v2_identity.csv        # reference only - do NOT import (see below)
-├── manifest.json               # row counts, checksums, and the import order
-├── policy-repo/                # only if you used the default Permit-managed policy repo
-└── README.md
+└── manifest.json               # row counts, checksums, and the import order
 ```
 
 :::warning Do not import `v2_identity.csv`
@@ -91,13 +119,14 @@ access when they first sign in to your on-prem deployment.
 
 ### Policy repository
 
-Your policy-as-code (Rego) lives in a Git repository, not in the database:
+Your policy-as-code (Rego) lives in a Git repository, not in the database, so it is **not** part of
+the exported package:
 
 - **If you connected your own Git repository in Permit Cloud (GitOps)** - keep using it. Point
   your on-prem deployment at the same repository in `values.yaml`
-- **If you used the default Permit-managed repository** - your package includes a `policy-repo/`
-  clone. Push it to a Git server you control and point your on-prem deployment at it, as
-  described in the package `README.md`
+- **If you used the default Permit-managed repository** - your Rego lives in a repository Permit
+  hosts. Ask your account team for a clone of it, then push it to a Git server you control and point
+  your on-prem deployment at that repository
 
 Any custom Rego you wrote exists **only** in the Git repository - it is not part of the database
 import, so make sure the repository is connected before you rely on custom policies.
@@ -111,7 +140,7 @@ import, so make sure the repository is connected before you rely on custom polic
 - Access to the Kubernetes cluster with `kubectl` configured
 - `jq`, `tar`, and `sha256sum` (macOS: `shasum`) available on the workstation where you extract
   the package
-- The migration data package downloaded from the secure link provided by Permit
+- The migration data package exported in [Step 0](#step-0-export-your-data-from-permit-cloud)
 
 ## Step-by-Step Import
 
@@ -120,8 +149,8 @@ import, so make sure the repository is connected before you rely on custom polic
 Extract the package and verify every file against the manifest checksums:
 
 ```bash
-tar -xzf permit-migration-<org>-<date>.tar.gz
-cd permit-migration-<org>-<date>/
+tar -xzf permit-migration.tar.gz
+cd permit-org-export-<org>-<timestamp>/
 
 # Verify checksums (on macOS use: shasum -a 256 -c -)
 jq -r '.tables[] | "\(.sha256)  \(.file)"' manifest.json | sha256sum -c -
@@ -221,14 +250,12 @@ AND NOT EXISTS (SELECT 1 FROM v2.v2_member m WHERE m.id = ui.member_id);"
 
 ### 7. Review cloud-specific configuration
 
-Run the short cloud-reference cleanup included in your package (it removes settings that only
-apply to Permit Cloud) - see the **Cleanup** section of the package `README.md`.
+Some imported settings carry over values that only made sense in Permit Cloud - review and adjust
+them for your deployment:
 
-Afterwards, review these imported settings - they may carry over values that only made sense in
-Permit Cloud:
-
-- **SSO connections** - imported SSO settings reference the Permit Cloud login integration.
-  Reconfigure SSO against your on-prem Keycloak (or delete the stale entries)
+- **SSO connections** - your SSO configuration lives with Permit Cloud's login integration, not in
+  the database, so the imported `v2_sso_connection` rows only point at it. Reconfigure SSO against
+  your on-prem Keycloak (or delete the stale entries)
 - **Webhooks** - your on-prem deployment sends webhooks from a different source IP; update
   firewall allowlists on the receiving side if needed
 - **PDP configurations** - review any PDP settings that point at Permit Cloud endpoints
@@ -351,9 +378,9 @@ the backup from step 3, or contact Permit support.
 
 ### The import prints no `COPY` lines
 
-Your package was produced before manifests included the import list
-(`.import.tables_in_order`). Check the package `README.md` for the ready-to-run import script
-matching your package version, or contact Permit support.
+The import loop reads the table list from `manifest.json` (`.import.tables_in_order`). If that field
+is empty, confirm `jq` is installed and that you are pointing at the extracted package's
+`manifest.json`, or contact Permit support.
 
 ### The imported organization is not visible in the UI
 
