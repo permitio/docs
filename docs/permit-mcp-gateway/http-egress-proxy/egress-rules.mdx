@@ -1,122 +1,93 @@
 ---
-title: Egress Rules
-sidebar_label: Egress Rules
-description: Define which outbound requests your agents may make — ordered allow, block, and require-approval rules matched by host, path, HTTP method, and the calling agent.
+title: Workflows & Rules
+sidebar_label: Workflows & Rules
+description: Define which outbound requests your agents may make — API workflows group a set of allowed domains and rules, matched by domain, path, and HTTP method, each carrying a required trust level.
 sidebar_position: 3
 ---
 
-# Egress Rules
+# Workflows & Rules
 
-Egress rules are the **allow-list** for outbound traffic. They decide, for each request an agent makes, whether it is allowed, blocked, or routed to a human for approval — before any credential is injected or any connection is made.
+Egress policy is organized into **API workflows**. A workflow is a named unit of access — a bundle of the domains an agent may reach and the rules that govern them. Every agent token is bound to exactly **one** workflow, so an agent can only ever make the outbound calls that workflow allows.
 
-The proxy is **deny-by-default**: if no rule matches a request, the request is denied. You grant access by adding rules.
+The proxy is **deny-by-default**: if a request doesn't match a domain and rule in the token's workflow, it is denied — before any credential is injected or any connection is made. You grant access by adding domains and rules to a workflow.
+
+:::note Where you author workflows
+Workflows are created and edited in the [dashboard](https://app.agent.security) under **Proxy → Workflows**. There is no CLI command for authoring workflows yet — the `asg` CLI handles everything around them (enabling the proxy, storing credentials, minting workflow-bound tokens).
+:::
+
+## How a workflow is structured
+
+A workflow has three levels:
+
+```text
+Workflow  "ship_pr"
+├── Domain  *.github.com
+│   ├── Rule  read_repo      GET/HEAD   → low trust
+│   └── Rule  push_commit    POST/PUT   → medium trust   (injects credential "github")
+└── Domain  api.slack.com
+    └── Rule  post_message   POST       → medium trust   (injects credential "slack")
+```
+
+- **Workflow** — the top-level unit an agent token binds to. Give it a clear name (e.g. *"Ship a PR"*) and slug.
+- **Domain** — a hostname or glob the workflow allows (`api.stripe.com`, `*.github.com`). A request's target host must match one of the workflow's domains, or it's denied.
+- **Rule** — inside a domain, a rule narrows *which* requests to that domain are allowed and at what trust level.
 
 ## What a rule matches
 
-Each rule matches a request on up to four dimensions:
+Each rule matches a request on these dimensions:
 
 | Field | Matches | Example |
 | --- | --- | --- |
-| **Host** | The target hostname (supports glob patterns). | `api.stripe.com`, `*.githubusercontent.com` |
-| **Path** | The request path (supports glob patterns). Optional — omit to match all paths. | `/v1/customers/*` |
-| **Method** | The HTTP method class: `read`, `write`, `delete`, or `all`. | `read` |
-| **Agent** | Restricts the rule to specific agents. Optional — omit to apply to all agents. | a specific agent's client ID |
+| **Path** | The request path (glob). Optional — leave blank to match all paths on the domain. | `/v1/customers/*` |
+| **Method** | One or more HTTP method **classes**: `read`, `write`, `delete`, or `all`. | `read`, `write` |
+| **Protocol** | `http` (default), `websocket`, or `any`. | `http` |
 
-The **method class** groups HTTP verbs by risk so you don't have to enumerate them: `read` covers safe methods like `GET` and `HEAD`, `write` covers `POST`/`PUT`/`PATCH`, `delete` covers `DELETE`, and `all` matches any method.
+The **method class** groups HTTP verbs by risk so you don't enumerate them: `read` covers safe methods like `GET` and `HEAD`, `write` covers `POST`/`PUT`/`PATCH`, `delete` covers `DELETE`, and `all` matches any method. A rule can select several classes at once.
 
-## What a rule does
+## What a rule grants
 
-Every rule carries one of three **actions**:
+Rules are **allow-only**: a matching request is authorized when the caller's trust level is **at least** the rule's required trust. There is no separate "block" or "require-approval" action — you control access by choosing which domains and rules exist and what trust each one demands.
 
-| Action | Effect |
+Each rule carries:
+
+| Field | Purpose |
 | --- | --- |
-| **`allow`** | The request proceeds to authorization and is forwarded. An `allow` rule can also name a [credential](./credentials) to inject. |
-| **`block`** | The request is denied immediately — no authorization check, no connection. Use this to carve exceptions out of a broader allow. |
-| **`require_approval`** | The request pauses and a [human-in-the-loop](#human-approval-on-egress) approval is requested. It proceeds only if a human approves. |
+| **Required trust** | The minimum trust the caller must hold for this rule to authorize the request — `low`, `medium`, or `high`. Choose **Auto** to derive it from the method class: `read → low`, `write → medium`, `delete`/`all → high`. |
+| **Credential** | An optional stored [credential](./credentials) to inject into matched requests, so the agent never holds the secret. |
+| **TLS mode** | For HTTPS, whether the connection is `passthrough` (host-level only) or `intercept` (decrypt and apply the rule in full). See below. |
+
+Because trust is required per rule, a single workflow can grant an agent broad read access while gating writes and deletes behind a higher trust level that only a human's consent can supply. See [Authorization & Trust](./authorization) for how trust is granted and capped.
 
 ## HTTPS handling per rule
 
-For HTTPS targets, each rule also carries a **TLS mode** that decides how deeply the proxy inspects the encrypted connection:
+For HTTPS targets, each rule's **TLS mode** decides how deeply the proxy inspects the encrypted connection:
 
-- **`passthrough`** (default) — the rule is enforced at the host level only; the encrypted tunnel is forwarded without decryption, so no credential injection, path matching, or response scrubbing happens inside it.
-- **`intercept`** — the proxy decrypts the connection (using a certificate authority issued for your host) and applies the rule in full, including credential injection and response scrubbing.
+- **`passthrough`** (default) — the request is authorized at the domain level, then the encrypted tunnel is forwarded without decryption. No path matching, credential injection, or response scrubbing happens inside it.
+- **`intercept`** — the proxy decrypts the connection (using a certificate authority issued for your host) and applies the rule in full, including path matching, credential injection, and response scrubbing.
 
-TLS mode is set per rule in the [dashboard](https://app.agent.security) rule editor; rules created with the CLI default to passthrough. See [Connecting Agents → HTTPS interception](./connecting-agents#https-interception).
+See [Connecting Agents → HTTPS interception](./connecting-agents#https-interception) for how to enable intercept and trust the CA.
 
-## Ordering and precedence
+## Building a workflow
 
-Rules are an **ordered list**, evaluated top to bottom; the **first matching rule wins**. Order matters: a narrow `block` must come before a broad `allow` to take effect.
+In **Proxy → Workflows**, create a workflow, add one or more domains, and add rules to each domain:
 
-Two precedence guarantees help here:
-
-- **Agent-scoped rules win over unscoped rules.** A rule restricted to a specific agent is considered before general rules, so you can grant one agent extra access (or extra restriction) without rewriting your global rules.
-- **`block` is absolute for the requests it matches.** A matched `block` denies regardless of any Permit policy, trust ceiling, or rate-limit budget.
-
-Reorder rules with the CLI or by dragging them in the dashboard:
-
-```bash
-asg proxy rules reorder acme <rule-id-1> <rule-id-2> <rule-id-3>
-```
-
-## Managing rules
-
-```bash
-# List the current rules in evaluation order.
-asg proxy rules list acme
-
-# Allow read-only access to a path on one host, injecting a stored credential.
-asg proxy rules add acme \
-  --host api.stripe.com \
-  --path "/v1/customers/*" \
-  --method read \
-  --action allow \
-  --credential stripe
-
-# Block a sensitive sub-path even though the host is otherwise allowed.
-asg proxy rules add acme \
-  --host api.stripe.com \
-  --path "/v1/account*" \
-  --action block
-
-# Require human approval for deletes against a host.
-asg proxy rules add acme \
-  --host api.github.com \
-  --method delete \
-  --action require_approval
-
-# Scope a rule to a single agent.
-asg proxy rules add acme \
-  --host internal-api.example.com \
-  --action allow \
-  --agent-match <agent-client-id>
-
-# Update or delete by rule ID.
-asg proxy rules update acme <rule-id> --action block
-asg proxy rules delete acme <rule-id>
-```
-
-**Dashboard:** **Proxy → Rules** shows the same list with the evaluation order made explicit, plus inline add, edit, reorder, and delete.
+1. **Create the workflow** — name it for the job the agent does (*"Ship a PR"*, *"Reconcile invoices"*).
+2. **Add a domain** — the hostname or glob the agent may reach.
+3. **Add rules** — for each domain, add rules that pin the paths, methods, and required trust. Attach a credential where the proxy should inject a secret.
+4. **Bind an agent** — mint a token for the workflow with [`asg proxy token create --workflow <slug>`](./cli), or have a human delegate it with [`asg proxy authorize --workflow <slug>`](./authorization#human-consent).
 
 :::tip Start tight, then widen
-Begin with a small set of `allow` rules for the exact hosts your agents need, and let deny-by-default handle everything else. Widen only as real traffic requires it — it's far easier than starting open and trying to lock down later.
+Begin with the exact domains and paths your agents need at the lowest trust that works, and let deny-by-default handle everything else. Widening later as real traffic requires it is far easier than starting open and trying to lock down after the fact.
 :::
 
-## Human approval on egress
+## Human-in-the-loop on egress
 
-A `require_approval` rule turns an outbound request into a [Human-in-the-Loop](/permit-mcp-gateway/human-in-the-loop) decision. When an agent hits such a rule:
-
-1. The request **pauses** at the proxy — it is not forwarded yet.
-2. An approval request is created and your reviewers are notified (email / Slack).
-3. If a reviewer **approves**, the request is forwarded. If they **reject** or the request **times out**, it is denied (fail-closed).
-
-This is the same approval machinery used for MCP tool calls, applied to raw HTTP egress — so you can gate, say, any `DELETE` to a production API behind a human, while routine reads flow through untouched.
-
-When an agent is driven by the CLI, approval outcomes are reported distinctly so automation can tell *"a human said no"* from *"blocked by policy"* from *"the request timed out."*
+For high-risk egress, the gateway can route a request to a human for approval before it's forwarded — the same [Human-in-the-Loop](/permit-mcp-gateway/human-in-the-loop) machinery it uses for MCP tool calls. This is an optional, per-host capability rather than a rule setting; [contact us](mailto:support@permit.io) to enable it for your account. When an approval is required, the request pauses at the proxy, your reviewers are notified (email / Slack), and it proceeds only if a reviewer approves — otherwise it's denied (fail-closed). When an agent is driven by the CLI, approval outcomes are reported distinctly so automation can tell *"a human said no"* from *"blocked by policy"* from *"the request timed out."*
 
 ---
 
 ## What's next
 
-- [**Credentials & Connections**](./credentials) — what the `--credential` on an allow rule injects.
-- [**Authorization & Trust**](./authorization) — how rules combine with Permit policy and human trust ceilings.
-- [**Security**](./security) — SSRF protection and rate limiting that run alongside rule matching.
+- [**Credentials & Connections**](./credentials) — what a rule's attached credential injects.
+- [**Authorization & Trust**](./authorization) — how a workflow's rules combine with Permit policy and human trust ceilings.
+- [**Security**](./security) — SSRF protection and rate limiting that run alongside workflow matching.
