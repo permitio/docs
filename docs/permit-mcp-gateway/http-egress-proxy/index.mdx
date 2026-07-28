@@ -2,7 +2,7 @@
 title: HTTP Egress Proxy
 sidebar_label: Overview
 description: Govern every outbound HTTP and HTTPS call your AI agents make — with the same identity-aware authentication, authorization, consent, and audit the gateway applies to MCP tool calls.
-sidebar_position: 0
+sidebar_position: 7.7
 ---
 
 # HTTP Egress Proxy
@@ -14,7 +14,7 @@ The Permit MCP Gateway governs an agent's **MCP tool calls**. The **HTTP Egress 
 When an agent's runtime is pointed at the proxy, every outbound request is authenticated, matched against the workflow bound to its token, authorized, optionally routed for human approval, and audited — before it ever reaches the upstream API. Credentials for those upstream APIs are stored in the gateway and injected server-side, so your agents never hold the secrets they use.
 
 :::note Availability
-The HTTP Egress Proxy is a newer capability and is enabled per environment. If you don't see the **Proxy** section in your [dashboard](https://app.agent.security), [contact us](mailto:support@permit.io) to have it turned on for your account.
+The HTTP Egress Proxy is a newer capability and is enabled per environment. If you don't see the **CLIs / APIs** section in your [dashboard](https://app.agent.security), [contact us](mailto:support@permit.io) to have it turned on for your account.
 :::
 
 ---
@@ -33,13 +33,13 @@ The HTTP Egress Proxy puts the same deny-by-default, identity-aware control plan
 
 | Capability | What it gives you |
 | --- | --- |
-| **Deny by default** | No outbound request is allowed until a workflow rule explicitly permits its host, path, and method. |
+| **Deny by default** | No outbound request is allowed until a workflow rule permits its destination — by domain (for HTTPS) and, on plain HTTP or intercepted HTTPS, by path and method too. |
 | **API workflows** | Group the domains an agent may reach and the rules that govern them — matched by domain, path, and HTTP method, each carrying a required trust level. Every agent token is bound to one workflow. |
-| **Server-side credentials** | Upstream API keys, tokens, and OAuth connections are stored encrypted in the gateway and injected into requests on the way out. The agent never sees them. |
+| **Server-side credentials** | Upstream API keys, tokens, and OAuth connections are stored in the gateway (encrypted at rest when the KMS vault is enabled) and injected into requests on the way out. The agent never sees them. |
 | **Human consent & trust ceilings** | Just like MCP, a human can delegate egress access to an agent within an admin-defined trust ceiling — and revoke it at any time. |
 | **Human-in-the-loop** | High-risk requests can be routed to a human for approval before they're forwarded (optional, per host). |
-| **SSRF protection** | Requests to internal, loopback, link-local, and cloud-metadata addresses are blocked before any DNS lookup or connection. |
-| **Response scrubbing** | Injected secrets are stripped out of upstream responses before they reach the agent. |
+| **SSRF protection** | Internal IP literals and known cluster-internal hostnames are rejected before any DNS lookup; a hostname that resolves into a private, loopback, link-local, or metadata range is rejected after resolution and before any connection. |
+| **Response scrubbing** | Injected secrets are stripped (best-effort, on by default) from upstream responses before they reach the agent. |
 | **Rate limiting** | Per-agent request budgets — by host and by domain — shed floods and contain runaway agents. |
 | **Full audit trail** | Every decision — who, what host, which agent, allow or deny — is logged. |
 
@@ -90,11 +90,11 @@ Every outbound request runs through the same ordered set of checks. Cheap, fail-
 1. **Authenticate** — the request must carry a valid, short-lived proxy access token bound to one of your workflows.
 2. **SSRF guard** — internal, loopback, link-local, and cloud-metadata targets are rejected immediately.
 3. **Proxy enabled?** — the host must have the proxy turned on.
-4. **Workflow match** — the request's host, path, and method are matched against the token's workflow. No matching rule means deny.
+4. **Workflow match** — the request's host, path, and method are matched against the token's workflow. No matching rule means deny. *(HTTPS in the default `passthrough` mode is matched on domain only — against a rule with method class `all` and no path, since the tunnel's inner path and method aren't visible. Path and method matching apply to plain HTTP and to HTTPS in `intercept` mode.)*
 5. **Rate limit** — per-agent, per-host budgets are checked.
 6. **Authorize** — the matched rule is checked against your Permit policy: the agent must hold a role that covers the rule's required trust.
 7. **Trust ceiling** — for human-delegated agents, the effective access is capped at the trust level that human granted for the workflow.
-8. **Forward** — the matched credential is injected, the request is sent, and the response is scrubbed of any injected secret before returning to the agent.
+8. **Forward** — the matched credential is injected, the request is sent, and the response is scrubbed of any injected secret before returning to the agent. *(Injection and scrubbing apply to plain HTTP and to HTTPS in `intercept` mode; a `passthrough` tunnel is forwarded opaquely.)*
 
 For the detail behind each gate, see [Authorization & Trust](./authorization) and [Security](./security).
 

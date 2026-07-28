@@ -25,7 +25,9 @@ You rarely set these by hand — `asg proxy env` and `asg proxy container-config
 eval "$(asg proxy env acme)"
 ```
 
-This exports `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, and the path to the agent's token file into the current shell. Any process launched from that shell now routes its outbound traffic through the proxy. Mint the token first (step 4 of the [Quick Start](./quickstart)).
+This exports `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, and `AGENT_SECURITY_PROXY_TOKEN_FILE` (the path to the token file) into the current shell. Mint the token first (step 4 of the [Quick Start](./quickstart)) at the path `asg proxy env` expects — `$HOME/.agent-security/tokens/<subdomain>.token` — or point `AGENT_SECURITY_PROXY_TOKEN_FILE` at wherever you wrote it.
+
+Routing traffic through the proxy is only half of it: every request must also carry `Proxy-Authorization: Bearer <token>`. Exporting the env does **not** authenticate your requests — your HTTP client has to read the token from `$AGENT_SECURITY_PROXY_TOKEN_FILE` and send that header (or launch the agent with [`asg run`](./cli), which injects the token into the proxy URL for you). Without it the proxy answers `407`.
 
 ## Docker and Kubernetes
 
@@ -44,9 +46,9 @@ Mount or reference the emitted configuration in your agent's container so the pr
 
 ## HTTPS interception
 
-By default the proxy handles HTTPS in **passthrough** mode: it authenticates and applies host-level rules, but the encrypted tunnel is forwarded opaquely — the proxy does not see the request path or body, and it can't inject a credential or scrub the response inside the tunnel.
+By default the proxy handles HTTPS in **passthrough** mode: it authenticates and authorizes the connection against the domain's **tunnel rule** (the `all`-method, path-less rule — see [Workflows & Rules](./egress-rules#https-needs-a-tunnel-rule)), but the encrypted tunnel is forwarded opaquely — the proxy does not see the request path or body, and it can't inject a credential or scrub the response inside the tunnel.
 
-To apply **full** governance to HTTPS — path-level rules, credential injection, and response scrubbing inside the encrypted connection — switch the relevant rule to **intercept** mode. You set a rule's TLS mode in the [dashboard](https://app.agent.security) workflow editor (**Proxy → Workflows**, edit the rule, set **TLS mode** to **Intercept**).
+To apply **full** governance to HTTPS — path-level rules, credential injection, and response scrubbing inside the encrypted connection — switch the domain's **tunnel rule** to **intercept** mode. You set TLS mode in the [dashboard](https://app.agent.security) workflow editor (**CLIs / APIs → Workflows**, open the workflow, edit the tunnel rule, set **TLS mode** to **Intercept (decrypt + inject credential)**). TLS mode is read from the tunnel rule, so setting it on a path- or method-scoped rule has no effect.
 
 In intercept mode the proxy terminates the agent's TLS using a **certificate authority issued for your host** and re-applies every check to the decrypted request. For your agent to trust those connections, it must trust that CA certificate — manage it with the CLI:
 
@@ -65,7 +67,7 @@ asg proxy ca rotate acme --grace-days 7
 ```
 
 :::note Choosing a mode
-Use **passthrough** when host-level control is enough, or for very large uploads, downloads, and long-lived streaming connections. Use **intercept** when you need path-level rules, credential injection, or response scrubbing on HTTPS traffic. Mode is per rule, so you can mix the two across your rule set.
+Use **passthrough** when domain-level control is enough, or for very large uploads, downloads, and long-lived streaming connections. Use **intercept** when you need path-level rules, credential injection, or response scrubbing on HTTPS traffic. Mode is decided by the rule that authorizes the tunnel, so in practice it's **per domain** for HTTPS — you can mix passthrough and intercept across domains.
 :::
 
 ## Diagnose with `doctor`
@@ -85,7 +87,7 @@ asg proxy doctor acme
 - The interception CA's status and expiry, and whether your environment trusts it
 - The token file's permissions and the token's expiry
 
-Each check reports a clear pass/fail with a suggested fix, so it's the first thing to run whenever an agent's traffic isn't behaving.
+Each check reports **pass**, **warn**, or **fail**; anything that isn't a pass carries a suggested fix. `doctor` exits `0` (clean), `1` (operator-fixable failure), or `2` (gateway fault), so it's safe to gate CI on — and it's the first thing to run whenever an agent's traffic isn't behaving.
 
 ---
 

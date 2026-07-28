@@ -1,62 +1,77 @@
 ---
 title: Security
 sidebar_label: Security
-description: The security properties of the HTTP Egress Proxy — SSRF protection, server-side credential isolation, response scrubbing, TLS modes, rate limiting, and a complete audit trail.
+description: The security properties of the HTTP Egress Proxy — SSRF protection, server-side credential isolation, response scrubbing, TLS modes, rate limiting, and audit — and the preconditions each one depends on.
 sidebar_position: 7
 ---
 
 # Security
 
-The egress proxy is a trust boundary for everything your agents send to the outside world. This page summarizes the protections it applies to that traffic.
+The egress proxy is a trust boundary for everything your agents send to the outside world. This page summarizes the protections it applies to that traffic — and, where a protection is conditional, the setting it depends on.
 
 ## Deny by default
 
-No outbound request is allowed unless a [workflow rule](./egress-rules) explicitly permits it. A request that matches no rule in the token's workflow is denied — and a denied request is never resolved to an IP address or connected to, so nothing leaks to a host you didn't allow. The cheap, fail-closed checks (authentication, SSRF, deny-by-default) all run **before** any network I/O.
+No outbound request is allowed unless a [workflow rule](./egress-rules) explicitly permits it. A request that matches no rule in the token's workflow is denied. The cheap, fail-closed checks (authentication, SSRF on the literal target, deny-by-default) all run **before the proxy touches the destination** — no DNS lookup and no TCP connect to the target happen until a rule authorizes the request, so a blocked target is never connected to.
 
 ## SSRF protection
 
 Server-Side Request Forgery — tricking a server into calling internal addresses — is a top risk for any proxy that forwards on behalf of an agent. The proxy defends against it in two stages:
 
-- **Before any DNS lookup**, the literal target is checked against blocklists for loopback, private/internal ranges, link-local and cloud-metadata addresses (such as `169.254.169.254`), and carrier-grade NAT — including obfuscated and legacy IP encodings that attackers use to slip past naive filters.
-- **After DNS resolution**, **every** resolved address is re-checked, and the validated address is **pinned** so the connection can't be re-pointed at an internal host between the check and the connection (a DNS-rebinding / time-of-check-to-time-of-use defense).
+- **Before any DNS lookup**, internal IP literals (loopback, private/internal ranges, link-local and cloud-metadata addresses such as `169.254.169.254`, carrier-grade NAT — including obfuscated and legacy IP encodings) and known cluster-internal hostname suffixes (`.local`, `.internal`, `.cluster.local`, and similar) are rejected outright.
+- **After DNS resolution**, an ordinary hostname that resolves into a private, loopback, link-local, or metadata range is rejected before any connection — and **every** resolved address is re-checked and the validated address is **pinned** so the connection can't be re-pointed at an internal host between the check and the connect (a DNS-rebinding / time-of-check-to-time-of-use defense).
 
-A single blocked address rejects the whole connection.
+A single blocked address rejects the whole connection, and resolution only happens after a rule has authorized the dial.
 
 ## Credential isolation
 
-Upstream secrets are **encrypted at rest** in the gateway using envelope encryption, bound to specific hosts, and injected into requests **server-side**. The agent never receives them.
+Upstream secrets are stored in the gateway, bound to specific host patterns, and injected into requests **server-side**, so the agent never holds them. They are also **write-only** — once stored they can't be read back through any interface, only overwritten or deleted. See [Credentials & Connections](./credentials).
 
-Credentials are **write-only** — once stored they can't be read back through any interface, only overwritten or deleted. See [Credentials & Connections](./credentials).
+:::warning Enable the vault before storing production secrets
+Encryption at rest is **not on by default**. When the gateway runs with the KMS vault enabled (`VAULT_ENABLED=true` plus an `AWS_KMS_KEY_ID`), credential records are encrypted at rest with AES-256-GCM envelope encryption. **Without the vault configured, credentials are written to the gateway's store in plaintext** — the gateway logs a loud warning but does not block it. Enable the vault before storing live upstream API keys. If you self-host, confirm this with whoever operates your gateway.
+:::
 
 ## Response scrubbing
 
-When the proxy injects a secret into a request, it also **removes that secret from the upstream response** — across response headers and the streamed body, including common encodings of the value (such as base64, hex, and percent-encoding). If a response can't be safely scrubbed, it fails closed rather than risk leaking the secret back to the agent. This keeps an injected credential from being reflected back and captured by the agent.
+When the proxy injects a secret into a request, response scrubbing (**on by default, configurable per credential**) makes a **best-effort** pass to remove that secret from the upstream response — headers, trailers, and the streamed body, matching the raw value plus the encodings the proxy itself produces (standard and URL-safe base64, lowercase hex; percent-encoded forms only when the credential is injected as a **query** parameter). Two things to know:
+
+- It is a **literal byte match**. An upstream that reflects the value in a different form — re-cased, or JSON `\uXXXX`-escaped — can still return it.
+- If the upstream returns a **compressed or non-`chunked`** body while scrubbing is active, the response is withheld entirely rather than streamed unscrubbed. This fail-closed withholding only runs while scrubbing is on.
+
+Scrubbing can be turned off per credential (`--no-scrub-response`). With it off, an injected secret the upstream echoes is returned to the agent verbatim, and the fail-closed withholding no longer applies — so leave it on. See [Credentials → Response scrubbing](./credentials#response-scrubbing).
 
 ## TLS modes
 
-`CONNECT` (HTTPS) tunnels are handled in one of two modes, chosen **per rule**:
+`CONNECT` (HTTPS) tunnels are handled in one of two modes, decided by the **tunnel rule** — the `all`-method, path-less rule that authorizes the HTTPS connection (see [Workflows & Rules](./egress-rules#https-needs-a-tunnel-rule)):
 
 | Mode | Behavior |
 | --- | --- |
-| **`passthrough`** (default) | The encrypted tunnel is forwarded opaquely. Host-level rules and authentication apply, but the proxy does not see the path or body, and cannot inject credentials or scrub responses inside the tunnel. |
-| **`intercept`** | The proxy terminates TLS with your host's own certificate authority and re-applies the full check set — path-level rules, authorization, credential injection, and response scrubbing — to every decrypted request. |
+| **`passthrough`** (default) | The encrypted tunnel is forwarded opaquely. Authentication and the domain/tunnel-rule authorization apply, but the proxy does not see the path or body and cannot inject credentials or scrub responses inside the tunnel. |
+| **`intercept`** | The proxy terminates TLS with your host's own certificate authority and re-applies the full check set — path- and method-level rules, authorization, credential injection, and response scrubbing — to every decrypted request. |
 
-Each rule's TLS mode is set in the [dashboard](https://app.agent.security) workflow editor. See [HTTPS interception](./connecting-agents#https-interception) for how to enable intercept and trust the CA. In intercept mode the rule set is captured when a tunnel opens, so a rule change takes effect on the **next** connection — with one exception: **revoked consent is enforced live**, denying in-flight requests immediately.
+Because only the tunnel rule is consulted at set-up, TLS mode is effectively **per domain** for HTTPS. You set it in the [dashboard](https://app.agent.security) workflow editor; see [HTTPS interception](./connecting-agents#https-interception). In intercept mode the rule set is captured when a tunnel opens, so a rule change takes effect on the **next** connection.
+
+**Revocation and open tunnels:** revocation is re-evaluated on each new request the gateway inspects. Traffic already flowing inside an established `passthrough` tunnel is opaque and is **not** re-checked — it continues until the client closes it or the idle timeout fires. If you need revocation (or a policy change) to interrupt an in-progress HTTPS connection, use `intercept`. See [Revocation](./authorization#revocation).
 
 ## Rate limiting and DoS bounds
 
-The proxy meters every request against per-agent budgets — both per **host** and per **registrable domain** — and sheds excess with a `429` and a `Retry-After`. These budgets run **before** the policy and approval checks, so a flood is rejected cheaply and can't be used to amplify load on your policy engine or your reviewers. Additional bounds — token size caps, slow-client timeouts, and a ceiling on concurrent connections — protect the proxy itself.
+The proxy meters every request that reaches a matching workflow rule against per-agent budgets — per **host** (600 requests / 60s by default) and per **registrable domain** (1200 / 60s) — and sheds excess with a `429` and a `Retry-After`. These budgets run before the policy and approval checks, so a flood is rejected cheaply. Additional bounds — token-size caps, slow-client timeouts, and a ceiling on concurrent connections — protect the proxy itself.
+
+Note that if the counter store is unreachable the limiter **fails open** (requests are allowed), so treat rate limiting as availability protection rather than a hard security boundary.
 
 ## Audit trail
 
-Every decision the proxy makes is logged — the agent, the human it acts for, the target host, the matched rule, and the allow/deny outcome — so you can answer "which agent called which API, on whose behalf, and was it allowed?" after the fact. Proxy activity appears alongside your MCP audit data (and in **Proxy → Activity** in the dashboard); see [Audit Logs](/permit-mcp-gateway/audit-logs).
+Proxy decisions are logged on a **best-effort, fire-and-forget** path — the agent, the target host and path, the matched rule, and the allow/deny outcome — and appear alongside your MCP audit data (and in **CLIs / APIs → Activity** in the dashboard); see [Audit Logs](/permit-mcp-gateway/audit-logs). Two caveats to set expectations:
+
+- The record identifies the **agent** (its client id), not the human who authorized it. To attribute a call to a person, correlate the agent's client id against the consent grants.
+- Authentication failures are recorded as **metrics only** (they can't be attributed to a tenant before the token is verified), and events may be shed if the ingestion sink falls behind — so don't treat the proxy audit log as a guaranteed-complete compliance record.
 
 ## What the proxy does and doesn't do
 
 The proxy governs the traffic that is **routed through it**. To make that governance effective:
 
 - **Route all of an agent's egress through the proxy.** An agent configured to bypass the `HTTP_PROXY` settings, or one that dials raw IPs directly, isn't governed. In production, pair the proxy with network controls that prevent agents from reaching the internet except through it.
-- **Use `intercept` mode where you need body- and path-level control over HTTPS.** In `passthrough` mode, HTTPS rules are host-level only.
+- **Use `intercept` mode where you need body- and path-level control over HTTPS.** In `passthrough` mode, HTTPS is governed at the domain level only — no path/method rules, no injection, no scrubbing, and no in-flight revocation inside an open tunnel.
+- **Enable the KMS vault before storing production credentials** (see [Credential isolation](#credential-isolation)).
 
 ---
 

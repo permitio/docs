@@ -7,30 +7,47 @@ sidebar_position: 3
 
 # Workflows & Rules
 
-Egress policy is organized into **API workflows**. A workflow is a named unit of access — a bundle of the domains an agent may reach and the rules that govern them. Every agent token is bound to exactly **one** workflow, so an agent can only ever make the outbound calls that workflow allows.
+Egress policy is organized into **API workflows**. An API workflow is a named unit of access — a bundle of the domains an agent may reach and the rules that govern them. Every agent token is bound to exactly **one** workflow, so an agent can only ever make the outbound calls that workflow allows.
+
+:::note "API workflow" vs. the agent "workflow context"
+The **API workflow** on this page — a bundle of domains and rules — is an egress-policy object. It is distinct from the agent *workflow context* in [Advanced Features](/permit-mcp-gateway/advanced-features), which is about the operational frame an agent acts in. When this section says "workflow", it means the API workflow.
+:::
 
 The proxy is **deny-by-default**: if a request doesn't match a domain and rule in the token's workflow, it is denied — before any credential is injected or any connection is made. You grant access by adding domains and rules to a workflow.
 
 :::note Where you author workflows
-Workflows are created and edited in the [dashboard](https://app.agent.security) under **Proxy → Workflows**. There is no CLI command for authoring workflows yet — the `asg` CLI handles everything around them (enabling the proxy, storing credentials, minting workflow-bound tokens).
+Workflows are created and edited in the [dashboard](https://app.agent.security) under **CLIs / APIs → Workflows**. There is no CLI command for authoring workflows yet — the `asg` CLI handles everything around them (enabling the proxy, storing credentials, minting workflow-bound tokens).
 :::
 
 ## How a workflow is structured
 
-A workflow has three levels:
+A workflow has three levels — workflow → domain → rules:
 
 ```text
 Workflow  "ship_pr"
 ├── Domain  *.github.com
-│   ├── Rule  read_repo      GET/HEAD   → low trust
-│   └── Rule  push_commit    POST/PUT   → medium trust   (injects credential "github")
+│   ├── Rule  open_tunnel   ALL, no path   → low trust     # authorizes the HTTPS tunnel
+│   ├── Rule  read_repo     GET/HEAD       → low trust      # applies on intercept
+│   └── Rule  push_commit   POST/PUT       → medium trust   (injects credential "github")
 └── Domain  api.slack.com
-    └── Rule  post_message   POST       → medium trust   (injects credential "slack")
+    ├── Rule  open_tunnel   ALL, no path   → medium trust   # authorizes the HTTPS tunnel
+    └── Rule  post_message  POST           → medium trust   (injects credential "slack")
 ```
 
 - **Workflow** — the top-level unit an agent token binds to. Give it a clear name (e.g. *"Ship a PR"*) and slug.
 - **Domain** — a hostname or glob the workflow allows (`api.stripe.com`, `*.github.com`). A request's target host must match one of the workflow's domains, or it's denied.
-- **Rule** — inside a domain, a rule narrows *which* requests to that domain are allowed and at what trust level.
+- **Rule** — inside a domain, a rule narrows *which* requests to that domain are allowed and at what trust level. Each HTTPS domain also needs one **tunnel rule** (`all` method, no path) — see below.
+
+## HTTPS needs a tunnel rule
+
+This is the one non-obvious part of the model. **HTTPS reaches the proxy as a `CONNECT`, and the tunnel is authorized *before* the inner path and method are visible.** A `CONNECT` can therefore only match a rule with **method class `all` and no path pattern** — a path- or method-scoped rule can never authorize an HTTPS connection.
+
+So **every domain you reach over HTTPS needs at least one `all`-method, path-less rule** (the "tunnel rule" in the example above). Without it, every HTTPS request to that domain is denied with `rule_not_matched`, even if you've added `read`/`write` rules.
+
+- In **passthrough** mode (the default), the tunnel rule is the *only* check on HTTPS — the encrypted body is opaque, so path and method rules don't apply inside it.
+- In **intercept** mode, the tunnel rule authorizes the connection and then each decrypted request is re-matched against your path- and method-scoped rules.
+
+Plain **HTTP** is matched on host, path, and method directly — no tunnel rule needed.
 
 ## What a rule matches
 
@@ -38,11 +55,15 @@ Each rule matches a request on these dimensions:
 
 | Field | Matches | Example |
 | --- | --- | --- |
-| **Path** | The request path (glob). Optional — leave blank to match all paths on the domain. | `/v1/customers/*` |
+| **Path** | The request path (glob). Optional — leave blank to match all paths on the domain. Required to be blank on a tunnel rule. | `/v1/customers*` |
 | **Method** | One or more HTTP method **classes**: `read`, `write`, `delete`, or `all`. | `read`, `write` |
 | **Protocol** | `http` (default), `websocket`, or `any`. | `http` |
 
-The **method class** groups HTTP verbs by risk so you don't enumerate them: `read` covers safe methods like `GET` and `HEAD`, `write` covers `POST`/`PUT`/`PATCH`, `delete` covers `DELETE`, and `all` matches any method. A rule can select several classes at once.
+The **method class** groups HTTP verbs by risk so you don't enumerate them: `read` covers `GET`, `HEAD`, and `OPTIONS`; `write` covers `POST`/`PUT`/`PATCH`; `delete` covers `DELETE`; and `all` matches any method — including unusual ones such as `TRACE`, which no other class matches (and which a CONNECT tunnel also relies on). A rule can select several classes at once.
+
+:::tip Path globs
+A trailing `*` matches within a path segment: `/v1/customers*` matches `/v1/customers` and `/v1/customers/cus_123`, but `/v1/customers/*` requires a trailing slash and does **not** match `/v1/customers`. Leave the path blank to match every path on the domain.
+:::
 
 ## What a rule grants
 
@@ -52,28 +73,19 @@ Each rule carries:
 
 | Field | Purpose |
 | --- | --- |
-| **Required trust** | The minimum trust the caller must hold for this rule to authorize the request — `low`, `medium`, or `high`. Choose **Auto** to derive it from the method class: `read → low`, `write → medium`, `delete`/`all → high`. |
-| **Credential** | An optional stored [credential](./credentials) to inject into matched requests, so the agent never holds the secret. |
-| **TLS mode** | For HTTPS, whether the connection is `passthrough` (host-level only) or `intercept` (decrypt and apply the rule in full). See below. |
+| **Required trust** | The minimum trust the caller must hold for this rule to authorize the request — `low`, `medium`, or `high`. This is declared **by the rule**, not derived from the method. Choose **Auto** to seed it from the method class (`read → low`, `write → medium`, `delete`/`all → high`); you can override in either direction. |
+| **Credential** | An optional stored [credential](./credentials) to inject into matched requests, so the agent never holds the secret. On an HTTPS domain, injection only happens on rules evaluated in `intercept` mode. |
+| **TLS mode** | For HTTPS, whether the connection is `passthrough` (domain-level only) or `intercept` (decrypt and apply path/method rules in full). Read from the **tunnel rule** — see [Connecting Agents](./connecting-agents#https-interception). |
 
 Because trust is required per rule, a single workflow can grant an agent broad read access while gating writes and deletes behind a higher trust level that only a human's consent can supply. See [Authorization & Trust](./authorization) for how trust is granted and capped.
 
-## HTTPS handling per rule
-
-For HTTPS targets, each rule's **TLS mode** decides how deeply the proxy inspects the encrypted connection:
-
-- **`passthrough`** (default) — the request is authorized at the domain level, then the encrypted tunnel is forwarded without decryption. No path matching, credential injection, or response scrubbing happens inside it.
-- **`intercept`** — the proxy decrypts the connection (using a certificate authority issued for your host) and applies the rule in full, including path matching, credential injection, and response scrubbing.
-
-See [Connecting Agents → HTTPS interception](./connecting-agents#https-interception) for how to enable intercept and trust the CA.
-
 ## Building a workflow
 
-In **Proxy → Workflows**, create a workflow, add one or more domains, and add rules to each domain:
+In **CLIs / APIs → Workflows**, create a workflow, add one or more domains, and add rules to each domain:
 
 1. **Create the workflow** — name it for the job the agent does (*"Ship a PR"*, *"Reconcile invoices"*).
 2. **Add a domain** — the hostname or glob the agent may reach.
-3. **Add rules** — for each domain, add rules that pin the paths, methods, and required trust. Attach a credential where the proxy should inject a secret.
+3. **Add rules** — for each **HTTPS** domain, add the `all`-method, path-less **tunnel rule** first (it's what authorizes the connection), then any path/method rules that apply once you switch the domain to `intercept`. For plain-HTTP domains, add path/method rules directly. Attach a credential where the proxy should inject a secret.
 4. **Bind an agent** — mint a token for the workflow with [`asg proxy token create --workflow <slug>`](./cli), or have a human delegate it with [`asg proxy authorize --workflow <slug>`](./authorization#human-consent).
 
 :::tip Start tight, then widen
@@ -82,7 +94,13 @@ Begin with the exact domains and paths your agents need at the lowest trust that
 
 ## Human-in-the-loop on egress
 
-For high-risk egress, the gateway can route a request to a human for approval before it's forwarded — the same [Human-in-the-Loop](/permit-mcp-gateway/human-in-the-loop) machinery it uses for MCP tool calls. This is an optional, per-host capability rather than a rule setting; [contact us](mailto:support@permit.io) to enable it for your account. When an approval is required, the request pauses at the proxy, your reviewers are notified (email / Slack), and it proceeds only if a reviewer approves — otherwise it's denied (fail-closed). When an agent is driven by the CLI, approval outcomes are reported distinctly so automation can tell *"a human said no"* from *"blocked by policy"* from *"the request timed out."*
+For high-risk egress, the gateway can route a request to a human for approval before it's forwarded — the same [Human-in-the-Loop](/permit-mcp-gateway/human-in-the-loop) machinery it uses for MCP tool calls. This is an optional capability; [contact us](mailto:support@permit.io) to enable it for your account. A few things to know about when it applies:
+
+- Approval is triggered by the intent **guardian**'s verdict on a request — not by a rule setting or a risk score.
+- It requires the host to have **both** agent identity and the guardian enabled.
+- It applies to plain HTTP and to HTTPS on rules evaluated in `intercept` mode. Traffic inside a default `passthrough` tunnel is opaque to the proxy and is **never** routed for approval.
+
+When an approval is required, the request pauses at the proxy, your reviewers are notified (email / Slack), and it proceeds only if a reviewer approves — otherwise it's denied (fail-closed). When an agent is driven by the CLI, approval outcomes are reported distinctly so automation can tell *"a human said no"* from *"blocked by policy"* from *"the request timed out."*
 
 ---
 
