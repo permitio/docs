@@ -1,7 +1,7 @@
 ---
 title: Security
 sidebar_label: Security
-description: The security properties of the HTTP Egress Proxy — SSRF protection, server-side credential isolation, response scrubbing, TLS modes, rate limiting, and audit — and the preconditions each one depends on.
+description: The security properties of the HTTP Egress Proxy — SSRF protection, server-side credential isolation, response scrubbing, TLS modes, agent identity and drift protection, rate limiting, and audit — and the preconditions each one depends on.
 sidebar_position: 7
 ---
 
@@ -57,6 +57,25 @@ Because only the tunnel rule is consulted at set-up, TLS mode is effectively **p
 The proxy meters every request that reaches a matching workflow rule against per-agent budgets — per **host** (600 requests / 60s by default) and per **registrable domain** (1200 / 60s) — and sheds excess with a `429` and a `Retry-After`. These budgets run before the policy and approval checks, so a flood is rejected cheaply. Additional bounds — token-size caps, slow-client timeouts, and a ceiling on concurrent connections — protect the proxy itself.
 
 Note that if the counter store is unreachable the limiter **fails open** (requests are allowed), so treat rate limiting as availability protection rather than a hard security boundary.
+
+## Agent identity and drift protection
+
+*(Opt-in — [contact us](mailto:support@permit.io) to enable it for your account.)*
+
+A host can additionally require every agent session to **register its intent**: before its first governed request, the agent declares what it is working on, in exactly twelve distinct words, with [`asg proxy register-session`](./cli). The gateway builds a behavioral baseline from those declarations, and a sharp change in an agent's declared intent — the signature of a hijacked or steered agent — **blocks the session**: registrations and governed requests are denied until a human re-approves the agent.
+
+**Recovery is user-driven.** The block response the agent receives carries a **re-approval link** to your gateway's own consent screen (`/reconsent-agent`). The agent is instructed to show that link to the person running it — never to open it itself. That person signs in (a recent sign-in, within the last day, is required), reviews **what the agent last declared it was doing**, and decides:
+
+- **Re-approve** — the block lifts, and the agent's next registration starts a clean baseline.
+- **Keep blocked** — nothing changes; the agent stays denied.
+
+Only the account that originally authorized the agent can unblock it — a link forwarded to anyone else shows an error instead of the review screen. Completing a fresh consent flow ([`asg proxy authorize`](./authorization#human-consent)) clears the block the same way. An operator can always clear a block with `asg proxy identity reconsent` — and for automated agents running under an operator-minted token (no human delegation), that is the only recovery path. Re-approvals — by the user or by an operator — are recorded in the [audit trail](#audit-trail), including who cleared the block.
+
+:::tip Review before you re-approve
+The review screen shows the agent's own declared intent — the words that tripped the block. If they don't match what you asked the agent to do, keep it blocked and investigate: a drift block is often the first visible sign of prompt injection.
+:::
+
+[`asg proxy doctor`](./connecting-agents#diagnose-with-doctor) reports a drift-blocked session as a failing check, with the same re-approval link. For the background on agent identity and drift detection, see [Agent Verification](/permit-mcp-gateway/advanced-features#agent-verification).
 
 ## Audit trail
 
