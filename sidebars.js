@@ -675,6 +675,7 @@ const sidebars = {
             "integrations/gateways/aws-api-gateway",
             "integrations/gateways/kong",
             "integrations/gateways/nginx",
+            "integrations/gateways/envoy",
           ],
         },
         {

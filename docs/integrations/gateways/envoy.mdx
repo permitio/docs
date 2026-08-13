@@ -82,6 +82,8 @@ In your GitOps repository:
    }
    ```
 
+   This boolean entrypoint is enough for Envoy to allow or deny the request. To also show those decisions in Permit's [Audit Log](https://app.permit.io/audit-log), return an object that includes `permitio_metadata` — see [Ingest Envoy decisions into Permit Audit Logs](#6-ingest-envoy-decisions-into-permit-audit-logs).
+
 3. Commit and **push** the new file to the GitOps repository.
 4. Wait for the PDP to sync the updated policies (or trigger a sync if you are using a CI flow).
 
@@ -180,7 +182,77 @@ Once configured, every Envoy ext_authz call will:
 
 ---
 
-## 6. Example repository
+## 6. Ingest Envoy decisions into Permit Audit Logs
+
+Envoy's ext_authz input is **not** a `permit.check` payload. The PDP still records a decision log for the Envoy query (`permit/envoy`), but the Audit Log page cannot fill **user**, **action**, **resource**, **tenant**, or **decision** from that Envoy-shaped input.
+
+To map those columns, include a `permitio_metadata` object on the **policy result**, using the same structure as [`permit.check()`](/how-to/enforce-permissions/check). Permit reads this object as a fallback when the query input is not a standard check.
+
+Return an object from the Envoy entrypoint (the OPA Envoy plugin uses the `allowed` field for allow/deny):
+
+```rego
+package permit
+
+import data.permit.root as check
+import input.attributes.request.http as http_request
+
+default envoy := {"allowed": false}
+
+envoy := {
+  "allowed": allowed,
+  "permitio_metadata": {
+    "allow": allowed,
+    "user": {"key": user_key},
+    "action": method,
+    "resource": {
+      "type": url,
+      "tenant": tenant_key,
+    },
+  },
+} {
+  url := http_request.path
+  method := http_request.method
+  user_key := http_request.headers["x-user-id"]
+  tenant_key := http_request.headers["x-tenant-id"]
+
+  check_input := {
+    "user": {"key": user_key},
+    "action": method,
+    "resource": {
+      "type": url,
+      "tenant": tenant_key,
+    },
+  }
+
+  allowed := check.allow with input as check_input
+}
+```
+
+`permitio_metadata` supports the following fields (all optional; omit any you do not have):
+
+| Field | Audit Log column |
+| --- | --- |
+| `allow` | Decision (allow / deny) |
+| `user.key` | User |
+| `user.email` | User email |
+| `user.first_name` / `user.last_name` | User display name |
+| `action` | Action |
+| `resource.type` | Resource |
+| `resource.tenant` | Tenant |
+
+If the query input already has a standard `permit.check` field (for example `input.user.key`), that value wins. `permitio_metadata` is only used when the corresponding input field is missing.
+
+:::note
+Keep the OPA path under the `permit/` prefix (for example `permit/envoy`). Decision logs whose query path does not start with `permit/` are not ingested into the Audit Log.
+:::
+
+After traffic hits Envoy, open the [Audit Log](https://app.permit.io/audit-log) and use the **All** query type. Envoy evaluations are not `permit.check` queries, so they will not appear if you filter to Check only. Missing columns in the table mean that field was not present on `permitio_metadata`.
+
+For how to read and filter logs, see [Audit Types & Filtering](/how-to/use-audit-logs/types-and-filtering).
+
+---
+
+## 7. Example repository
 
 An example repository demonstrating this integration (including a complete `envoy_entrypoint.rego`, Envoy configuration, and GitOps layout) will be provided here:
 
