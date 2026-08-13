@@ -1,0 +1,663 @@
+---
+title: Architecture
+sidebar_label: Architecture
+description: Technical architecture of Permit MCP Gateway — components, data flows, authorization model, and deployment patterns.
+sidebar_position: 7
+---
+
+import ZoomableDiagram from '@site/src/components/ZoomableDiagram';
+
+# Permit MCP Gateway Architecture
+
+## Executive Summary
+
+Permit MCP Gateway is a proxy that sits between MCP clients and upstream MCP servers. When an MCP client connects, the gateway handles authentication (via a consent service), checks every tool call against fine-grained policy (via Permit.io), and logs every decision for audit.
+
+**The key architectural properties are:**
+
+- **Transparent proxy** — MCP clients connect to the gateway URL instead of the upstream server URL. The upstream MCP server receives proxied requests and does not need to be modified.
+- **Identity binding** — every tool call is tied to a specific human (who authenticated) and agent (the MCP client acting on their behalf), using a relationship-based access control model.
+- **Real-time policy enforcement** — the gateway calls `permit.check()` on every `call_tool` request. Decisions are based on the agent's trust level, the human's trust ceiling, and the tool's risk classification.
+- **Stateful sessions** — upstream OAuth tokens and consent state are stored server-side (in Redis), so users do not re-authenticate on every connection.
+- **Multi-tenant isolation** — each host (gateway instance) has its own subdomain, policies, users, and sessions.
+
+The rest of this page covers the detailed component architecture, data flows, and authorization model.
+
+---
+
+## Permit.io as Control Plane and Data Plane
+
+Permit.io serves as both the **control plane** and the **default data plane** for Permit MCP Gateway.
+
+- **Control plane**: Permit.io is where the authorization model is defined — resource types, actions, roles, relations, derived roles, and role assignments. The gateway dashboard ([app.agent.security](https://app.agent.security)) and the Consent Service write policy changes to Permit via its Platform API. Admins can also inspect and manage policies directly in the Permit dashboard ([app.permit.io](https://app.permit.io)).
+- **Data plane**: The Permit PDP (Policy Decision Point) evaluates every `permit.check()` call from the gateway at runtime. In the hosted deployment, the cloud PDP handles these evaluations. In customer-controlled deployments, a local PDP can be used so that authorization decisions stay within your network.
+
+Every gateway **host** maps 1:1 to a **Permit environment**. This binding is established when the admin creates a host and selects a Permit project and environment. All resources, users, roles, and audit logs for that host live in the linked environment.
+
+```mermaid
+flowchart LR
+  subgraph "Gateway (*.agent.security)"
+    Host["Host<br/>acme-brave-coral-37"]
+    GW["Gateway"]
+    CS["Consent Service"]
+  end
+
+  subgraph "Permit.io (Control Plane + Data Plane)"
+    Env["Permit Environment<br/>(linked to host)"]
+    PDP["Permit PDP"]
+    Audit["Audit Logs"]
+  end
+
+  Host --- Env
+  CS -->|"Write policy<br/>(roles, relations)"| Env
+  GW -->|"permit.check()<br/>(every tool call)"| PDP
+  PDP -->|"Log decision"| Audit
+```
+
+This means the full power of Permit's policy engine is available to the gateway — including RBAC, ABAC, and ReBAC models, real-time policy updates via OPAL, and the complete audit log API.
+
+---
+
+## Technical Architecture
+
+Permit MCP Gateway delivers **permissions-as-a-service** for any MCP server. It provides:
+
+* **Fine-grained ReBAC** (relationship-based access control) powered by Permit.io (which uses OPA and OPAL under the hood)
+* **Authentication and authorization** that binds user, agent, MCP server, and downstream service identities
+* **Comprehensive auditing** covering every tool call, user, and agent
+* **Hosted gateway deployment**, with all components using the same policy rules
+
+Adopting the gateway requires a single configuration change — pointing your MCP client at the gateway URL instead of directly at the upstream server.
+
+## System Architecture Overview
+
+<ZoomableDiagram title="System Architecture Overview">
+
+```mermaid
+flowchart LR
+  Client["MCP Client<br/>(Cursor / Claude / VS Code)"]
+  Admin["System Admin"]
+
+  subgraph Tenant["*.agent.security"]
+    Edge["Edge Router<br/>(NGINX)"]
+    GW["Gateway"]
+    GWAdmin["Gateway<br/>(Admin API)"]
+    CS["Consent Service"]
+    PG[(PostgreSQL)]
+    REDIS[(Redis)]
+  end
+
+  subgraph Permit["Permit.io"]
+    PermitPDP["Permit PDP<br/>(Cloud)"]
+    PermitAPI["Permit Platform API"]
+    PermitPDP --> PermitAPI
+  end
+
+  subgraph Platform["app.agent.security"]
+    PlatformUI["Platform UI"]
+  end
+
+  Admin -->|"Manage hosts + users"| PlatformUI
+  PlatformUI -->|"Create host"| PermitAPI
+  PlatformUI -->|"POST /hosts"| GWAdmin
+
+  Client -- "MCP Streamable HTTP" --> Edge
+  Edge -- "UI + OAuth APIs" --> CS
+  Edge -- "/mcp, /oauth/*,<br/>/.well-known/*" --> GW
+
+  GWAdmin -->|"All Redis access"| REDIS
+  CS -->|"Session + OAuth state<br/>(via Admin API)"| GWAdmin
+  REDIS -->|"Host config +<br/>app session state"| GW
+
+  CS -- "Users, sessions, OAuth clients" --> PG
+  GW -- "JWT verification (JWKS)" --> CS
+  GW -- "permit.check() per tool call" --> PermitPDP
+  CS -->|"Sync consent → roles/relations"| PermitAPI
+
+  GW -- "Proxy MCP +<br/>X-Gateway-Auth JWT" --> Upstream
+  Upstream -.->|"Verify JWT (optional)<br/>GET /.well-known/gateway-jwks.json"| GW
+
+  Upstream["Upstream MCP Server"]
+```
+
+</ZoomableDiagram>
+
+**Key components:**
+- **Platform** (`app.agent.security`): Admin interface for managing hosts, MCP servers, and user access
+- **Edge Router** (NGINX): Routes requests by path to the Gateway or Consent Service
+- **Gateway** (`*.agent.security/mcp`): MCP proxy that enforces authorization on every tool call
+- **Consent Service** (`*.agent.security`): Handles OAuth login, user consent, and upstream MCP OAuth
+- **Permit.io PDP**: Policy decision point for real-time authorization checks
+- **Redis**: Session and host configuration store (accessed only by the Gateway)
+- **PostgreSQL**: User accounts, OAuth clients, and auth sessions
+
+:::info Architecture constraint
+The Consent Service does **not** access Redis directly. All state persistence goes through the Gateway Admin API, centralizing Redis schema and logic in the Gateway.
+:::
+
+## Data Flow
+
+The diagram below shows where data lives and how it flows between components:
+
+<ZoomableDiagram title="Data Flow">
+
+```mermaid
+flowchart TD
+  subgraph Storage["Data Storage"]
+    REDIS[("Redis<br/>Sessions, host config")]
+    PG[("PostgreSQL<br/>Users, OAuth clients")]
+    PERMIT[("Permit.io<br/>Policies, audit logs")]
+  end
+
+  subgraph Services["Services"]
+    GW["Gateway<br/>port 8001"]
+    GWAdmin["Gateway Admin API<br/>port 8002"]
+    CS["Consent Service<br/>port 3000"]
+    NGINX["NGINX<br/>port 8080"]
+  end
+
+  subgraph External["External"]
+    ALB["AWS ALB<br/>(TLS termination)"]
+    MCP["Upstream MCP Servers"]
+  end
+
+  ALB -->|"HTTP/1.1"| NGINX
+  NGINX -->|"/mcp, /oauth/*, /.well-known/*"| GW
+  NGINX -->|"/api/auth/*, /api/consent/*,<br/>/api/mcp/*, /login, /consent"| CS
+  CS -->|"HTTP + Bearer token<br/>sessions, oauth-states"| GWAdmin
+  GWAdmin -->|"RESP protocol"| REDIS
+  CS -->|"PostgreSQL protocol"| PG
+  GW -->|"JWKS fetch (cached)"| CS
+  GW -->|"permit.check()"| PERMIT
+  CS -->|"Policy sync on consent"| PERMIT
+  GW -->|"Streamable HTTP + upstream OAuth tokens<br/>+ X-Gateway-Auth JWT"| MCP
+```
+
+</ZoomableDiagram>
+
+| From | To | Protocol | Notes |
+| --- | --- | --- | --- |
+| ALB | NGINX | HTTP/1.1 | TLS terminated at ALB |
+| NGINX | Gateway | HTTP/1.1 (port 8001) | Routes: `/mcp`, `/oauth/*`, `/.well-known/*` |
+| NGINX | Consent Service | HTTP/1.1 (port 3000) | Routes: `/api/auth/*`, `/api/consent/*`, `/api/mcp/*`, `/login`, `/consent` |
+| Consent Service | Gateway Admin API | HTTP/1.1 + Bearer (port 8002) | Sessions, OAuth states, pending tokens |
+| Gateway | Redis | RESP (port 6379) | **Only** Gateway has direct Redis access |
+| Consent Service | PostgreSQL | PostgreSQL (port 5432) | Users, sessions, OAuth clients |
+| Gateway | Consent Service (JWKS) | HTTP (port 3000) | JWT signature verification |
+| Gateway | Permit.io | HTTPS | Authorization checks (Cloud PDP) |
+| Consent Service | Permit.io | HTTPS | Policy sync during consent |
+| Gateway | Upstream MCP | HTTPS | Streamable HTTP with upstream OAuth tokens + signed `X-Gateway-Auth` JWT (see [Upstream Authentication](#upstream-authentication-gateway-jwt)) |
+
+## Integration Patterns
+
+Permit MCP Gateway is available as a hosted gateway deployment:
+
+| Pattern                   | When to Use                      | How It Works                                                      |
+| ------------------------- | -------------------------------- | ----------------------------------------------------------------- |
+| **Hosted Gateway**        | Fastest rollout; SaaS workloads  | Point agents/MCP clients to `https://<host>.agent.security/mcp`       |
+
+## Policy Model
+
+### Trust-Level Access Control
+
+Permit MCP Gateway classifies each tool into a trust level based on its risk:
+
+1. **Low trust** — everything else (read-only by convention); this is the default for tools not matching medium or high patterns
+2. **Medium trust** — write operations (tools containing: `create`, `write`, `update`, `set`, `modify`, `edit`, `put`, `post`, `insert`, `add`, `send`, `execute`, `run`, `invoke`, `submit`, `push`, `publish`, `deploy`, `apply`, `patch`)
+3. **High trust** — destructive operations (tools containing: `delete`, `remove`, `destroy`, `drop`, `purge`, `erase`, `truncate`, `terminate`, `kill`, `revoke`)
+
+Trust levels are hierarchical: higher levels inherit all permissions from lower levels.
+
+### Policy Architecture
+
+Permit MCP Gateway automatically generates [Google-Zanzibar](/modeling/google-drive)-inspired ReBAC (Relationship-based Access Control) policies based on:
+- Defined roles for users and agents
+- MCP server resource instances
+- Agent roles derived from the user's consent choices
+- A `user_profile` resource that links each user to the agents acting on their behalf, enabling relationship-based permission derivation through a 3-way chain: **Agent** --role on--> **UserProfile** --relation to--> **MCP Server**. The effective permission on a server is derived as `min(agent_role_on_profile, profile_relation_to_server)` — meaning a human's profile relation acts as a ceiling on the trust level any agent can actually exercise, regardless of what trust level was granted during consent.
+
+Each MCP server maps to a **Permit resource type** whose key is the server key (e.g., `linear`). The server's tools become **actions** on that resource, using slugified tool names (e.g., `create_issue`). There are no separate resource instances per tool — the server itself is both the resource type and instance.
+
+:::note Simplified diagram
+The diagram below shows the logical relationship between agents and server resources. The actual Permit model uses a 3-way derived chain through a `user_profile` intermediary: **Agent** --role on--> **UserProfile** --relation to--> **MCP Server**, with effective permission = `min(agent_role, profile_relation)`. See the [Authorization: Trust Ceiling](#authorization-trust-ceiling-min-logic) section below for the full model.
+:::
+
+```mermaid
+graph TD
+    A[Agent] --Trust Level Role--> UP[UserProfile<br/>user_profile:user_id]
+    UP --"relation (max trust)"--> S[Server Resource<br/>type: server_key<br/>instance: server_key]
+    S --Action--> F1[get_issues]
+    S --Action--> F2[create_issue]
+    S --Action--> F3[delete_repo]
+```
+
+## Authentication & Authorization
+
+### How it Works
+
+**Admin setup (one-time via Platform UI):**
+
+1. Admin signs in to the Platform UI at [app.agent.security](https://app.agent.security) and creates a host linked to a Permit environment
+2. Admin imports upstream MCP servers through the Platform, which configures the Gateway and syncs policies to Permit
+3. Admin grants specific users permission to connect to specific MCP servers via the Platform's Humans page
+
+**User connection (first time):**
+
+1. The MCP client discovers the gateway's OAuth endpoints
+2. The user authenticates and signs in
+3. The user selects an MCP server from the list of servers the admin has granted them access to
+4. If the upstream MCP server requires OAuth, the user authorizes with the upstream provider
+5. The user chooses the trust level they want to grant their agent, up to the maximum the admin configured
+6. The gateway issues a JWT access token to the MCP client
+
+**On subsequent tool calls:**
+
+1. The gateway verifies the JWT and identifies the agent
+2. The gateway checks Permit: *"Can this agent call this tool on this MCP server?"*
+3. Allowed calls are proxied; denied calls return a permission denied error
+
+**Identity format:** The gateway constructs a user key for the Permit check based on the caller type:
+- **Human users**: `human|{subject}` — where `subject` is the authenticated user's identity. This format is used by the consent service and platform for policy management (e.g., granting a user access to MCP servers).
+- **Agents**: `agent|{client_id}` — where `client_id` identifies the agent acting on behalf of the user. This format is used at runtime by the gateway for tool-call authorization checks.
+
+### Sequence: Admin Setup Flow
+
+The admin creates a host through the Platform UI by selecting a Permit project and environment. The Platform resolves the environment's API key, provisions the host configuration in the Gateway, and stores it in Redis.
+
+```mermaid
+sequenceDiagram
+    participant A as Admin
+    participant Platform as Platform UI
+    participant PermitAPI as Permit Platform API
+    participant GW as Gateway (Admin API)
+    participant R as Redis
+
+    A->>Platform: Create host (select Permit environment)
+    Platform->>PermitAPI: GET /v2/api-key/{proj_id}/{env_id}
+    PermitAPI-->>Platform: { secret: "permit_key_..." }
+    Platform->>GW: POST /hosts { subdomain, permit_api_key }
+    GW->>PermitAPI: GET /v2/api-key/scope
+    PermitAPI-->>GW: { organization_id, project_id, environment_id }
+    GW->>R: SET host_lookup:{subdomain}
+    GW-->>Platform: 201 Created
+    Platform-->>A: Host created
+
+    Note over A,R: Admin then imports MCP servers and grants user access
+    A->>Platform: Import MCP servers + set trust levels
+    A->>Platform: Grant users access to MCP servers
+    Platform->>PermitAPI: Create resource types, instances, relations
+```
+
+### Sequence: User Consent Flow
+
+When a user connects for the first time, the MCP client discovers OAuth endpoints, the user authenticates and consents, and if the upstream MCP server requires OAuth, that flow is handled transparently.
+
+```mermaid
+sequenceDiagram
+    participant C as MCP Client
+    participant GW as Gateway
+    participant CS as Consent Service
+    participant PermitAPI as Permit Platform
+    participant Up as Upstream MCP Server
+
+    Note over C,Up: OAuth Discovery + Authentication
+    C->>GW: POST /mcp (no token)
+    GW-->>C: 401 + WWW-Authenticate
+    C->>GW: GET /.well-known/oauth-protected-resource
+    GW-->>C: Resource metadata (points to Gateway AS)
+    C->>GW: GET /.well-known/oauth-authorization-server
+    GW-->>C: AS metadata (endpoints on Consent Service)
+    C->>GW: POST /oauth/register (DCR)
+    GW-->>C: client_id
+    C->>CS: Authorization request (PKCE)
+    CS-->>C: Redirect to login
+
+    Note over C,Up: User Login + Consent
+    C->>CS: User authenticates (login)
+    CS-->>C: Redirect to consent UI
+    CS-->>C: Show admin-granted MCP server list
+
+    Note over C,Up: Upstream OAuth (if required)
+    C->>CS: Select MCP server
+    CS->>Up: Probe upstream + initialize/list_tools
+    alt Upstream requires OAuth
+        Up-->>CS: 401 + WWW-Authenticate
+        CS->>Up: Discover auth server + DCR + build auth URL
+        CS->>GW: Store OAuth state (short TTL)
+        CS-->>C: Redirect to upstream auth provider
+        C->>CS: GET /api/mcp/oauth/callback?code=...
+        CS->>GW: Exchange code for tokens
+        CS->>GW: Store upstream token (keyed by consent_id)
+        CS-->>C: Redirect back to consent
+    end
+    CS->>Up: list_tools (with upstream token if applicable)
+    Up-->>CS: Tools list + server info
+
+    Note over C,Up: Trust Selection + Policy Sync
+    CS-->>C: Show tools + trust level controls
+    C->>CS: Accept consent + trust level selection
+    CS->>PermitAPI: Create resource instances + assign roles
+    CS->>GW: Store MCP session info
+    CS-->>C: Authorization code
+    C->>CS: POST /api/auth/token (exchange code)
+    CS-->>C: JWT access token
+    C->>GW: POST /mcp (Bearer token)
+    GW-->>C: MCP response
+```
+
+:::info Server allow-list
+By default, users can only connect to MCP servers that the admin has pre-configured and granted them access to — the Consent Service validates that every upstream URL matches a server the user is authorized to use. However, if the admin enables **Dynamic MCPs** on the host, users can also enter arbitrary upstream MCP server URLs during the consent flow. See [Dynamic MCPs](#dynamic-mcps) below.
+:::
+
+### Sequence: Authorization Decision Flow
+
+When a tool call arrives at the Gateway, it passes through a multi-step middleware chain before reaching the upstream MCP server.
+
+```mermaid
+sequenceDiagram
+    participant C as MCP Client
+    participant GW as Gateway
+    participant R as Redis
+    participant PDP as Permit PDP
+    participant Up as Upstream MCP Server
+
+    C->>GW: call_tool(name=create_issue, Bearer token)
+
+    Note over GW: 1. Extract tenant from Host header
+    Note over GW: Host: acme-brave-coral-37.agent.security
+
+    GW->>R: GET host_lookup:acme-brave-coral-37
+    Note over GW,R: 2. Load tenant config (permit_api_key, oauth config)
+
+    Note over GW: 3. JWT Validation
+    Note over GW: Verify Ed25519 signature (JWKS cached)
+    Note over GW: Validate claims: iss, aud, exp, tenant_subdomain
+    Note over GW: Extract: subject (user ID), client_id (agent ID)
+
+    Note over GW: 4. Transport session lookup (in-memory)
+    Note over GW: MCP-Session-Id → local HashMap
+
+    GW->>R: GET mcp:session:{client_id}:{subject}
+    R-->>GW: {upstream_url, tokens, trust_level}
+    Note over GW,R: 5. Application session lookup
+
+    Note over GW: 6. Token refresh (if upstream token expires within 5 min)
+
+    GW->>PDP: permit.check("agent|{client_id}", "create_issue", "{server_key}:{server_key}")
+    Note over GW,PDP: 7. Authorization check
+
+    alt allowed
+        PDP-->>GW: ALLOW
+        GW->>Up: call_tool (proxied with upstream token)
+        Up-->>GW: tool result
+        GW-->>C: tool result
+    else denied
+        PDP-->>GW: DENY
+        GW-->>C: MCP error (-32004 Permission denied)
+    end
+    GW->>GW: Log to audit
+```
+
+:::note Tool visibility vs. enforcement
+The gateway returns **all tools** in `list_tools` responses regardless of the agent's trust level. Authorization enforcement happens exclusively at `call_tool` time — agents may see tools they cannot invoke.
+:::
+
+### Authorization: Trust Ceiling (min logic)
+
+The effective permission on an MCP server is determined by the **minimum** of the agent's trust level and the human's profile relation to the server. This ensures a human's profile relation acts as a ceiling on what any agent can exercise.
+
+```mermaid
+flowchart LR
+    Agent["Agent<br/>agent|client_id"]
+    Profile["UserProfile<br/>user_profile:subject"]
+    Server["MCP Server<br/>server_key:server_key"]
+    Result["Effective Role<br/>= min(agent_role, profile_relation)"]
+
+    Agent -->|"role: {server}-medium"| Profile
+    Profile -->|"relation: medium"| Server
+    Server --> Result
+
+    style Result fill:#f9f,stroke:#333,stroke-width:2px
+```
+
+**How it works:**
+
+The system uses 9 derived role rules per MCP server to implement the `min()` logic through Permit's ReBAC:
+
+| Agent role on profile | Profile relation to server | Effective server role |
+| --- | --- | --- |
+| `{server}-high` | `high` | **high** |
+| `{server}-high` | `medium` | **medium** (capped) |
+| `{server}-high` | `low` | **low** (capped) |
+| `{server}-medium` | `high` | **medium** |
+| `{server}-medium` | `medium` | **medium** |
+| `{server}-medium` | `low` | **low** (capped) |
+| `{server}-low` | `high` | **low** |
+| `{server}-low` | `medium` | **low** |
+| `{server}-low` | `low` | **low** |
+
+The derived role then determines which tools are allowed:
+- **Low** trust tools: available to `low`, `medium`, and `high` roles
+- **Medium** trust tools: available to `medium` and `high` roles
+- **High** trust tools: available to `high` role only
+
+## Upstream Authentication (Gateway JWT)
+
+When the gateway proxies a request to an upstream MCP server, it attaches a short-lived, gateway-signed JWT in an `X-Gateway-Auth` header alongside the upstream OAuth token. This lets upstream servers verify that a request came through the gateway — preventing agents from bypassing the gateway's authN/authZ/consent layer by connecting directly to the upstream URL.
+
+The feature is **always on** and requires no configuration on the gateway. Upstream servers opt in to verification — those that don't simply ignore the extra header, so behavior is unchanged for servers that don't need this guarantee.
+
+### How it works
+
+The gateway maintains an Ed25519 signing key that is cached in Redis and shared across all gateway replicas. The public key is exposed at `GET /.well-known/gateway-jwks.json` (unauthenticated, cached by clients for 5 minutes). On each upstream request, the gateway signs a short-lived JWT with the authenticated user's identity, the upstream URL as audience, and the tenant subdomain. The JWT is cached and reused until it is within 30 seconds of expiry, then re-signed — avoiding per-request signing overhead while ensuring long-lived MCP sessions always send a valid token.
+
+```mermaid
+sequenceDiagram
+    participant Client as MCP Client
+    participant GW as Gateway
+    participant JWKS as Gateway JWKS<br/>/.well-known/gateway-jwks.json
+    participant Up as Upstream MCP Server
+
+    Note over GW: Startup: load shared Ed25519 key<br/>from Redis (or generate + store if none exists)
+
+    Client->>GW: POST /mcp (tool call)
+    GW->>GW: Auth + Permit check
+
+    rect rgb(240, 248, 255)
+        Note over GW: JWT signing (lazy — cached, re-signed near expiry)
+        GW->>GW: Is cached JWT still valid?
+        alt JWT expired or near expiry (within 30s)
+            GW->>GW: Sign fresh JWT<br/>{iss, sub, aud, exp, iat, nbf, jti, tenant}
+            GW->>GW: Cache JWT
+        else JWT still valid
+            GW->>GW: Reuse cached JWT
+        end
+    end
+
+    GW->>Up: POST (MCP request)<br/>Authorization: Bearer {upstream_oauth_token}<br/>X-Gateway-Auth: Bearer {gateway_jwt}
+
+    opt Upstream wants to verify
+        Up->>JWKS: GET /.well-known/gateway-jwks.json
+        JWKS-->>Up: {keys: [{kty: "OKP", crv: "Ed25519", ...}]}
+        Up->>Up: Verify JWT signature + claims
+    end
+
+    Up-->>GW: MCP response
+    GW-->>Client: MCP response
+```
+
+### JWT claims
+
+| Claim    | Value                                                                                            | Purpose                           |
+| -------- | ------------------------------------------------------------------------------------------------ | --------------------------------- |
+| `iss`    | `agent-security-gateway`                                                                         | Identifies the issuer             |
+| `sub`    | Authenticated user ID                                                                            | Who the request is being made for |
+| `aud`    | Canonicalized upstream URL — host lowercased, all trailing slashes (including root `/`) stripped | Intended recipient                |
+| `exp`    | `now + TTL` (default 5 min)                                                                      | Token expiry                      |
+| `iat`    | `now - 30s` (clock-skew leeway)                                                                  | When the token was issued         |
+| `nbf`    | `now - 30s` (clock-skew leeway)                                                                  | Not valid before this time        |
+| `jti`    | Unique UUID                                                                                      | Unique token ID                   |
+| `tenant` | Host subdomain                                                                                   | Which tenant the request belongs to |
+
+:::note Clock-skew leeway
+`iat` and `nbf` are intentionally backdated 30 seconds so upstream verifiers with small clock drift don't reject otherwise-valid tokens. Configure your JWT library with a clock tolerance of at least 30 seconds (e.g. `clockTolerance: 30` in `jose`).
+:::
+
+:::note Audience canonicalization
+The `aud` claim is the canonicalized form of your upstream URL — host lowercased, all trailing slashes (including root `/`) stripped. Configure your verifier's `audience` option with the canonicalized form, e.g. `https://MCP.Example.com/` becomes `https://mcp.example.com`, and `https://your-server.example.com/v1/` becomes `https://your-server.example.com/v1`.
+:::
+
+### Two auth headers coexist
+
+The gateway sends two distinct headers on upstream requests — they serve different purposes and don't conflict:
+
+| Header              | Who issues it  | What it proves                                  |
+| ------------------- | -------------- | ----------------------------------------------- |
+| `Authorization: Bearer <token>` | The upstream's OAuth provider | The user authorized this request with the upstream service |
+| `X-Gateway-Auth: Bearer <jwt>`  | The gateway                   | The request originated from this gateway instance |
+
+### Verifying on the upstream side
+
+Upstream servers that want to reject direct (non-gateway) traffic fetch the gateway's public key from the JWKS endpoint and verify the `X-Gateway-Auth` header on every request. Using a standard JWT library (which handles JWKS caching and key rotation automatically) the verifier is short — under 10 lines of meaningful code:
+
+```js
+import { createRemoteJWKSet, jwtVerify } from 'jose';
+
+const JWKS = createRemoteJWKSet(
+  new URL('https://<tenant>.agent.security/.well-known/gateway-jwks.json')
+);
+
+const auth = req.headers['x-gateway-auth'];
+if (typeof auth !== 'string' || !auth.startsWith('Bearer ')) {
+  return res.status(401).end();
+}
+
+const { payload } = await jwtVerify(
+  auth.slice(7).trim(),
+  JWKS,
+  {
+    issuer: 'agent-security-gateway',
+    audience: 'https://your-mcp-server.example.com', // canonical: lowercase host, no trailing slash
+    algorithms: ['EdDSA'],
+    clockTolerance: 30,
+  }
+);
+```
+
+Reject any request without a valid `X-Gateway-Auth` header. The `aud` claim is the **canonicalized form** of your upstream URL — host lowercased, all trailing slashes (including the root `/`) stripped — so configure `audience` with the canonicalized form (e.g. `https://MCP.Example.com/` becomes `https://mcp.example.com`).
+
+:::note Replay protection (opt-in)
+The `jti` claim is unique per token but `jose.jwtVerify` does not deduplicate it. If you need replay protection, track recently-seen `jti` values for at least the JWT TTL plus your clock-skew window — e.g. a Redis `SET` with `TTL = GATEWAY_JWT_TTL_SECONDS + 30` and reject any `jti` already in the set.
+:::
+
+:::info Key rotation
+The signing key is stored in Redis and shared across all gateway replicas, so JWTs remain valid across pod restarts and the JWKS endpoint returns the same key regardless of which replica serves it. When the token vault is enabled (`VAULT_ENABLED=true` + `AWS_KMS_KEY_ID`), the key is encrypted at rest using AES-256-GCM with AWS KMS envelope encryption; without vault it is stored as plaintext JSON (the gateway logs a warning). Set `GATEWAY_JWT_REQUIRE_VAULT=true` in production to refuse the plaintext fallback.
+
+Rotation is **manual** — the gateway logs a warning and emits a `gateway_jwt_signing_key_age_seconds` metric after 90 days, but does not rotate on its own. To rotate, delete the Redis key and trigger a rolling restart:
+
+```bash
+redis-cli DEL gateway:jwt:signing_key
+# then: kubectl rollout restart deployment/gateway
+```
+
+The `kid` header on each JWT identifies which key signed it — upstream servers should rely on their JWT library's JWKS caching, which automatically re-fetches the JWKS on unknown `kid`, making rotation transparent to verifiers.
+:::
+
+### Configuration
+
+There is nothing to configure on the gateway to enable this feature. Two optional tunables are available:
+
+| Env var                     | Default | Description                                                                                                                              |
+| --------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `GATEWAY_JWT_TTL_SECONDS`   | `300`   | JWT lifetime in seconds. Must be between `60` and `3600`; values outside that range fail config validation at startup.                   |
+| `GATEWAY_JWT_REQUIRE_VAULT` | `false` | Refuse to start if the token vault is not configured. Prevents plaintext private-key storage in Redis. Recommended `true` in production. |
+
+The JWKS URL for each host is available in the platform under **Settings > Upstream Authentication (JWT)**, along with a sample verification snippet.
+
+## Rate Limiting
+
+The gateway includes built-in rate limiting to prevent abuse. No configuration is required on your end.
+
+### Rate Limits
+
+Rate limits are applied per IP address. If a limit is exceeded, the gateway returns an **HTTP 429** response:
+
+```json
+{
+  "error": "rate_limited",
+  "message": "You have exceeded the rate limit. Please try again later."
+}
+```
+
+| Endpoint | Method | Limit |
+| --- | --- | --- |
+| `/api/auth/sign-in` | POST | 100 req / 5 min |
+| `/api/auth/sign-up` | POST | 100 req / 10 min |
+| `/oauth/register` | POST | 100 req/min |
+| `/mcp` | POST | 1000 req/min |
+| All write operations | POST, PUT, DELETE | 1200 req/min |
+| All traffic | Any | 2000 req/min |
+
+:::note Corporate NAT
+Rate limits are designed to accommodate corporate networks where many users share a single public IP. If you encounter rate limiting in a large deployment, contact [Permit support](https://permit.io/support).
+:::
+
+### Handling 429 Responses in MCP Clients
+
+If your MCP client or agent receives an HTTP 429 response, it should:
+
+1. **Wait and retry** — back off for a few seconds before retrying the request.
+2. **Reduce concurrency** — if multiple agents share the same IP, reduce parallel requests.
+3. **Check the response body** — the JSON error body confirms the rate limit was triggered (as opposed to an application-level error).
+
+## Deployment
+
+Permit MCP Gateway is available as a **hosted gateway** at `*.agent.security`. Each host (tenant) gets a unique subdomain with isolated policies, users, and sessions.
+
+Point your MCP clients to `https://<host>.agent.security/mcp` and the gateway handles the rest — authentication, authorization, and audit logging are all built in.
+
+For organizations that need the gateway inside their own network — for data residency, private MCP servers, or local PDP authorization — see [Enterprise Deployment](/permit-mcp-gateway/enterprise-deployment).
+
+## Key Advantages
+
+* **Single enforcement point** for authentication, authorization, consent, and audit
+* **Drop-in proxy** — no code changes to MCP clients or servers
+* **Fine-grained ReBAC** — models the full user → agent → server → tool relationship chain
+* **Policy-as-code** — policies managed via UI and API, powered by OPA/Rego under the hood
+* **Credential isolation** — upstream OAuth tokens managed by the gateway, not exposed to MCP clients
+
+## Agent Configuration Examples
+
+:::note
+Agent roles are automatically derived from the trust level selected during the user consent flow. The table below shows how different agents might be configured in practice.
+:::
+
+Below is an example of how different agents end up with permissions based on the consent flow:
+
+| Agent (MCP Client) | User | MCP Server | Trust Level Granted | Example Allowed Tools | Example Denied Tools |
+|---------------------|------|------------|--------------------|-----------------------|----------------------|
+| Cursor | alice | `linear_mcp` | Medium | `get_issues`, `create_issue` | `delete_project` |
+| Claude Desktop | alice | `github_mcp` | Low | `list_repos`, `get_file` | `create_issue`, `delete_repo` |
+| VS Code Copilot | bob | `github_mcp` | High | `get_file`, `create_issue`, `delete_repo` | *(none — high includes all)* |
+| Claude Code | carol | `slack_mcp` | Medium | `search_messages`, `send_message` | `remove_member` |
+
+## Dynamic MCPs
+
+Dynamic MCPs allow users to connect to any MCP server URL during consent, not just admin-provisioned servers. For setup instructions, see [Platform: Dynamic MCPs](/permit-mcp-gateway/platform#dynamic-mcps).
+
+**How it works in Permit:** The Consent Service creates per-user resource types for dynamic MCP servers, keyed as `{serverKey}-{userId}` with an `mcp_server_type: "dynamic"` attribute. The host-level toggle is enforced via a `connect_dynamic_mcp` action on the `user_profile` resource.
+
+## Glossary
+
+| Term           | Meaning                                              |
+| -------------- | ---------------------------------------------------- |
+| **MCP**            | Model Context Protocol (tool/agent interoperability) |
+| **Originator**     | Human delegating authority                           |
+| **Agent**          | Autonomous MCP client acting on behalf of the user   |
+| **Host**           | A named gateway instance with its own subdomain, policies, and sessions |
+| **Trust Level**    | Risk classification (low/medium/high) that determines which tools an agent can call |
+| **PDP**            | Policy Decision Point — evaluates authorization requests in real time |
+| **HITL**           | Human-in-the-loop                                    |
+| **ReBAC**          | Relationship-based access control                    |
+| **OPAL**           | Open Policy Administration Layer                     |
+| **OPA**            | Open Policy Agent                                    |

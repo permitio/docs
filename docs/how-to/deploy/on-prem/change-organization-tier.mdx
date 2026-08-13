@@ -1,0 +1,215 @@
+---
+title: "Change Organization Tier (Trial to Enterprise)"
+description: "How to change an organization's tier from Trial to Enterprise by updating the PostgreSQL database"
+---
+
+# Change Organization Tier from Trial to Enterprise
+
+## Automatic Configuration (Recommended)
+
+**As of the latest version**, the on-premise installer **automatically sets all organizations to Enterprise tier** during the migration process. This happens automatically when you:
+- Install Permit Platform for the first time
+- Upgrade an existing installation
+
+The migration job automatically ensures:
+- `is_enterprise = true`
+- `usage_limits.billing_tier = "enterprise"`
+
+**No manual database updates are required** for new installations or upgrades!
+
+## Manual Configuration (Legacy/Troubleshooting)
+
+If you need to manually change an organization's tier (for older installations or troubleshooting), this guide explains how to update the PostgreSQL database directly. This will remove the trial countdown message and update the tier badge in the UI.
+
+## Overview
+
+The organization tier is controlled by two database fields:
+1. **`is_enterprise`** - Controls Enterprise feature access and the tier badge display
+2. **`usage_limits.billing_tier`** - Controls the billing/subscription status and trial countdown
+
+Both fields must be updated to fully change from Trial to Enterprise.
+
+## Prerequisites
+
+- Access to the Kubernetes cluster where Permit Platform is deployed
+- `kubectl` configured with appropriate permissions
+- PostgreSQL pod running in the namespace
+
+## Step-by-Step Instructions
+
+### 1. Connect to the PostgreSQL Pod
+
+First, identify your PostgreSQL pod name:
+
+```bash
+kubectl get pods -n permit-platform | grep postgres
+```
+
+You should see output like:
+```
+postgres-c94f7f6fd-tj55t   1/1     Running   0          2d
+```
+
+### 2. Check Current Organization Status
+
+Connect to the database and check the current organization settings:
+
+```bash
+kubectl exec -n permit-platform <postgres-pod-name> -- \
+  psql -U permit -d permit -c \
+  "SELECT id, name, is_enterprise, usage_limits FROM v2.v2_organization WHERE name = '<org-name>';"
+```
+
+Example output:
+```
+                  id                  |   name   | is_enterprise |                     usage_limits
+--------------------------------------+----------+---------------+-------------------------------------------------------
+ 8cdcc192-0ba3-472f-8691-87d765af715f | gke-test | f             | {"mau": 5000, "tenants": 50, "billing_tier": "trial"}
+```
+
+**Key indicators of Trial status:**
+- `is_enterprise: f` (false)
+- `usage_limits` contains `"billing_tier": "trial"`
+
+### 3. Update Organization to Enterprise Tier
+
+Run the following command to update both fields simultaneously:
+
+```bash
+kubectl exec -n permit-platform <postgres-pod-name> -- \
+  psql -U permit -d permit -c \
+  "UPDATE v2.v2_organization
+   SET is_enterprise = true,
+       usage_limits = jsonb_set(usage_limits, '{billing_tier}', '\"enterprise\"')
+   WHERE id = '<organization-uuid>';"
+```
+
+**Example:**
+```bash
+kubectl exec -n permit-platform postgres-c94f7f6fd-tj55t -- \
+  psql -U permit -d permit -c \
+  "UPDATE v2.v2_organization
+   SET is_enterprise = true,
+       usage_limits = jsonb_set(usage_limits, '{billing_tier}', '\"enterprise\"')
+   WHERE id = '8cdcc192-0ba3-472f-8691-87d765af715f';"
+```
+
+You should see:
+```
+UPDATE 1
+```
+
+### 4. Verify the Changes
+
+Verify that both fields were updated correctly:
+
+```bash
+kubectl exec -n permit-platform <postgres-pod-name> -- \
+  psql -U permit -d permit -c \
+  "SELECT id, name, is_enterprise, usage_limits FROM v2.v2_organization WHERE name = '<org-name>';"
+```
+
+Expected output:
+```
+                  id                  |   name   | is_enterprise |                        usage_limits
+--------------------------------------+----------+---------------+------------------------------------------------------------
+ 8cdcc192-0ba3-472f-8691-87d765af715f | gke-test | t             | {"mau": 5000, "tenants": 50, "billing_tier": "enterprise"}
+```
+
+**Verify:**
+- `is_enterprise: t` (true) ✓
+- `usage_limits` contains `"billing_tier": "enterprise"` ✓
+
+### 5. Check the UI
+
+Refresh your browser or clear the cache to see the changes:
+
+**Before:**
+- Badge: "PRO"
+- Message: "14 days left in Pro Trial"
+
+**After:**
+- Badge: "ENTERPRISE"
+- Message: (no trial countdown)
+
+## Alternative: Update to PRO Tier
+
+To update to PRO tier instead of Enterprise:
+
+```bash
+kubectl exec -n permit-platform <postgres-pod-name> -- \
+  psql -U permit -d permit -c \
+  "UPDATE v2.v2_organization
+   SET is_enterprise = false,
+       usage_limits = jsonb_set(usage_limits, '{billing_tier}', '\"pro\"')
+   WHERE id = '<organization-uuid>';"
+```
+
+Note: Set `is_enterprise = false` for PRO tier, `is_enterprise = true` for Enterprise tier.
+
+## Understanding the Database Fields
+
+### `is_enterprise` (boolean)
+- **`false`** - Organization has PRO tier features
+- **`true`** - Organization has Enterprise tier features
+- Controls feature flags and tier badge display
+
+### `usage_limits` (JSONB)
+Contains various limits and billing information:
+```json
+{
+  "mau": 5000,           // Monthly Active Users limit
+  "tenants": 50,         // Tenant limit
+  "billing_tier": "trial" // Billing status: "trial", "pro", or "enterprise"
+}
+```
+
+The `billing_tier` field specifically controls:
+- Trial countdown messages
+- Billing status in the UI
+- Upgrade prompts
+
+## Important Notes
+
+1. **Both fields are required** - Changing only `is_enterprise` will not remove the trial countdown
+2. **UI refresh needed** - You may need to clear browser cache or hard refresh to see changes
+3. **Backup recommended** - Consider backing up the database before making changes
+4. **Case sensitive** - The tier values are lowercase: `"trial"`, `"pro"`, `"enterprise"`
+
+## Troubleshooting
+
+### Changes not visible in UI
+- Hard refresh the browser (Ctrl+Shift+R or Cmd+Shift+R)
+- Clear browser cache
+- Log out and log back in
+
+### Cannot find organization
+List all organizations to find the correct name or ID:
+```bash
+kubectl exec -n permit-platform <postgres-pod-name> -- \
+  psql -U permit -d permit -c \
+  "SELECT id, name, key, is_enterprise FROM v2.v2_organization;"
+```
+
+### Permission denied
+Ensure you have proper kubectl permissions and the PostgreSQL user has write access.
+
+## Database Schema Reference
+
+**Table:** `v2.v2_organization`
+
+**Key Columns:**
+- `id` (uuid) - Primary key
+- `name` (text) - Organization name
+- `key` (text) - Organization key
+- `is_enterprise` (boolean) - Enterprise tier flag
+- `usage_limits` (jsonb) - Usage limits and billing tier
+- `settings` (jsonb) - Additional settings
+- `created_at` (timestamp with time zone)
+- `updated_at` (timestamp with time zone)
+
+## See Also
+
+- [On-Premise Installation Guide](./installation.mdx)
+- [On-Premise Troubleshooting](./troubleshooting.mdx)
+- [On-Premise Reference](./reference.mdx)

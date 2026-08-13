@@ -1,5 +1,29 @@
 import React from "react";
 
+export const mcpGatewayRow = [
+  {
+    type: "link",
+    href: "/permit-mcp-gateway",
+    label: "MCP Gateway",
+    svgIcon: <i className="ri-shield-keyhole-line ri-xl !text-[#F39C12]"></i>,
+    description: "Secure any MCP server with auth, consent, and audit — no code changes",
+  },
+  {
+    type: "link",
+    href: "/permit-mcp-gateway/guide",
+    label: "Getting Started",
+    svgIcon: <i className="ri-rocket-2-line ri-xl !text-[#F39C12]"></i>,
+    description: "Set up your first gateway and make an authorized tool call in minutes",
+  },
+  {
+    type: "link",
+    href: "/permit-mcp-gateway/demos",
+    label: "Demos & Examples",
+    svgIcon: <i className="ri-play-circle-line ri-xl !text-[#F39C12]"></i>,
+    description: "Step-by-step walkthroughs with Linear, n8n, and more",
+  },
+];
+
 export const firstRow = [
   {
     type: "link",
