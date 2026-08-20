@@ -83,13 +83,13 @@ function CodeBlock({ folderPath }) {
   useEffect(() => {
     const fetchFiles = async () => {
       const files = await Promise.all(
-        filesTree[folderPath].map((key) => import(`!raw-loader!../../sdks${folderPath}/${key}`))
+        filesTree[folderPath].map((key) => import(`!raw-loader!../../sdks${folderPath}/${key}`)),
       );
       setFilteredFiles(
         files.map((file, index) => ({
           name: filesTree[folderPath][index],
           content: file.default,
-        }))
+        })),
       );
     };
     fetchFiles();

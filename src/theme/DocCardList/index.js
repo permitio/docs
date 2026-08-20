@@ -1,4 +1,3 @@
-/* eslint-disable spellcheck/spell-checker */
 import React from "react";
 import clsx from "clsx";
 import { useCurrentSidebarCategory, filterDocCardListItems } from "@docusaurus/theme-common";
@@ -20,7 +19,7 @@ export default function DocCardList(props) {
         className,
         ` flex flex-col md:grid gap-6 ${cols === 2 ? "md:grid-cols-2" : ""} ${
           cols === 3 ? "md:grid-cols-3" : ""
-        }`
+        }`,
       )}
     >
       {filteredItems.map((item, index) => (
@@ -28,7 +27,7 @@ export default function DocCardList(props) {
           key={index}
           className={clsx(
             `${articleClassName ? articleClassName : "col col--6 margin-bottom--lg"}`,
-            "w-full max-w-full"
+            "w-full max-w-full",
           )}
         >
           <DocCard item={item} />
