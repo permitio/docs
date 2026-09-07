@@ -379,6 +379,7 @@ const sidebars = {
             "concepts/pdp/configuration",
             "concepts/pdp/cloud-pdp-capabilities",
             "concepts/pdp/cloud-pdp-benchmarks",
+            "concepts/pdp/new-edge-pdp",
             "how-to/manage-data/local-facts-uploader",
           ],
         },

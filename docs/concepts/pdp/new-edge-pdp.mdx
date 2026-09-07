@@ -1,0 +1,436 @@
+---
+title: New Edge PDP
+sidebar_label: New Edge PDP
+description: A single-binary PDP with an embedded database that keeps a local copy of your policy and authorization data in sync over a durable event stream — no network in the decision path.
+sidebar_position: 4
+---
+
+# New Edge PDP
+
+**A single-binary Policy Decision Point with an embedded database, kept in sync over a durable event stream.**
+
+The **New Edge PDP** is a ground-up rewrite of the PDP runtime, shipped as `permitio/pdp-v3`. It runs one container per Permit environment, holds a **local, on-disk copy** of that environment's policy and authorization data, and answers authorization queries with **no network call in the decision path**.
+
+:::note Availability
+The New Edge PDP is a **new deployment option**, not a replacement. The existing [Edge PDP](/concepts/pdp/overview#run-an-edge-pdp-with-docker) (`permitio/pdp-v2`) remains fully supported and continues to be the right choice for the capabilities listed under [Feature support](#feature-support) below.
+
+It is currently in early access and enabled per account. [Contact us](mailto:support@permit.io) to have it turned on.
+:::
+
+---
+
+## Why a new runtime
+
+Today's Edge PDP keeps your authorization data inside OPA's in-memory document, and refreshes it by reacting to a notification and then **fetching the changed data back from Permit's API**. That design is proven, but it has three structural ceilings:
+
+- **Memory scales with your data.** Because the fact graph lives in memory, a large environment needs a large PDP — which is why sharding exists for the biggest data sets.
+- **Every update costs a round trip.** A notification tells the PDP *that* something changed; a second call is needed to find out *what*.
+- **Catching up after a disconnect is a re-fetch.** There is no server-side record of precisely what a given PDP has and hasn't seen.
+
+The New Edge PDP changes all three. Data lives in an **embedded on-disk database**, updates **arrive already containing the change**, and the control plane **durably retains** each PDP's unacknowledged changes until that specific PDP confirms it applied them.
+
+---
+
+## Architecture
+
+Everything runs inside one container. The only externally exposed listeners are the authorization API and the health endpoint.
+
+```mermaid
+flowchart LR
+    subgraph VPC["Your VPC / network"]
+        apps["Your app / service<br/>(Permit SDK)"]
+        probes["Your orchestrator<br/>(liveness and readiness probes)"]
+
+        subgraph EDGE["New Edge PDP — one container per Permit environment"]
+            public["Authorization API<br/>:7000 — opens once ready<br/>bearer: PDP_API_KEY"]
+            opa["OPA policy engine<br/>supervised child"]
+            health["Health and readiness<br/>:7001"]
+            queryloop["Query loopback<br/>127.0.0.1:7002 — graph data"]
+            bundleloop["Bundle loopback<br/>127.0.0.1:7003 — Rego bundle"]
+            edgedb[("Embedded database<br/>SurrealDB + RocksDB<br/>persistent volume")]
+            ingest["Change ingest and repair<br/>applies changes; self-heals"]
+            leaf["NATS leaf<br/>supervised child<br/>durable JetStream"]
+        end
+    end
+
+    permit["Permit.io<br/>app.permit.io · api.permit.io"]
+    git["Policy Store<br/>your own Git service"]
+
+    apps -->|"Authorize (REST)"| public
+    public -->|"Evaluate"| opa
+    probes -->|"Probes"| health
+    opa -->|"Graph data"| queryloop
+    opa -->|"Policy bundle"| bundleloop
+    queryloop -->|"Reads"| edgedb
+    leaf -->|"Policy KV"| bundleloop
+    leaf -->|"Change stream"| ingest
+    ingest -->|"Applies"| edgedb
+    permit -->|"Event channel (WSS :443)"| leaf
+    opa -->|"Decision logs (HTTPS)"| permit
+    permit -->|"Policy as code (SSH)"| git
+```
+
+### What runs where
+
+| Component | Kind | Role |
+| --- | --- | --- |
+| **Authorization API** | In-process | The public REST surface on port `7000`. Opens **only once the PDP is ready**. |
+| **OPA policy engine** | Supervised child process | Evaluates Rego. Bound to loopback only — never reachable from outside the container. |
+| **Embedded database** | In-process (SurrealDB over RocksDB) | Your environment's fact graph — users, tenants, resource instances, relationships — **on disk**. |
+| **NATS leaf node** | Supervised child process | Durable, on-disk event store. Holds the link to Permit's control plane. |
+| **Change ingest and repair** | In-process task | Applies incoming changes to the embedded database; detects and repairs gaps. |
+| **Query / bundle loopbacks** | In-process | Serve OPA its graph data and its policy bundle over `127.0.0.1`. |
+| **Health and readiness** | In-process | Port `7001`. Answers throughout startup, including a long cold start. |
+
+### The decision path
+
+```
+client → :7000 authorization API
+       → 127.0.0.1 OPA
+       → 127.0.0.1 query loopback
+       → embedded database (local disk)
+```
+
+Every hop is loopback or local disk. **No step in answering an authorization query contacts Permit's API**, by construction — the New Edge PDP has no control plane other than its event stream, and cannot reach `api.permit.io` for a decision even if it wanted to.
+
+---
+
+## How policy and data stay in sync
+
+The container's NATS leaf node holds a persistent link to Permit's control plane and **sources** four independent planes onto local, on-disk storage:
+
+| Plane | Carries |
+| --- | --- |
+| **Change stream** | Transactions of authorization facts — users, tenants, resource instances, relationship tuples |
+| **Policy files** | The compiled Rego bundle OPA evaluates |
+| **Policy schema** | Role and permission definitions from your policy |
+| **Snapshot** | A one-shot bulk transfer, used only during cold start |
+
+Each change arrives as a **transaction** — an ordered set of operations with a timestamp and a transaction ID — rather than as a "something changed, come and fetch it" signal. The data is in the message.
+
+### Retention is per-PDP, and server-side
+
+Each PDP has its own durable position in the change stream. The control plane **retains a change until that specific PDP has acknowledged applying it** — so a PDP that is restarting, disconnected, or slow does not lose updates, and does not need to re-fetch its whole data set to catch up. Interest is held by the subscription's *existence*, not by an open connection; a PDP that is disconnected for minutes resumes exactly where it left off.
+
+### Self-healing
+
+Two background tasks keep the local copy honest:
+
+- **A gap detector** compares the PDP's position in the change stream against the oldest change the control plane still holds. If the PDP has fallen so far behind that the stream can no longer bridge the difference, it signals for a rebuild.
+- **A rebuild orchestrator** then builds a fresh copy of the database **in a side directory** and swaps it in atomically.
+
+Crucially, **the PDP keeps answering from the existing database while the rebuild runs**. The public port is never re-bound, no request is refused, and no decision waits on the rebuild. Staleness is surfaced on the health endpoint rather than turned into errors.
+
+:::info Design principle
+The New Edge PDP **serves stale before it serves nothing**. A control-plane outage costs you freshness, never availability — decisions keep flowing from the local copy indefinitely.
+:::
+
+---
+
+## Consistency
+
+Consistency is a property of the design rather than something you configure.
+
+**Three mechanisms combine:**
+
+1. **A durably ordered log.** Changes are carried on an ordered, persisted stream. Nothing is dropped, and nothing is trimmed before every PDP that needs it has confirmed it.
+
+2. **Order-independent application.** Each fact carries `(timestamp, transaction id)`, and a write is applied **only if it is strictly newer than what is already stored**. Because the merge rule is convergent, the final state does not depend on the order in which changes were applied — which is what makes it safe to apply several transactions concurrently without risking a stale write landing on top of a fresh one.
+
+3. **Per-transaction atomicity.** All operations within a transaction are applied together, so a decision never observes half of a multi-part change.
+
+Together these give **convergence by construction**: two PDPs in the same environment that have seen the same set of changes hold the same state, regardless of the order or timing in which they received them, and re-delivering a change that was already applied is a no-op.
+
+:::note What this does and does not guarantee
+The consistency model is **eventual, with a convergent merge**. It guarantees that PDPs converge, that no update is lost, and that replays are safe.
+
+It does **not** provide read-your-own-writes. There is no local write API — the New Edge PDP is read-only with respect to your data, and a fact written through Permit's API becomes visible once it propagates. If you need write-then-immediately-read semantics, use the existing Edge PDP's [local facts uploader](/how-to/manage-data/local-facts-uploader).
+
+A PDP that restarts with a backlog becomes ready and begins serving while it is still catching up. Whether it is serving stale data, and by how long, is reported on the health endpoint.
+:::
+
+---
+
+## Propagation latency
+
+The sync path is structurally shorter than the existing Edge PDP's:
+
+| | Edge PDP (`pdp-v2`) | New Edge PDP (`pdp-v3`) |
+| --- | --- | --- |
+| Change notification | WebSocket notification | Push delivery on a durable per-PDP subscription |
+| Data fetch | **A second call back to Permit's API** | None — the change travels *in* the message |
+| Round trips per change | 2 or more | 1 |
+| Missed while offline | Reconnect, then re-fetch | Retained server-side; resumes at its exact position |
+| Calls to `api.permit.io` | Per update | **Never** |
+
+Removing the fetch leg removes both a round trip and a dependency: propagation no longer depends on the PDP being able to reach Permit's API, only on the event stream.
+
+:::caution Numbers not yet published
+Permit has not yet published measured propagation-latency figures for the New Edge PDP. The improvement described above is architectural. If you have a latency target to validate against, [talk to us](mailto:support@permit.io) before designing around a specific number.
+:::
+
+---
+
+## Cold start and warm resume
+
+The PDP decides which path to take from the state of its persistent volume.
+
+### Warm resume — a restart with an intact volume
+
+The embedded database, the event store, and every subscription position are already on disk. The PDP reopens the database and resumes applying changes **from its last acknowledged position**. There is no snapshot transfer and no re-fetch.
+
+This is the normal case for a pod restart, a rolling update, or a short disconnection — and it is the path that benefits most from the design, because a disconnected PDP's changes were retained for it rather than discarded.
+
+### Cold start — first boot, or an unbridgeable gap
+
+On a genuinely fresh PDP — or when the gap detector determines the change stream can no longer bridge the difference — the PDP requests a **snapshot** of its environment.
+
+The snapshot is not a stream of individual records. It is a set of **pre-built database files**, transferred in chunks, checksum-verified, and then **bulk-loaded directly into the storage engine** — bypassing the normal per-record write path entirely. The snapshot also carries the Rego bundle and policy schema, so a cold-started PDP comes up with policy and data together.
+
+The boundary between the two is exact: the snapshot records the precise stream position it was cut at, and the PDP resumes the change stream from the very next change. Nothing is applied twice in a way that matters, and nothing is skipped.
+
+A checksum mismatch, a missing chunk, or an empty snapshot is **fail-closed** — the PDP refuses to come up on a partial data set rather than serving decisions against one.
+
+:::caution Cold start is not fast — plan probes accordingly
+A cold start transfers and loads the environment's entire data set. Permit's own CI observes **84 seconds to roughly 4 minutes** for this on test environments, and larger environments will take longer.
+
+The health endpoint answers throughout, so **set a generous startup probe** and let readiness — not liveness — gate traffic. The authorization port does not open until the PDP is ready, so there is no window in which it accepts a request it cannot answer correctly.
+:::
+
+---
+
+## Running at high volume
+
+What makes the New Edge PDP suitable for high request rates is mostly what it *doesn't* do per request:
+
+- **No network in the decision path** — every hop is loopback or local disk.
+- **No control-plane call to authenticate** — the API key is verified against the PDP's own key in constant time. Permit's API is never contacted to authorize a request.
+- **No dependency on Permit's availability** — a control-plane outage affects freshness, not throughput or availability.
+- **Reads do not contend with syncing** — incoming changes are applied to the embedded database concurrently and independently of the request path.
+- **The same evaluation core as the managed Cloud PDP**, which is already tuned for large-scale checks.
+
+:::caution Numbers not yet published
+As with propagation latency, Permit has not published measured throughput figures for the New Edge PDP. The [Cloud PDP benchmarks](/concepts/pdp/cloud-pdp-benchmarks) measure a different deployment and should not be read as New Edge PDP numbers.
+:::
+
+---
+
+## Resource footprint
+
+The New Edge PDP changes **where** your authorization data lives, and that is the change that matters for sizing.
+
+| | Edge PDP (`pdp-v2`) | New Edge PDP (`pdp-v3`) |
+| --- | --- | --- |
+| Fact graph | In OPA's **in-memory** document | **On disk**, in an embedded database |
+| Memory vs. data size | Scales with your data set | Bounded by a configurable cache |
+| Processes | Python API server + OPAL client + OPA | Native binary + NATS leaf + OPA |
+| Language runtime | CPython | None — compiled binary |
+| Persistent storage | Not required | **Required** |
+
+The architectural consequence is that **memory stops scaling linearly with your data set**. On the existing Edge PDP, a large environment needs a large PDP, and very large data sets need sharding. On the New Edge PDP, the data set lives on disk and memory is governed by the database's cache size, which you control.
+
+:::caution Size generously to start, then tune
+The New Edge PDP's **default** configuration is not tuned for a small footprint. It inherits cloud-scale storage-engine defaults — a 512 MiB block cache and a 256 MiB write buffer — so a container given only a few hundred MiB will be OOM-killed on startup. Permit currently sizes it at **4 GiB** of memory.
+
+If you need a smaller footprint, tune the storage engine directly:
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `SURREAL_ROCKSDB_BLOCK_CACHE_SIZE` | `536870912` (512 MiB) | Read cache. The single largest lever on resident memory. |
+| `SURREAL_ROCKSDB_WRITE_BUFFER_SIZE` | `268435456` (256 MiB) | In-memory write buffer before flushing to disk. |
+| `SURREAL_ROCKSDB_MAX_WRITE_BUFFER_NUMBER` | `32` | How many write buffers may exist at once. |
+| `SURREAL_ROCKSDB_BACKGROUND_THREADS` | `4` | Background compaction threads. |
+
+Benchmark against your own data set before committing to a size.
+:::
+
+### Disk
+
+Two paths must be on persistent storage — the embedded database and the event store. Size for **roughly twice your data set**, plus headroom: during a rebuild, two generations of the database exist side by side until the new one is swapped in.
+
+---
+
+## Feature support
+
+The New Edge PDP is **wire-compatible on the endpoints it implements** — same paths, same request and response shapes, so existing SDK integrations that use those endpoints work unchanged. But it implements a **subset** of the existing Edge PDP's surface.
+
+Its capability envelope is that of the **managed Cloud PDP, deployed in your own network** — not a port of the `pdp-v2` container.
+
+### Supported
+
+| Capability | Endpoint |
+| --- | --- |
+| **RBAC** | — |
+| **ReBAC**, including role derivation | — |
+| **Multi-tenancy** | — |
+| [Check](/how-to/enforce-permissions/check) | `POST /allowed` |
+| [Bulk check](/how-to/enforce-permissions/bulk-check) | `POST /allowed/bulk` |
+| [User permissions](/how-to/enforce-permissions/user-permissions) | `POST /user-permissions` |
+| [Authorized users](/how-to/enforce-permissions/authorized-users) | `POST /authorized_users` |
+| AuthZen access evaluation | `POST /access/v1/evaluation` |
+| AuthZen bulk evaluations | `POST /access/v1/evaluations` |
+| AuthZen subject / resource / action search | `POST /access/v1/search/{subject,resource,action}` |
+| AuthZen discovery | `GET /.well-known/authzen-configuration` |
+| Decision logs to Permit | — |
+| Health and readiness | `GET /health`, `GET /healthy` |
+
+### Not supported
+
+Use the existing [Edge PDP](/concepts/pdp/overview#run-an-edge-pdp-with-docker) if you need any of these:
+
+| Not supported | Notes |
+| --- | --- |
+| **ABAC** — attribute-based access control | Condition sets, user sets, and resource sets are not evaluated. A check against an ABAC policy returns a deny. |
+| **Policy-as-Code / custom OPA bundles** | Per-environment Rego bundle publishing is not available yet. |
+| [**All-tenants check**](/how-to/enforce-permissions/all-tenants-check) | `POST /allowed/all-tenants` is not served. |
+| [**Data filtering**](/how-to/enforce-permissions/data-filtering) via partial evaluation | Graph-based filtering through `/user-permissions` and `/authorized_users` **is** available. |
+| [**URL-based enforcement**](/how-to/enforce-permissions/url-mapping/url-mapping-check) | `POST /allowed_url` is not served. |
+| **Local facts / read-your-own-writes** | There is no local write API. |
+| [**Local enforcement APIs**](/how-to/enforce-permissions/list-role-assignments) | `/local/*` endpoints are not served. |
+| **Custom data sources** | The change stream is the only data plane. |
+| **Kong and nginx integration endpoints** | — |
+| **Envoy ext-authz / proxy mode** | — |
+| **`/metrics` endpoint** | See [Observability](#observability). |
+| **Offline / air-gapped first boot** | A PDP that cannot reach the control plane at first boot cannot start. Once started, it survives outages indefinitely. |
+
+---
+
+## Observability
+
+### Health and readiness
+
+Three endpoints on the management port (`7001`):
+
+| Endpoint | Auth | Behavior |
+| --- | --- | --- |
+| `GET /health` | None | Always `200`. Reports per-component status. Answers throughout startup. |
+| `GET /health/ready` | None | `200` only when every gating component is up, otherwise `503`. |
+| `GET /health/detail` | `PDP_API_KEY` bearer | Full diagnostic detail per component. |
+
+Wire **liveness** to `/health` and **readiness** to `/health/ready`. Nine components gate readiness — the control-plane link, each of the four sync planes, the embedded database, OPA, and both loopbacks.
+
+`/health/detail` is where you diagnose a lagging or stale PDP: it reports child-process restart counts and exit codes, the PDP's position in the change stream against the control plane's oldest retained change, whether the PDP is currently **serving stale** data and for how long, and whether decision-log shipping is healthy.
+
+:::note Staleness never blocks decisions
+Neither staleness nor decision-log failures gate readiness. A PDP that cannot ship its audit logs keeps answering authorization queries — the design deliberately refuses to trade the primary function for the secondary one.
+:::
+
+### Logs
+
+Structured logs go to stdout at `INFO` by default; `RUST_LOG` overrides (`info,edge_pdp=debug` is a good verbose setting). Both child processes' output is captured and re-emitted on the main log stream with attribution and correct log levels, so container logs are the single place to look.
+
+:::warning Child debug levels expose data
+`EDGE_NATS_LOG_LEVEL=trace` logs raw message payloads — which means **your authorization data** — and `EDGE_OPA_LOG_LEVEL=debug` logs authorization request and response bodies. Use these only for short, deliberate debugging sessions.
+:::
+
+### Decision logs
+
+Decision logs ship from the OPA child directly to Permit over HTTPS, batched, with a bounded in-memory buffer. They require **both** that decision logging is enabled for your environment in Permit **and** that `EDGE_DECISION_LOG_OPT_OUT` is not set — the local setting can only turn logging off, never on.
+
+:::caution OpenTelemetry is not available yet
+The New Edge PDP **does not currently export OpenTelemetry traces, metrics, or logs**, and does not read `OTEL_*` environment variables. It also does not serve a `/metrics` endpoint.
+
+Observability today is structured stdout logs plus the health endpoints described above. If OTLP export is a requirement for your deployment, [let us know](mailto:support@permit.io) — it is a known gap rather than a design decision.
+:::
+
+---
+
+## Configuration
+
+### Required
+
+| Variable | Description |
+| --- | --- |
+| `PDP_API_KEY` | Your environment-level Permit API key. This single value binds the container to one environment, authenticates it to the control plane, and is the bearer token the authorization API accepts. |
+| `PDP_CONTROL_PLANE` | The control-plane endpoint. **See the warning below — this is not the same kind of value as on `pdp-v2`.** |
+
+:::warning `PDP_CONTROL_PLANE` means something different here
+On the existing Edge PDP, `PDP_CONTROL_PLANE` is an **HTTPS API base URL** (`https://api.permit.io`).
+
+On the New Edge PDP it is the **event-stream endpoint**, and it must be a bare host and port with **no path and no trailing slash** — for example `wss://control-plane.permit.io:443`. Copying the `pdp-v2` value across will not work.
+
+Permit will give you the correct value for your account when the New Edge PDP is enabled.
+:::
+
+### Storage and ports
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `EDGE_DB_PATH` | `/var/lib/edge-pdp/db` | Embedded database directory. **Must be on a persistent volume.** |
+| `EDGE_DATA_DIR` | `/var/lib/edge-pdp` | Event store and generated credentials. **Must be on a persistent volume.** |
+| `EDGE_PUBLIC_PORT` | `7000` | Authorization API. The only port your services need. |
+| `EDGE_HEALTH_PORT` | `7001` | Health and readiness. |
+
+Ports `7002`, `7003`, `8181`, `4222`, and `8222` are used internally and bind to loopback only. Expose **`7000` and `7001`** and nothing else.
+
+### Behavior and tuning
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `RUST_LOG` | `info` | Log level. Try `info,edge_pdp=debug` when debugging. |
+| `PDP_DEBUG` | `false` | Include debug detail in authorization responses. |
+| `OPA_TIMEOUT_MS` | `800` | Per-request evaluation timeout. |
+| `EDGE_PARALLELISM` | `4` | How many change transactions are applied concurrently. |
+| `EDGE_DECISION_LOG_OPT_OUT` | `false` | Set to `true` to stop shipping decision logs. |
+| `EDGE_NATS_LOG_LEVEL` | follows `RUST_LOG` | Control-plane client log level. See the warning above. |
+| `EDGE_OPA_LOG_LEVEL` | follows `RUST_LOG` | OPA log level. See the warning above. |
+| `EDGE_DRAIN_TIMEOUT_SECS` | `10` | Shutdown drain budget. |
+| `EDGE_CHILD_TERMINATION_TIMEOUT_SECS` | `30` | Child-process shutdown budget. |
+
+---
+
+## Deployment requirements
+
+The New Edge PDP has real operational requirements that the existing Edge PDP does not. Read these before deploying.
+
+**Persistent storage is mandatory.** Both `EDGE_DB_PATH` and `EDGE_DATA_DIR` must survive restarts. On ephemeral storage, every restart becomes a full cold start — minutes of startup, and a full snapshot transfer each time.
+
+**Set `terminationGracePeriodSeconds` to at least 40.** It must be at least `EDGE_DRAIN_TIMEOUT_SECS + EDGE_CHILD_TERMINATION_TIMEOUT_SECS`, which is 40 seconds at defaults. If the grace period is too short, the container is killed mid-flush and the durable event store is corrupted — forcing a cold start on the next boot.
+
+**Set a generous startup probe.** Cold start can take minutes. Point liveness at `/health` and readiness at `/health/ready`, and give startup enough headroom that a first boot is not killed as a hang.
+
+**Run one container per Permit environment.** The API key binds the container to exactly one environment; there is no multi-environment mode.
+
+**Memory: start at 4 GiB.** See [Resource footprint](#resource-footprint) for tuning.
+
+**Runs as non-root** (uid/gid `10001`). Ensure your mounted volumes are writable by that user.
+
+:::tip Running locally on macOS
+Port `7000` collides with AirPlay Receiver on macOS. Map it to a different host port, for example `-p 7766:7000`, and point your SDK at `http://localhost:7766`.
+:::
+
+---
+
+## Security model
+
+**Requests are authenticated against the container's own key.** The bearer token on an authorization request is compared, in constant time, against the container's `PDP_API_KEY`. Permit's API is **never** contacted to authenticate or authorize a request — the code that could do so is not compiled into this binary at all.
+
+**One container serves exactly one environment.** The environment is fixed at startup from the API key. A valid key for a *different* environment does not authenticate, and there is no code path by which a caller can steer a request at data outside the container's own environment.
+
+**Credentials never reach the child processes.** Both OPA and the NATS leaf are started with a cleared environment; only the specific variables each one needs are re-added. Credential files are written `0600` with protections against symlink attacks from other containers sharing the volume, and are referenced by path rather than inlined into any generated config.
+
+**The blast radius of a compromised PDP is one environment's data.** It holds no credential that grants access to any other environment, and no ability to reach Permit's management API.
+
+---
+
+## Choosing between the two
+
+| Choose the **existing Edge PDP** when you need | Choose the **New Edge PDP** when you need |
+| --- | --- |
+| ABAC, condition sets, user or resource sets | The largest data sets, without sharding |
+| Policy-as-Code / custom Rego bundles | Bounded, tunable memory rather than memory that scales with data |
+| Read-your-own-writes / local facts | Decisions that never depend on reaching Permit's API |
+| Data filtering via partial evaluation | Sync that survives long disconnections without a re-fetch |
+| URL-based enforcement, Kong, or ext-authz | Fewer moving parts — one binary, no Python runtime |
+| An OpenTelemetry or `/metrics` pipeline, or deployment without persistent storage | Observability through structured logs and detailed health endpoints |
+
+Both connect to the same Permit environment and enforce the same policies you author in Permit. You can run them side by side while you evaluate.
+
+---
+
+## Related documentation
+
+- [PDP Overview](/concepts/pdp/overview) — deployment models for the existing Edge PDP
+- [Cloud PDP Capabilities](/concepts/pdp/cloud-pdp-capabilities) — the managed PDP's capability envelope, which the New Edge PDP mirrors
+- [PDP Configuration](/concepts/pdp/configuration) — configuration reference for the existing Edge PDP
+- [Monitoring PDPs](/how-to/monitoring-pdps) — fleet visibility in the Permit dashboard
