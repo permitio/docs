@@ -21,54 +21,40 @@ It is currently in early access and enabled per account. [Contact us](mailto:sup
 
 ## Why a new runtime
 
-The container PDP keeps your authorization data inside OPA's in-memory document, and refreshes it by reacting to a notification and then **fetching the changed data back from Permit's API**. That design is proven, but it has three structural ceilings:
+The container PDP holds your authorization data inside OPA, and **OPA's data store is a single in-memory JSON document**. That one design choice sets two ceilings.
 
-- **Memory scales with your data.** Because the fact graph lives in memory, a large environment needs a large PDP — which is why sharding exists for the biggest data sets.
-- **Every update costs a round trip.** A notification tells the PDP *that* something changed; a second call is needed to find out *what*.
-- **Catching up after a disconnect is a re-fetch.** There is no server-side record of precisely what a given PDP has and hasn't seen.
+### It is not a graph store
 
-The New Edge PDP changes all three. Data lives in an **embedded on-disk database**, updates **arrive already containing the change**, and the control plane **durably retains** each PDP's unacknowledged changes until that specific PDP confirms it applied them.
+A JSON document has no indexes and no concept of edges. It cannot be optimized for graph traversal, or for the granular, relationship-heavy queries that ReBAC and derived roles depend on — questions like *"does this user reach this resource through some chain of roles and relationships?"*
+
+The New Edge PDP moves those questions out of the JSON document entirely. Relationship data lives in an embedded database built for graph traversal, and OPA queries it over a local loopback while it evaluates policy. Policy evaluation and graph traversal each run on something designed for the job.
+
+### It is expensive in memory
+
+Because the fact graph lives in memory, a large environment needs a large PDP. OPA's own documentation is direct about the cost:
+
+> Memory usage scales with the size of the policy (i.e., Rego) and data (e.g., JSON) that you load into OPA. Raw JSON data loaded into OPA uses approximately 20x more memory compared to the same data stored in a compact, serialized format (e.g., on disk).
+>
+> — [OPA documentation: Policy Performance](https://www.openpolicyagent.org/docs/policy-performance)
+
+The New Edge PDP stores exactly that compact, serialized form on disk, and keeps a bounded cache in memory. Memory becomes a number you set rather than a function of how much data your environment holds.
+
+### Updates cost a round trip
+
+There is a third ceiling, in how data arrives rather than where it lives. The container PDP refreshes by reacting to a notification and then **fetching the changed data back from Permit's API**. A notification says *that* something changed; a second call is needed to find out *what*. And catching up after a disconnect means re-fetching, because there is no server-side record of what a given PDP has and hasn't seen.
+
+On the New Edge PDP, updates **arrive already containing the change**, and the control plane **durably retains** each PDP's unacknowledged changes until that specific PDP confirms it applied them.
 
 ---
 
-## Architecture
+## What it gives you
 
-Everything runs inside one container. The only externally exposed listeners are the authorization API and the health endpoint.
+- **Decisions that never leave the container.** Every hop in the request path is loopback or local disk, so no authorization query depends on reaching Permit.
+- **Memory you control.** The data set lives on disk; a configurable cache bounds what is resident.
+- **Sync that survives disconnection.** Changes are retained per-PDP, server-side, until that PDP acknowledges them — no re-fetch on reconnect.
+- **Availability over freshness.** A control-plane outage costs you freshness, never the ability to answer. The PDP serves from its local copy indefinitely, and reports how stale it is.
 
-![Architecture of the New Edge PDP: your app and orchestrator on the left, the single New Edge PDP container holding the authorization API, OPA, the health server, the query and bundle loopbacks, the embedded database, the change-ingest worker and the NATS leaf, with Permit.io and your policy store on the right](/images/pdp/new-edge-pdp-architecture.svg)
-
-<p style={{textAlign: "center", fontSize: "0.9em", opacity: 0.75, marginTop: "-0.5em"}}>
-  Click the diagram to enlarge it.
-</p>
-
-:::note Reading the diagram
-The diagram labels the change stream by its internal name, the **WAL** (write-ahead log). `LOCAL_WAL` is this container's own durable copy of it. Elsewhere in these pages it is called the *change stream*.
-:::
-
-### What runs where
-
-| Component | Kind | Role |
-| --- | --- | --- |
-| **Authorization API** | In-process | The public REST surface on port `7000`. Opens **only once the PDP is ready**. |
-| **OPA policy engine** | Supervised child process | Evaluates Rego. Bound to loopback only — never reachable from outside the container. |
-| **Embedded database** | In-process (SurrealDB over RocksDB) | Your environment's fact graph — users, tenants, resource instances, relationships — **on disk**. |
-| **NATS leaf node** | Supervised child process | Durable, on-disk event store. Holds the link to Permit's control plane. |
-| **Change ingest and repair** | In-process task | Applies incoming changes to the embedded database; detects and repairs gaps. |
-| **Query / bundle loopbacks** | In-process | Serve OPA its graph data and its policy bundle over `127.0.0.1`. |
-| **Health and readiness** | In-process | Port `7001`. Answers throughout startup, including a long cold start. |
-
-### The decision path
-
-```
-client → :7000 authorization API
-       → 127.0.0.1 OPA
-       → 127.0.0.1 query loopback
-       → embedded database (local disk)
-```
-
-Every hop is loopback or local disk. **No step in answering an authorization query contacts Permit's API**, by construction — the New Edge PDP has no control plane other than its event stream, and cannot reach `api.permit.io` for a decision even if it wanted to.
-
-For how data reaches that database and what consistency it gives you, see [How It Works](./new-edge-pdp-how-it-works).
+See [Architecture](./new-edge-pdp-architecture) for what runs inside the container, and [How It Works](./new-edge-pdp-how-it-works) for how the local copy is kept current.
 
 ---
 
@@ -76,8 +62,8 @@ For how data reaches that database and what consistency it gives you, see [How I
 
 | Choose the **container PDP** when you need | Choose the **New Edge PDP** when you need |
 | --- | --- |
-| ABAC, condition sets, user or resource sets | The largest data sets, without sharding |
-| Policy-as-Code / custom Rego bundles | Bounded, tunable memory rather than memory that scales with data |
+| ABAC, condition sets, user or resource sets | Large data sets without a large memory footprint |
+| Policy-as-Code / custom Rego bundles | Relationship queries served from a graph-capable store |
 | Read-your-own-writes / local facts | Decisions that never depend on reaching Permit's API |
 | URL-based enforcement or Kong integration | Sync that survives long disconnections without a re-fetch |
 | Custom data sources | To drop the Python and OPAL layer entirely |
@@ -91,6 +77,7 @@ See [Feature Parity](./new-edge-pdp-feature-parity) for the full comparison.
 
 ## Related documentation
 
+- [Architecture](./new-edge-pdp-architecture) — what runs inside the container and the request path
 - [How It Works](./new-edge-pdp-how-it-works) — sync, consistency, cold start, and resource profile
 - [Feature Parity](./new-edge-pdp-feature-parity) — capability comparison against the container PDP
 - [Deployment](./new-edge-pdp-deployment) — requirements, observability, and the security model

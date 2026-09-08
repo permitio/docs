@@ -387,6 +387,7 @@ const sidebars = {
                 id: "concepts/pdp/new-edge-pdp",
               },
               items: [
+                "concepts/pdp/new-edge-pdp-architecture",
                 "concepts/pdp/new-edge-pdp-how-it-works",
                 "concepts/pdp/new-edge-pdp-feature-parity",
                 "concepts/pdp/new-edge-pdp-deployment",

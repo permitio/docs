@@ -1,0 +1,84 @@
+---
+title: New Edge PDP — Architecture
+sidebar_label: Architecture
+description: What runs inside the New Edge PDP container, which component is responsible for what, and the path a single authorization request takes.
+sidebar_position: 2
+---
+
+# New Edge PDP Architecture
+
+What runs inside the [New Edge PDP](./new-edge-pdp) container, which component is responsible for what, and the path a single authorization request takes.
+
+Everything runs inside one container. The only externally exposed listeners are the authorization API and the health endpoint.
+
+![Architecture of the New Edge PDP: your app and orchestrator on the left, the single New Edge PDP container holding the authorization API, OPA, the health server, the query and bundle loopbacks, the embedded database, the change-ingest worker and the NATS leaf, with Permit.io and your policy store on the right](/images/pdp/new-edge-pdp-architecture.svg)
+
+<p style={{textAlign: "center", fontSize: "0.9em", opacity: 0.75, marginTop: "-0.5em"}}>
+  Click the diagram to enlarge it.
+</p>
+
+:::note Reading the diagram
+The diagram labels the change stream by its internal name, the **WAL** (write-ahead log). `LOCAL_WAL` is this container's own durable copy of it. Elsewhere in these pages it is called the *change stream*.
+:::
+
+---
+
+## What runs where
+
+| Component | Kind | Role |
+| --- | --- | --- |
+| **Authorization API** | In-process | The public REST surface on port `7000`. Opens **only once the PDP is ready**. |
+| **OPA policy engine** | Supervised child process | Evaluates Rego. Bound to loopback only — never reachable from outside the container. |
+| **Embedded database** | In-process (SurrealDB over RocksDB) | Your environment's fact graph — users, tenants, resource instances, relationships — **on disk**. |
+| **NATS leaf node** | Supervised child process | Durable, on-disk event store. Holds the link to Permit's control plane. |
+| **Change ingest and repair** | In-process task | Applies incoming changes to the embedded database; detects and repairs gaps. |
+| **Query / bundle loopbacks** | In-process | Serve OPA its graph data and its policy bundle over `127.0.0.1`. |
+| **Health and readiness** | In-process | Port `7001`. Answers throughout startup, including a long cold start. |
+
+### Ports
+
+| Port | Bound to | Purpose |
+| --- | --- | --- |
+| `7000` | All interfaces | Authorization API — the only port your services need |
+| `7001` | All interfaces | Health and readiness — the port your orchestrator probes |
+| `7002` | Loopback | Query loopback: serves OPA its graph data |
+| `7003` | Loopback | Bundle loopback: serves OPA its Rego bundle |
+| `8181` | Loopback | OPA |
+| `4222` / `8222` | Loopback | NATS leaf client and monitoring |
+
+Only `7000` and `7001` are exposed by the container image. Everything else is reachable solely from inside it.
+
+---
+
+## The decision path
+
+```
+client → :7000 authorization API
+       → 127.0.0.1 OPA
+       → 127.0.0.1 query loopback
+       → embedded database (local disk)
+```
+
+Every hop is loopback or local disk. **No step in answering an authorization query contacts Permit's API**, by construction — the New Edge PDP has no control plane other than its event stream, and cannot reach `api.permit.io` for a decision even if it wanted to.
+
+This is also what separates policy evaluation from graph traversal. OPA evaluates the Rego policy, but whenever that policy needs to know whether a user reaches a resource through a chain of roles and relationships, it calls out to the query loopback, which answers from the embedded database. Relationship queries run against a database built for them rather than against a JSON document held in memory.
+
+---
+
+## Separation of duties
+
+The container is deliberately split so that the thing serving decisions is never blocked by the thing keeping data fresh:
+
+- **The request path** — authorization API, OPA, query loopback, embedded database — only ever reads.
+- **The sync path** — NATS leaf, change ingest, gap detector, rebuild orchestrator — only ever writes, on its own tasks.
+
+They meet at the embedded database, which is why a control-plane outage costs freshness but never availability, and why a rebuild can run underneath a PDP that is still answering. See [How It Works](./new-edge-pdp-how-it-works) for what happens along the sync path.
+
+---
+
+## Related documentation
+
+- [New Edge PDP](./new-edge-pdp) — overview
+- [How It Works](./new-edge-pdp-how-it-works) — sync, consistency, cold start, and resource profile
+- [Feature Parity](./new-edge-pdp-feature-parity) — capability comparison against the container PDP
+- [Deployment](./new-edge-pdp-deployment) — requirements, observability, and the security model
