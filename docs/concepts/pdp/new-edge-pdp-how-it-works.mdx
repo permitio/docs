@@ -1,0 +1,166 @@
+---
+title: New Edge PDP — How It Works
+sidebar_label: How It Works
+description: How the New Edge PDP keeps its local copy in sync, what consistency that gives you, how cold start and warm resume differ, and what it costs to run.
+sidebar_position: 2
+---
+
+# How the New Edge PDP Works
+
+How the [New Edge PDP](./new-edge-pdp) keeps its local copy of your policy and authorization data current, what consistency that gives you, and what it costs to run.
+
+---
+
+## How policy and data stay in sync
+
+The container's NATS leaf node holds a persistent link to Permit's control plane and **sources** four independent planes onto local, on-disk storage:
+
+| Plane | Carries |
+| --- | --- |
+| **Change stream** | Transactions of authorization facts — users, tenants, resource instances, relationship tuples |
+| **Policy files** | The compiled Rego bundle OPA evaluates |
+| **Policy schema** | Role and permission definitions from your policy |
+| **Snapshot** | A one-shot bulk transfer, used only during cold start |
+
+Each change arrives as a **transaction** — an ordered set of operations with a timestamp and a transaction ID — rather than as a "something changed, come and fetch it" signal. The data is in the message.
+
+### Retention is per-PDP, and server-side
+
+Each PDP has its own durable position in the change stream. The control plane **retains a change until that specific PDP has acknowledged applying it** — so a PDP that is restarting, disconnected, or slow does not lose updates, and does not need to re-fetch its whole data set to catch up. Interest is held by the subscription's *existence*, not by an open connection; a PDP that is disconnected for minutes resumes exactly where it left off.
+
+### Self-healing
+
+Two background tasks keep the local copy honest:
+
+- **A gap detector** compares the PDP's position in the change stream against the oldest change the control plane still holds. If the PDP has fallen so far behind that the stream can no longer bridge the difference, it signals for a rebuild.
+- **A rebuild orchestrator** then builds a fresh copy of the database **in a side directory** and swaps it in atomically.
+
+Crucially, **the PDP keeps answering from the existing database while the rebuild runs**. The public port is never re-bound, no request is refused, and no decision waits on the rebuild. Staleness is surfaced on the health endpoint rather than turned into errors.
+
+:::info Design principle
+The New Edge PDP **serves stale before it serves nothing**. A control-plane outage costs you freshness, never availability — decisions keep flowing from the local copy indefinitely.
+:::
+
+---
+
+## Consistency
+
+Consistency is a property of the design rather than something you configure.
+
+**Three mechanisms combine:**
+
+1. **A durably ordered log.** Changes are carried on an ordered, persisted stream. Nothing is dropped, and nothing is trimmed before every PDP that needs it has confirmed it.
+
+2. **Order-independent application.** Each fact carries `(timestamp, transaction id)`, and a write is applied **only if it is strictly newer than what is already stored**. Because the merge rule is convergent, the final state does not depend on the order in which changes were applied — which is what makes it safe to apply several transactions concurrently without risking a stale write landing on top of a fresh one.
+
+3. **Per-transaction atomicity.** All operations within a transaction are applied together, so a decision never observes half of a multi-part change.
+
+Together these give **convergence by construction**: two PDPs in the same environment that have seen the same set of changes hold the same state, regardless of the order or timing in which they received them, and re-delivering a change that was already applied is a no-op.
+
+:::note What this does and does not guarantee
+The consistency model is **eventual, with a convergent merge**. It guarantees that PDPs converge, that no update is lost, and that replays are safe.
+
+It does **not** provide read-your-own-writes. The New Edge PDP is read-only with respect to your data: a fact written through Permit's API becomes visible once it propagates. If you need write-then-immediately-read semantics today, use the container PDP's [local facts uploader](/how-to/manage-data/local-facts-uploader).
+
+A PDP that restarts with a backlog becomes ready and begins serving while it is still catching up. Whether it is serving stale data, and by how long, is reported on the health endpoint.
+:::
+
+---
+
+## Propagation latency
+
+The sync path is structurally shorter than the container PDP's:
+
+| | Container PDP (`pdp-v2`) | New Edge PDP (`pdp-v3`) |
+| --- | --- | --- |
+| Change notification | WebSocket notification | Push delivery on a durable per-PDP subscription |
+| Data fetch | **A second call back to Permit's API** | None — the change travels *in* the message |
+| Round trips per change | 2 or more | 1 |
+| Missed while offline | Reconnect, then re-fetch | Retained server-side; resumes at its exact position |
+| Calls to `api.permit.io` | Per update | **Never** |
+
+Removing the fetch leg removes both a round trip and a dependency: propagation no longer depends on the PDP being able to reach Permit's API, only on the event stream.
+
+:::caution Numbers not yet published
+Permit has not yet published measured propagation-latency figures for the New Edge PDP. The improvement described above is architectural. If you have a latency target to validate against, [talk to us](mailto:support@permit.io) before designing around a specific number.
+:::
+
+---
+
+## Cold start and warm resume
+
+The PDP decides which path to take from the state of its persistent volume.
+
+### Warm resume — a restart with an intact volume
+
+The embedded database, the event store, and every subscription position are already on disk. The PDP reopens the database and resumes applying changes **from its last acknowledged position**. There is no snapshot transfer and no re-fetch.
+
+This is the normal case for a pod restart, a rolling update, or a short disconnection — and it is the path that benefits most from the design, because a disconnected PDP's changes were retained for it rather than discarded.
+
+### Cold start — first boot, or an unbridgeable gap
+
+On a genuinely fresh PDP — or when the gap detector determines the change stream can no longer bridge the difference — the PDP requests a **snapshot** of its environment.
+
+The snapshot is not a stream of individual records. It is a set of **pre-built database files**, transferred in chunks, checksum-verified, and then **bulk-loaded directly into the storage engine** — bypassing the normal per-record write path entirely. The snapshot also carries the Rego bundle and policy schema, so a cold-started PDP comes up with policy and data together.
+
+The boundary between the two is exact: the snapshot records the precise stream position it was cut at, and the PDP resumes the change stream from the very next change. Nothing is applied twice in a way that matters, and nothing is skipped.
+
+A checksum mismatch, a missing chunk, or an empty snapshot is **fail-closed** — the PDP refuses to come up on a partial data set rather than serving decisions against one.
+
+Bulk-loading pre-built database files is substantially faster than the container PDP's cold start, which fetches and applies its data set through the normal write path.
+
+:::tip Still give startup room
+A cold start transfers and loads your environment's entire data set, so it is not instant — how long depends on how much data your environment holds.
+
+Set a **generous startup probe** and let readiness, not liveness, gate traffic. The health endpoint answers throughout, and the authorization port does not open until the PDP is ready, so there is no window in which it accepts a request it cannot answer correctly.
+:::
+
+---
+
+## Running at high volume
+
+What makes the New Edge PDP suitable for high request rates is mostly what it *doesn't* do per request:
+
+- **No network in the decision path** — every hop is loopback or local disk.
+- **No control-plane call to authenticate** — the API key is verified against the PDP's own key in constant time. Permit's API is never contacted to authorize a request.
+- **No dependency on Permit's availability** — a control-plane outage affects freshness, not throughput or availability.
+- **Reads do not contend with syncing** — incoming changes are applied to the embedded database concurrently and independently of the request path.
+- **The same evaluation core as the managed Cloud PDP**, which is already tuned for large-scale checks.
+
+:::caution Numbers not yet published
+As with propagation latency, Permit has not published measured throughput figures for the New Edge PDP. The [Cloud PDP benchmarks](/concepts/pdp/cloud-pdp-benchmarks) measure a different deployment and should not be read as New Edge PDP numbers.
+:::
+
+---
+
+## Resource footprint
+
+The New Edge PDP changes **where** your authorization data lives, and that is the change that matters for sizing.
+
+| | Container PDP (`pdp-v2`) | New Edge PDP (`pdp-v3`) |
+| --- | --- | --- |
+| Fact graph | In OPA's **in-memory** document | **On disk**, in an embedded database |
+| Memory vs. data size | Scales with your data set | Bounded by a configurable cache |
+| Processes | Python API server + OPAL client + OPA | Native binary + NATS leaf + OPA |
+| Language runtime | CPython | None — compiled binary |
+| Persistent storage | Not required | **Required** |
+
+The architectural consequence is that **memory stops scaling linearly with your data set**. On the container PDP, a large environment needs a large PDP, and very large data sets need sharding. On the New Edge PDP, the data set lives on disk and memory is governed by the database's cache size, which you control.
+
+:::caution Size generously to start, then tune
+The New Edge PDP's **default** configuration is not tuned for a small footprint. It inherits cloud-scale storage-engine defaults — a 512 MiB block cache and a 256 MiB write buffer — so a container given only a few hundred MiB will be OOM-killed on startup. Permit currently sizes it at **4 GiB** of memory.
+
+A smaller footprint is possible by tuning the storage engine's cache and write-buffer sizes — [contact us](mailto:support@permit.io) for the current settings. Benchmark against your own data set before committing to a size.
+:::
+
+### Disk
+
+Two paths must be on persistent storage — the embedded database and the event store. Size for **roughly twice your data set**, plus headroom: during a rebuild, two generations of the database exist side by side until the new one is swapped in.
+
+---
+
+## Related documentation
+
+- [New Edge PDP](./new-edge-pdp) — overview and architecture
+- [Feature Parity](./new-edge-pdp-feature-parity) — capability comparison against the container PDP
+- [Deployment](./new-edge-pdp-deployment) — requirements, observability, and the security model

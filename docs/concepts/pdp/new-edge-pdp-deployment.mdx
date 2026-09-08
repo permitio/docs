@@ -1,0 +1,98 @@
+---
+title: New Edge PDP — Deployment
+sidebar_label: Deployment
+description: Deployment requirements, health and readiness probes, logging, and the security model for the New Edge PDP.
+sidebar_position: 4
+---
+
+# Deploying the New Edge PDP
+
+Operational requirements, observability surfaces, and the security model for the [New Edge PDP](./new-edge-pdp).
+
+---
+
+## Deployment requirements
+
+The New Edge PDP has real operational requirements that the container PDP does not. Read these before deploying.
+
+**Persistent storage is mandatory.** Both the embedded database directory and the event store must survive restarts. On ephemeral storage, every restart becomes a full cold start — minutes of startup, and a full snapshot transfer each time.
+
+**Set `terminationGracePeriodSeconds` to at least 40.** That is the combined shutdown budget for draining and for stopping the child processes, at default settings. If the grace period is too short, the container is killed mid-flush and the durable event store is corrupted — forcing a cold start on the next boot.
+
+**Set a generous startup probe.** Cold start can take minutes. Point liveness at `/health` and readiness at `/health/ready`, and give startup enough headroom that a first boot is not killed as a hang.
+
+**Run one container per Permit environment.** The API key binds the container to exactly one environment; there is no multi-environment mode.
+
+**Memory: start at 4 GiB.** See [Resource footprint](./new-edge-pdp-how-it-works#resource-footprint) for tuning.
+
+**Expose ports `7000` and `7001` only.** Everything else binds to loopback inside the container.
+
+**Runs as non-root** (uid/gid `10001`). Ensure your mounted volumes are writable by that user.
+
+:::tip Running locally on macOS
+Port `7000` collides with AirPlay Receiver on macOS. Map it to a different host port, for example `-p 7766:7000`, and point your SDK at `http://localhost:7766`.
+:::
+
+---
+
+## Health and readiness
+
+Health is served on the **management port (`7001`)**, which is where all probes belong:
+
+| Endpoint | Auth | Behavior |
+| --- | --- | --- |
+| `GET /health` | None | Always `200`. Reports per-component status. Answers throughout startup. |
+| `GET /health/ready` | None | `200` only when every gating component is up, otherwise `503`. |
+| `GET /health/detail` | `PDP_API_KEY` bearer | Full diagnostic detail per component. |
+
+Wire **liveness** to `:7001/health` and **readiness** to `:7001/health/ready`. Nine components gate readiness — the control-plane link, each of the four sync planes, the embedded database, OPA, and both loopbacks.
+
+:::warning Probe `7001`, never `7000`
+The authorization port (`7000`) also answers `GET /health` — and `GET /healthy`, an alias kept so tooling written for the container PDP keeps working. Neither is a substitute for the management port:
+
+- There is **no `/health/ready` on port `7000`**. A readiness probe pointed at `:7000/health/ready` gets a `404` and the pod never becomes ready.
+- Port `7000` does not open at all until the PDP is ready, so any probe against it **fails for the entire cold start** — which can be minutes. A liveness probe there will kill the container before it ever finishes starting.
+
+Port `7001` answers from the moment the process starts, which is exactly what makes it the safe probe target.
+:::
+
+`/health/detail` is where you diagnose a lagging or stale PDP: it reports child-process restart counts and exit codes, the PDP's position in the change stream against the control plane's oldest retained change, whether the PDP is currently **serving stale** data and for how long, and whether decision-log shipping is healthy.
+
+:::note Staleness never blocks decisions
+Neither staleness nor decision-log failures gate readiness. A PDP that cannot ship its audit logs keeps answering authorization queries — the design deliberately refuses to trade the primary function for the secondary one.
+:::
+
+---
+
+## Logs
+
+Structured logs go to stdout at `INFO` by default; `RUST_LOG` overrides (`info,edge_pdp=debug` is a good verbose setting). Both child processes' output is captured and re-emitted on the main log stream with attribution and correct log levels, so container logs are the single place to look.
+
+:::warning Child debug levels expose data
+The child processes have their own log levels, and turning them all the way up exposes data: the control-plane client logs raw message payloads at `trace` — which means **your authorization data** — and the policy engine logs authorization request and response bodies at `debug`. Use these only for short, deliberate debugging sessions, and never leave them on in production.
+:::
+
+### Decision logs
+
+Decision logs ship from the OPA child directly to Permit over HTTPS, batched, with a bounded in-memory buffer. They require **both** that decision logging is enabled for your environment in Permit **and** that the PDP's local opt-out is not set — the local setting can only turn logging off, never on.
+
+---
+
+## Security model
+
+**Requests are authenticated against the container's own key.** The bearer token on an authorization request is compared, in constant time, against the container's `PDP_API_KEY`. Permit's API is **never** contacted to authenticate or authorize a request — the code that could do so is not compiled into this binary at all.
+
+**One container serves exactly one environment.** The environment is fixed at startup from the API key. A valid key for a *different* environment does not authenticate, and there is no code path by which a caller can steer a request at data outside the container's own environment.
+
+**Credentials never reach the child processes.** Both OPA and the NATS leaf are started with a cleared environment; only the specific variables each one needs are re-added. Credential files are written `0600` with protections against symlink attacks from other containers sharing the volume, and are referenced by path rather than inlined into any generated config.
+
+**The blast radius of a compromised PDP is one environment's data.** It holds no credential that grants access to any other environment, and no ability to reach Permit's management API.
+
+---
+
+## Related documentation
+
+- [New Edge PDP](./new-edge-pdp) — overview and architecture
+- [How It Works](./new-edge-pdp-how-it-works) — sync, consistency, cold start, and resource profile
+- [Feature Parity](./new-edge-pdp-feature-parity) — capability comparison against the container PDP
+- [Monitoring PDPs](/how-to/monitoring-pdps) — fleet visibility in the Permit dashboard
