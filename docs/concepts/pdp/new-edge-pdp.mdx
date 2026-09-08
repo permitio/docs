@@ -12,7 +12,7 @@ sidebar_position: 4
 The **New Edge PDP** is a ground-up rewrite of the PDP runtime, shipped as `permitio/pdp-v3`. It runs one container per Permit environment, holds a **local, on-disk copy** of that environment's policy and authorization data, and answers authorization queries with **no network call in the decision path**.
 
 :::note Availability
-The New Edge PDP is a **new deployment option**, not a replacement. The existing [Edge PDP](/concepts/pdp/overview#run-an-edge-pdp-with-docker) (`permitio/pdp-v2`) remains fully supported and continues to be the right choice for the capabilities listed under [Feature support](#feature-support) below.
+The New Edge PDP is a **new deployment option**, not a replacement. The existing [Edge PDP](/concepts/pdp/overview#run-an-edge-pdp-with-docker) (`permitio/pdp-v2`) remains fully supported and continues to be the right choice for the capabilities listed under [Feature compatibility](#feature-compatibility-and-roadmap) below.
 
 It is currently in early access and enabled per account. [Contact us](mailto:support@permit.io) to have it turned on.
 :::
@@ -115,7 +115,7 @@ Together these give **convergence by construction**: two PDPs in the same enviro
 :::note What this does and does not guarantee
 The consistency model is **eventual, with a convergent merge**. It guarantees that PDPs converge, that no update is lost, and that replays are safe.
 
-It does **not** provide read-your-own-writes. There is no local write API — the New Edge PDP is read-only with respect to your data, and a fact written through Permit's API becomes visible once it propagates. If you need write-then-immediately-read semantics, use the existing Edge PDP's [local facts uploader](/how-to/manage-data/local-facts-uploader).
+It does **not** provide read-your-own-writes. The New Edge PDP is read-only with respect to your data: a fact written through Permit's API becomes visible once it propagates. If you need write-then-immediately-read semantics today, use the existing Edge PDP's [local facts uploader](/how-to/manage-data/local-facts-uploader).
 
 A PDP that restarts with a backlog becomes ready and begins serving while it is still catching up. Whether it is serving stale data, and by how long, is reported on the health endpoint.
 :::
@@ -162,10 +162,12 @@ The boundary between the two is exact: the snapshot records the precise stream p
 
 A checksum mismatch, a missing chunk, or an empty snapshot is **fail-closed** — the PDP refuses to come up on a partial data set rather than serving decisions against one.
 
-:::caution Cold start is not fast — plan probes accordingly
-A cold start transfers and loads the environment's entire data set. Permit's own CI observes **84 seconds to roughly 4 minutes** for this on test environments, and larger environments will take longer.
+Bulk-loading pre-built database files is substantially faster than the existing Edge PDP's cold start, which fetches and applies its data set through the normal write path.
 
-The health endpoint answers throughout, so **set a generous startup probe** and let readiness — not liveness — gate traffic. The authorization port does not open until the PDP is ready, so there is no window in which it accepts a request it cannot answer correctly.
+:::tip Still give startup room
+A cold start transfers and loads your environment's entire data set, so it is not instant — how long depends on how much data your environment holds.
+
+Set a **generous startup probe** and let readiness, not liveness, gate traffic. The health endpoint answers throughout, and the authorization port does not open until the PDP is ready, so there is no window in which it accepts a request it cannot answer correctly.
 :::
 
 ---
@@ -203,16 +205,7 @@ The architectural consequence is that **memory stops scaling linearly with your 
 :::caution Size generously to start, then tune
 The New Edge PDP's **default** configuration is not tuned for a small footprint. It inherits cloud-scale storage-engine defaults — a 512 MiB block cache and a 256 MiB write buffer — so a container given only a few hundred MiB will be OOM-killed on startup. Permit currently sizes it at **4 GiB** of memory.
 
-If you need a smaller footprint, tune the storage engine directly:
-
-| Variable | Default | Effect |
-| --- | --- | --- |
-| `SURREAL_ROCKSDB_BLOCK_CACHE_SIZE` | `536870912` (512 MiB) | Read cache. The single largest lever on resident memory. |
-| `SURREAL_ROCKSDB_WRITE_BUFFER_SIZE` | `268435456` (256 MiB) | In-memory write buffer before flushing to disk. |
-| `SURREAL_ROCKSDB_MAX_WRITE_BUFFER_NUMBER` | `32` | How many write buffers may exist at once. |
-| `SURREAL_ROCKSDB_BACKGROUND_THREADS` | `4` | Background compaction threads. |
-
-Benchmark against your own data set before committing to a size.
+If you need a smaller footprint, tune the storage engine directly — see [Storage engine](/concepts/pdp/new-edge-pdp-configuration#storage-engine) for the variables that matter. Benchmark against your own data set before committing to a size.
 :::
 
 ### Disk
@@ -221,48 +214,64 @@ Two paths must be on persistent storage — the embedded database and the event 
 
 ---
 
-## Feature support
+## Feature compatibility and roadmap
 
 The New Edge PDP is **wire-compatible on the endpoints it implements** — same paths, same request and response shapes, so existing SDK integrations that use those endpoints work unchanged. But it implements a **subset** of the existing Edge PDP's surface.
 
 Its capability envelope is that of the **managed Cloud PDP, deployed in your own network** — not a port of the `pdp-v2` container.
 
-### Supported
+**✅ Supported · 🚧 On the roadmap · ❌ Not supported**
 
-| Capability | Endpoint |
-| --- | --- |
-| **RBAC** | — |
-| **ReBAC**, including role derivation | — |
-| **Multi-tenancy** | — |
-| [Check](/how-to/enforce-permissions/check) | `POST /allowed` |
-| [Bulk check](/how-to/enforce-permissions/bulk-check) | `POST /allowed/bulk` |
-| [User permissions](/how-to/enforce-permissions/user-permissions) | `POST /user-permissions` |
-| [Authorized users](/how-to/enforce-permissions/authorized-users) | `POST /authorized_users` |
-| AuthZen access evaluation | `POST /access/v1/evaluation` |
-| AuthZen bulk evaluations | `POST /access/v1/evaluations` |
-| AuthZen subject / resource / action search | `POST /access/v1/search/{subject,resource,action}` |
-| AuthZen discovery | `GET /.well-known/authzen-configuration` |
-| Decision logs to Permit | — |
-| Health check on the authorization port | `GET /health`, `GET /healthy` (aliases for the same handler) |
+### Permission checks
 
-### Not supported
+| Capability | Endpoint | Edge PDP | New Edge PDP |
+| --- | --- | :-: | :-: |
+| [**Check**](/how-to/enforce-permissions/check) | `POST /allowed` | ✅ | ✅ |
+| &nbsp;&nbsp;└ RBAC | | ✅ | ✅ |
+| &nbsp;&nbsp;└ ReBAC, including role derivation | | ✅ | ✅ |
+| &nbsp;&nbsp;└ Multi-tenancy | | ✅ | ✅ |
+| &nbsp;&nbsp;└ ABAC — condition, user and resource sets | | ✅ | ❌ |
+| [**Bulk check**](/how-to/enforce-permissions/bulk-check) | `POST /allowed/bulk` | ✅ | ✅ |
+| [**User permissions**](/how-to/enforce-permissions/user-permissions) | `POST /user-permissions` | ✅ | ✅ |
+| [**Authorized users**](/how-to/enforce-permissions/authorized-users) | `POST /authorized_users` | ✅ | ✅ |
+| [**All-tenants check**](/how-to/enforce-permissions/all-tenants-check) | `POST /allowed/all-tenants` | ✅ | ❌ |
+| [**Data filtering**](/how-to/enforce-permissions/data-filtering) via partial evaluation | — | ✅ | ❌ |
+| [**URL-based enforcement**](/how-to/enforce-permissions/url-mapping/url-mapping-check) | `POST /allowed_url` | ✅ | ❌ |
 
-Use the existing [Edge PDP](/concepts/pdp/overview#run-an-edge-pdp-with-docker) if you need any of these:
+:::note Filtering without partial evaluation
+Partial evaluation is not available, but graph-based filtering through `/user-permissions` and `/authorized_users` is — for many "which resources can this user see?" cases that is the same answer by a different route.
+:::
 
-| Not supported | Notes |
-| --- | --- |
-| **ABAC** — attribute-based access control | Condition sets, user sets, and resource sets are not evaluated. A check against an ABAC policy returns a deny. |
-| **Policy-as-Code / custom OPA bundles** | Per-environment Rego bundle publishing is not available yet. |
-| [**All-tenants check**](/how-to/enforce-permissions/all-tenants-check) | `POST /allowed/all-tenants` is not served. |
-| [**Data filtering**](/how-to/enforce-permissions/data-filtering) via partial evaluation | Graph-based filtering through `/user-permissions` and `/authorized_users` **is** available. |
-| [**URL-based enforcement**](/how-to/enforce-permissions/url-mapping/url-mapping-check) | `POST /allowed_url` is not served. |
-| **Local facts / read-your-own-writes** | There is no local write API. |
-| [**Local enforcement APIs**](/how-to/enforce-permissions/list-role-assignments) | `/local/*` endpoints are not served. |
-| **Custom data sources** | The change stream is the only data plane. |
-| **Kong and nginx integration endpoints** | — |
-| **Envoy ext-authz / proxy mode** | — |
-| **`/metrics` endpoint** | See [Observability](#observability). |
-| **Offline / air-gapped first boot** | A PDP that cannot reach the control plane at first boot cannot start. Once started, it survives outages indefinitely. |
+### Standards
+
+| Capability | Endpoint | Edge PDP | New Edge PDP |
+| --- | --- | :-: | :-: |
+| AuthZen access evaluation | `POST /access/v1/evaluation` | ✅ | ✅ |
+| AuthZen bulk evaluations | `POST /access/v1/evaluations` | ✅ | ✅ |
+| AuthZen subject / resource / action search | `POST /access/v1/search/{subject,resource,action}` | ✅ | ✅ |
+| AuthZen discovery | `GET /.well-known/authzen-configuration` | ✅ | ✅ |
+
+### Policy and data
+
+| Capability | Edge PDP | New Edge PDP |
+| --- | :-: | :-: |
+| Policy-as-Code / custom Rego bundles | ✅ | ❌ |
+| Local facts / read-your-own-writes | ✅ | ❌ |
+| [Local enforcement APIs](/how-to/enforce-permissions/list-role-assignments) (`/local/*`) | ✅ | ❌ |
+| Custom data sources | ✅ | ❌ |
+| Kong and nginx integration endpoints | ✅ | ❌ |
+| [Offline / air-gapped first boot](/how-to/deploy/offline-mode) | ✅ | ❌ |
+
+A New Edge PDP that cannot reach the control plane on its **first** boot cannot start. Once it has started, it survives control-plane outages indefinitely.
+
+### Operations
+
+| Capability | Edge PDP | New Edge PDP |
+| --- | :-: | :-: |
+| Decision logs to Permit | ✅ | ✅ |
+| Health and readiness endpoints | ✅ | ✅ |
+| Prometheus `/metrics` endpoint | ✅ | ❌ |
+| OpenTelemetry (OTLP traces, metrics, logs) | ❌ | 🚧 |
 
 ---
 
@@ -307,55 +316,25 @@ Structured logs go to stdout at `INFO` by default; `RUST_LOG` overrides (`info,e
 
 Decision logs ship from the OPA child directly to Permit over HTTPS, batched, with a bounded in-memory buffer. They require **both** that decision logging is enabled for your environment in Permit **and** that `EDGE_DECISION_LOG_OPT_OUT` is not set — the local setting can only turn logging off, never on.
 
-:::caution OpenTelemetry is not available yet
-The New Edge PDP **does not currently export OpenTelemetry traces, metrics, or logs**, and does not read `OTEL_*` environment variables. It also does not serve a `/metrics` endpoint.
+:::note OpenTelemetry and `/metrics`
+The New Edge PDP does not currently export OpenTelemetry traces, metrics, or logs, does not read `OTEL_*` environment variables, and does not serve a `/metrics` endpoint. OTLP export is on the roadmap — see [Feature compatibility](#feature-compatibility-and-roadmap).
 
-Observability today is structured stdout logs plus the health endpoints described above. If OTLP export is a requirement for your deployment, [let us know](mailto:support@permit.io) — it is a known gap rather than a design decision.
+Observability today is structured stdout logs plus the health endpoints described above. If OTLP export matters for your deployment, [let us know](mailto:support@permit.io).
 :::
 
 ---
 
 ## Configuration
 
-### Required
+`PDP_API_KEY` is the only variable you must set. It binds the container to one Permit environment, authenticates it to the control plane, **carries the control-plane routing so there is no endpoint URL to configure**, and is the bearer token your services present to the authorization API.
 
-| Variable | Description |
-| --- | --- |
-| `PDP_API_KEY` | Your environment-level Permit API key. This single value binds the container to one environment, authenticates it to the control plane, and is the bearer token the authorization API accepts. |
-| `PDP_CONTROL_PLANE` | The control-plane endpoint. **See the warning below — this is not the same kind of value as on `pdp-v2`.** |
+Everything else — storage paths, ports, log levels, and storage-engine tuning — has a working default.
 
-:::warning `PDP_CONTROL_PLANE` means something different here
-On the existing Edge PDP, `PDP_CONTROL_PLANE` is an **HTTPS API base URL** (`https://api.permit.io`).
+**See [New Edge PDP Configuration](/concepts/pdp/new-edge-pdp-configuration) for the full environment variable reference.**
 
-On the New Edge PDP it is the **event-stream endpoint**. Give it a **scheme, host, and explicit port**, with **no path and no trailing slash** — for example `wss://control-plane.permit.io:443`. The port is not optional, and a trailing `/` or any path segment will prevent the PDP from connecting. Copying the `pdp-v2` value across will not work.
-
-Permit will give you the correct value for your account when the New Edge PDP is enabled.
+:::note Early access
+Configuration is still settling while the New Edge PDP is in early access. Some variables and defaults may change before general availability.
 :::
-
-### Storage and ports
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `EDGE_DB_PATH` | `/var/lib/edge-pdp/db` | Embedded database directory. **Must be on a persistent volume.** |
-| `EDGE_DATA_DIR` | `/var/lib/edge-pdp` | Event store and generated credentials. **Must be on a persistent volume.** |
-| `EDGE_PUBLIC_PORT` | `7000` | Authorization API. The only port your services need. |
-| `EDGE_HEALTH_PORT` | `7001` | Health and readiness. |
-
-Ports `7002`, `7003`, `8181`, `4222`, and `8222` are used internally and bind to loopback only. Expose **`7000` and `7001`** and nothing else.
-
-### Behavior and tuning
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `RUST_LOG` | `info` | Log level. Try `info,edge_pdp=debug` when debugging. |
-| `PDP_DEBUG` | `false` | Include debug detail in authorization responses. |
-| `OPA_TIMEOUT_MS` | `800` | Per-request evaluation timeout. |
-| `EDGE_PARALLELISM` | `4` | How many change transactions are applied concurrently. |
-| `EDGE_DECISION_LOG_OPT_OUT` | `false` | Set to `true` to stop shipping decision logs. |
-| `EDGE_NATS_LOG_LEVEL` | follows `RUST_LOG` | Control-plane client log level. See the warning above. |
-| `EDGE_OPA_LOG_LEVEL` | follows `RUST_LOG` | OPA log level. See the warning above. |
-| `EDGE_DRAIN_TIMEOUT_SECS` | `10` | Shutdown drain budget. |
-| `EDGE_CHILD_TERMINATION_TIMEOUT_SECS` | `30` | Child-process shutdown budget. |
 
 ---
 
@@ -410,7 +389,8 @@ Both connect to the same Permit environment and enforce the same policies you au
 
 ## Related documentation
 
+- [New Edge PDP Configuration](/concepts/pdp/new-edge-pdp-configuration) — full environment variable reference
 - [PDP Overview](/concepts/pdp/overview) — deployment models for the existing Edge PDP
 - [Cloud PDP Capabilities](/concepts/pdp/cloud-pdp-capabilities) — the managed PDP's capability envelope, which the New Edge PDP mirrors
-- [PDP Configuration](/concepts/pdp/configuration) — configuration reference for the existing Edge PDP
+- [Configurations](/concepts/pdp/configuration) — configuration reference for the existing Edge PDP
 - [Monitoring PDPs](/how-to/monitoring-pdps) — fleet visibility in the Permit dashboard
