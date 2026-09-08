@@ -391,6 +391,7 @@ const sidebars = {
                 "concepts/pdp/new-edge-pdp-how-it-works",
                 "concepts/pdp/new-edge-pdp-feature-parity",
                 "concepts/pdp/new-edge-pdp-deployment",
+                "concepts/pdp/new-edge-pdp-configuration",
               ],
             },
             "how-to/manage-data/local-facts-uploader",
