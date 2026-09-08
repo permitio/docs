@@ -380,7 +380,6 @@ const sidebars = {
             "concepts/pdp/cloud-pdp-capabilities",
             "concepts/pdp/cloud-pdp-benchmarks",
             "concepts/pdp/new-edge-pdp",
-            "concepts/pdp/new-edge-pdp-configuration",
             "how-to/manage-data/local-facts-uploader",
           ],
         },

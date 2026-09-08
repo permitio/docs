@@ -205,7 +205,7 @@ The architectural consequence is that **memory stops scaling linearly with your 
 :::caution Size generously to start, then tune
 The New Edge PDP's **default** configuration is not tuned for a small footprint. It inherits cloud-scale storage-engine defaults — a 512 MiB block cache and a 256 MiB write buffer — so a container given only a few hundred MiB will be OOM-killed on startup. Permit currently sizes it at **4 GiB** of memory.
 
-If you need a smaller footprint, tune the storage engine directly — see [Storage engine](/concepts/pdp/new-edge-pdp-configuration#storage-engine) for the variables that matter. Benchmark against your own data set before committing to a size.
+A smaller footprint is possible by tuning the storage engine's cache and write-buffer sizes — [contact us](mailto:support@permit.io) for the current settings. Benchmark against your own data set before committing to a size.
 :::
 
 ### Disk
@@ -309,12 +309,12 @@ Neither staleness nor decision-log failures gate readiness. A PDP that cannot sh
 Structured logs go to stdout at `INFO` by default; `RUST_LOG` overrides (`info,edge_pdp=debug` is a good verbose setting). Both child processes' output is captured and re-emitted on the main log stream with attribution and correct log levels, so container logs are the single place to look.
 
 :::warning Child debug levels expose data
-`EDGE_NATS_LOG_LEVEL=trace` logs raw message payloads — which means **your authorization data** — and `EDGE_OPA_LOG_LEVEL=debug` logs authorization request and response bodies. Use these only for short, deliberate debugging sessions.
+The child processes have their own log levels, and turning them all the way up exposes data: the control-plane client logs raw message payloads at `trace` — which means **your authorization data** — and the policy engine logs authorization request and response bodies at `debug`. Use these only for short, deliberate debugging sessions, and never leave them on in production.
 :::
 
 ### Decision logs
 
-Decision logs ship from the OPA child directly to Permit over HTTPS, batched, with a bounded in-memory buffer. They require **both** that decision logging is enabled for your environment in Permit **and** that `EDGE_DECISION_LOG_OPT_OUT` is not set — the local setting can only turn logging off, never on.
+Decision logs ship from the OPA child directly to Permit over HTTPS, batched, with a bounded in-memory buffer. They require **both** that decision logging is enabled for your environment in Permit **and** that the PDP's local opt-out is not set — the local setting can only turn logging off, never on.
 
 :::note OpenTelemetry and `/metrics`
 The New Edge PDP does not currently export OpenTelemetry traces, metrics, or logs, does not read `OTEL_*` environment variables, and does not serve a `/metrics` endpoint. OTLP export is on the roadmap — see [Feature compatibility](#feature-compatibility-and-roadmap).
@@ -326,14 +326,12 @@ Observability today is structured stdout logs plus the health endpoints describe
 
 ## Configuration
 
-`PDP_API_KEY` is the only variable you must set. It binds the container to one Permit environment, authenticates it to the control plane, **carries the control-plane routing so there is no endpoint URL to configure**, and is the bearer token your services present to the authorization API.
+`PDP_API_KEY` is the only value you must set. It binds the container to one Permit environment, authenticates it to the control plane, **carries the control-plane routing so there is no endpoint URL to configure**, and is the bearer token your services present to the authorization API.
 
-Everything else — storage paths, ports, log levels, and storage-engine tuning — has a working default.
+Everything else — storage paths, ports, log levels, and storage-engine tuning — has a working default, so a container with a valid API key and a persistent volume will start.
 
-**See [New Edge PDP Configuration](/concepts/pdp/new-edge-pdp-configuration) for the full environment variable reference.**
-
-:::note Early access
-Configuration is still settling while the New Edge PDP is in early access. Some variables and defaults may change before general availability.
+:::note Configuration reference
+The New Edge PDP's remaining environment variables are still settling while it is in early access, so they are not documented here yet. [Contact us](mailto:support@permit.io) if you need to tune storage, logging, or the storage engine for your deployment.
 :::
 
 ---
@@ -342,9 +340,9 @@ Configuration is still settling while the New Edge PDP is in early access. Some 
 
 The New Edge PDP has real operational requirements that the existing Edge PDP does not. Read these before deploying.
 
-**Persistent storage is mandatory.** Both `EDGE_DB_PATH` and `EDGE_DATA_DIR` must survive restarts. On ephemeral storage, every restart becomes a full cold start — minutes of startup, and a full snapshot transfer each time.
+**Persistent storage is mandatory.** Both the embedded database directory and the event store must survive restarts. On ephemeral storage, every restart becomes a full cold start — minutes of startup, and a full snapshot transfer each time.
 
-**Set `terminationGracePeriodSeconds` to at least 40.** It must be at least `EDGE_DRAIN_TIMEOUT_SECS + EDGE_CHILD_TERMINATION_TIMEOUT_SECS`, which is 40 seconds at defaults. If the grace period is too short, the container is killed mid-flush and the durable event store is corrupted — forcing a cold start on the next boot.
+**Set `terminationGracePeriodSeconds` to at least 40.** That is the combined shutdown budget for draining and for stopping the child processes, at default settings. If the grace period is too short, the container is killed mid-flush and the durable event store is corrupted — forcing a cold start on the next boot.
 
 **Set a generous startup probe.** Cold start can take minutes. Point liveness at `/health` and readiness at `/health/ready`, and give startup enough headroom that a first boot is not killed as a hang.
 
@@ -389,7 +387,6 @@ Both connect to the same Permit environment and enforce the same policies you au
 
 ## Related documentation
 
-- [New Edge PDP Configuration](/concepts/pdp/new-edge-pdp-configuration) — full environment variable reference
 - [PDP Overview](/concepts/pdp/overview) — deployment models for the existing Edge PDP
 - [Cloud PDP Capabilities](/concepts/pdp/cloud-pdp-capabilities) — the managed PDP's capability envelope, which the New Edge PDP mirrors
 - [Configurations](/concepts/pdp/configuration) — configuration reference for the existing Edge PDP
