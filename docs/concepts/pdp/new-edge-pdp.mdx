@@ -35,7 +35,7 @@ The New Edge PDP changes all three. Data lives in an **embedded on-disk database
 
 Everything runs inside one container. The only externally exposed listeners are the authorization API and the health endpoint.
 
-![Architecture of the New Edge PDP: your app and orchestrator on the left, the single Edge PDP container holding the authorization API, OPA, the health server, the query and bundle loopbacks, the embedded database, the change-ingest worker and the NATS leaf, with Permit.io and your policy store on the right](/images/pdp/new-edge-pdp-architecture.svg)
+![Architecture of the New Edge PDP: your app and orchestrator on the left, the single New Edge PDP container holding the authorization API, OPA, the health server, the query and bundle loopbacks, the embedded database, the change-ingest worker and the NATS leaf, with Permit.io and your policy store on the right](/images/pdp/new-edge-pdp-architecture.svg)
 
 <p style={{textAlign: "center", fontSize: "0.9em", opacity: 0.75, marginTop: "-0.5em"}}>
   Click the diagram to enlarge it.
@@ -243,7 +243,7 @@ Its capability envelope is that of the **managed Cloud PDP, deployed in your own
 | AuthZen subject / resource / action search | `POST /access/v1/search/{subject,resource,action}` |
 | AuthZen discovery | `GET /.well-known/authzen-configuration` |
 | Decision logs to Permit | — |
-| Health and readiness | `GET /health`, `GET /healthy` |
+| Health check on the authorization port | `GET /health`, `GET /healthy` (aliases for the same handler) |
 
 ### Not supported
 
@@ -270,7 +270,7 @@ Use the existing [Edge PDP](/concepts/pdp/overview#run-an-edge-pdp-with-docker) 
 
 ### Health and readiness
 
-Three endpoints on the management port (`7001`):
+Health is served on the **management port (`7001`)**, which is where all probes belong:
 
 | Endpoint | Auth | Behavior |
 | --- | --- | --- |
@@ -278,7 +278,16 @@ Three endpoints on the management port (`7001`):
 | `GET /health/ready` | None | `200` only when every gating component is up, otherwise `503`. |
 | `GET /health/detail` | `PDP_API_KEY` bearer | Full diagnostic detail per component. |
 
-Wire **liveness** to `/health` and **readiness** to `/health/ready`. Nine components gate readiness — the control-plane link, each of the four sync planes, the embedded database, OPA, and both loopbacks.
+Wire **liveness** to `:7001/health` and **readiness** to `:7001/health/ready`. Nine components gate readiness — the control-plane link, each of the four sync planes, the embedded database, OPA, and both loopbacks.
+
+:::warning Probe `7001`, never `7000`
+The authorization port (`7000`) also answers `GET /health` — and `GET /healthy`, an alias kept so tooling written for the existing Edge PDP keeps working. Neither is a substitute for the management port:
+
+- There is **no `/health/ready` on port `7000`**. A readiness probe pointed at `:7000/health/ready` gets a `404` and the pod never becomes ready.
+- Port `7000` does not open at all until the PDP is ready, so any probe against it **fails for the entire cold start** — which can be minutes. A liveness probe there will kill the container before it ever finishes starting.
+
+Port `7001` answers from the moment the process starts, which is exactly what makes it the safe probe target.
+:::
 
 `/health/detail` is where you diagnose a lagging or stale PDP: it reports child-process restart counts and exit codes, the PDP's position in the change stream against the control plane's oldest retained change, whether the PDP is currently **serving stale** data and for how long, and whether decision-log shipping is healthy.
 
@@ -318,7 +327,7 @@ Observability today is structured stdout logs plus the health endpoints describe
 :::warning `PDP_CONTROL_PLANE` means something different here
 On the existing Edge PDP, `PDP_CONTROL_PLANE` is an **HTTPS API base URL** (`https://api.permit.io`).
 
-On the New Edge PDP it is the **event-stream endpoint**, and it must be a bare host and port with **no path and no trailing slash** — for example `wss://control-plane.permit.io:443`. Copying the `pdp-v2` value across will not work.
+On the New Edge PDP it is the **event-stream endpoint**. Give it a **scheme, host, and explicit port**, with **no path and no trailing slash** — for example `wss://control-plane.permit.io:443`. The port is not optional, and a trailing `/` or any path segment will prevent the PDP from connecting. Copying the `pdp-v2` value across will not work.
 
 Permit will give you the correct value for your account when the New Edge PDP is enabled.
 :::
