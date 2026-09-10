@@ -1,0 +1,105 @@
+---
+title: New Edge PDP — Configuration
+sidebar_label: Configuration
+description: Environment variable reference for the New Edge PDP (permitio/pdp-v3) — credentials, storage, ports, logging, and storage-engine tuning.
+sidebar_position: 6
+---
+
+# New Edge PDP Configuration
+
+Environment variable reference for the [New Edge PDP](./new-edge-pdp) (`permitio/pdp-v3`).
+
+:::caution Beta — expect changes
+The New Edge PDP is in early access and **this configuration surface is not yet stable**. Variables and defaults on this page may be renamed, replaced, or removed before general availability.
+
+Treat it as a working reference rather than a contract: **pin an image tag**, and re-read this page when you upgrade. If you are depending on a specific variable, [tell us](mailto:support@permit.io) so we can flag it before it moves.
+:::
+
+For the [container PDP](/concepts/pdp/overview#run-an-edge-pdp-with-docker) (`permitio/pdp-v2`), see [Configurations](/concepts/pdp/configuration) instead. The two runtimes do not share a configuration surface, and **a variable of the same name may mean something different** on each.
+
+---
+
+## Credentials
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PDP_API_KEY` | **required** | Your environment-level Permit API key. |
+
+`PDP_API_KEY` is the entire credential. This single value:
+
+- binds the container to exactly one Permit environment,
+- authenticates it to the control plane,
+- carries the control-plane routing, so the PDP finds the right plane on its own,
+- and is the bearer token the authorization API accepts from your services.
+
+:::tip No control-plane URL to set
+Unlike the container PDP, there is **no `PDP_CONTROL_PLANE` value to configure**. The API key routes the PDP to the correct control plane automatically.
+:::
+
+---
+
+## Storage and ports
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `EDGE_DB_PATH` | `/var/lib/edge-pdp/db` | Embedded database directory. **Must be on a persistent volume.** |
+| `EDGE_DATA_DIR` | `/var/lib/edge-pdp` | Event store and generated credentials. **Must be on a persistent volume.** |
+| `EDGE_PUBLIC_PORT` | `7000` | Authorization API — the only port your services need. |
+| `EDGE_HEALTH_PORT` | `7001` | Health and readiness. Probe this port, [never `7000`](./new-edge-pdp-deployment#health-and-readiness). |
+
+Both storage paths must be on persistent storage that survives restarts. On ephemeral storage every restart becomes a full cold start. See [Deployment requirements](./new-edge-pdp-deployment#deployment-requirements).
+
+Ports `7002`, `7003`, `8181`, `4222`, and `8222` are used internally and bind to loopback only — see [Architecture](./new-edge-pdp-architecture#ports). Expose **`7000` and `7001`** and nothing else.
+
+---
+
+## Behavior and tuning
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `RUST_LOG` | `info` | Log level. Try `info,edge_pdp=debug` when debugging. |
+| `PDP_DEBUG` | `false` | Include debug detail in authorization responses. |
+| `OPA_TIMEOUT_MS` | `800` | Per-request policy evaluation timeout. |
+| `EDGE_PARALLELISM` | `4` | How many change transactions are applied concurrently. |
+| `EDGE_DECISION_LOG_OPT_OUT` | `false` | Set to `true` to stop shipping decision logs. |
+| `EDGE_DRAIN_TIMEOUT_SECS` | `10` | Shutdown drain budget. |
+| `EDGE_CHILD_TERMINATION_TIMEOUT_SECS` | `30` | Child-process shutdown budget. |
+
+Your `terminationGracePeriodSeconds` must be at least the sum of the last two — **40 seconds at defaults**. See [Deployment requirements](./new-edge-pdp-deployment#deployment-requirements).
+
+### Child process logging
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `EDGE_NATS_LOG_LEVEL` | follows `RUST_LOG` | Control-plane client log level. |
+| `EDGE_OPA_LOG_LEVEL` | follows `RUST_LOG` | Policy engine log level. |
+
+:::warning Debug levels expose your data
+`EDGE_NATS_LOG_LEVEL=trace` logs raw message payloads — which means **your authorization data** — and `EDGE_OPA_LOG_LEVEL=debug` logs authorization request and response bodies. Use these only for short, deliberate debugging sessions, and never leave them on in production.
+:::
+
+---
+
+## Storage engine
+
+The embedded database inherits storage-engine defaults tuned for cloud-scale workloads, not for a small container. These are the levers that matter for memory footprint:
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `SURREAL_ROCKSDB_BLOCK_CACHE_SIZE` | `536870912` (512 MiB) | Read cache. The single largest lever on resident memory. |
+| `SURREAL_ROCKSDB_WRITE_BUFFER_SIZE` | `268435456` (256 MiB) | In-memory write buffer before flushing to disk. |
+| `SURREAL_ROCKSDB_MAX_WRITE_BUFFER_NUMBER` | `32` | How many write buffers may exist at once. |
+| `SURREAL_ROCKSDB_BACKGROUND_THREADS` | `4` | Background compaction threads. |
+
+At these defaults a container given only a few hundred MiB will be OOM-killed on startup. Start at **4 GiB** and tune down against your own data set. See [Resource footprint](./new-edge-pdp-how-it-works#resource-footprint).
+
+---
+
+## Related documentation
+
+- [New Edge PDP](./new-edge-pdp) — overview
+- [Architecture](./new-edge-pdp-architecture) — what runs inside the container and the request path
+- [How It Works](./new-edge-pdp-how-it-works) — sync, consistency, cold start, and resource profile
+- [Feature Parity](./new-edge-pdp-feature-parity) — capability comparison against the container PDP
+- [Deployment](./new-edge-pdp-deployment) — requirements, observability, and the security model
+- [Configurations](/concepts/pdp/configuration) — configuration reference for the container PDP

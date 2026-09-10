@@ -379,6 +379,21 @@ const sidebars = {
             "concepts/pdp/configuration",
             "concepts/pdp/cloud-pdp-capabilities",
             "concepts/pdp/cloud-pdp-benchmarks",
+            {
+              type: "category",
+              label: "New Edge PDP",
+              link: {
+                type: "doc",
+                id: "concepts/pdp/new-edge-pdp",
+              },
+              items: [
+                "concepts/pdp/new-edge-pdp-architecture",
+                "concepts/pdp/new-edge-pdp-how-it-works",
+                "concepts/pdp/new-edge-pdp-feature-parity",
+                "concepts/pdp/new-edge-pdp-deployment",
+                "concepts/pdp/new-edge-pdp-configuration",
+              ],
+            },
             "how-to/manage-data/local-facts-uploader",
           ],
         },
