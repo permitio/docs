@@ -46,6 +46,15 @@ const config = {
     hooks: {
       onBrokenMarkdownLinks: "throw",
     },
+    mdx1Compat: {
+      // Admonitions compat stays on: 251 legacy ":::type Title text" blocks
+      // across 111 files rely on it (auto-converted to a directive [Title]
+      // label). Disabling dropped ~1-27 admonitions per page on 110 pages —
+      // a real content rewrite, not a mechanical fix. See PR follow-ups.
+      comments: false,
+      admonitions: true,
+      headingIds: false,
+    },
   },
   themes: ["@docusaurus/theme-mermaid"],
   presets: [
@@ -255,7 +264,7 @@ const config = {
       },
       footer: {
         // No `style: "dark"`: _footer.scss paints it from tokens so it follows
-        // the colour mode (a dark footer on the light theme is website defect D2).
+        // the colour mode (a hard-coded dark footer would clash on the light theme).
         logo: {
           alt: "Permit.io Docs",
           src: "logo/logo_nav.svg",
