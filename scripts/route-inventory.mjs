@@ -12,16 +12,15 @@ const mode = process.argv[2];
 
 const norm = (u) => (u.length > 1 ? u.replace(/\/+$/, '') : u);
 
-// Redirect `from` paths, read from the docusaurus.config.js source of truth (same way
-// checkRedirects.js does it) rather than trusted to the filesystem walk below. On macOS/APFS
-// (case-insensitive, case-preserving) a build can silently fold a redirect's declared case
-// onto an already-existing lowercase doc directory, so the walk alone would miss (or
-// mis-case) that redirect. Reading the config keeps the exact case Netlify/CI will see.
-// NOTE: when Task 1.1 moves redirects into redirects.js, only this lookup needs to change.
+// Redirect `from` paths, read from redirects.js (the same source of truth
+// checkRedirects.js and docusaurus.config.js use) rather than trusted to the filesystem walk
+// below. On macOS/APFS (case-insensitive, case-preserving) a build can silently fold a
+// redirect's declared case onto an already-existing lowercase doc directory, so the walk
+// alone would miss (or mis-case) that redirect. Reading redirects.js keeps the exact case
+// Netlify/CI will see.
 function redirectFromsFromConfig() {
-  const config = require('../docusaurus.config.js');
-  const [, options] = config.plugins.find((p) => Array.isArray(p) && p[0] === '@docusaurus/plugin-client-redirects');
-  return (options.redirects || []).flatMap((r) => r.from).map(norm);
+  const redirects = require('../redirects.js');
+  return redirects.flatMap((r) => r.from).map(norm);
 }
 
 function builtRoutes() {
