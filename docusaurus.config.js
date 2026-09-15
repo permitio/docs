@@ -165,11 +165,6 @@ const config = {
             className: "algolia-search",
           },
           {
-            type: "docsVersion",
-            position: "right",
-            className: "version",
-          },
-          {
             alt: "github logo",
             className: "github-icon nav-icon",
             href: "https://github.com/permitio",
