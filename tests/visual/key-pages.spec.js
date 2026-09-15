@@ -3,9 +3,9 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { KEY_PAGES } from "./key-pages.js";
 
-// Baseline "before" screenshots for the docs-site makeover (Task 0.3). Later
-// stages re-run this spec (`npm run test:visual`) to produce "after" shots
-// for the same pages, viewports and themes so the two can be diffed.
+// Baseline "before" screenshots for the docs-site makeover. Later stages
+// re-run this spec (`npm run test:visual`) to produce "after" shots for the
+// same pages, viewports and themes so the two can be diffed.
 //
 // This spec is deliberately NOT part of the default `npx playwright test`
 // invocation Argos CI runs - see the RUN_VISUAL_BASELINE gate in
