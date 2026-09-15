@@ -13,6 +13,15 @@ const path = require("path");
 const prismLightTheme = require("./src/css/prism/light");
 const prismDarkTheme = require("./src/css/prism/dark");
 const siteLinks = require("./src/data/site-links");
+const nexusAnnouncement = require("./src/data/announcements");
+
+// Shown when the owner flips announcements.js's `enabled` to true, or for a
+// preview deploy via DOCS_ANNOUNCEMENT=<id> (matched against the id field).
+// Undefined means Docusaurus renders no announcement bar at all.
+const activeAnnouncement =
+  nexusAnnouncement.enabled || process.env.DOCS_ANNOUNCEMENT === nexusAnnouncement.id
+    ? nexusAnnouncement
+    : undefined;
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -312,13 +321,15 @@ const config = {
         disableSwitch: false,
         respectPrefersColorScheme: true,
       },
-      announcementBar: {
-        id: "support_us",
-        content: `If you like Permit, give us a ⭐️  on <a href="${siteLinks.OPAL}" target="_blank" rel="noopener noreferrer">GitHub</a> and follow us on <a href="${siteLinks.X}" target="_blank" rel="noopener noreferrer">X</a>`,
-        backgroundColor: "#8132D7",
-        textColor: "#FFFFFF",
-        isCloseable: true,
-      },
+      ...(activeAnnouncement && {
+        announcementBar: {
+          id: activeAnnouncement.id,
+          content: activeAnnouncement.content,
+          backgroundColor: activeAnnouncement.backgroundColor,
+          textColor: activeAnnouncement.textColor,
+          isCloseable: activeAnnouncement.isCloseable,
+        },
+      }),
     }),
 };
 
