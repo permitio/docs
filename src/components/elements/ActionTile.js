@@ -28,7 +28,7 @@ export default function ActionTile(props) {
 			</div>
 			<div className="px-4 pb-4 h-10 rounded font-semibold">
 				<span
-					className="hover:cursor-pointer hover:text-[#4e3bdb]"
+					className="hover:cursor-pointer hover:text-pm-link"
 					onClick={() => redirectUser()}
 				>
 					Learn More →

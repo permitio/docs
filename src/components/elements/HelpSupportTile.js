@@ -1,4 +1,5 @@
 import React from "react";
+import siteLinks from "@site/src/data/site-links";
 
 export default function HelpSupportTile() {
 	return (
@@ -17,21 +18,36 @@ export default function HelpSupportTile() {
 				<div className="flex flex-col w-1/2 font-medium text-sm justify-around">
 					<span className="">
 						Questions?{" "}
-						<a className="text-pm-link" href="">
+						<a
+							className="text-pm-link"
+							href={siteLinks.DEMO}
+							target="_blank"
+							rel="noopener noreferrer"
+						>
 							Contact Us
 						</a>
 						.
 					</span>
 					<span>
 						Watch our{" "}
-						<a className="text-pm-link" href="">
+						<a
+							className="text-pm-link"
+							href={siteLinks.VIDEOS}
+							target="_blank"
+							rel="noopener noreferrer"
+						>
 							developer tutorials
 						</a>
 						.
 					</span>
 					<span>
 						Need help? Join our{" "}
-						<a className="text-pm-link" href="">
+						<a
+							className="text-pm-link"
+							href={siteLinks.COMMUNITY}
+							target="_blank"
+							rel="noopener noreferrer"
+						>
 							Slack
 						</a>
 						.
@@ -59,7 +75,12 @@ export default function HelpSupportTile() {
 					</div>
 					<span className="text-xs mt-2">
 						You can unsubscribe at any time. Read our{" "}
-						<a href="https://permit.io" className="text-pm-link">
+						<a
+							href={siteLinks.PRIVACY}
+							className="text-pm-link"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
 							privacy policy
 						</a>
 						.
