@@ -12,6 +12,7 @@ const path = require("path");
 // Code block themes from the www.permit.io palette; contrast notes in each file.
 const prismLightTheme = require("./src/css/prism/light");
 const prismDarkTheme = require("./src/css/prism/dark");
+const siteLinks = require("./src/data/site-links");
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -97,10 +98,45 @@ const config = {
           },
         },
         SearchBar: {
+          searchSettings: {
+            placeholder: "Search docs",
+          },
           baseSettings: {
             apiKey: "446287e718c0fd535135e7e51147a028a61120d17fd74d2f",
             primaryBrandColor: "#8132D7",
             organizationDisplayName: "Permit.io",
+            theme: {
+              // The trigger renders in a shadow root, so navbar CSS cannot reach
+              // it; page tokens (custom properties) still inherit. It fills the
+              // width _navbar.scss gives its host and shows only the icon when
+              // that host is narrow (below 1440px).
+              styles: [
+                {
+                  key: "pm-navbar-search",
+                  type: "style",
+                  value: `
+                    .ikp-search-bar__container { min-width: 0 !important; }
+                    .ikp-search-bar__container button {
+                      width: 100%;
+                      border-color: var(--pm-border-strong);
+                      background: transparent;
+                      color: var(--pm-text-muted);
+                    }
+                    .ikp-search-bar__text {
+                      overflow: hidden;
+                      color: var(--pm-text-muted);
+                      font-size: 0.875rem;
+                      text-overflow: ellipsis;
+                      white-space: nowrap;
+                    }
+                    @media (max-width: 1439px) {
+                      .ikp-search-bar__container button { justify-content: center; padding: 0; }
+                      .ikp-search-bar__text, .ikp-search-bar__container kbd { display: none; }
+                    }
+                  `,
+                },
+              ],
+            },
           },
         },
       },
@@ -126,46 +162,75 @@ const config = {
       },
       navbar: {
         hideOnScroll: false,
-        // logo: {
-        //   alt: "Permit.io logo",
-        //   src: "logo/new-logo-light.svg",
-        //   srcDark: "logo/new-logo-dark.svg",
-        //   href: "/",
-        //   target: "_self",
-        //   width: 230,
-        // },
+        logo: {
+          alt: "Permit.io Docs",
+          src: "logo/logo_nav.svg",
+          srcDark: "logo/logo-dark.svg",
+          href: "/",
+          target: "_self",
+          width: 110,
+          height: 20,
+        },
         items: [
+          // Section tabs: each is backed by a sidebar in sidebars.js, so the tab
+          // stays active on every page of that section.
+          ...[
+            ["getStarted", "Get started"],
+            ["concepts", "Concepts"],
+            ["modeling", "Policies"],
+            ["enforce", "Enforce"],
+            ["aiAgents", "AI agents"],
+            ["sdks", "SDKs & API"],
+            ["integrations", "Integrations"],
+            ["operate", "Operate"],
+          ].map(([sidebarId, label]) => ({
+            type: "docSidebar",
+            sidebarId,
+            label,
+            position: "left",
+            className: "pm-nav-tab",
+          })),
           {
             type: "search",
-            position: "left",
-            className: "algolia-search",
+            position: "right",
+            className: "pm-nav-search",
           },
           {
-            alt: "github logo",
-            className: "github-icon nav-icon",
-            href: "https://github.com/permitio",
-            target: "_blank",
+            label: "API reference",
+            href: siteLinks.API_REFERENCE,
             position: "right",
+            className: "pm-nav-link",
           },
           {
-            alt: "twitter logo",
-            className: "twitter-icon nav-icon",
-            href: "https://twitter.com/permit_io",
-            target: "_blank",
+            type: "dropdown",
+            label: "permit.io",
             position: "right",
-          },
-          {
-            alt: "slack logo",
-            className: "slack-icon nav-icon",
-            href: "https://io.permit.io/docs-to-slack",
-            target: "_blank",
-            position: "right",
+            className: "pm-nav-link pm-nav-www",
+            items: [
+              { type: "html", value: '<span class="pm-dropdown-heading">Products</span>' },
+              ...siteLinks.products.map(({ label, href }) => ({ label, href })),
+              {
+                type: "html",
+                value: '<span class="pm-dropdown-heading">Authorization models</span>',
+              },
+              ...siteLinks.models.map(({ label, href }) => ({ label, href })),
+              { type: "html", value: '<hr class="pm-dropdown-divider" />' },
+              { label: "Pricing", href: siteLinks.PRICING },
+              { label: "Trust Center", href: siteLinks.TRUST },
+              { label: "Blog", href: siteLinks.BLOG },
+            ],
           },
           {
             type: "html",
             position: "right",
-            className: "dashboard",
-            value: "<a target='_blank' href='https://io.permit.io/QoPSfh'>Go to dashboard</a>",
+            className: "pm-nav-icon",
+            value: `<a href="${siteLinks.GITHUB}" target="_blank" rel="noopener noreferrer" aria-label="Permit.io on GitHub"><i class="ri-github-fill" aria-hidden="true"></i><span class="pm-nav-icon__label">GitHub</span></a>`,
+          },
+          {
+            type: "html",
+            position: "right",
+            className: "pm-nav-cta",
+            value: `<a href="${siteLinks.APP}" target="_blank" rel="noopener noreferrer">Open dashboard</a>`,
           },
         ],
       },
@@ -181,8 +246,7 @@ const config = {
       },
       announcementBar: {
         id: "support_us",
-        content:
-          'If you like Permit, give us a ⭐️  on <a href="https://www.github.com/permitio/opal" target="_blank" rel="noopener noreferrer">GitHub</a> and follow us on <a href="https://www.twitter.com/permit_io" target="_blank" rel="noopener noreferrer">Twitter</a>',
+        content: `If you like Permit, give us a ⭐️  on <a href="${siteLinks.OPAL}" target="_blank" rel="noopener noreferrer">GitHub</a> and follow us on <a href="${siteLinks.X}" target="_blank" rel="noopener noreferrer">X</a>`,
         backgroundColor: "#8132D7",
         textColor: "#FFFFFF",
         isCloseable: true,
