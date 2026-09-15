@@ -50,6 +50,9 @@ const config = {
         docs: {
           sidebarPath: require.resolve("./sidebars.js"),
           routeBasePath: "/",
+          // Docusaurus appends the doc's own relative path (with its real
+          // extension) natively; no more hand-built .mdx-only URL in TOC.
+          editUrl: "https://github.com/permitio/docs/edit/master/",
           lastVersion: "current",
           versions: {
             current: {
@@ -149,7 +152,7 @@ const config = {
       mermaid: {
         options: {
           themeVariables: {
-            edgeLabelBackground: '#F9EDE7',
+            edgeLabelBackground: "#F9EDE7",
           },
         },
       },
