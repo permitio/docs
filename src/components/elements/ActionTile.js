@@ -10,14 +10,14 @@ export default function ActionTile(props) {
 		<div
 			className={cx(
 				"flex flex-col",
-				props.alt ? "bg-[#6851ff]" : "bg-slate-100",
-				props.alt ? "text-white" : "text-slate-800",
+				props.alt ? "bg-pm-primary" : "bg-slate-100",
+				props.alt ? "text-pm-on-primary" : "text-slate-800",
 				"my-3 w-64 mr-3 h-40 rounded"
 			)}
 		>
 			<div
 				className={cx(
-					props.alt ? "bg-[#4b2fff]" : "bg-slate-200",
+					props.alt ? "bg-pm-purple" : "bg-slate-200",
 					"w-full px-4 py-2 rounded"
 				)}
 			>

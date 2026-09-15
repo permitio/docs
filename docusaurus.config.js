@@ -116,14 +116,14 @@ const config = {
         ChatButton: {
           baseSettings: {
             apiKey: "446287e718c0fd535135e7e51147a028a61120d17fd74d2f",
-            primaryBrandColor: "#7542B5",
+            primaryBrandColor: "#8132D7",
             organizationDisplayName: "Permit.io",
           },
         },
         SearchBar: {
           baseSettings: {
             apiKey: "446287e718c0fd535135e7e51147a028a61120d17fd74d2f",
-            primaryBrandColor: "#7542B5",
+            primaryBrandColor: "#8132D7",
             organizationDisplayName: "Permit.io",
           },
         },
@@ -137,7 +137,7 @@ const config = {
       mermaid: {
         options: {
           themeVariables: {
-            edgeLabelBackground: '#EEEEEE',
+            edgeLabelBackground: '#F9EDE7',
           },
         },
       },
@@ -207,7 +207,7 @@ const config = {
         id: "support_us",
         content:
           'If you like Permit, give us a ⭐️  on <a href="https://www.github.com/permitio/opal" target="_blank" rel="noopener noreferrer">GitHub</a> and follow us on <a href="https://www.twitter.com/permit_io" target="_blank" rel="noopener noreferrer">Twitter</a>',
-        backgroundColor: "#6851ff",
+        backgroundColor: "#8132D7",
         textColor: "#FFFFFF",
         isCloseable: true,
       },

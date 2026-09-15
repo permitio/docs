@@ -14,11 +14,11 @@ export default function ElementTile(props) {
 					redirectUser();
 				}}
 			>
-				<span className="mr-4 font-semibold text-[#6851ff] dark:text-[#a796ff]">
+				<span className="mr-4 font-semibold text-pm-link">
 					{props.title}
 				</span>
 				{props.recommended ? (
-					<div className="flex items-center justify-center bg-[#6851ff] px-2 text-xs text-white text-bold rounded">
+					<div className="flex items-center justify-center bg-pm-primary px-2 text-xs text-pm-on-primary text-bold rounded">
 						RECOMMENDED
 					</div>
 				) : null}

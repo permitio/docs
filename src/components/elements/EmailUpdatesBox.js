@@ -41,7 +41,7 @@ export default function EmailUpdatesBox(props) {
 								className="w-full px-6 border-none outline-none dark:bg-white dark:text-slate-900"
 							/>
 							<button
-								className="w-28 bg-white dark:bg-[#6851ff] text-[#6851ff] dark:text-white font-semibold border-none cursor-pointer"
+								className="w-28 bg-white dark:bg-pm-primary text-pm-purple dark:text-pm-on-primary font-semibold border-none cursor-pointer"
 								onClick={() => textBox()}
 							>
 								Sign Up
@@ -49,7 +49,7 @@ export default function EmailUpdatesBox(props) {
 						</div>
 						<span className="text-xs mt-2 dark:text-slate-900">
 							Read our{" "}
-							<a href="https://permit.io" className="text-[#6851ff]">
+							<a href="https://permit.io" className="text-pm-link underline dark:text-slate-900">
 								privacy policy
 							</a>
 							.

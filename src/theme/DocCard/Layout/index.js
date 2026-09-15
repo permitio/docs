@@ -22,11 +22,11 @@ function Container({ className, href, children }) {
     >
       <div className="flex flex-col relative z-20 gap-[14px]">{children}</div>
       <div
-        style={{ border: "1px solid #D1B9B0" }}
+        style={{ border: "1px solid var(--pm-border)" }}
         className="absolute z-10 pointer-events-none rounded-lg inset-0 opacity-100 group-hover:opacity-0 transition"
       ></div>
       <div
-        style={{ border: "2px solid #974EF2" }}
+        style={{ border: "2px solid var(--pm-purple)" }}
         className="absolute z-10 pointer-events-none rounded-lg inset-0 opacity-0 group-hover:opacity-100 transition"
       ></div>
     </Link>
