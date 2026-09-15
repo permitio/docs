@@ -5,7 +5,7 @@ import styles from "./styles.module.css";
 import hero_image from "./assets/hero.png";
 import cloud from "./assets/cloud.png";
 
-const SectionHero = ({ title, text }) => (
+const SectionHero = ({ title = "Welcome to Permit.io", text = "" }) => (
   <div className="min-h-[260px] relative p-6 md:p-12 !-mt-[2.2rem] overflow-hidden ">
     <div className="flex flex-col xl:flex-row items-center justify-between gap-10 mx-auto w-full px-0 lg:px-5 max-w-6xl">
       <div className="flex flex-col gap-3 shrink-0 relative z-20">
@@ -39,13 +39,8 @@ const SectionHero = ({ title, text }) => (
 );
 
 SectionHero.propTypes = {
-  title: PropTypes.string.isRequired,
-  text: PropTypes.string.isRequired,
-};
-
-SectionHero.defaultProps = {
-  title: "Welcome to Permit.io",
-  text: "",
+  title: PropTypes.string,
+  text: PropTypes.string,
 };
 
 export default SectionHero;
