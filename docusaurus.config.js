@@ -203,12 +203,6 @@ const config = {
         disableSwitch: false,
         respectPrefersColorScheme: false,
       },
-      algolia: {
-        appId: "MVBO9ANY91",
-        apiKey: "cce9564dd44f4505a37949e7ba1593e0",
-        indexName: "permit",
-        contextualSearch: true,
-      },
       announcementBar: {
         id: "support_us",
         content:
