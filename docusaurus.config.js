@@ -9,12 +9,7 @@
 
 const path = require("path");
 
-const lightCodeTheme = require("./src/css/prism-theme");
-const darkCodeTheme = require("prism-react-renderer/themes/dracula");
-
-const companyWebsiteUrl = process.env.COMPANY_WEBSITE_URL ?? "https://permit.io";
-
-const apiReferenceUrl = process.env.API_REFERENCE_URL ?? "https://api.permit.io/v2/redoc";
+const { themes } = require("prism-react-renderer");
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -25,16 +20,24 @@ const config = {
   url: "https://docs.permit.io",
   baseUrl: "/",
   onBrokenLinks: "throw",
-  onBrokenMarkdownLinks: "throw",
   favicon: "logo/favicon.ico",
   organizationName: "permitio", // Usually your GitHub org/user name.
   projectName: "docs", // Usually your repo name.
+  future: {
+    v4: {
+      removeLegacyPostBuildHeadAttribute: true,
+      useCssCascadeLayers: false,
+    },
+  },
   markdown: {
     mermaid: true,
     mdx1Compat: {
       comments: true,
       admonitions: true,
       headingIds: false,
+    },
+    hooks: {
+      onBrokenMarkdownLinks: "throw",
     },
   },
   themes: ["@docusaurus/theme-mermaid"],
@@ -146,14 +149,14 @@ const config = {
             className: "version",
           },
           {
-            alt: "twitter logo",
+            alt: "github logo",
             className: "github-icon nav-icon",
             href: "https://github.com/permitio",
             target: "_blank",
             position: "right",
           },
           {
-            alt: "github logo",
+            alt: "twitter logo",
             className: "twitter-icon nav-icon",
             href: "https://twitter.com/permit_io",
             target: "_blank",
@@ -175,7 +178,8 @@ const config = {
         ],
       },
       prism: {
-        theme: require("prism-react-renderer/themes/dracula"),
+        theme: themes.github,
+        darkTheme: themes.dracula,
         additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl", "php", "bash"],
       },
       colorMode: {
