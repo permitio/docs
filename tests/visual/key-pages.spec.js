@@ -30,6 +30,54 @@ function waitForDocusaurusHydration() {
   return document.documentElement.dataset.hasHydrated === "true";
 }
 
+// Known flake (ai-security-framework, quickstart, 390 viewport): images that
+// are still decoding when the screenshot fires paint one or two frames late,
+// producing a small pixel diff on an otherwise-identical page. Wait for
+// every <img> on the page to finish loading, then for the network to go
+// idle, before capturing.
+async function waitForImages(page) {
+  // `loading="lazy"` images below the fold don't start fetching until they
+  // scroll into view - `page.screenshot({fullPage: true})` does scroll
+  // through the page, but only during the capture itself, which is too late
+  // for a wait that runs before it. Scroll through first so every image on
+  // the page has actually started loading before we wait on it.
+  await page.evaluate(async () => {
+    const step = window.innerHeight || 800;
+    const height = document.documentElement.scrollHeight;
+    for (let y = 0; y < height; y += step) {
+      window.scrollTo(0, y);
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+    window.scrollTo(0, 0);
+  });
+
+  await page.evaluate(async () => {
+    const images = Array.from(document.images);
+    await Promise.all(
+      images.map((img) => {
+        if (img.complete) {
+          return Promise.resolve();
+        }
+        return new Promise((resolve) => {
+          img.addEventListener("load", resolve, { once: true });
+          img.addEventListener("error", resolve, { once: true });
+          // Safety net: an image the browser defers indefinitely (e.g. one
+          // that never actually enters the viewport) must not hang the
+          // whole capture - 4s is generous for a same-origin/static asset.
+          setTimeout(resolve, 4000);
+        });
+      })
+    );
+  });
+
+  // Best-effort: some pages keep a long-lived connection open (e.g. the
+  // Inkeep search/chat widget), which would never let networkidle resolve.
+  // Images are what actually cause the flake, so don't fail the capture if
+  // idle isn't reached quickly.
+  await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+}
+
 for (const keyPage of KEY_PAGES) {
   for (const viewport of VIEWPORTS) {
     for (const theme of THEMES) {
@@ -61,6 +109,8 @@ for (const keyPage of KEY_PAGES) {
         if (appliedTheme !== theme) {
           throw new Error(`theme mismatch for ${keyPage.path}: expected data-theme="${theme}", got "${appliedTheme}"`);
         }
+
+        await waitForImages(page);
 
         await page.addStyleTag({ content: stylesheet });
 
