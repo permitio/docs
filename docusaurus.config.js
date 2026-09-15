@@ -143,7 +143,14 @@ const config = {
                     }
                     @media (max-width: 1439px) {
                       .ikp-search-bar__container button { justify-content: center; padding: 0; }
-                      .ikp-search-bar__text, .ikp-search-bar__container kbd { display: none; }
+                      .ikp-search-bar__container kbd { display: none; }
+                      /* Visually hidden, not display:none, so the icon-only
+                         button keeps "Search docs" as its accessible name. */
+                      .ikp-search-bar__text {
+                        display: block !important; /* Inkeep hides it on narrow viewports */
+                        position: absolute; width: 1px; height: 1px;
+                        overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+                      }
                     }
                   `,
                 },
