@@ -1,53 +1,38 @@
 import { useState } from "react";
-import anime from "animejs/lib/anime.es.js";
-// import SyntaxHighlighter from "react-syntax-highlighter";
-// import { docco } from "react-syntax-highlighter/dist/esm/styles/hljs";
-import { CodeBlock, tomorrowNightBlue } from "react-code-blocks";
+import ThemeCodeBlock from "@theme/CodeBlock";
 import "./CodeDropdown.scss";
-import { render } from "react-dom";
 
-export default function CodeDropdown(props) {
-	const [isOpen, setOpen] = useState(props.open);
-	const [mode, setMode] = useState("dark");
-	const [language, setLanguage] = useState(props.language);
-	const [languages, setLanguages] = useState(props.languages);
-	const [code] = useState(props.code);
-
+export default function CodeDropdown({
+	open = false,
+	number,
+	title,
+	client,
+	server,
+	code = [],
+	language = [],
+	languages = [],
+	showLineNumbers,
+	children,
+}) {
+	const [isOpen, setOpen] = useState(open);
 	const [currentKey, setCurrentKey] = useState(0);
-
-	// FUTURE ANIMATION POSSIBILITIES
-
-	// useEffect(() => {
-	// 	var t1 = anime
-	// 		.timeline({
-	// 			targets: ".test",
-	// 			easing: "easeInOutSine",
-	// 			delay: anime.stagger(200),
-	// 			height: [0, "200px"],
-	// 			duration: 500,
-	// 		})
-	// 		.add({
-	// 			delay: 200,
-	// 			opacity: ["0", "1"],
-	// 		});
-	// }, [isOpen]);
 
 	return (
 		<div className="flex flex-col">
 			<div className="w-full flex justify-between items-center p-3 border-t-[1px] border-solid border-l-0 border-b-0 border-r-0 border-slate-200">
 				<div className="flex justify-center items-center">
 					<span className="text-xl text-slate-500 dark:text-slate-400 mr-3 font-semibold">
-						{props.number}
+						{number}
 					</span>
 					<span className="text-xl font-semibold mr-3 text-slate-900 dark:text-slate-300">
-						{props.title}
+						{title}
 					</span>
-					{props.client ? (
+					{client ? (
 						<span className="text-xs bg-slate-200 dark:bg-slate-200 0 px-1.5 py-0.5 rounded text-slate-900">
 							Client-side
 						</span>
 					) : null}
-					{props.server ? (
+					{server ? (
 						<span className="text-xs bg-slate-200 dark:bg-slate-200 px-1.5 py-0.5 rounded text-slate-900">
 							Server-side
 						</span>
@@ -92,7 +77,7 @@ export default function CodeDropdown(props) {
 			</div>
 			{isOpen ? (
 				<div className="w-full mb-6 px-3">
-					{props.children}
+					{children}
 
 					<div className="parentCodeSelector w-full">
 						<div className="w-full bg-[#0f2540] h-8 flex items-center border-b-2 border-black rounded-t-md">
@@ -108,15 +93,12 @@ export default function CodeDropdown(props) {
 								);
 							})}
 						</div>
-						<CodeBlock
-							style={{ width: "100%" }}
-							text={code[currentKey]}
+						<ThemeCodeBlock
 							language={language[currentKey]}
-							showLineNumbers={props.showLineNumbers}
-							theme={tomorrowNightBlue}
-							wrapLines={true}
-							CodeBlock
-						/>
+							showLineNumbers={showLineNumbers}
+						>
+							{code[currentKey]}
+						</ThemeCodeBlock>
 					</div>
 				</div>
 			) : null}

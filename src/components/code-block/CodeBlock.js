@@ -1,7 +1,6 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import PropTypes from "prop-types";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism";
+import ThemeCodeBlock from "@theme/CodeBlock";
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
@@ -24,36 +23,26 @@ const filesTree = context
     return acc;
   }, {});
 
+// File-extension -> Prism language id. Most extensions already match a
+// Prism/Docusaurus language id (or a recognized alias) directly; the two
+// package-manager "languages" below aren't real grammars, so they're mapped
+// onto `bash` for highlighting instead of rendering unstyled.
+const PRISM_LANGUAGE_OVERRIDES = {
+  npm: "bash",
+  yarn: "bash",
+};
+
 function CodeTabItem({ file }) {
-  const [copyStatus, setCopyStatus] = useState("Copy Code");
-
-  const handleCopyCode = useCallback(() => {
-    navigator.clipboard
-      .writeText(file.content)
-      .then(() => {
-        setCopyStatus("Woof!");
-        setTimeout(() => setCopyStatus("Copy Code"), 3000);
-      })
-      .catch((err) => {
-        console.error("Failed to copy code: ", err);
-      });
-  }, [file.content]);
-
   const language = file.name.split(".").pop();
+  const prismLanguage = PRISM_LANGUAGE_OVERRIDES[language] || language;
   const showLineNumbers = !["npm", "yarn"].includes(language);
 
   return (
     <div className="tabContent">
-      <button
-        onClick={handleCopyCode}
-        className={`copyButtonInline ${copyStatus === "Woof!" ? "copiedAnimation" : ""}`}
-      >
-        {copyStatus}
-      </button>
       <div className="codeContent noHorizontalScroll">
-        <SyntaxHighlighter language={language} style={dracula} showLineNumbers={showLineNumbers}>
+        <ThemeCodeBlock language={prismLanguage} showLineNumbers={showLineNumbers}>
           {file.content}
-        </SyntaxHighlighter>
+        </ThemeCodeBlock>
       </div>
     </div>
   );
