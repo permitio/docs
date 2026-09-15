@@ -1,27 +1,8 @@
 import React, { useState } from "react";
-import axios from "axios";
 
 export default function EmailUpdatesBox(props) {
 	const [success, setSuccess] = useState(false);
 	const [email, setEmail] = useState(null);
-
-	const addSubscriber = () => {
-		// Replace URL with actual endpoint to add emails to HubSpot.
-		const url = null;
-
-		try {
-			const response = axios.post({
-				url,
-				email,
-			});
-
-			if ((response.status = 200)) {
-				setSuccess(true);
-			}
-		} catch (err) {
-			console.log(err);
-		}
-	};
 
 	// temporary for testing
 	const textBox = () => {
