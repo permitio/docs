@@ -72,13 +72,15 @@ module.exports = {
       },
     ],
   },
-  overrides: {
-    // disable for test files
-    files: ["tests/**"],
-    rules: {
-      "spellcheck/spell-checker": ["off"],
+  overrides: [
+    {
+      // disable for test files
+      files: ["tests/**"],
+      rules: {
+        "spellcheck/spell-checker": ["off"],
+      },
     },
-  },
+  ],
   settings: {
     react: {
       version: "detect",
