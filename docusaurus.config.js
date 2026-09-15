@@ -234,6 +234,71 @@ const config = {
           },
         ],
       },
+      footer: {
+        // No `style: "dark"`: _footer.scss paints it from tokens so it follows
+        // the colour mode (a dark footer on the light theme is website defect D2).
+        logo: {
+          alt: "Permit.io Docs",
+          src: "logo/logo_nav.svg",
+          srcDark: "logo/logo-dark.svg",
+          href: "/",
+          width: 110,
+          height: 20,
+        },
+        links: [
+          {
+            title: "Docs",
+            items: [
+              { label: "Quickstart", to: "/quickstart" },
+              { label: "Concepts", to: "/overview/how-does-it-work" },
+              { label: "SDKs", to: "/sdk/sdks-overview" },
+              { label: "API reference", href: siteLinks.API_REFERENCE },
+              { label: "Changelog", to: "/updates-and-feedback/changelog" },
+              { label: "Status", href: siteLinks.STATUS },
+            ],
+          },
+          {
+            title: "Products",
+            items: siteLinks.products.map(({ label, href }) => ({ label, href })),
+          },
+          {
+            title: "Resources",
+            items: [
+              { label: "Blog", href: siteLinks.BLOG },
+              // The website has no models index page; RBAC links to the other three.
+              { label: "Authorization models", href: siteLinks.models[0].href },
+              { label: "Open source OPAL", href: siteLinks.OPAL },
+              { label: "Videos", href: siteLinks.VIDEOS },
+            ],
+          },
+          {
+            title: "Company",
+            items: [
+              { label: "Trust Center", href: siteLinks.TRUST },
+              { label: "Pricing", href: siteLinks.PRICING },
+              { label: "Contact sales", href: siteLinks.DEMO },
+              { label: "Community Slack", href: siteLinks.COMMUNITY },
+              { label: "Privacy", href: siteLinks.PRIVACY },
+              { label: "Terms", href: siteLinks.TERMS },
+            ],
+          },
+        ],
+        copyright: [
+          `<span class="pm-footer-copyright">&copy; ${new Date().getFullYear()} Permit.io</span>`,
+          '<ul class="pm-footer-social">',
+          ...[
+            ["GitHub", siteLinks.GITHUB, "ri-github-fill"],
+            ["Slack", siteLinks.COMMUNITY, "ri-slack-fill"],
+            ["X", siteLinks.X, "ri-twitter-x-fill"],
+            ["YouTube", siteLinks.YOUTUBE, "ri-youtube-fill"],
+            ["LinkedIn", siteLinks.LINKEDIN, "ri-linkedin-box-fill"],
+          ].map(
+            ([name, href, icon]) =>
+              `<li><a href="${href}" target="_blank" rel="noopener noreferrer" aria-label="Permit.io on ${name}"><i class="${icon}" aria-hidden="true"></i></a></li>`
+          ),
+          "</ul>",
+        ].join(""),
+      },
       prism: {
         theme: prismLightTheme,
         darkTheme: prismDarkTheme,
