@@ -116,6 +116,7 @@ const sidebars = {
           type: "category",
           label: "Conceptual Guides",
           items: [
+            "overview/how-does-it-work",
             "overview/why-permit",
             "concepts/differentiator-checklist",
             "how-to/build-policies/policy-basics",
@@ -142,7 +143,6 @@ const sidebars = {
           },
           items: [
             "how-to/ownership",
-            "overview/how-does-it-work",
             "concepts/multi-tenant-authorization",
             {
               // Lives in the modeling sidebar (ABAC); linked here, not listed twice.
