@@ -95,6 +95,20 @@ function collect() {
 		const layers = [];
 		let node = el;
 		while (node && node !== document.documentElement) {
+			// Mermaid (and other SVG) labels are HTML inside <foreignObject>; the
+			// colour behind them is the SVG shape's `fill`, not a CSS background.
+			// Without this the label is measured against the page and reads as a
+			// false ~1:1 failure (or a false pass). Use the node shape's fill as the
+			// opaque layer when it has one.
+			if (node.tagName && node.tagName.toLowerCase() === 'foreignobject') {
+				const group = node.closest('g.node, g.cluster');
+				const shape = group && group.querySelector(':scope > rect, :scope > polygon, :scope > path, :scope > circle, :scope > ellipse, :scope > g > rect, :scope > g > path');
+				const fill = shape && parseColor(getComputedStyle(shape).fill);
+				if (fill && fill.alpha === 1) {
+					layers.push(fill);
+					break;
+				}
+			}
 			const cs = getComputedStyle(node);
 			if (cs.backgroundImage && cs.backgroundImage !== 'none') return null;
 			const bg = parseColor(cs.backgroundColor);
@@ -192,6 +206,11 @@ function collect() {
 		const rect = el.getBoundingClientRect();
 		if (rect.width <= 0 || rect.height <= 0) return;
 		if (rect.right <= viewportWidth + 1.5) return;
+		// Docusaurus's skip link is parked just past the right edge on purpose
+		// (theme-classic SkipToContent: position fixed, left 100%) and moves to
+		// left 1rem on :focus, so it is not lost content. Matched by its fixed
+		// target href, not by class, so any other overflowing link still counts.
+		if (el.matches('a[href="#__docusaurus_skipToContent_fallback"]') && cs.position === 'fixed') return;
 		// Ignore anything inside a container that scrolls horizontally on purpose
 		// (e.g. Docusaurus code blocks, tables).
 		let node = el.parentElement;
