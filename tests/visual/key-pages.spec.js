@@ -14,7 +14,7 @@ import { KEY_PAGES } from "./key-pages.js";
 const siteUrl = process.env.BASE_URL || "http://localhost:3000";
 const stylesheetPath = join(__dirname, "..", "screenshot.css");
 const stylesheet = readFileSync(stylesheetPath).toString();
-const outDir = join(__dirname, "..", "..", "screenshots", "baseline");
+const outDir = join(__dirname, "..", "..", "screenshots", process.env.VISUAL_OUT_DIR || "baseline");
 
 const VIEWPORTS = [
   { name: "1440", width: 1440, height: 900 },
