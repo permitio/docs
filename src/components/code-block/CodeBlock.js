@@ -4,8 +4,6 @@ import ThemeCodeBlock from "@theme/CodeBlock";
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-import "./CodeBlock.css";
-
 const context = require.context("!raw-loader!../../sdks", true);
 
 const filesTree = context
@@ -38,13 +36,9 @@ function CodeTabItem({ file }) {
   const showLineNumbers = !["npm", "yarn"].includes(language);
 
   return (
-    <div className="tabContent">
-      <div className="codeContent noHorizontalScroll">
-        <ThemeCodeBlock language={prismLanguage} showLineNumbers={showLineNumbers}>
-          {file.content}
-        </ThemeCodeBlock>
-      </div>
-    </div>
+    <ThemeCodeBlock language={prismLanguage} showLineNumbers={showLineNumbers}>
+      {file.content}
+    </ThemeCodeBlock>
   );
 }
 
@@ -89,26 +83,27 @@ function CodeBlock({ folderPath }) {
   }
 
   return (
-    <div className="customCodeBlockWrapper">
-      <div className="codeBlock">
-        <Tabs
-          className="customTabs"
-          groupId="code-snippets"
-          defaultValue={filteredFiles[0].name}
-          values={filteredFiles.map((file) => {
-            const fileExtension = file.name.split(".").pop();
-            const language = languageNames[fileExtension] || fileExtension.toUpperCase();
-            return { label: language, value: file.name };
-          })}
-        >
-          {filteredFiles.map((file) => (
-            <TabItem key={file.name} value={file.name}>
-              <CodeTabItem file={file} />
-            </TabItem>
-          ))}
-        </Tabs>
-      </div>
-    </div>
+    // Tab bar styling: .pm-code-tabs in src/css/components/_code.scss.
+    <Tabs
+      className="pm-code-tabs"
+      groupId="code-snippets"
+      defaultValue={filteredFiles[0].name}
+      values={filteredFiles.map((file) => {
+        const fileExtension = file.name.split(".").pop();
+        const language = languageNames[fileExtension] || fileExtension.toUpperCase();
+        return {
+          label: language,
+          value: file.name,
+          attributes: { className: "pm-code-tabs__item" },
+        };
+      })}
+    >
+      {filteredFiles.map((file) => (
+        <TabItem key={file.name} value={file.name}>
+          <CodeTabItem file={file} />
+        </TabItem>
+      ))}
+    </Tabs>
   );
 }
 
