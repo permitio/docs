@@ -11,6 +11,32 @@ const path = require("path");
 
 const { themes } = require("prism-react-renderer");
 
+// prism-react-renderer's bundled `themes.github` light theme (used below for
+// code blocks) has several token colors that miss WCAG AA 4.5:1 text
+// contrast against its own #f6f8fa background out of the box: comment
+// (2.71:1), string/attr-value (4.32:1), the entity/variable/number/property
+// group (2.58:1), the atrule/keyword/attr-name/selector group (2.69:1), and
+// function/tag (4.30:1) — confirmed against `npm run audit:a11y`. Stage 3
+// re-tunes the whole code-block palette as part of the broader visual
+// system; until then, this keeps `themes.github` as the base (per the
+// approved dark-look-unchanged/light-theme-fixed decision for this upgrade)
+// and only nudges those failing token colors darker, same hue, just past
+// 4.5:1, so picking up the stock theme doesn't regress the a11y gate.
+const githubLightTheme = {
+  ...themes.github,
+  styles: themes.github.styles.map((style) => {
+    const overrides = {
+      comment: "#717161", // was #999988 (2.71:1 -> 4.66:1)
+      string: "#da1067", // was #e3116c (4.32:1 -> 4.64:1)
+      entity: "#277b7a", // was #36acaa (2.58:1 -> 4.70:1)
+      atrule: "#0078a0", // was #00a4db (2.69:1 -> 4.70:1)
+      function: "#d42d3d", // was #d73a49 (4.30:1 -> 4.65:1)
+    };
+    const overrideKey = Object.keys(overrides).find((type) => style.types.includes(type));
+    return overrideKey ? { ...style, style: { ...style.style, color: overrides[overrideKey] } } : style;
+  }),
+};
+
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "Permit.io Documentation",
@@ -178,7 +204,7 @@ const config = {
         ],
       },
       prism: {
-        theme: themes.github,
+        theme: githubLightTheme,
         darkTheme: themes.dracula,
         additionalLanguages: ["java", "ruby", "csharp", "groovy", "go", "hcl", "php", "bash"],
       },
