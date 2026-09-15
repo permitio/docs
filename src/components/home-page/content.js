@@ -50,7 +50,7 @@ export const homeSdks = [
     pkg: "permitio/permit-io",
     href: "/integrations/infra-as-code/terraform-provider",
   },
-  { name: "CLI", registry: "npm", pkg: "@permitio/cli", href: "/how-to/permit-cli/" },
+  { name: "CLI", registry: "npm", pkg: "@permitio/cli", href: "/how-to/permit-cli" },
 ];
 
 export const homeTasks = [
