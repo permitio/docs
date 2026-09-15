@@ -177,7 +177,7 @@ const config = {
       colorMode: {
         defaultMode: "light",
         disableSwitch: false,
-        respectPrefersColorScheme: false,
+        respectPrefersColorScheme: true,
       },
       announcementBar: {
         id: "support_us",

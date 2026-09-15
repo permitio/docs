@@ -27,8 +27,8 @@ export default function TOC({ toc, editUrl, ...props }) {
   }, []);
 
   return (
-    <div className="toc-wrapper">
-      <h2>Contents</h2>
+    <div className="pm-toc">
+      <h2 className="pm-toc-heading">Contents</h2>
       <OriginalTOC toc={toc} {...props} />
       <BrowserOnly>
         {() => (
@@ -40,7 +40,7 @@ export default function TOC({ toc, editUrl, ...props }) {
                 getFileForPathname(window.location.pathname)
               }
             />
-            <div className="flex content-center items-center mt-2 hover:opacity-75">
+            <div className="pm-toc-help">
               <svg
                 width="14"
                 height="14"
@@ -48,7 +48,6 @@ export default function TOC({ toc, editUrl, ...props }) {
                 fill="none"
                 aria-hidden="true"
                 alt="Slack Logo"
-                className="h-full mr-2"
               >
                 <path
                   d="M22,12 a6,6 0 1 1 6,-6 v6z M22,16 a6,6 0 0 1 0,12 h-16 a6,6 0 1 1 0,-12"
@@ -70,13 +69,12 @@ export default function TOC({ toc, editUrl, ...props }) {
               <a
                 href="https://io.permit.io/docs-to-slack"
                 target="_blank"
-                id="join-community"
-                className="font-semibold text-[0.875rem] hover:text-slate-900 hover:underline hover:cursor-pointer"
+                className="pm-toc-help-link"
               >
                 Join our community
               </a>
             </div>
-            <div className="flex content-center items-center mt-2 hover:opacity-75">
+            <div className="pm-toc-help">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 48 48"
@@ -84,7 +82,6 @@ export default function TOC({ toc, editUrl, ...props }) {
                 height="19px"
                 fill="#2196f3"
                 alt="Zoom Logo"
-                className="h-full mr-[6px] ml-[-1px]"
               >
                 <circle cx="24" cy="24" r="20" fill="#2196f3" />
                 <path
@@ -96,8 +93,7 @@ export default function TOC({ toc, editUrl, ...props }) {
               <a
                 href="https://io.permit.io/docs-to-call"
                 target="_blank"
-                id="join-community"
-                className="font-semibold text-[0.875rem] hover:text-slate-900 hover:underline hover:cursor-pointer"
+                className="pm-toc-help-link"
               >
                 Schedule a call
               </a>

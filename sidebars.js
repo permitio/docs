@@ -26,31 +26,19 @@ const sidebars = {
 
                 <div class='sidebar_bottom'>
                   <a target="_blank" rel="noopener noreferrer" href="https://www.permit.io/">
-                    <div>
-                      <img src="/sidebar-top-icons/normal-icons/marketing-home.svg" alt='' />
-                      <img src="/sidebar-top-icons/hover-icons/marketing-home.svg" alt='' />
-                    </div>
+                    <i class='ri-home-4-line' aria-hidden='true'></i>
                     Permit Homepage
                   </a>
                   <a target="_blank" rel="noopener noreferrer" href="https://api.permit.io/v2/redoc">
-                    <div>
-                      <img src="/sidebar-top-icons/normal-icons/api.svg" alt='' />
-                      <img src="/sidebar-top-icons/hover-icons/api.svg" alt='' />
-                    </div>
+                    <i class='ri-code-s-slash-line' aria-hidden='true'></i>
                     API Reference
                   </a>
                   <a target="_blank" rel="noopener noreferrer" href="https://io.permit.io/slack">
-                    <div>
-                      <img src="/sidebar-top-icons/normal-icons/slack.svg" alt='' />
-                      <img src="/sidebar-top-icons/hover-icons/slack.svg" alt='' />
-                    </div>
+                    <i class='ri-slack-line' aria-hidden='true'></i>
                     Slack Community
                   </a>
                   <a target="_blank" rel="noopener noreferrer" href="https://github.com/permitio">
-                    <div>
-                      <img src="/sidebar-top-icons/normal-icons/github.svg" alt='' />
-                      <img src="/sidebar-top-icons/hover-icons/github.svg" alt='' />
-                    </div>
+                    <i class='ri-github-line' aria-hidden='true'></i>
                     GitHub
                   </a>
                 </div>

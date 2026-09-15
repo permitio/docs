@@ -17,7 +17,8 @@ import DocItemTOCDesktop from '@theme/DocItem/TOC/Desktop';
 import DocItemContent from '@theme/DocItem/Content';
 import DocBreadcrumbs from '@theme/DocBreadcrumbs';
 import ContentVisibility from '@theme/ContentVisibility';
-import styles from './styles.module.css';
+// Permit customisation: layout classes are global `pm-doc-item__*` names
+// styled in src/css/components/_doc-item.scss (no CSS module).
 /**
  * Decide if the toc should be rendered, on mobile or desktop viewports
  */
@@ -54,16 +55,16 @@ export default function DocItemLayout({children}) {
       <div
         className={clsx(
           'col',
+          'pm-doc-item__col',
           isFullWidthContainer && '!p-0',
-          !docTOC.hidden && styles.docItemCol,
         )}>
         <ContentVisibility metadata={metadata} />
         <DocVersionBanner />
         <div
           className={clsx({
-            [styles.fullWidthContainer]: isFullWidthContainer,
-            [styles.docItemContainerFull]: isFullWidthDesktop,
-            [styles.docItemContainer]: !isFullWidthDesktop,
+            'pm-doc-item__container--bleed': isFullWidthContainer,
+            'pm-doc-item__container--wide': isFullWidthDesktop,
+            'pm-doc-item__container': !isFullWidthDesktop,
           })}>
           <article>
             {!hideBreadcrumbs && <DocBreadcrumbs />}
@@ -75,7 +76,9 @@ export default function DocItemLayout({children}) {
           <DocItemPaginator />
         </div>
       </div>
-      {docTOC.desktop && <div className="col col--3">{docTOC.desktop}</div>}
+      {docTOC.desktop && (
+        <div className="col col--3 pm-doc-item__toc-col">{docTOC.desktop}</div>
+      )}
     </div>
   );
 }
