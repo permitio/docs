@@ -1,26 +1,34 @@
-/* eslint-disable spellcheck/spell-checker */
-import React from "react";
-import clsx from "clsx";
-import { useWindowSize } from "@docusaurus/theme-common";
-import DocItemPaginator from "@theme/DocItem/Paginator";
-import DocVersionBanner from "@theme/DocVersionBanner";
-import DocVersionBadge from "@theme/DocVersionBadge";
-import DocItemFooter from "@theme/DocItem/Footer";
-import DocItemTOCMobile from "@theme/DocItem/TOC/Mobile";
-import DocItemTOCDesktop from "@theme/DocItem/TOC/Desktop";
-import DocItemContent from "@theme/DocItem/Content";
-import DocBreadcrumbs from "@theme/DocBreadcrumbs";
-import styles from "./styles.module.css";
-import { useDoc } from "@docusaurus/plugin-content-docs/lib/client/doc.js";
-
+/**
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+import React from 'react';
+import clsx from 'clsx';
+import {useWindowSize} from '@docusaurus/theme-common';
+import {useDoc} from '@docusaurus/plugin-content-docs/client';
+import DocItemPaginator from '@theme/DocItem/Paginator';
+import DocVersionBanner from '@theme/DocVersionBanner';
+import DocVersionBadge from '@theme/DocVersionBadge';
+import DocItemFooter from '@theme/DocItem/Footer';
+import DocItemTOCMobile from '@theme/DocItem/TOC/Mobile';
+import DocItemTOCDesktop from '@theme/DocItem/TOC/Desktop';
+import DocItemContent from '@theme/DocItem/Content';
+import DocBreadcrumbs from '@theme/DocBreadcrumbs';
+import ContentVisibility from '@theme/ContentVisibility';
+import styles from './styles.module.css';
+/**
+ * Decide if the toc should be rendered, on mobile or desktop viewports
+ */
 function useDocTOC() {
-  const { frontMatter, toc } = useDoc();
+  const {frontMatter, toc} = useDoc();
   const windowSize = useWindowSize();
   const hidden = frontMatter.hide_table_of_contents;
   const canRender = !hidden && toc.length > 0;
   const mobile = canRender ? <DocItemTOCMobile /> : undefined;
   const desktop =
-    canRender && (windowSize === "desktop" || windowSize === "ssr") ? (
+    canRender && (windowSize === 'desktop' || windowSize === 'ssr') ? (
       <DocItemTOCDesktop />
     ) : undefined;
   return {
@@ -29,35 +37,34 @@ function useDocTOC() {
     desktop,
   };
 }
-
-export default function DocItemLayout({ children }) {
+export default function DocItemLayout({children}) {
   const docTOC = useDocTOC();
-  const doc = useDoc();
+  const {metadata, frontMatter} = useDoc();
   const windowSize = useWindowSize();
-
-  // Check if window size is 'desktop' or 'ssr' and full_width is true
-  const isDesktopAndSSR = windowSize === "desktop" || windowSize === "ssr";
-  const isFullWidthDesktop = isDesktopAndSSR && doc.frontMatter.full_width;
-  const isFullWidthContainer = doc.frontMatter.full_width_container;
-
-  const hideBreadcrumbs = doc.frontMatter.hide_breadcrumbs;
-
+  // Permit customisation: page-level layout frontmatter.
+  // - full_width: widen the content container on desktop (and SSR)
+  // - full_width_container: remove column padding and max-width entirely
+  // - hide_breadcrumbs: skip the breadcrumbs bar
+  const isDesktopOrSSR = windowSize === 'desktop' || windowSize === 'ssr';
+  const isFullWidthDesktop = isDesktopOrSSR && frontMatter.full_width;
+  const isFullWidthContainer = frontMatter.full_width_container;
+  const hideBreadcrumbs = frontMatter.hide_breadcrumbs;
   return (
     <div className="row">
       <div
         className={clsx(
-          `col ${isFullWidthContainer ? "!p-0" : ""}`,
-          !docTOC.hidden ? styles.docItemCol : ""
-        )}
-      >
+          'col',
+          isFullWidthContainer && '!p-0',
+          !docTOC.hidden && styles.docItemCol,
+        )}>
+        <ContentVisibility metadata={metadata} />
         <DocVersionBanner />
         <div
           className={clsx({
             [styles.fullWidthContainer]: isFullWidthContainer,
-            [styles.docItemContainerFull]: isFullWidthDesktop, // Apply full width only if on desktop and full_width is true
-            [styles.docItemContainer]: !isFullWidthDesktop, // Otherwise, apply the standard width
-          })}
-        >
+            [styles.docItemContainerFull]: isFullWidthDesktop,
+            [styles.docItemContainer]: !isFullWidthDesktop,
+          })}>
           <article>
             {!hideBreadcrumbs && <DocBreadcrumbs />}
             <DocVersionBadge />
