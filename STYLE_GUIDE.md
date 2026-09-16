@@ -123,7 +123,8 @@ Use these terms, spelled this way.
 | **API key** | Not "API Key", "secret key", or "SDK key". "environment API key" when the scope matters. |
 | **permit.check()** | In code formatting, with parentheses. |
 | **X** | The social network. Not Twitter. |
-| **SOC 2 Type II** | Always "attested" or "attestation". Never "certified" or "certification". Don't claim HIPAA, ISO 27001, PCI, or FedRAMP for Permit. |
+| **SOC 2 Type II** | Always "attested" or "attestation". Never "certified" or "certification". |
+| **HIPAA** | Permit.io is HIPAA compliant; "HIPAA compliant" is the wording to use. Don't claim ISO 27001, PCI, or FedRAMP for Permit. |
 | **sign in** / **sign-in** | Verb / noun. Not "log into" in new copy. |
 
 ## Before you open a pull request
