@@ -48,6 +48,7 @@ langchain-permit = "^0.1.4"
 permit = "^2.7.2"
 pydantic-settings = "^2.7.1"
 faiss-cpu = "^1.8.0"
+pyjwt = { version = "^2.10.1", extras = ["crypto"] }
 ```
 
 :::warning Check the LangChain versions
@@ -81,6 +82,72 @@ OPENAI_API_KEY=sk-...  # From OpenAI
 | `OPENAI_API_KEY` | Your OpenAI API key |
 
 The `Settings` class in [Configuration settings](#configuration-settings) requires all of these variables. If one is missing, `Settings()` raises a validation error when the app starts.
+
+### Create a test JWKS and signed JWT \{#create-a-test-jwks-and-signed-jwt}
+
+```python
+# scripts/make_test_jwt.py
+import json
+import sys
+from pathlib import Path
+
+import jwt
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from jwt.algorithms import RSAAlgorithm
+
+KEY_ID = "test-key"
+PRIVATE_KEY_PATH = Path("jwks/private_key.pem")
+JWKS_PATH = Path("jwks/public/.well-known/jwks.json")
+
+USERS = {
+    "eligible": {
+        "key": "user-123",
+        "attributes": {"age": 25, "ai_opt_in": True, "daily_quota_remaining": 10, "can_schedule": True},
+    },
+    "ineligible": {
+        "key": "user-456",
+        "attributes": {"age": 16, "ai_opt_in": False, "daily_quota_remaining": 0, "can_schedule": False},
+    },
+}
+
+
+def load_or_create_key():
+    if PRIVATE_KEY_PATH.exists():
+        return serialization.load_pem_private_key(PRIVATE_KEY_PATH.read_bytes(), password=None)
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    PRIVATE_KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PRIVATE_KEY_PATH.write_bytes(
+        private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    return private_key
+
+
+def main():
+    user = USERS[sys.argv[1] if len(sys.argv) > 1 else "eligible"]
+    private_key = load_or_create_key()
+
+    public_jwk = json.loads(RSAAlgorithm.to_jwk(private_key.public_key()))
+    public_jwk.update({"kid": KEY_ID, "alg": "RS256", "use": "sig"})
+    JWKS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    JWKS_PATH.write_text(json.dumps({"keys": [public_jwk]}, indent=2))
+
+    token = jwt.encode(user, private_key, algorithm="RS256", headers={"kid": KEY_ID})
+    print(token)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+```bash
+poetry run python scripts/make_test_jwt.py eligible
+python3 -m http.server 3458 --directory jwks/public
+```
 
 ## Plan the access model \{#planning-our-policies}
 
@@ -177,7 +244,8 @@ Add two test users in the **Directory** screen. See [Sync users](/how-to/sync-us
     "age": 25,
     "ai_opt_in": true,
     "daily_quota_remaining": 10,
-    "can_schedule": true}
+    "can_schedule": true
+  }
 }
 ```
 
@@ -192,7 +260,8 @@ Add two test users in the **Directory** screen. See [Sync users](/how-to/sync-us
     "age": 16,
     "ai_opt_in": false,
     "daily_quota_remaining": 0,
-    "can_schedule": false}
+    "can_schedule": false
+  }
 }
 ```
 
@@ -385,10 +454,8 @@ from typing import List, Dict, Any
 from langchain.schema import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain_permit.retrievers import PermitEnsembleRetriever
-from src.config.settings import get_settings
+from src.core.permissions import permissions_manager
 
-settings = get_settings()
 
 class RAGSecurityManager:
     def __init__(self):
@@ -410,16 +477,27 @@ class RAGSecurityManager:
         self.vectorstore = FAISS.from_documents(self.sample_docs, self.embeddings)
 
     async def get_relevant_documents(self, query: str, user: Dict[str, Any]) -> List[Document]:
-        vector_retriever = self.vectorstore.as_retriever(search_kwargs={"k": 2})
-        secure_retriever = PermitEnsembleRetriever(
-            retrievers=[vector_retriever],
-            api_key=settings.permit_api_key,
-            pdp_url=settings.permit_pdp_url,
-            user=user['key'],
+        retriever = self.vectorstore.as_retriever(search_kwargs={"k": 3})
+        docs = await retriever.ainvoke(query)
+
+        resources = [
+            {
+                "key": doc.metadata["id"],
+                "type": doc.metadata["type"],
+                "tenant": "default",
+                "attributes": doc.metadata["attributes"],
+            }
+            for doc in docs
+        ]
+        allowed = await permissions_manager.permit_client.filter_objects(
+            user={"key": user["key"], "attributes": user["attributes"]},
             action="view",
-            resource_type="healthcare_document"
+            context={},
+            resources=resources,
         )
-        return await secure_retriever.ainvoke(query)
+        allowed_keys = {resource["key"] for resource in allowed}
+        return [doc for doc in docs if doc.metadata["id"] in allowed_keys]
+
 
 rag_security_manager = RAGSecurityManager()
 ```
@@ -433,8 +511,13 @@ rag_security_manager = RAGSecurityManager()
 Update the `PromptGuard` class in `src/perimeters/prompt_guard.py`. `process_medical_query` retrieves the allowed documents and adds their content to the prompt as context:
 
 ```python
-# src/perimeters/prompt_guard.py (continued)
+# src/perimeters/prompt_guard.py
+from langchain_openai import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from src.core.security import security_manager
+from src.core.permissions import permissions_manager
 from src.perimeters.rag_security import rag_security_manager
+
 
 class PromptGuard:
     def __init__(self):
@@ -449,20 +532,22 @@ class PromptGuard:
         if not allowed:
             raise ValueError("User does not have permission to use the AI.")
 
-        # 🔒 Secure RAG filtering
         context_docs = await rag_security_manager.get_relevant_documents(query=question, user=user)
+        print("Documents in context:", [doc.metadata["id"] for doc in context_docs])
         context_text = "\n".join(doc.page_content for doc in context_docs)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", self.system_prompt),
-            ("system", f"Context:\n{context_text}"),
+            ("system", "Context:\n{context}"),
             ("human", "{question}")
         ])
 
         chain = prompt | self.llm
-        response = await chain.ainvoke({"question": question})
+        response = await chain.ainvoke({"context": context_text, "question": question})
         return response.content
 
+
+prompt_guard = PromptGuard()
 ```
 
 ### Expected document filtering behavior \{#expected-behavior}
@@ -480,12 +565,6 @@ Run the app:
 
 ```bash
 poetry run python -m src.main
-```
-
-To test document filtering, set the question in `src/main.py` to a query about a non-public document:
-
-```python
-query = "What treatments are available for high blood pressure?"
 ```
 
 When `doc2` is filtered out, the LLM answers without the treatment guidelines in its context, so the answer is more general.
@@ -522,7 +601,7 @@ class ExternalAccessManager:
             # Step 3: (Mocked) external call
             date = appointment_details.get("date", "N/A")
             time = appointment_details.get("time", "N/A")
-            return f"✅ Appointment successfully booked for {date} at {time}."
+            return f"Appointment successfully booked for {date} at {time}."
 
         except Exception as e:
             raise ValueError(f"Scheduling failed: {str(e)}")
@@ -535,24 +614,35 @@ external_access_manager = ExternalAccessManager()
 Add the following code inside the `main()` function in `src/main.py`. The code simulates a user who accepts the assistant's suggestion to book a follow-up:
 
 ```python
-# src/main.py (continued)
+# src/main.py
+import asyncio
+from datetime import date, timedelta
+from src.perimeters.prompt_guard import prompt_guard
 from src.perimeters.external_access import external_access_manager
+from src.config.settings import get_settings
 
-# Run PromptGuard as before...
-response = await prompt_guard.process_medical_query(
-    token=settings.test_jwt_token,
-    question="Should I follow up with a doctor?"
-)
-print("AI Response:", response)
 
-# Simulated user follow-up
-user_input = "Yes"  # Imagine this comes from a UI click
-if user_input.strip().lower() == "yes":
-    schedule_response = await external_access_manager.schedule_appointment(
+async def main():
+    settings = get_settings()
+    response = await prompt_guard.process_medical_query(
         token=settings.test_jwt_token,
-        appointment_details={"date": "2025-12-10", "time": "10:00 AM"}
+        question="Should I follow up with a doctor about high blood pressure?"
     )
-    print("Scheduling Response:", schedule_response)
+    print("AI Response:", response)
+
+    # Simulate a user who accepts the suggestion to book a follow-up
+    user_input = "Yes"
+    if user_input.strip().lower() == "yes":
+        follow_up = date.today() + timedelta(days=7)
+        schedule_response = await external_access_manager.schedule_appointment(
+            token=settings.test_jwt_token,
+            appointment_details={"date": follow_up.isoformat(), "time": "10:00 AM"}
+        )
+        print("Scheduling Response:", schedule_response)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 Move the `import` line to the top of `src/main.py`.
@@ -601,8 +691,14 @@ class SensitiveDataParser(BaseOutputParser):
 Update `PromptGuard` in `src/perimeters/prompt_guard.py` to pass the LLM output through `SensitiveDataParser`:
 
 ```python
-# src/perimeters/prompt_guard.py (continued)
+# src/perimeters/prompt_guard.py
+from langchain_openai import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from src.core.security import security_manager
+from src.core.permissions import permissions_manager
+from src.perimeters.rag_security import rag_security_manager
 from src.perimeters.output_parser import SensitiveDataParser
+
 
 class PromptGuard:
     def __init__(self):
@@ -619,21 +715,23 @@ class PromptGuard:
             raise ValueError("User does not have permission to use the AI.")
 
         context_docs = await rag_security_manager.get_relevant_documents(query=question, user=user)
+        print("Documents in context:", [doc.metadata["id"] for doc in context_docs])
         context_text = "\n".join(doc.page_content for doc in context_docs)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", self.system_prompt),
-            ("system", f"Context:\n{context_text}"),
+            ("system", "Context:\n{context}"),
             ("human", "{question}")
         ])
 
         chain = prompt | self.llm
-        raw_response = await chain.ainvoke({"question": question})
+        raw_response = await chain.ainvoke({"context": context_text, "question": question})
 
-        # 🔐 Parse the final response
-        safe_response = self.sensitive_parser.parse(raw_response.content)
-        return safe_response
+        # Redact sensitive phrases before returning the answer
+        return self.sensitive_parser.parse(raw_response.content)
 
+
+prompt_guard = PromptGuard()
 ```
 
 ### Redact based on permissions \{#optional-permission-aware-redaction}
@@ -662,37 +760,27 @@ poetry run python -m src.main
 
 ### Example JWT payloads
 
-Sign a test JWT with each payload, set `TEST_JWT_TOKEN` to it, and run the app. Both payloads use the key `user-123`, so test them one at a time.
-
 #### Ineligible user \{#ineligible-user}
 
-```json
-{
-  "key": "user-123",
-  "attributes": {
-    "age": 16,
-    "ai_opt_in": false,
-    "daily_quota_remaining": 0,
-    "can_schedule": false}
-}
+```bash
+TEST_JWT_TOKEN=$(poetry run python scripts/make_test_jwt.py ineligible) poetry run python -m src.main
 ```
 
-**Result:** `process_medical_query` raises `ValueError: User does not have permission to use the AI.` because the user doesn't match `Eligible AI Users`.
+```text
+ValueError: User does not have permission to use the AI.
+```
 
 #### Fully eligible user \{#fully-eligible-user}
 
-```json
-{
-  "key": "user-123",
-  "attributes": {
-    "age": 25,
-    "ai_opt_in": true,
-    "daily_quota_remaining": 10,
-    "can_schedule": true}
-}
+```bash
+TEST_JWT_TOKEN=$(poetry run python scripts/make_test_jwt.py eligible) poetry run python -m src.main
 ```
 
-**Result:** The prompt is allowed, the LLM receives only the documents that pass the filter, "high blood pressure" is redacted from the answer, and the appointment is booked.
+```text
+Documents in context: ['doc1']
+AI Response: ...
+Scheduling Response: Appointment successfully booked for <date seven days from today> at 10:00 AM.
+```
 
 ### What you should see
 

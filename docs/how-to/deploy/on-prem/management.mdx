@@ -97,10 +97,12 @@ List the pods and confirm that each one shows `Running` with all containers read
 # Check all pods status
 kubectl get pods -n permit-platform
 
-# Health check endpoints
-curl -k https://your-domain.com/health              # Frontend health
-curl -k https://your-domain.com/scim/health         # SCIM health
-curl -k https://your-domain.com/api/v2/health       # Backend health
+# Backend health check (prints: true)
+kubectl exec -n permit-platform deployment/permit-backend-v2 -- \
+  python3 -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/v2/healthy').read().decode())"
+
+# Frontend reachability through the ingress (prints an HTTP status code, 200 when the frontend serves the page)
+curl -k -s -o /dev/null -w '%{http_code}\n' https://your-domain.com/
 ```
 
 ## Change the platform configuration \{#configuration-management}
@@ -207,7 +209,7 @@ helm upgrade migrations charts/permit-platform \
   --set secrets.enabled=false \
   -n permit-platform
 
-# 3. Update platform services (all 35 Permit services)
+# 3. Update platform services (the Permit application services)
 helm upgrade permit-platform charts/permit-platform \
   --set permitServices.enabled=true \
   -n permit-platform
@@ -234,7 +236,7 @@ kubectl describe deployment permit-backend-v2 -n permit-platform | grep -A 20 "E
 
 # Update environment variables via values.yaml
 vi charts/permit-platform/values.yaml
-./scripts/install-permit-platform.sh  # Re-apply configuration
+./scripts/install-permit-platform.sh --gke --skip-images  # Re-apply configuration (use the flags you installed with)
 
 # Check if configuration was applied
 kubectl get deployment permit-backend-v2 -n permit-platform -o yaml | grep -A 10 env:
@@ -291,8 +293,8 @@ kubectl logs -n permit-platform deployment/permit-backend-v2 -f
 # View logs for crashed pods
 kubectl logs -n permit-platform <pod-name> --previous
 
-# Export all logs
-kubectl logs -n permit-platform --all-containers=true > platform-logs.txt
+# Export all logs (every pod with an app label)
+kubectl logs -n permit-platform --selector=app --all-containers=true --prefix --tail=-1 > platform-logs.txt
 ```
 
 ### Restart services \{#service-management}
@@ -453,7 +455,7 @@ kubectl exec -i -n permit-platform deployment/postgres -- psql -U permit -d perm
 
 # Restore configuration
 cp values-backup-20241201-143022.yaml charts/permit-platform/values.yaml
-./scripts/install-permit-platform.sh  # Re-apply configuration
+./scripts/install-permit-platform.sh --gke --skip-images  # Re-apply configuration (use the flags you installed with)
 ```
 
 ## Upgrade Permit Platform \{#updates-and-upgrades}
@@ -467,8 +469,8 @@ cp values-backup-20241201-143022.yaml charts/permit-platform/values.yaml
 
 ```bash
 # Extract new version package
-tar -xzf permit-platform-on-prem-installer-v2.0.0.tar.gz
-cd permit-platform-on-prem-installer-v2.0.0
+tar -xzf permit-platform-on-prem-installer-<new-version>.tar.gz
+cd permit-platform-on-prem-installer-<new-version>
 
 # Backup current configuration
 cp /path/to/current/charts/permit-platform/values.yaml ./values-backup.yaml
@@ -476,8 +478,8 @@ cp /path/to/current/charts/permit-platform/values.yaml ./values-backup.yaml
 # Update configuration with your settings
 vi charts/permit-platform/values.yaml
 
-# Run installation (automatically upgrades existing deployment)
-./scripts/install-permit-platform.sh
+# Run installation (automatically upgrades existing deployment; use the flags you installed with)
+./scripts/install-permit-platform.sh --gke --skip-images
 
 # Verify upgrade completed successfully
 kubectl get pods -n permit-platform
@@ -536,15 +538,6 @@ The certificate is replaced when the `openssl x509 -noout -dates` command prints
 
 The installer keeps service passwords in `global-infrastructure-secret` and builds the database connection string in `permit-backend-v2-secret` from `values.yaml`. Every installer run reuses the passwords already in `global-infrastructure-secret`. Patching a secret doesn't change the password of the PostgreSQL user in the database. For help planning a rotation, contact [Permit support](#support).
 
-```bash
-# Update service passwords in backend secret  
-kubectl patch secret permit-backend-v2-secret -n permit-platform \
-  --type='merge' -p='{"data":{"PG_DSN":"'$(echo -n 'postgresql+asyncpg://permit:new-password@postgres:5432/permit' | base64)'"}}'
-
-# Restart affected services
-kubectl rollout restart deployment -n permit-platform
-```
-
 ### Audit pod security settings \{#security-auditing}
 
 ```bash
@@ -591,8 +584,9 @@ kubectl get svc -n ingress-nginx
 # View load balancer configuration
 kubectl get ingress -n permit-platform -o yaml
 
-# Test service connectivity
-kubectl run test-pod --image=busybox --rm -it --restart=Never -- wget -qO- http://permit-backend-v2.permit-platform.svc.cluster.local:8000/health
+# Test service connectivity through the backend service DNS name (prints: true)
+kubectl exec -n permit-platform deployment/permit-backend-v2 -- \
+  python3 -c "import urllib.request; print(urllib.request.urlopen('http://permit-backend-v2.permit-platform.svc.cluster.local:8000/v2/healthy').read().decode())"
 ```
 
 ## Diagnose problems from the command line \{#troubleshooting-commands}
@@ -645,7 +639,7 @@ Save the logs of all pods except PostgreSQL, and the logs of the backend and Key
 
 ```bash
 # Collect all pod logs
-kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres > all-logs.txt
+kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres --prefix --tail=-1 > all-logs.txt
 
 # Collect specific service logs
 kubectl logs -n permit-platform deployment/permit-backend-v2 > backend-logs.txt
@@ -658,7 +652,7 @@ Collect system information and resource usage, then pack every `.txt` file in th
 
 ```bash
 # Collect all pod logs for support
-kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres > permit-platform-logs.txt
+kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres --prefix --tail=-1 > permit-platform-logs.txt
 
 # Collect system information
 kubectl get pods,svc,ingress,pv,pvc -n permit-platform -o wide > system-info.txt
@@ -690,11 +684,11 @@ kubectl scale deployment --replicas=0 -n permit-platform --all
 # Verify all pods are down
 kubectl get pods -n permit-platform
 
-# After maintenance, scale services back up
-kubectl scale deployment permit-backend-v2 -n permit-platform --replicas=1
-kubectl scale deployment permit-frontend -n permit-platform --replicas=1
-kubectl scale deployment celery-general -n permit-platform --replicas=1
-# ... continue for other services
+# After maintenance, restore the replica counts from values.yaml (use the flags you installed with)
+./scripts/install-permit-platform.sh --gke --skip-images
+
+# Verify all pods are back
+kubectl get pods -n permit-platform
 ```
 
 To start every service with the replica counts from `values.yaml`, run the installer again instead of scaling each deployment by hand.
@@ -727,7 +721,7 @@ Uninstall the three Helm releases, delete the namespace, and delete the persiste
 
 ```bash
 # Remove all 3 Helm releases (the platform uses 3 separate charts)
-helm uninstall permit-platform -n permit-platform 2>/dev/null || true        # 35 Permit services
+helm uninstall permit-platform -n permit-platform 2>/dev/null || true        # Permit application services
 helm uninstall migrations -n permit-platform 2>/dev/null || true             # Database schema
 helm uninstall third-party-services -n permit-platform 2>/dev/null || true   # PostgreSQL, Redis, OpenSearch, etc.
 

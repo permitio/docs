@@ -160,9 +160,9 @@ kubectl get all -n permit-platform
    # If upgrade failed
    helm rollback permit-platform -n permit-platform
    
-   # Or uninstall and retry
+   # Or uninstall and retry (use the flags you installed with)
    helm uninstall permit-platform -n permit-platform
-   ./scripts/install-permit-platform.sh
+   ./scripts/install-permit-platform.sh --gke --skip-images
    ```
 
 2. **Pods can't start before the Helm timeout.** Check node capacity and failed pods:
@@ -361,14 +361,11 @@ If you pushed the images to a private registry but ran the installer without `--
 # Problem: Installer loaded wrong images from local tar files!
 # Solution: Re-run installer with --skip-images flag
 
-# For GKE:
+# For GKE, EKS, AKS, or self-managed Kubernetes with a private registry:
 ./scripts/install-permit-platform.sh --gke --skip-images
 
-# For other Kubernetes with private registry:
-./scripts/install-permit-platform.sh --skip-images
-
 # For OpenShift with private registry:
-./scripts/install-permit-platform.sh --openshift --skip-images
+./scripts/install-permit-platform.sh --openshift --skip-openshift-registry --skip-images
 ```
 
 #### Wrong imageRegistry value \{#wrong-imageregistry}
@@ -472,8 +469,14 @@ kubectl get pods -n permit-platform -o jsonpath='{range .items[*]}{.metadata.nam
 # Check all imagePullSecrets are configured
 kubectl get deployment -n permit-platform -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.template.spec.imagePullSecrets[*].name}{"\n"}{end}'
 
-# Test pulling an image manually (on a cluster node)
-kubectl run test-pull --image=YOUR_REGISTRY/permit-backend-v2:TAG --namespace=permit-platform --dry-run=client
+# Test pulling an image: start a pod from the image with the pull secret
+# (remove --overrides when the registry uses node authentication, such as GAR, ECR, or ACR)
+kubectl run test-pull --image=YOUR_REGISTRY/permit-backend-v2:TAG --namespace=permit-platform \
+  --restart=Never --command \
+  --overrides='{"apiVersion":"v1","spec":{"imagePullSecrets":[{"name":"registry-credentials"}]}}' \
+  -- sleep 60
+kubectl get pod test-pull -n permit-platform   # STATUS Running or Completed: the pull works. ErrImagePull or ImagePullBackOff: it fails.
+kubectl delete pod test-pull -n permit-platform
 ```
 
 The problem is fixed when the first command returns no lines and `kubectl get pods` shows the pods `Running`.
@@ -625,7 +628,7 @@ The commands below save logs, pod state, events, and networking configuration to
 
 ```bash
 # Get all pod logs
-kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres > permit-platform-logs.txt
+kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres --prefix --tail=-1 > permit-platform-logs.txt
 
 # Get pod status and descriptions
 kubectl get pods -n permit-platform -o wide > pod-status.txt
@@ -681,7 +684,7 @@ The reset uninstalls the three Helm releases, deletes the namespace and its volu
 
 ```bash
 # 1. Uninstall all 3 Helm releases (in reverse order)
-helm uninstall permit-platform -n permit-platform 2>/dev/null || true        # Platform services (35 services)
+helm uninstall permit-platform -n permit-platform 2>/dev/null || true        # Permit application services
 helm uninstall migrations -n permit-platform 2>/dev/null || true             # Database migrations
 helm uninstall third-party-services -n permit-platform 2>/dev/null || true   # Infrastructure (PostgreSQL, Redis, etc.)
 
@@ -692,8 +695,8 @@ kubectl delete namespace permit-platform
 kubectl get pv | grep permit-platform  # Check before deleting
 kubectl delete pv $(kubectl get pv -o jsonpath='{.items[?(@.spec.claimRef.namespace=="permit-platform")].metadata.name}')
 
-# 4. Re-run installation
-./scripts/install-permit-platform.sh
+# 4. Re-run installation (use the flags you installed with)
+./scripts/install-permit-platform.sh --gke --skip-images
 ```
 
 ### Recover a single service \{#manual-service-recovery}
