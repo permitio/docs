@@ -114,7 +114,8 @@ flowchart LR
   GW -- "permit.check() per tool call" --> PermitPDP
   CS -->|"Sync consent → roles/relations"| PermitAPI
 
-  GW -- "Proxy Streamable HTTP" --> Upstream
+  GW -- "Proxy MCP +<br/>X-Gateway-Auth JWT" --> Upstream
+  Upstream -.->|"Verify JWT (optional)<br/>GET /.well-known/gateway-jwks.json"| GW
 
   Upstream["Upstream MCP Server"]
 ```
@@ -169,7 +170,7 @@ flowchart TD
   GW -->|"JWKS fetch (cached)"| CS
   GW -->|"permit.check()"| PERMIT
   CS -->|"Policy sync on consent"| PERMIT
-  GW -->|"Streamable HTTP +<br/>upstream OAuth tokens"| MCP
+  GW -->|"Streamable HTTP + upstream OAuth tokens<br/>+ X-Gateway-Auth JWT"| MCP
 ```
 
 </ZoomableDiagram>
@@ -185,7 +186,7 @@ flowchart TD
 | Gateway | Consent Service (JWKS) | HTTP (port 3000) | JWT signature verification |
 | Gateway | Permit.io | HTTPS | Authorization checks (Cloud PDP) |
 | Consent Service | Permit.io | HTTPS | Policy sync during consent |
-| Gateway | Upstream MCP | HTTPS | Streamable HTTP with upstream OAuth tokens |
+| Gateway | Upstream MCP | HTTPS | Streamable HTTP with upstream OAuth tokens + signed `X-Gateway-Auth` JWT (see [Upstream Authentication](#upstream-authentication-gateway-jwt)) |
 
 ## Integration Patterns
 
@@ -440,13 +441,146 @@ The derived role then determines which tools are allowed:
 - **Medium** trust tools: available to `medium` and `high` roles
 - **High** trust tools: available to `high` role only
 
-## Rate Limiting & WAF
+## Upstream Authentication (Gateway JWT)
 
-The gateway is protected by a Web Application Firewall (WAF) attached to the load balancer. The WAF provides two layers of protection: managed rules that detect common attack patterns, and per-IP rate limits that prevent abuse.
+When the gateway proxies a request to an upstream MCP server, it attaches a short-lived, gateway-signed JWT in an `X-Gateway-Auth` header alongside the upstream OAuth token. This lets upstream servers verify that a request came through the gateway — preventing agents from bypassing the gateway's authN/authZ/consent layer by connecting directly to the upstream URL.
+
+The feature is **always on** and requires no configuration on the gateway. Upstream servers opt in to verification — those that don't simply ignore the extra header, so behavior is unchanged for servers that don't need this guarantee.
+
+### How it works
+
+The gateway maintains an Ed25519 signing key that is cached in Redis and shared across all gateway replicas. The public key is exposed at `GET /.well-known/gateway-jwks.json` (unauthenticated, cached by clients for 5 minutes). On each upstream request, the gateway signs a short-lived JWT with the authenticated user's identity, the upstream URL as audience, and the tenant subdomain. The JWT is cached and reused until it is within 30 seconds of expiry, then re-signed — avoiding per-request signing overhead while ensuring long-lived MCP sessions always send a valid token.
+
+```mermaid
+sequenceDiagram
+    participant Client as MCP Client
+    participant GW as Gateway
+    participant JWKS as Gateway JWKS<br/>/.well-known/gateway-jwks.json
+    participant Up as Upstream MCP Server
+
+    Note over GW: Startup: load shared Ed25519 key<br/>from Redis (or generate + store if none exists)
+
+    Client->>GW: POST /mcp (tool call)
+    GW->>GW: Auth + Permit check
+
+    rect rgb(240, 248, 255)
+        Note over GW: JWT signing (lazy — cached, re-signed near expiry)
+        GW->>GW: Is cached JWT still valid?
+        alt JWT expired or near expiry (within 30s)
+            GW->>GW: Sign fresh JWT<br/>{iss, sub, aud, exp, iat, nbf, jti, tenant}
+            GW->>GW: Cache JWT
+        else JWT still valid
+            GW->>GW: Reuse cached JWT
+        end
+    end
+
+    GW->>Up: POST (MCP request)<br/>Authorization: Bearer {upstream_oauth_token}<br/>X-Gateway-Auth: Bearer {gateway_jwt}
+
+    opt Upstream wants to verify
+        Up->>JWKS: GET /.well-known/gateway-jwks.json
+        JWKS-->>Up: {keys: [{kty: "OKP", crv: "Ed25519", ...}]}
+        Up->>Up: Verify JWT signature + claims
+    end
+
+    Up-->>GW: MCP response
+    GW-->>Client: MCP response
+```
+
+### JWT claims
+
+| Claim    | Value                                                                                            | Purpose                           |
+| -------- | ------------------------------------------------------------------------------------------------ | --------------------------------- |
+| `iss`    | `agent-security-gateway`                                                                         | Identifies the issuer             |
+| `sub`    | Authenticated user ID                                                                            | Who the request is being made for |
+| `aud`    | Canonicalized upstream URL — host lowercased, all trailing slashes (including root `/`) stripped | Intended recipient                |
+| `exp`    | `now + TTL` (default 5 min)                                                                      | Token expiry                      |
+| `iat`    | `now - 30s` (clock-skew leeway)                                                                  | When the token was issued         |
+| `nbf`    | `now - 30s` (clock-skew leeway)                                                                  | Not valid before this time        |
+| `jti`    | Unique UUID                                                                                      | Unique token ID                   |
+| `tenant` | Host subdomain                                                                                   | Which tenant the request belongs to |
+
+:::note Clock-skew leeway
+`iat` and `nbf` are intentionally backdated 30 seconds so upstream verifiers with small clock drift don't reject otherwise-valid tokens. Configure your JWT library with a clock tolerance of at least 30 seconds (e.g. `clockTolerance: 30` in `jose`).
+:::
+
+:::note Audience canonicalization
+The `aud` claim is the canonicalized form of your upstream URL — host lowercased, all trailing slashes (including root `/`) stripped. Configure your verifier's `audience` option with the canonicalized form, e.g. `https://MCP.Example.com/` becomes `https://mcp.example.com`, and `https://your-server.example.com/v1/` becomes `https://your-server.example.com/v1`.
+:::
+
+### Two auth headers coexist
+
+The gateway sends two distinct headers on upstream requests — they serve different purposes and don't conflict:
+
+| Header              | Who issues it  | What it proves                                  |
+| ------------------- | -------------- | ----------------------------------------------- |
+| `Authorization: Bearer <token>` | The upstream's OAuth provider | The user authorized this request with the upstream service |
+| `X-Gateway-Auth: Bearer <jwt>`  | The gateway                   | The request originated from this gateway instance |
+
+### Verifying on the upstream side
+
+Upstream servers that want to reject direct (non-gateway) traffic fetch the gateway's public key from the JWKS endpoint and verify the `X-Gateway-Auth` header on every request. Using a standard JWT library (which handles JWKS caching and key rotation automatically) the verifier is short — under 10 lines of meaningful code:
+
+```js
+import { createRemoteJWKSet, jwtVerify } from 'jose';
+
+const JWKS = createRemoteJWKSet(
+  new URL('https://<tenant>.agent.security/.well-known/gateway-jwks.json')
+);
+
+const auth = req.headers['x-gateway-auth'];
+if (typeof auth !== 'string' || !auth.startsWith('Bearer ')) {
+  return res.status(401).end();
+}
+
+const { payload } = await jwtVerify(
+  auth.slice(7).trim(),
+  JWKS,
+  {
+    issuer: 'agent-security-gateway',
+    audience: 'https://your-mcp-server.example.com', // canonical: lowercase host, no trailing slash
+    algorithms: ['EdDSA'],
+    clockTolerance: 30,
+  }
+);
+```
+
+Reject any request without a valid `X-Gateway-Auth` header. The `aud` claim is the **canonicalized form** of your upstream URL — host lowercased, all trailing slashes (including the root `/`) stripped — so configure `audience` with the canonicalized form (e.g. `https://MCP.Example.com/` becomes `https://mcp.example.com`).
+
+:::note Replay protection (opt-in)
+The `jti` claim is unique per token but `jose.jwtVerify` does not deduplicate it. If you need replay protection, track recently-seen `jti` values for at least the JWT TTL plus your clock-skew window — e.g. a Redis `SET` with `TTL = GATEWAY_JWT_TTL_SECONDS + 30` and reject any `jti` already in the set.
+:::
+
+:::info Key rotation
+The signing key is stored in Redis and shared across all gateway replicas, so JWTs remain valid across pod restarts and the JWKS endpoint returns the same key regardless of which replica serves it. When the token vault is enabled (`VAULT_ENABLED=true` + `AWS_KMS_KEY_ID`), the key is encrypted at rest using AES-256-GCM with AWS KMS envelope encryption; without vault it is stored as plaintext JSON (the gateway logs a warning). Set `GATEWAY_JWT_REQUIRE_VAULT=true` in production to refuse the plaintext fallback.
+
+Rotation is **manual** — the gateway logs a warning and emits a `gateway_jwt_signing_key_age_seconds` metric after 90 days, but does not rotate on its own. To rotate, delete the Redis key and trigger a rolling restart:
+
+```bash
+redis-cli DEL gateway:jwt:signing_key
+# then: kubectl rollout restart deployment/gateway
+```
+
+The `kid` header on each JWT identifies which key signed it — upstream servers should rely on their JWT library's JWKS caching, which automatically re-fetches the JWKS on unknown `kid`, making rotation transparent to verifiers.
+:::
+
+### Configuration
+
+There is nothing to configure on the gateway to enable this feature. Two optional tunables are available:
+
+| Env var                     | Default | Description                                                                                                                              |
+| --------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `GATEWAY_JWT_TTL_SECONDS`   | `300`   | JWT lifetime in seconds. Must be between `60` and `3600`; values outside that range fail config validation at startup.                   |
+| `GATEWAY_JWT_REQUIRE_VAULT` | `false` | Refuse to start if the token vault is not configured. Prevents plaintext private-key storage in Redis. Recommended `true` in production. |
+
+The JWKS URL for each host is available in the platform under **Settings > Upstream Authentication (JWT)**, along with a sample verification snippet.
+
+## Rate Limiting
+
+The gateway includes built-in rate limiting to prevent abuse. No configuration is required on your end.
 
 ### Rate Limits
 
-All rate limits are enforced per source IP address. Requests that exceed a threshold receive an **HTTP 429** response with a JSON body:
+Rate limits are applied per IP address. If a limit is exceeded, the gateway returns an **HTTP 429** response:
 
 ```json
 {
@@ -455,44 +589,34 @@ All rate limits are enforced per source IP address. Requests that exceed a thres
 }
 ```
 
-| Endpoint | Purpose |
-| --- | --- |
-| `/api/auth/sign-in`, `/api/auth/sign-up` | Brute-force and credential-stuffing protection |
-| `/oauth/register` | Dynamic Client Registration abuse prevention |
-| `/mcp` | MCP endpoint protection for high-throughput agent traffic |
-| All write operations | Global write ceiling |
-| All traffic | Final catch-all across all methods |
+| Endpoint | Method | Limit |
+| --- | --- | --- |
+| `/api/auth/sign-in` | POST | 100 req / 5 min |
+| `/api/auth/sign-up` | POST | 100 req / 10 min |
+| `/oauth/register` | POST | 100 req/min |
+| `/mcp` | POST | 1000 req/min |
+| All write operations | POST, PUT, DELETE | 1200 req/min |
+| All traffic | Any | 2000 req/min |
 
 :::note Corporate NAT
-Rate limits are designed to accommodate corporate networks where many users share a single public IP. If you encounter rate limiting in a large deployment, contact support.
-:::
-
-### Managed Rules
-
-Managed rule groups provide defense-in-depth against common web attacks:
-
-- **SQL injection** — detected in headers, query strings, and URI paths
-- **Cross-site scripting (XSS)** — detected in headers, query strings, and URI paths
-- **Path traversal and bad inputs** — blocked at the request level
-- **Known exploits** (Log4j, JNDI injection) — blocked in headers and URI
-
-:::info Body inspection
-Request body inspection is tuned to avoid false positives from legitimate MCP payloads (which may contain code snippets, SQL queries, and HTML). Header, URI, and query string inspection rules are active and blocking.
+Rate limits are designed to accommodate corporate networks where many users share a single public IP. If you encounter rate limiting in a large deployment, contact [Permit support](https://permit.io/support).
 :::
 
 ### Handling 429 Responses in MCP Clients
 
 If your MCP client or agent receives an HTTP 429 response, it should:
 
-1. **Wait and retry** — back off for a few seconds before retrying the request
-2. **Reduce concurrency** — if multiple agents share the same IP, reduce parallel requests
-3. **Check the response body** — the JSON error body confirms the rate limit was triggered (as opposed to an application-level error)
+1. **Wait and retry** — back off for a few seconds before retrying the request.
+2. **Reduce concurrency** — if multiple agents share the same IP, reduce parallel requests.
+3. **Check the response body** — the JSON error body confirms the rate limit was triggered (as opposed to an application-level error).
 
 ## Deployment
 
 Permit MCP Gateway is available as a **hosted gateway** at `*.agent.security`. Each host (tenant) gets a unique subdomain with isolated policies, users, and sessions.
 
 Point your MCP clients to `https://<host>.agent.security/mcp` and the gateway handles the rest — authentication, authorization, and audit logging are all built in.
+
+For organizations that need the gateway inside their own network — for data residency, private MCP servers, or local PDP authorization — see [Enterprise Deployment](/permit-mcp-gateway/enterprise-deployment).
 
 ## Key Advantages
 

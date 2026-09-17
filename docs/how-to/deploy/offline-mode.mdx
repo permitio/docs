@@ -1,0 +1,166 @@
+---
+sidebar_position: 2
+title: PDP Offline Mode
+description: "Configure the PDP to work offline with local backups and runtime connectivity control"
+---
+
+The PDP relies on Permit Cloud for fetching configuration, loading policies, and keeping those up to date.
+Despite the high availability of Permit Cloud, there still might be cases when the PDP can't reach it (e.g. network issues).
+For extra resilience, the PDP can be configured to work in offline mode, where it will use a local backup of the configuration, data, and policies.
+
+## Using Offline Mode
+
+To enable the PDP offline mode, use the `PDP_ENABLE_OFFLINE_MODE` environment variable.
+You also have to mount a volume or a host directory to the PDP container at the path configured by `PDP_OFFLINE_MODE_BACKUP_DIR` (default: `/app/backup`), where the backup files will be persisted.
+When the PDP offline mode is enabled, the PDP will automatically enable OPAL's offline mode and use the backup files from the mounted volume.
+
+```sh
+docker run -it -p 7766:7000 -p 8181:8181 \
+  --env PDP_API_KEY=<YOUR_API_KEY> \
+  --env PDP_ENABLE_OFFLINE_MODE=true \
+  -v <HOST_BACKUP_DIR_OR_NAMED_VOLUME>:/app/backup \
+  permitio/pdp-v2:latest
+```
+
+:::tip
+When using `<HOST_BACKUP_DIR>` instead of a volume, make sure the directory is writable by the user running inside the container so the PDP can persist its offline backup files. Prefer matching the container UID/GID with `chown` rather than using overly permissive settings like `chmod 777`.
+:::
+
+
+If you need to deliberately run the PDP with static offline data (e.g. in a CI environment), first generate the two backup files (configuration and policy store) by running your PDP in an online environment. Then you can run the PDP again in the offline environment. Just make sure to use the same configuration and place those backup files in the directory or volume mounted to the path configured by `PDP_OFFLINE_MODE_BACKUP_DIR` (default: `/app/backup`).
+
+## How it works
+By default, the PDP starts in online mode, trying to fetch its configuration from Permit Cloud.
+If `PDP_CONFIG_FETCH_MAX_RETRIES` fetch attempts fail and `PDP_ENABLE_OFFLINE_MODE` is set to `true`, the PDP switches to offline mode and loads its configuration from the backup file, if one exists.
+Once the PDP is up and running, it does not re-run the startup configuration loading flow unless the container is restarted. Policy and data synchronization can still be re-enabled later via the runtime connectivity API described below.
+
+For backing up the policy store's state (both policy rules/code and data), the PDP internally uses [OPAL's offline mode](https://docs.opal.ac/getting-started/running-opal/run-opal-client/opa-runner-parameters/#policy-store-backup).
+There is no need to explicitly enable OPAL's offline mode; the PDP will do it automatically.
+In the standard offline-mode flow, OPAL uses policy and data from a backup file, if it exists, to initially load the policy store, but it keeps trying to sync with the cloud. Once Permit Cloud is reachable again, it can fetch the latest policy data.
+
+The policy store is backed up periodically (see "Advanced Configuration" below to customize the interval) and also on a graceful shutdown of the PDP. This backup file is written to the same directory as the PDP configuration backup.
+
+## Starting Disconnected from the Control Plane
+
+:::note
+The connectivity control feature requires PDP version **0.9.11** or later.
+:::
+
+In some scenarios you may want the PDP to boot completely disconnected from the Permit control plane — for example, in air-gapped environments or during planned maintenance windows — and only reconnect later on your terms.
+
+To start the PDP disconnected, set both `PDP_ENABLE_OFFLINE_MODE` and `PDP_CONTROL_PLANE_CONNECTIVITY_DISABLED` to `true`. If valid local backup files are already present in the directory mounted to `PDP_OFFLINE_MODE_BACKUP_DIR`, the PDP will load its configuration and policies entirely from those backups and will **not** attempt to connect to Permit Cloud on startup.
+
+```sh
+docker run -it -p 7766:7000 \
+  --env PDP_API_KEY=<YOUR_API_KEY> \
+  --env PDP_ENABLE_OFFLINE_MODE=true \
+  --env PDP_CONTROL_PLANE_CONNECTIVITY_DISABLED=true \
+  -v <HOST_BACKUP_DIR_OR_NAMED_VOLUME>:/app/backup \
+  permitio/pdp-v2:latest
+```
+
+:::note
+`PDP_CONTROL_PLANE_CONNECTIVITY_DISABLED` only takes effect when `PDP_ENABLE_OFFLINE_MODE` is also enabled and valid backup files are present. If no valid backup is found, the PDP falls back to connecting to the control plane.
+:::
+
+You can later reconnect the PDP to the control plane at runtime using the connectivity API described below.
+
+## Runtime Connectivity Control
+
+When offline mode is enabled, the PDP exposes HTTP endpoints that let you toggle control plane connectivity at runtime — without restarting the container.
+
+All connectivity endpoints are authenticated with the PDP API key (the same `PDP_API_KEY` used to start the PDP). Pass it via the `Authorization: Bearer <PDP_API_KEY>` header.
+
+### Get Connectivity Status
+
+```
+GET /control-plane/connectivity
+```
+
+Returns the current connectivity state.
+
+**Response:**
+
+```json
+{
+  "control_plane_connectivity_disabled": true,
+  "offline_mode_enabled": true
+}
+```
+
+| Field | Description |
+|---|---|
+| `control_plane_connectivity_disabled` | `true` when the PDP is disconnected from the control plane |
+| `offline_mode_enabled` | `true` when offline mode is enabled on this PDP |
+
+### Enable Connectivity (Reconnect)
+
+```
+POST /control-plane/connectivity/enable
+```
+
+Reconnects the PDP to the control plane. This starts the policy and data updaters, triggering a full rehydration — the PDP will refetch policies and data from Permit Cloud.
+
+**Response:**
+
+```json
+{ "status": "enabled" }
+```
+
+Returns `{ "status": "already_enabled" }` if connectivity is already active.
+
+Returns `400 Bad Request` if offline mode is not enabled.
+
+### Disable Connectivity (Disconnect)
+
+```
+POST /control-plane/connectivity/disable
+```
+
+Disconnects the PDP from the control plane. This stops the policy and data updaters. The policy store continues serving decisions from its current in-memory state.
+
+**Response:**
+
+```json
+{ "status": "disabled" }
+```
+
+Returns `{ "status": "already_disabled" }` if connectivity is already disabled.
+
+Returns `400 Bad Request` if offline mode is not enabled.
+
+### Example: Reconnecting a Disconnected PDP
+
+```sh
+# Check current status
+curl -s http://localhost:7766/control-plane/connectivity \
+  -H "Authorization: Bearer <YOUR_PDP_API_KEY>"
+
+# Reconnect to the control plane
+curl -s -X POST http://localhost:7766/control-plane/connectivity/enable \
+  -H "Authorization: Bearer <YOUR_PDP_API_KEY>"
+```
+
+## Backup and Restore Resiliency
+
+For stronger resilience, it is recommended to back up the volume or host directory that you mounted into the container at the path configured by `PDP_OFFLINE_MODE_BACKUP_DIR` (default: `/app/backup`) frequently. This gives you an additional recovery point if the local backup files become corrupted or if policy data is deleted accidentally, allowing you to restore the PDP locally while the corresponding state is being restored in the Permit control plane.
+
+When restoring the backup directory to an earlier point in time, start the PDP with `PDP_CONTROL_PLANE_CONNECTIVITY_DISABLED=true` so it serves from the restored local snapshot without immediately reconnecting to the control plane. After the desired state has also been restored in the control plane, re-enable connectivity via the runtime API or restart the PDP without that flag so normal synchronization can resume.
+
+
+## Advanced Configuration
+
+| Variable | Description | Default |
+|---|---|---|
+| `PDP_ENABLE_OFFLINE_MODE` | Enables offline mode with local backup and restore | `false` |
+| `PDP_CONTROL_PLANE_CONNECTIVITY_DISABLED` | When `true` (and offline mode is enabled), the PDP starts disconnected from the control plane and serves from local backup. Valid backup files are required; otherwise, the PDP falls back to connecting to the control plane. Can be toggled at runtime via the `/control-plane/connectivity` endpoints. | `false` |
+| `PDP_OFFLINE_MODE_BACKUP_DIR` | Directory used to store the PDP's offline-mode backup files | `/app/backup` |
+| `PDP_OFFLINE_MODE_BACKUP_FILENAME` | File name of the PDP's configuration backup file | `pdp_cloud_config_backup.json` |
+| `PDP_OFFLINE_MODE_POLICY_BACKUP_FILENAME` | File name of the policy store's backup (holds both data & code) within the PDP's backup dir. This replaces OPAL's `OPAL_STORE_BACKUP_PATH`. | `policy_store_backup.json` |
+| `PDP_CONFIG_FETCH_MAX_RETRIES` | Number of failed fetch attempts before the PDP switches to offline mode | `6` |
+| `OPAL_STORE_BACKUP_INTERVAL` | How often the policy store backup is saved | `1m` |
+
+## Security Considerations
+
+The PDP's configuration backup file is securely encrypted on disk using a key derived from your secret `PDP_API_KEY` token.
+Currently, OPAL's policy store backup file is not encrypted, so make sure to secure the mounted host directory or volume where the backup files are stored. Contact [Permit support](https://permit.io/support) if encryption of the policy store backup is required for your deployment.

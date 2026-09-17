@@ -7,12 +7,10 @@ import { KEY_PAGES } from "./key-pages.js";
 // re-run this spec (`npm run test:visual`) to produce "after" shots for the
 // same pages, viewports and themes so the two can be diffed.
 //
-// This spec is deliberately NOT part of the default `npx playwright test`
-// invocation Argos CI runs - see the RUN_VISUAL_BASELINE gate in
-// playwright.config.js for why, and run it with `npm run test:visual`.
+// Run it with `npm run test:visual`.
 
 const siteUrl = process.env.BASE_URL || "http://localhost:3000";
-const stylesheetPath = join(__dirname, "..", "screenshot.css");
+const stylesheetPath = join(__dirname, "screenshot.css");
 const stylesheet = readFileSync(stylesheetPath).toString();
 const outDir = join(__dirname, "..", "..", "screenshots", process.env.VISUAL_OUT_DIR || "baseline");
 

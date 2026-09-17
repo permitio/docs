@@ -137,7 +137,26 @@ const sidebars = {
             type: "doc",
             id: "concepts/pdp/overview",
           },
-          items: ["concepts/pdp/configuration", "concepts/pdp/cloud-pdp-capabilities"],
+          items: [
+            "concepts/pdp/configuration",
+            "concepts/pdp/cloud-pdp-capabilities",
+            "concepts/pdp/cloud-pdp-benchmarks",
+            {
+              type: "category",
+              label: "New Edge PDP",
+              link: {
+                type: "doc",
+                id: "concepts/pdp/new-edge-pdp",
+              },
+              items: [
+                "concepts/pdp/new-edge-pdp-architecture",
+                "concepts/pdp/new-edge-pdp-how-it-works",
+                "concepts/pdp/new-edge-pdp-feature-parity",
+                "concepts/pdp/new-edge-pdp-deployment",
+                "concepts/pdp/new-edge-pdp-configuration",
+              ],
+            },
+          ],
         },
         {
           type: "category",
@@ -378,6 +397,7 @@ const sidebars = {
       collapsible: false,
       items: [
         "permit-mcp-gateway/index",
+        "permit-mcp-gateway/quickstart",
         "permit-mcp-gateway/overview",
         "permit-mcp-gateway/guide",
         "permit-mcp-gateway/platform",
@@ -387,8 +407,25 @@ const sidebars = {
         "permit-mcp-gateway/consent-service",
         "permit-mcp-gateway/audit-logs",
         "permit-mcp-gateway/architecture",
+        "permit-mcp-gateway/human-in-the-loop",
+        {
+          type: "category",
+          label: "HTTP Egress Proxy",
+          link: { type: "doc", id: "permit-mcp-gateway/http-egress-proxy/index" },
+          items: [
+            "permit-mcp-gateway/http-egress-proxy/quickstart",
+            "permit-mcp-gateway/http-egress-proxy/cli",
+            "permit-mcp-gateway/http-egress-proxy/egress-rules",
+            "permit-mcp-gateway/http-egress-proxy/credentials",
+            "permit-mcp-gateway/http-egress-proxy/authorization",
+            "permit-mcp-gateway/http-egress-proxy/connecting-agents",
+            "permit-mcp-gateway/http-egress-proxy/security",
+          ],
+        },
         "permit-mcp-gateway/permit-integration",
         "permit-mcp-gateway/advanced-features",
+        "permit-mcp-gateway/enterprise-deployment",
+        "permit-mcp-gateway/on-prem-installation",
         {
           type: "category",
           label: "Usage Examples and Demos",
@@ -765,6 +802,7 @@ const sidebars = {
             id: "how-to/deploy/deploy-to-production",
           },
           items: [
+            "how-to/deploy/offline-mode",
             "how-to/SDLC/CI-CD",
             {
               type: "category",

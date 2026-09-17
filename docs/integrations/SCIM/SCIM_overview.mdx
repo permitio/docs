@@ -34,3 +34,41 @@ When changes occur in the IdP (e.g., user profiles created or updated), these ch
 SCIM 1.0 shipped in December 2011. The IETF standardized SCIM 2.0 in September 2015 as two RFCs: [RFC 7643](https://www.rfc-editor.org/rfc/rfc7643) for the core schema and [RFC 7644](https://www.rfc-editor.org/rfc/rfc7644) for the protocol.
 
 :::
+
+### Multi-tenant SCIM
+
+One Permit environment can serve several isolated customer tenants through a tenant-aware SCIM URL. The SCIM server accepts two **base URL** shapes. Your SCIM client (Okta, Entra) appends the resource path (`/Users`, `/Groups`) to the base URL you configure:
+
+- **Legacy (single-tenant) base URL:** `https://scim.permit.io/scim/v2/{permit_project_id}/{permit_env_id}`
+  - Resource endpoints: `.../Users`, `.../Groups`.
+  - All role assignments land in the `default` tenant. Existing integrations keep working unchanged.
+- **Tenant-aware base URL:** `https://scim.permit.io/scim/v2/{permit_project_id}/{permit_env_id}/v2/{tenant_id}`
+  - Resource endpoints: `.../Users`, `.../Groups`.
+  - The `{tenant_id}` segment is required. There is no tenant-less `/v2/Users`. SCIM clients store the tenant in their endpoint configuration, so each tenant points its IdP at its own base URL.
+
+Replace `{permit_project_id}` and `{permit_env_id}` with your Permit project ID or key and environment ID or key, and `{tenant_id}` with the target Permit tenant key.
+
+**EU users:** replace the `scim.permit.io` host with `scim.eu-central-1.permit.io` in either shape. For example, `https://scim.eu-central-1.permit.io/scim/v2/{permit_project_id}/{permit_env_id}` (legacy) or `https://scim.eu-central-1.permit.io/scim/v2/{permit_project_id}/{permit_env_id}/v2/{tenant_id}` (tenant-aware).
+
+:::note
+The second `/v2/` segment in the tenant-aware URL is a routing prefix that selects the multi-tenant SCIM API. It is **not** a SCIM protocol version. The SCIM 2.0 protocol version is the earlier `/scim/v2/` segment.
+:::
+
+`{tenant_id}` must match `[A-Za-z0-9_-]{1,64}`: 1 to 64 alphanumerics, underscores, or hyphens. Invalid values return a 404 at the routing layer before any handler runs.
+
+#### How users, groups, and tenants relate
+
+- **Users are environment-scoped.** A SCIM User created through any tenant URL is provisioned once in the Permit environment. The URL accepts the `{tenant_id}` segment, but it doesn't partition users: `userName` stays unique across the environment.
+- **Groups (roles) are environment-scoped definitions.** A Group with `displayName: "Engineering"` resolves to a single role in the environment. If two tenants both create a Group with the same `displayName`, they share the same underlying role definition, and the second `POST /Groups` reuses the existing role instead of failing. Matching uses the normalized role key (non-alphanumeric characters other than `-` and `_` are stripped), not the raw `displayName`. Two *different* display names that normalize to the same key (for example, `Eng Team` and `EngTeam` both become `EngTeam`) are rejected, not merged.
+- **Group membership (role assignment) is tenant-scoped.** Adding a user to a Group through `/v2/{tenant_id}/Groups/...` grants that user the role *within that tenant*. The same user can hold the `Engineering` role in tenant `acme` and not in tenant `globex`. Membership in one tenant has no effect on membership in another.
+
+This follows Permit's data model: roles are defined per environment, and assignments carry a tenant. Role definitions aren't duplicated per tenant, and each tenant's user-to-role bindings stay independent.
+
+#### Choosing between the two URLs
+
+- Use the **legacy URL** for existing single-tenant integrations, or when all users share one logical tenant.
+- Use the **tenant-aware URL** when one Permit environment serves multiple customers and each needs its own isolated set of role assignments. Create one SCIM connection per tenant in your IdP, each pointing at its own `/v2/{tenant_id}/...` endpoint.
+
+:::warning Create the tenant first
+The target Permit tenant must exist before you provision the SCIM connection. The SCIM server validates the `{tenant_id}` format but does **not** create the tenant. It auto-creates missing *users*, but not tenants. If a SCIM client points at a `{tenant_id}` that doesn't exist in the environment, the role-assignment call fails and your IdP shows an error.
+:::

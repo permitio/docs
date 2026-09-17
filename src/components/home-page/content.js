@@ -93,6 +93,8 @@ export const homeTasks = [
   { label: "Assign ReBAC resource roles", href: "/how-to/build-policies/rebac/building-rebac-policies" },
   { label: "Filter audit logs", href: "/how-to/use-audit-logs/types-and-filtering" },
   { label: "Manage policy with GitOps", href: "/integrations/gitops/overview" },
+  { label: "Set up the MCP Gateway", href: "/permit-mcp-gateway/guide" },
+  { label: "Try the MCP Gateway demos", href: "/permit-mcp-gateway/demos" },
 ];
 
 export const helpChannels = [
