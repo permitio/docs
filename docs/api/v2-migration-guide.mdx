@@ -5,7 +5,7 @@ sidebar_label: Migrating v1 to v2
 description: "Migrate code that uses the Permit.io v1 API, v1 PDP, or v1 SDKs to v2: the new object hierarchy and keys, organization-scoped objects, and the PDP and SDK upgrade."
 ---
 
-Move an application from the deprecated Permit.io v1 API, v1 policy decision point (PDP), and v1 SDKs to v2. This page is for maintainers of code that calls the v1 API or runs a v1 PDP. It explains what changed in v2 and the order to migrate in.
+Move an application from the deprecated Permit.io v1 API, v1 policy decision point (PDP), and v1 SDKs to v2. This page is for maintainers of code that calls the v1 API or runs a v1 PDP. The first half is a reference of what changed and where each object type lives in v2. The second half is the migration procedure, in the order to run it.
 
 ## Who needs to migrate \{#who-is-this-guide-for}
 
@@ -123,27 +123,36 @@ For example, one environment can hold a resource with the key `john` and a role 
 ## Migration order \{#migration-order}
 
 1. **Move off organization-scoped objects**, if you have any. Do this first, because v2 PDPs ignore organization-scoped objects.
-2. **Upgrade the PDP and SDKs together.** v2 SDKs work only with v2 PDPs, and v1 SDKs work only with v1 PDPs.
+2. **Upgrade each service's SDK and point it at a v2 PDP in the same change.** Run the v2 PDP next to the v1 PDP until every service has moved.
 3. **Update REST API calls** at any point. The v1 and v2 APIs share data, so each call can move to v2 on its own schedule.
 
 ## 1. Move off organization-scoped objects \{#migrating-off-organization-scoped-objects}
 
 v2 does not support organization-scoped schema objects. An environment depends only on its own objects, so a change in one environment can't break another. In v1, only users and roles can be organization-scoped.
 
-The v1 API and v1 PDPs keep using organization-scoped objects. The v2 API and the Permit dashboard show them in a compatibility environment, `v2_global_env`, in the project `v1_global_project`. v2 PDPs ignore the objects in the compatibility environment.
+The v1 API and v1 PDPs keep using organization-scoped objects. The v2 API and the Permit dashboard show them in a compatibility environment that Permit created for them, and v2 PDPs ignore the objects in that environment.
 
-1. Check whether you have organization-scoped objects. With an organization API key, send GET requests to these URLs:
+1. Find the compatibility environment. With an organization API key, list your projects, then list the environments of each project:
 
-```text
-https://api.permit.io/v2/schema/v1_global_project/v2_global_env/roles
-https://api.permit.io/v2/facts/v1_global_project/v2_global_env/users
+```bash
+curl -H 'Authorization: Bearer <YOUR_ORG_API_KEY>' https://api.permit.io/v2/projects
+curl -H 'Authorization: Bearer <YOUR_ORG_API_KEY>' https://api.permit.io/v2/projects/{proj_id}/envs
 ```
 
-   A 404 response means the compatibility environment does not exist, so you have no organization-scoped objects. Skip to [Upgrade the PDP and SDKs](#migrating-the-pdp-and-sdk).
+   The compatibility environment is the one in the list that you didn't create. Take its `key` from the response instead of assuming a name: the key differs between organizations. If every project and environment in the list is one you created, you have no organization-scoped objects. Skip to [Upgrade the PDP and SDKs](#migrating-the-pdp-and-sdk).
 
-2. Recreate each role and user from the compatibility environment in every environment that uses it. v1 PDPs also use environment-scoped objects, so you can make this change before you upgrade to v2.
-3. Verify the move: run a `permit.check()` call against a v2 PDP for a user and role you recreated. The check returns the same decision it returned on v1.
-4. Delete the `v2_global_env` environment and the `v1_global_project` project.
+2. List the roles and users in that environment, with its project key as `{proj_id}` and its own key as `{env_id}`:
+
+```bash
+curl -H 'Authorization: Bearer <YOUR_ORG_API_KEY>' https://api.permit.io/v2/schema/{proj_id}/{env_id}/roles
+curl -H 'Authorization: Bearer <YOUR_ORG_API_KEY>' https://api.permit.io/v2/facts/{proj_id}/{env_id}/users
+```
+
+   The roles endpoint returns an array of roles, or a paginated object with the roles in `data`. The users endpoint returns a paginated object with the users in `data`. Every entry is an object to move, and an empty list means there is nothing to move.
+
+3. Recreate each role and user from the compatibility environment in every environment that uses it. v1 PDPs also use environment-scoped objects, so you can make this change before you upgrade to v2.
+4. Verify the move: run a `permit.check()` call against a v2 PDP for a user and role you recreated. The check returns the same decision it returned on v1.
+5. Delete the compatibility environment, and the project that holds it if that project holds nothing else.
 
 ## 2. Upgrade the PDP and SDKs \{#migrating-the-pdp-and-sdk}
 
@@ -158,7 +167,7 @@ docker run -p 7766:7000 \
   permitio/pdp-v2:latest
 ```
 
-2. Upgrade each service to the v2 SDK, and point the SDK at the v2 PDP. SDK initialization and `permit.check()` calls don't change.
+2. Upgrade each service to the v2 SDK, and set the SDK's PDP address to the v2 PDP in the same change. SDK initialization and `permit.check()` calls don't change.
 3. If the service writes data through the SDK, rewrite those calls for the v2 write API. See [Rewrite SDK write calls](#rewrite-sdk-write-calls).
 4. Verify the service: run a `permit.check()` call through the v2 PDP, and confirm it returns the expected decision. See [Run the PDP](/overview/run-pdp) for how to check that the PDP container is running.
 5. When every service uses the v2 SDK, stop the v1 PDP.
@@ -188,7 +197,35 @@ For the full SDK API, see the [Node.js SDK quickstart](/sdk/nodejs/quickstart-no
 
 ## 3. Update REST API calls \{#how-to-migrate}
 
-Change each v1 API call to the matching v2 path from the [object path tables](#new-object-hierarchy). Replace slugs and `custom_id` values with keys. For every v2 endpoint, see the [Permit API reference](https://api.permit.io/v2/redoc).
+The v2 API reference documents v2 endpoints only, and there is no published table of v1 paths. Map each call by the object it acts on instead of by its old path:
+
+1. Identify the object type the v1 call reads or writes: user, tenant, role assignment, role, resource, or condition set.
+2. Find that object type in the table below, and build the path with your project and environment key.
+3. Replace v1 slugs and `custom_id` values with the object's key. See [Keys](#keys).
+4. Confirm the method, the path parameters, and the request body against the object's tag in the [Permit API reference](https://api.permit.io/v2/redoc).
+5. Run the v2 call, then read the object back with the matching `GET` request and compare it with what the v1 call returned.
+
+### v2 endpoints by object type \{#v2-endpoints-by-object-type}
+
+| Object the call acts on | v2 method and path |
+| --- | --- |
+| Users in an environment | `GET` and `POST /v2/facts/{proj_id}/{env_id}/users` |
+| One user, including a full sync of the user | `GET`, `PUT`, `PATCH`, and `DELETE /v2/facts/{proj_id}/{env_id}/users/{user_id}` |
+| Roles of one user | `POST` and `DELETE /v2/facts/{proj_id}/{env_id}/users/{user_id}/roles` |
+| Role assignments | `GET`, `POST`, and `DELETE /v2/facts/{proj_id}/{env_id}/role_assignments` |
+| Tenants | `GET` and `POST /v2/facts/{proj_id}/{env_id}/tenants`, and `/tenants/{tenant_id}` for one tenant |
+| Users of one tenant | `GET` and `POST /v2/facts/{proj_id}/{env_id}/tenants/{tenant_id}/users` |
+| Resource instances | `GET` and `POST /v2/facts/{proj_id}/{env_id}/resource_instances` |
+| Roles | `GET` and `POST /v2/schema/{proj_id}/{env_id}/roles`, and `/roles/{role_id}` for one role |
+| Resources, with their actions and attributes | `GET` and `POST /v2/schema/{proj_id}/{env_id}/resources`, and `/resources/{resource_id}` for one resource |
+| Resource roles | `GET` and `POST /v2/schema/{proj_id}/{env_id}/resources/{resource_id}/roles` |
+| Condition sets (ABAC user sets and resource sets) | `GET` and `POST /v2/schema/{proj_id}/{env_id}/condition_sets` |
+| Condition set rules | `GET`, `POST`, and `DELETE /v2/facts/{proj_id}/{env_id}/set_rules` |
+| Many users or tenants in one call | `PUT`, `POST`, and `DELETE /v2/facts/{proj_id}/{env_id}/bulk/users` and `/bulk/tenants`. See [Bulk operations](/how-to/bulk-operations). |
+
+Permission checks don't go through this API. A check goes to the PDP, not to `api.permit.io`. See [Check permissions](/how-to/enforce-permissions/check).
+
+If a v1 call has no clear v2 object, ask in the [Permit Slack community](https://io.permit.io/slack) with the v1 path you are replacing.
 
 ## Get help \{#documentation--support}
 

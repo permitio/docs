@@ -2,10 +2,14 @@
 sidebar_position: 3
 title: Authorize Kong Gateway requests with Permit
 sidebar_label: Kong API Gateway x Permit
-description: "Run the Permit PDP next to Kong Gateway and configure the Kong OPA plugin to send each route request to the PDP for a permission check."
+description: "Run the Permit PDP behind a reverse proxy that adds the PDP API key, and configure the Kong OPA plugin to send each route request to the PDP for a permission check."
 ---
 
-Authorize requests that pass through Kong Gateway with a Permit.io policy, without adding permission checks to your service code. This page is for developers who already route and authenticate traffic with Kong. You run the Permit policy decision point (PDP) next to Kong, then configure the Kong Open Policy Agent (OPA) plugin on a route to ask the PDP about each request.
+Authorize requests that pass through Kong Gateway with a Permit.io policy, without adding permission checks to your service code. This page is for developers who already route and authenticate traffic with Kong. You run the Permit policy decision point (PDP) next to Kong, put a reverse proxy in front of the PDP to add the PDP API key, then configure the Kong Open Policy Agent (OPA) plugin on a route to ask the PDP about each request.
+
+:::danger The Kong OPA plugin cannot send the PDP its API key
+The PDP answers any request to `/kong` that has no `Authorization: Bearer <API key>` header with HTTP `401` (pinned by `test_kong_endpoint_enabled_integration_allowed_flow` in the [PDP repository](https://github.com/permitio/PDP)). The [Kong OPA plugin](https://developer.konghq.com/plugins/opa/reference/) has no configuration field for the headers it sends to OPA, so a plugin pointed straight at the PDP gets `401` on every request, and the plugin turns any non-`200` answer into HTTP `500` for the client. Point the plugin at a reverse proxy that adds the header, as [2. Add the API key with a reverse proxy](#add-the-api-key-with-a-reverse-proxy) describes. Without that proxy, every request through the protected route fails.
+:::
 
 ## How the Kong integration works \{#overview}
 
@@ -18,17 +22,13 @@ The Permit PDP is built on OPA, so Kong's standard OPA plugin can call it. When 
 | Resource type | Derived from the request path (see [Map request paths to resources](#map-request-paths-to-resources)) |
 | Tenant | `default` |
 
-When the PDP allows the request, Kong forwards it to your service. When the PDP denies it, Kong returns HTTP `403`. You manage the policy in the Permit dashboard, and Permit keeps it as policy as code.
-
-:::danger The PDP requires an API key header that the Kong OPA plugin doesn't send
-The PDP rejects requests to `/kong` without an `Authorization: Bearer <API key>` header, with HTTP `401`. The [Kong OPA plugin configuration](https://developer.konghq.com/plugins/opa/reference/) has no field for request headers to OPA. When the PDP returns a status other than `200`, the OPA plugin returns HTTP `500` to the client. Before you roll out this integration, confirm with Permit that your PDP version accepts requests from the Kong OPA plugin: ask in the [Permit Slack community](https://io.permit.io/slack).
-:::
+The PDP answers with the decision in a `result` field. When the PDP allows the request, Kong forwards it to your service. When the PDP denies it, Kong returns HTTP `403`. You manage the policy in the Permit dashboard, and Permit keeps it as policy as code.
 
 ## Prerequisites \{#connect-your-kong-gateway-to-permitio}
 
 - Kong Gateway configured to route requests to your backend, with authentication handled by Kong so each request has a consumer
 - The Kong OPA plugin, which Kong provides on Kong Gateway Enterprise
-- Docker on a host that Kong can reach
+- Docker on a host that Kong can reach, for the PDP and the reverse proxy
 - A Permit.io policy with resources named after your route paths, and actions named after lowercase HTTP methods ([Configure your first RBAC policy](/overview/configure-your-first-rbac-policy))
 - Your environment API key ([Get your API key](/overview/get-api-key))
 
@@ -49,49 +49,77 @@ docker run \
 
 The command maps port `7766` on the host to the PDP's port `7000`. `PDP_KONG_INTEGRATION=true` enables the `/kong` endpoint. Without it, the PDP answers `/kong` requests with HTTP `503`.
 
-## 2. Add the OPA plugin to a Kong route \{#adding-the-opa-plugin-to-kong}
+## 2. Add the API key with a reverse proxy \{#add-the-api-key-with-a-reverse-proxy}
+
+Kong sends no `Authorization` header to the PDP, so put a proxy between Kong and the PDP that adds one. The following NGINX configuration listens on port `8080`, adds the API key, and forwards to the PDP on `7766`. Replace `YOUR_PERMIT_API_KEY` with your environment API key, and `PDP_HOST` with the host that runs the PDP:
+
+```nginx
+events {}
+
+http {
+    server {
+        listen 8080;
+
+        location /kong {
+            proxy_pass http://PDP_HOST:7766/kong;
+            proxy_set_header Authorization "Bearer YOUR_PERMIT_API_KEY";
+        }
+    }
+}
+```
+
+Save the configuration as `pdp-proxy.conf` and run it as a container on a host Kong can reach:
+
+```sh
+docker run \
+  -p 8080:8080 \
+  -v "$PWD/pdp-proxy.conf:/etc/nginx/nginx.conf:ro" \
+  nginx:stable
+```
+
+Check that the proxy reaches the PDP and authenticates. The request body below is not a valid Kong query, so the PDP rejects the body rather than the caller:
+
+```sh
+curl -i -X POST http://localhost:8080/kong -H "Content-Type: application/json" -d '{}'
+```
+
+Read the status line: `401` means the API key in `proxy_set_header` is missing or wrong, and any other status means the proxy added a key that the PDP accepted. A connection error means the proxy can't reach the PDP at the `proxy_pass` address.
+
+:::warning The proxy holds your environment API key
+Anyone who can reach the proxy can send permission checks to your PDP, and anyone who can read `pdp-proxy.conf` can change that environment's policy through the Permit API. Run the proxy on a network that only Kong can reach, and keep the configuration file out of source control.
+:::
+
+## 3. Add the OPA plugin to a Kong route \{#adding-the-opa-plugin-to-kong}
 
 In Kong Manager, open the route you want to protect and add a plugin. The **Add plugin** link is in the **Plugins** section of the route page.
 
 ![Kong Manager route page with the Plugins section and the Add plugin link](/img/integrations/kong/kong-1.png)
 
-Choose the OPA plugin and set the following values. If you changed the port or host of the PDP, use your values here too.
+Choose the OPA plugin and set these fields to the address of the reverse proxy from step 2, not the address of the PDP:
 
-### Consume OPA Input
+| Plugin field | Value | Why |
+|---|---|---|
+| `Config.include Consumer In Opa Input` | Checked | The PDP uses the consumer's username as the user key. Without the consumer, the PDP denies every request. |
+| `Config.Opa Host` | The IP address or host name of the reverse proxy, for example `192.168.60.231` | Where Kong sends the check |
+| `Config.Opa Port` | `8080` | The port the reverse proxy listens on |
+| `Config.Opa Path` | `/kong` | The PDP endpoint for Kong |
+| `Config.Opa Protocol` | `http` | The protocol between Kong and the reverse proxy |
 
-Check `Config.include Consumer In Opa Input`. The PDP uses the consumer's username as the user key. Without the consumer, the PDP denies every request.
+## 4. Verify the permission check \{#wrapping-up}
 
-### Config.Opa Host
+1. Send a request through the Kong route as a consumer who has permission for the action on the resource. Kong forwards the request to your service.
+2. Send the same request as a consumer without that permission. Kong returns HTTP `403`.
+3. Open **Audit Log** in the Permit dashboard. Each request appears as a decision with the consumer's username, the lowercase HTTP method, and the resource type. See [View and filter audit logs](/how-to/use-audit-logs/types-and-filtering).
 
-The IP address or host name of the PDP, for example `192.168.60.231`.
+Use this table when a request through the route fails:
 
-### Config.Opa Path
-
-The PDP endpoint for Kong:
-
-```
-/kong
-```
-
-### Config.Opa Port
-
-The host port the PDP container listens on:
-
-```
-7766
-```
-
-### Config.Opa Protocol
-
-The protocol Kong uses to call the PDP:
-
-```
-http
-```
-
-The completed plugin form looks like this:
-
-![Kong OPA plugin form with Include Consumer In Opa Input checked and the PDP host, path /kong, port 7766, and protocol http filled in](https://permit-instructions-files.s3.us-east-2.amazonaws.com/instructions-kong-2.png)
+| Symptom | Cause | Fix |
+|---|---|---|
+| Kong returns `500` for every request | The plugin points at the PDP instead of the reverse proxy, so the PDP answers `401` | Set `Config.Opa Host` and `Config.Opa Port` to the reverse proxy from step 2 |
+| Kong returns `500` and the PDP logs nothing | Kong can't reach the reverse proxy, or the proxy can't reach the PDP | Run the `curl` check in step 2 from the Kong host |
+| The proxy container exits with `host not found in upstream` | NGINX resolves the `proxy_pass` host at startup, and the host in the configuration doesn't resolve | Replace `PDP_HOST` with a host name or IP address the proxy container can resolve |
+| The PDP logs `Got request from Kong with no consumer` | The plugin doesn't include the consumer | Check `Config.include Consumer In Opa Input` in the plugin configuration |
+| The PDP logs `no matching route` | No rule in `kong_routes.json` matches the request path | Add a rule for the path to the route mapping file |
 
 ## Map request paths to resources
 
@@ -103,15 +131,17 @@ The PDP picks the resource type from the request path with the first matching ru
 | `/<segment>...`, for example `/repo` | `<segment>` (`repo`) |
 | `/` | `index` |
 
-The rules come from the file `/config/kong_routes.json` in the PDP container. Each rule is a regular expression paired with a resource type name, or with the index of a capture group whose value is the resource type. The PDP reads the file at startup. If no rule matches a path, the PDP denies the request. For an example of a custom mapping table, see the Permit blog post [No-code permissions with Kong and Permit.io](https://www.permit.io/blog/no-code-permissions-with-kong-and-permitio).
+The rules come from the file `/config/kong_routes.json` in the PDP container, which holds a JSON array of `[regular expression, resource]` pairs. The `resource` element is either a resource type name or the index of a capture group whose value is the resource type. The default file is:
 
-## 3. Verify the permission check \{#wrapping-up}
+```json
+[
+	["/v\\d+/([^/]+).*", 0],
+	["/([^/]+).*", 0],
+	["/", "index"]
+]
+```
 
-1. Send a request through the Kong route as a consumer who has permission for the action on the resource. Kong forwards the request to your service.
-2. Send the same request as a consumer without that permission. Kong returns HTTP `403`.
-3. Open **Audit Log** in the Permit dashboard. Each request appears as a decision with the consumer's username, the lowercase HTTP method, and the resource type. See [View and filter audit logs](/how-to/use-audit-logs/types-and-filtering).
-
-If the PDP container logs `Got request from Kong with no consumer`, check `Config.include Consumer In Opa Input` in the plugin configuration. If it logs `no matching route`, add a rule for the path to the route mapping file.
+To use your own mapping, mount a replacement file over `/config/kong_routes.json` when you run the PDP container, for example `-v "$PWD/kong_routes.json:/config/kong_routes.json:ro"`. The PDP reads the file at startup, so restart the container after you change it. If no rule matches a path, the PDP denies the request.
 
 ## Next steps
 

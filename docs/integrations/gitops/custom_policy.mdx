@@ -88,7 +88,8 @@ false
    The `rbac.allowing_roles` set lists the roles that allowed the request. Chain an `else` branch to the previous rule that is `true` when `tmp-admin` isn't one of them:
 
    ```rego
-   else {
+   allow {
+      "rbac" in policies.__allow_sources
       not "tmp-admin" in rbac.allowing_roles
    }
    ```
@@ -98,9 +99,14 @@ false
 3. **Allow the `tmp-admin` role only inside the time window.** Chain a last `else` branch that compares the current time with the start and end of the window:
 
    ```rego
-   else {
-      time.now_ns() >= time.parse_rfc3339_ns("2023-01-01T00:00:00+02:00")
-      time.now_ns() <= time.parse_rfc3339_ns("2024-01-01T00:00:00+02:00")
+   # Replace both timestamps with the start and end of your window.
+   window_start_ns := time.parse_rfc3339_ns("2026-01-01T00:00:00Z")
+   window_end_ns := time.parse_rfc3339_ns("2027-01-01T00:00:00Z")
+
+   allow {
+      "tmp-admin" in rbac.allowing_roles
+      time.now_ns() >= window_start_ns
+      time.now_ns() <= window_end_ns
    }
    ```
 
@@ -117,13 +123,26 @@ import data.permit.rbac
 
 default allow := false
 
+# Replace both timestamps with the start and end of your window.
+window_start_ns := time.parse_rfc3339_ns("2026-01-01T00:00:00Z")
+window_end_ns := time.parse_rfc3339_ns("2027-01-01T00:00:00Z")
+
+# The decision does not come from RBAC.
 allow {
     not "rbac" in policies.__allow_sources
-} else {
-   not "tmp-admin" in rbac.allowing_roles
-} else {
-   time.now_ns() >= time.parse_rfc3339_ns("2023-01-01T00:00:00+02:00")
-   time.now_ns() <= time.parse_rfc3339_ns("2024-01-01T00:00:00+02:00")
+}
+
+# RBAC allowed the request, but not through the tmp-admin role.
+allow {
+    "rbac" in policies.__allow_sources
+    not "tmp-admin" in rbac.allowing_roles
+}
+
+# The tmp-admin role allowed the request, and the current time is inside the window.
+allow {
+    "tmp-admin" in rbac.allowing_roles
+    time.now_ns() >= window_start_ns
+    time.now_ns() <= window_end_ns
 }
 ```
 

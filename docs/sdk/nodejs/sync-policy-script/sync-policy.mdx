@@ -121,139 +121,95 @@ The script treats any error from `permit.api.resources.get()` or `permit.api.rol
 ```js
 const { Permit } = require('permitio');
 
-// Create a Permit client. The script only calls the Permit API.
+// The script calls only the Permit API, so it needs an API key and no PDP URL.
+// Read the API key from the environment instead of hardcoding it in the script.
 const permit = new Permit({
-    // in production, you might need to change this url to fit your deployment
-    pdp: 'https://cloudpdp.api.permit.io',
-    // your api key
-    token:
-        'permit_key_',
+    token: process.env.PERMIT_API_KEY,
 });
 
+// Every resource in this script has the same four actions.
+const actions = {
+    'create': { name: 'create' },
+    'read-all': { name: 'read-all' },
+    'delete': { name: 'delete' },
+    'export': { name: 'export' },
+};
+
+const resources = [
+    { key: 'employee', name: 'Employee', actions },
+    { key: 'task', name: 'Task', actions },
+    { key: 'folder', name: 'Folder', actions },
+];
 
 const roles = [
     {
-        "key": "manager",
-        "name": "Manager",
-        "description": "Default User",
-        "permissions": ["employee:export", "employee:delete"]
+        key: 'manager',
+        name: 'Manager',
+        description: 'Can export and delete employees',
+        permissions: ['employee:export', 'employee:delete'],
     },
-]
-
-const resources = [
-    {
-        "key": "employee",
-        "name": "Employee",
-        "actions": {
-            "create": {
-                "name": "create",
-            },
-            "read-all": {
-                "name": "read-all"
-            },
-            "delete": {
-                "name": "delete"
-            },
-            "export": {
-                "name": "export"
-            },
-        },
-    },
-    {
-        "key": "task",
-        "name": "Task",
-        "actions": {
-            "create": {
-                "name": "create",
-            },
-            "read-all": {
-                "name": "read-all"
-            },
-            "delete": {
-                "name": "delete"
-            },
-            "export": {
-                "name": "export"
-            },
-        },
-    
-    },
-    {
-        "key": "folder",
-        "name": "Folder",
-        "actions": {
-            "create": {
-                "name": "create",
-            },
-            "read-all": {
-                "name": "read-all"
-            },
-            "delete": {
-                "name": "delete"
-            },
-            "export": {
-                "name": "export"
-            },
-        },
-    }
-]
-
+];
 
 const createPolicy = async () => {
-    // iterate through resources
-    for (let resource of resources) {
-        // check if resource exists
-        let resourceExists
+    // create each resource that does not exist yet
+    for (const resource of resources) {
+        let resourceExists;
         try {
             resourceExists = await permit.api.resources.get(resource.key);
-        } catch(err){
+        } catch (err) {
             console.log('no resource: ' + resource.key);
         }
 
-        // if resource don't exist create it
         if (!resourceExists) {
-            console.log("creating resource: " + resource.key);
+            console.log('creating resource: ' + resource.key);
             await permit.api.resources.create(resource);
         } else {
-            console.log("resource already exists: " + resource.key);
+            console.log('resource already exists: ' + resource.key);
         }
     }
-    // iterate through roles
-    for (let role of roles) {
-        // check if role exists
-        let roleExists
+
+    // create each role that does not exist yet, and align the permissions of the roles that do
+    for (const role of roles) {
+        let roleExists;
         try {
             roleExists = await permit.api.roles.get(role.key);
-        } catch(err){
+        } catch (err) {
             console.log('no role: ' + role.key);
         }
-        // if role don't exist create it
+
         if (!roleExists) {
-            console.log("creating role: " + role.key);
+            console.log('creating role: ' + role.key);
             await permit.api.roles.create(role);
-        } else {
-            console.log("role already exists: " + role.key);
-            console.log(roleExists.permissions, role.permissions)
-            if (roleExists.permissions.some(x => !role.permissions.includes(x)) || role.permissions.some(x => !roleExists.permissions.includes(x))) {
-                console.log("updating permissions for role: " + role.key);
-                // clear permissions
-                await permit.api.roles.removePermissions(roleExists.id, roleExists.permissions);
-                // add permissions
-                await permit.api.roles.assignPermissions(roleExists.id, role.permissions);
-            } else {
-                console.log("permissions for role: " + role.key + " are up to date");
-            }
+            continue;
+        }
+
+        console.log('role already exists: ' + role.key);
+        const current = roleExists.permissions ?? [];
+        const toAdd = role.permissions.filter((permission) => !current.includes(permission));
+        const toRemove = current.filter((permission) => !role.permissions.includes(permission));
+
+        if (toAdd.length === 0 && toRemove.length === 0) {
+            console.log('permissions for role: ' + role.key + ' are up to date');
+            continue;
+        }
+
+        console.log('updating permissions for role: ' + role.key);
+        if (toRemove.length > 0) {
+            await permit.api.roles.removePermissions(role.key, toRemove);
+        }
+        if (toAdd.length > 0) {
+            await permit.api.roles.assignPermissions(role.key, toAdd);
         }
     }
-}
+};
 
-createPolicy().then(() => {
-    console.log("done");
-}
-).catch((err) => {
-    console.log(err);
-}
-)
+createPolicy()
+    .then(() => {
+        console.log('done');
+    })
+    .catch((err) => {
+        console.log(err);
+    });
 ```
 
 ## Verify the policy script \{#notes}

@@ -9,6 +9,8 @@ This page is for operators and security teams who design egress access for AI ag
 
 An outbound request passes through two independent gates, and both must allow it. The same model governs MCP tool calls in the Permit MCP Gateway, and both use the same Permit policy environment.
 
+On this page, **the proxy** is the HTTP Egress Proxy, the component that decides each outbound request. **The gateway** is the Permit MCP Gateway that hosts the proxy and holds the host configuration, the workflows, and the stored credentials.
+
 ## The two authorization gates \{#the-two-gates}
 
 ```mermaid
@@ -33,13 +35,13 @@ For an agent a person delegated access to, the proxy also applies that person's 
 
 ### Gate 1: Workflow match \{#gate-1--workflow-match}
 
-Every proxy access token is bound to one [API workflow](/permit-mcp-gateway/http-egress-proxy/egress-rules). The gateway resolves the token's workflow, checks the request's target host against the workflow's domains, and finds the rules that match the request's path and method. The proxy denies a request that matches no rule, before any policy evaluation.
+Every proxy access token is bound to one [API workflow](/permit-mcp-gateway/http-egress-proxy/egress-rules). The proxy resolves the token's workflow, checks the request's target host against the workflow's domains, and finds the rules that match the request's path and method. The proxy denies a request that matches no rule, before any policy evaluation.
 
 The workflow match is the operator-controlled allow-list: it decides which domains, paths, and methods an agent can request at all.
 
 ### Gate 2: Permit.io policy \{#gate-2--permitio-policy}
 
-For a request that matches a rule, the gateway asks your Permit.io policy whether the agent holds a role that authorizes the rule. Each rule is a Permit action on the workflow resource.
+For a request that matches a rule, the proxy asks your Permit.io policy whether the agent holds a role that authorizes the rule. Each rule is a Permit action on the workflow resource.
 
 The rule declares the trust level a request must meet (its required trust). The method class decides only which rules a request can match. When you set required trust to **Auto**, the method class also sets the default level.
 
@@ -49,11 +51,16 @@ With two gates, an operator defines a workflow's domains and rules, and your cen
 
 ## Human consent and trust ceilings
 
-An agent often acts on behalf of a person. The HTTP Egress Proxy uses the same delegation model as the gateway uses for MCP: a person explicitly authorizes an agent to make egress calls for them for one workflow, and a trust ceiling caps the access the agent gets through that person.
+An agent often acts on behalf of a person. Egress requests use the same delegation model the gateway uses for MCP tool calls: a person explicitly authorizes an agent to make egress calls for them on one workflow, and a trust ceiling caps the access the agent gets through that person.
 
 ### Trust ceilings
 
-An admin sets, per person and per workflow, the maximum trust level that person may delegate: `low`, `medium`, or `high`. This is the **Max Trust Level** setting described in [Host setup](/permit-mcp-gateway/host-setup).
+An admin sets, per person and per workflow, the maximum trust level that person may delegate: `low`, `medium`, or `high`. Set that ceiling in the [Permit MCP Gateway dashboard](https://app.agent.security) in either place:
+
+- On the workflow's detail page under **CLIs / APIs**, in the **Authorized humans** card: select **Grant workflow access**, choose the person, and set **Max trust**.
+- On the person's detail page under **Humans**, in the **API workflow access** card: add the workflow and set its max trust.
+
+The per-workflow ceiling is separate from the per-MCP-server max trust level that [step 6 of Host setup](/permit-mcp-gateway/host-setup#6-grant-users-access-to-mcp-servers) sets. The per-server level caps MCP tool calls; the per-workflow ceiling caps egress requests. A person needs a ceiling on a workflow before they can authorize any agent for it.
 
 When a person consents to an agent, the agent receives the lower of two levels: the level the person grants and the admin's ceiling. A person cannot delegate more than their ceiling allows.
 
@@ -72,32 +79,30 @@ asg proxy authorize <agent-client-id> --workflow charge_customers
 1. **Sign in.** The person authenticates.
 2. **Review the workflow.** The consent screen shows the workflow's domains and rules that the agent requests.
 3. **Choose an access level.** The screen defaults to the lowest level and caps the choice at the admin's ceiling for that person and workflow.
-4. **Approve.** The gateway issues a short-lived token for the agent, bound to the person and the workflow.
+4. **Approve.** The Consent Service records the grant in Permit and issues a short-lived token for the agent, bound to the person and the workflow.
 
-When the person approves, `asg proxy authorize` returns the token. Pass `--out <file>` to write the token to a file. If the person denies access or the flow times out, the command exits with code `1`.
+When the person approves, `asg proxy authorize` returns the token. If the person denies access or the flow times out, the command exits with code `1`.
 
-Options:
+Two options change what the person is asked to delegate:
 
-| Option | Description |
-| --- | --- |
-| `--workflow <slug>` | The workflow to delegate. Omit it to let the consent screen show a picker of the workflows the person may delegate. |
-| `--trust low\|medium\|high` | Proposes a cap below the person's ceiling. Omit it to default to the lowest level. |
-| `--subdomain <host>` | The host subdomain, if you have not set a default. |
-| `--out <file>` | Writes the token to a file with restrictive permissions. |
+- `--workflow <slug>` names the workflow. Omit it and the consent screen shows a picker of the workflows that person may delegate.
+- `--trust low|medium|high` lowers the cap offered on the screen below the person's ceiling. Omit it and the screen defaults to the lowest level and caps at the ceiling.
+
+If the person has no ceiling on the workflow, or asks for a level above their ceiling, the Consent Service rejects the request with `403`. For the remaining options, such as writing the token to a file, run `asg proxy authorize --help` or see [the asg proxy command tree](/permit-mcp-gateway/http-egress-proxy/cli#the-asg-proxy-command-tree).
 
 The resulting token's access depends on that person's consent, and the person can revoke it.
 
 ### Revocation
 
-A person can revoke an agent's delegated access from their account at any time. Revocation removes the agent's policy assignment, so new authorization decisions for that agent fail.
+A person can revoke an agent's delegated access from the **Your authorized agents** page at `/my-agents` in their account at any time. Revocation removes the agent's policy assignment, so new authorization decisions for that agent fail.
 
-A proxy token issued before the revocation stays valid until it expires, unless the person also selects **deny in-flight tokens**. That option denies every token minted before the revocation for the rest of the token's lifetime. Use it for a lost device or a compromised agent.
+A proxy token issued before the revocation stays valid until it expires, unless the person also selects **Also deny tokens already in flight**. That option denies every token minted before the revocation for the rest of the token's lifetime. Use it for a lost device or a compromised agent.
 
 The proxy checks revocation only on requests it inspects. Traffic inside an open `passthrough` HTTPS tunnel is not re-checked, and continues until the client closes the tunnel or the idle timeout ends it. If revocation must stop an in-progress HTTPS connection, use `intercept` mode for that domain.
 
 ## How automated agents differ
 
-Some agents, such as a CI job or a backend service, do not act for a person. Issue such an agent a token directly with [`asg proxy token create --workflow <slug>`](/permit-mcp-gateway/http-egress-proxy/quickstart#4-mint-a-workflow-bound-agent-token).
+Some agents, such as a CI job or a backend service, do not act for a person. Issue an agent like that a token directly with [`asg proxy token create --workflow <slug>`](/permit-mcp-gateway/http-egress-proxy/quickstart#4-mint-a-workflow-bound-agent-token), and skip the consent flow.
 
 A directly issued token is not bound to a person, so no trust ceiling applies. The workflow's rules and the agent's own Permit policy govern its access.
 

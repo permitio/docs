@@ -174,36 +174,52 @@ The `/postLogin` page syncs the user to Permit in `getServerSideProps`, with the
 
 ```tsx
 // pages/postLogin/index.tsx
+import { getSession } from "@auth0/nextjs-auth0";
+import { redirect } from "next/dist/server/api-utils";
+import { PermitApiError } from "permitio";
+import { permit } from "../api/tasks";
+
+export default function Sync() {
+  return <div>Syncing with Permit</div>;
+}
+
 export async function getServerSideProps({ req, res }: any) {
   const session = await getSession(req, res);
-  const permitUserObj = {
+  const userKey = session?.user?.sub;
+
+  // Skip the sync when the user already exists in Permit.
+  try {
+    await permit.api.users.get(userKey);
+    redirect(res, 302, "/");
+    return { props: {} };
+  } catch (error) {
+    if (!(error instanceof PermitApiError) || error.response?.status !== 404) {
+      throw error;
+    }
+  }
+
+  await permit.api.syncUser({
+    key: userKey,
     email: session?.user?.email,
-    key: session?.user?.sub,
     first_name: session?.user?.name,
-  };
-  const permitUser = await permit.api.syncUser(permitUserObj);
-  //... the sync role logic
+  });
+
+  // The Auth0 Action adds the my_app_name/roles claim. Role keys are case-sensitive.
+  const roleKeys: string[] = session?.user["my_app_name/roles"] ?? [];
+  for (const roleKey of roleKeys) {
+    await permit.api.users.assignRole({
+      user: userKey,
+      role: roleKey,
+      tenant: "default",
+    });
+  }
+
+  redirect(res, 302, "/");
+  return { props: {} };
 }
 ```
 
 Next, the page reads the roles from the `my_app_name/roles` claim, which the [Auth0 Action in the integration guide](/authentication/auth0/permit-integration#31-sync-auth0-with-permit) adds, and assigns each role in the `default` tenant. The block ends the same `getServerSideProps` function and redirects the user to the home page:
-
-```tsx
-    if (session?.user['my_app_name/roles']) {
-        session?.user['my_app_name/roles'].map(async (roleKey: string) => {
-            console.log(roleKey);
-            const roleToAssign = {
-                role: roleKey,
-                user: permitUserObj.key,
-                tenant: 'default'
-            }
-            const assignedRole = await permit.api.roleAssignments.assign(roleToAssign);
-            console.log(assignedRole);
-        });
-    }
-    redirect(res, 302, '/');
-}
-```
 
 Role keys must match exactly in Auth0 and Permit, because keys are case-sensitive. The full page, including the check that skips users who already exist in Permit, is in [pages/postLogin/index.tsx on GitHub](https://github.com/permitio/permit-next-todo-starter/blob/auth0-integration/pages/postLogin/index.tsx).
 

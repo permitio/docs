@@ -34,10 +34,10 @@ Create a Permit client, and replace `permit_key_secret` with your environment AP
 
 ```js
 const permit = new Permit({
-  // in production, you might need to change this url to fit your deployment
+  // the Cloud PDP; in production, use the URL of the PDP you deploy
   pdp: "https://cloudpdp.api.permit.io",
-  // your api key
-  token: "permit_key_secret"
+  // the environment API key, read from the environment
+  token: process.env.PERMIT_API_KEY,
 });
 ```
 
@@ -66,11 +66,13 @@ const PermissionMap = {
 
 const permitPlugin = {
   async requestDidStart(context) {
-    const operationName = context.request.operationName || "";
-    var userId = await getUserIdFromJWT("");
+    const operationName = (context.request.operationName || "").toLowerCase();
+    // the Authorization header of the incoming GraphQL request
+    const authorization = context.request.http?.headers.get("authorization");
+    const userId = await getUserIdFromJWT(authorization);
     let allowed = false;
-    if (operationName.toLowerCase() in PermissionMap) {
-      const { resource, action } = PermissionMap[operationName.toLowerCase()];
+    if (operationName in PermissionMap) {
+      const { resource, action } = PermissionMap[operationName];
       allowed = await permit.check(userId, action, resource);
     }
     else {
@@ -90,13 +92,17 @@ In the Permit Policy Editor, create each resource in the map (`user`, `launch`) 
 This plugin uses the lowercase operation name as the resource. The action is `write` for a mutation and `read` for any other operation. The check runs in the `didResolveOperation` hook, after Apollo Server has parsed the operation.
 
 ```js
-
 const permitPlugin = {
-  requestDidStart(requestContext) {
+  requestDidStart() {
     return {
       async didResolveOperation (context) {
         const op = context.operationName
-        var userId = await getUserIdFromJWT("");
+        if (!op) {
+          throw new Error("Not allowed"); // an anonymous operation has no resource to check
+        }
+        // the Authorization header of the incoming GraphQL request
+        const authorization = context.request.http?.headers.get("authorization")
+        const userId = await getUserIdFromJWT(authorization)
         const isMutation = context.operation.operation === 'mutation'
         const allowed = await permit.check(userId, isMutation? "write": "read", op.toLowerCase()) // this will look like "action: write, resource:launches" or "action: read, resource:launches"
         if (!allowed) {
@@ -115,6 +121,9 @@ In the Permit Policy Editor, create a resource for each operation name, for exam
 Add `permitPlugin` to the `plugins` list of the Apollo Server constructor:
 
 ```js
+// Apollo Server 3 ships the local landing page plugin in apollo-server-core
+const { ApolloServerPluginLandingPageLocalDefault } = require("apollo-server-core");
+
 // Set up Apollo Server
 const server = new ApolloServer({
   debug: true,

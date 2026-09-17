@@ -1,35 +1,25 @@
 ---
 sidebar_position: 1
 title: View and filter audit logs
-description: "View the audit log of permission decisions in the Permit dashboard, filter it by user, date, decision, and tenant, and read the reason behind each decision."
+description: "Find the permission decision you are debugging: open the audit log in the Permit dashboard, filter it by user, date, decision, and tenant, list it with the API, and read the reason behind a decision."
 ---
 
 import viewingAuditLogs from "/static/ui-videos/how-to/audit-logs/viewing-audit-logs.mp4";
 import filteringAuditLogs from "/static/ui-videos/how-to/audit-logs/filtering-audit-logs.mp4";
 
-View every permission decision your policy decision points (PDPs) make, filter the list to the decisions you care about, and read why each decision allowed or denied the request. This page is for developers and admins who debug permissions or review who accessed what.
+Find a permission decision your policy decision point (PDP) made, and read why it allowed or denied the request. This page is for developers who debug a `permit.check()` call that returned an unexpected result.
 
-## How Permit creates audit logs \{#automatic-log-generation}
+## Prerequisites
 
-Each `permit.check()` call that reaches a PDP creates an audit log entry. You don't add logging code. The entry combines the check (user, action, resource, tenant) with the policy that the PDP evaluated: resources, actions, roles, and user and tenant data.
+- A PDP that has served at least one `permit.check()` call. See [Run the PDP](/overview/run-pdp).
+- Access to the Permit environment the PDP runs against. See [Projects and environments](/manage-your-account/projects-and-env).
+- For the API calls on this page: an environment API key. See [Get your API key](/overview/get-api-key).
 
-The PDP uploads decision logs to Permit by default, for container PDPs and the Cloud PDP. To see decisions outside the Permit dashboard, use one of these options on a container PDP:
-
-- Print each decision to the container output with `PDP_OPA_DECISION_LOG_CONSOLE`. See [Print decisions to the console](/overview/local-authorization-microservice#debug-mode).
-- Send decision logs to Elasticsearch or stdout with the [logs forwarder](/how-to/use-audit-logs/logs-forwarder).
-
-## Audit log types \{#types-of-audit-logs}
-
-| Type | What it shows |
-|---|---|
-| Audit log | Who made the request, the action, the resource, the tenant, and whether the PDP allowed or denied it. |
-| Decision log | The details of one decision, including a human-readable `reason` for the result. |
-
-## View audit logs \{#viewing-your-audit-logs}
+## View audit logs in the dashboard \{#viewing-your-audit-logs}
 
 1. Sign in to the [Permit dashboard](https://app.permit.io) and select the environment your PDP uses.
-2. Open the [Audit Log](https://app.permit.io/audit-log) screen.
-3. Select an entry to open its decision log.
+2. Open the [Audit Log](https://app.permit.io/audit-log) screen. Each row holds the timestamp, the user, the action, the resource type, the tenant, and the decision.
+3. Select a row. The decision log for that check opens next to the list.
 
 <video controls aria-label="Opening the Audit Log screen in the Permit dashboard and selecting a log entry">
   <source src={viewingAuditLogs} />
@@ -37,23 +27,57 @@ The PDP uploads decision logs to Permit by default, for container PDPs and the C
 
 If the screen shows no entries, see [Troubleshoot missing audit logs](/how-to/use-audit-logs/troubleshooting).
 
-:::note Audit log retention
-Permit deletes old audit logs periodically. To access older logs or extend log retention for your account, contact Permit on [Slack](https://io.permit.io/slack) or at [help@permit.io](mailto:help@permit.io).
-:::
-
 ## Filter audit logs \{#filtering}
 
-On the **Audit Log** screen, filter entries by **user**, **date**, **decision**, and **tenant**.
+On the **Audit Log** screen, filter entries by **user**, **date**, **decision**, and **tenant**. Filtering by user and by decision is the fastest way to find a denial for one user.
 
 <video controls aria-label="Filtering audit log entries by user, date, decision, and tenant in the Permit dashboard">
   <source src={filteringAuditLogs} />
 </video>
 
-To filter audit logs in code, call the [List audit logs](https://api.permit.io/v2/redoc#tag/Audit-Logs/operation/list_audit_logs) endpoint. It filters by users, decision, resources, tenant, action, PDP configuration, and a time range, and returns up to 100 results per page. To narrow a large result, shorten the time range or add filters.
+## List audit logs with the API
 
-## Decision logs
+To filter audit logs from a script, call the [List audit logs](https://api.permit.io/v2/redoc#tag/Audit-Logs/operation/list_audit_logs) endpoint. Replace `<YOUR_API_KEY>` with your environment API key, and `{proj_id}` and `{env_id}` with your project and environment keys or IDs.
 
-A decision log shows the input the PDP received and the result that Open Policy Agent (OPA), the policy engine inside the PDP, returned. The Permit policy that runs in OPA adds a human-readable `reason` that explains why the PDP allowed or denied the request.
+This request returns the denied checks for one user in the `default` tenant:
+
+```bash
+curl -G 'https://api.permit.io/v2/pdps/{proj_id}/{env_id}/audit_logs' \
+  -H 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data-urlencode 'users=john@permit.io' \
+  --data-urlencode 'decision=false' \
+  --data-urlencode 'tenant=default' \
+  --data-urlencode 'per_page=10'
+```
+
+The response holds one object per check in `data`, the number of matching entries in `total_count`, and the number of pages in `page_count`. Each entry also carries the `org_id`, `project_id`, and `env_id` of the check:
+
+```json
+{
+  "data": [
+    {
+      "id": "6f1c3a2e-6e24-4f3f-9b7a-5a9c0d8e1f22",
+      "timestamp": "2026-02-11T08:24:19+00:00",
+      "user_key": "john@permit.io",
+      "user_email": "john@permit.io",
+      "action": "delete",
+      "resource_type": "task",
+      "tenant": "default",
+      "decision": false,
+      "pdp_config_id": "0b0e3a49-1e2f-4a8c-9d21-6f3b7c8a4e15"
+    }
+  ],
+  "total_count": 1,
+  "page_count": 1,
+  "pagination_count": 1
+}
+```
+
+Available filters: `users`, `decision`, `resources`, `action`, `tenant`, `pdp_id`, `timestamp_from`, `timestamp_to`, and `query` (`check`, `get_user_permissions`, or `get_authorized_users`). Page through results with `page` and `per_page`: `per_page` defaults to 30 and accepts up to 100. To read the full decision log of one entry, call `GET /v2/pdps/{proj_id}/{env_id}/audit_logs/{log_id}` with the `id` from `data`.
+
+## Read a decision log \{#decision-logs}
+
+A decision log shows the input the PDP received and the result that Open Policy Agent (OPA), the policy engine inside the PDP, returned. The Permit policy that runs in OPA adds a human-readable `reason` that explains the result.
 
 ![Decision log panel in the Audit Log screen showing the request input, the decision, and the reason](/ui-videos/how-to/audit-logs/decision-log.png)
 
@@ -82,6 +106,26 @@ The decision log includes the `reason` when [Debug Mode](/how-to/use-audit-logs/
 | [`no_matching_resourcesets`](/how-to/use-audit-logs/errors/no_matching_resourcesets) | The resource matches no ABAC resource set. |
 | [`no_matching_rules`](/how-to/use-audit-logs/errors/no_matching_rules) | No ABAC rule grants the action between the matched sets. |
 | [`cloud_pdp_not_supporting_abac`](/how-to/use-audit-logs/errors/cloud_pdp_not_supporting_abac) | The check reached the Cloud PDP, and the environment uses ABAC. |
+
+## Where audit logs come from \{#automatic-log-generation}
+
+Each `permit.check()` call that reaches a PDP creates one audit log entry. You don't add logging code. The entry combines the check (user, action, resource, tenant) with the policy the PDP evaluated.
+
+The PDP uploads decision logs to Permit by default, for container PDPs and the Cloud PDP. To see decisions outside the Permit dashboard, use one of these options on a container PDP:
+
+- Print each decision to the container output with `PDP_OPA_DECISION_LOG_CONSOLE`. See [Print decisions to the console](/overview/local-authorization-microservice#debug-mode).
+- Send decision logs to Elasticsearch or stdout with the [logs forwarder](/how-to/use-audit-logs/logs-forwarder).
+
+### Audit log entry compared with decision log \{#types-of-audit-logs}
+
+| | Audit log entry | Decision log |
+|---|---|---|
+| What it holds | One row per check: timestamp, user, action, resource type, tenant, and the `true` or `false` decision | The full record of one check: the `input` the PDP received, the `result` OPA returned, and the `reason` and `code` for the result |
+| Where you see it | The list on the **Audit Log** screen, and the `data` array of `GET /v2/pdps/{proj_id}/{env_id}/audit_logs` | The panel that opens when you select a row, and `GET /v2/pdps/{proj_id}/{env_id}/audit_logs/{log_id}` |
+
+### Audit log retention \{#audit-log-retention}
+
+Permit stores audit logs for a limited time, so a check from far in the past can be missing from the **Audit Log** screen and from the API. To find out the retention period for your account, or to keep logs longer, contact Permit on [Slack](https://io.permit.io/slack) or at [help@permit.io](mailto:help@permit.io). To keep decisions in your own systems, forward them with the [logs forwarder](/how-to/use-audit-logs/logs-forwarder).
 
 ## Next steps
 
