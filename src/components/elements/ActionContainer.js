@@ -34,8 +34,7 @@ export default function ActionContainer(props) {
 						onClick={() => redirectUser()}
 						className={cx(
 							"font-semibold",
-							"text-[#6851ff]",
-							"dark:text-[#a796ff]",
+							"text-pm-link",
 							"hover:cursor-pointer",
 							props.reverse ? "ml-6" : "mr-6"
 						)}

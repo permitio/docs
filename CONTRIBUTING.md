@@ -100,6 +100,8 @@ Upon merge to `master`, the site will redeploy automatically to [https://docs.pe
 
 ## Writing Guidelines
 
+Read the **[docs style guide](./STYLE_GUIDE.md)** first. It defines the voice, page anatomy, component usage, and terminology glossary every page follows. The notes below add structure guidance for conceptual and implementation pages.
+
 ### Structure and Logic
 
 The [Permit.io](http://Permit.io) documentation can be roughly separated into two categories: 
@@ -123,8 +125,8 @@ Below are some writing guides for each:
     - For longer examples, split them into sections, explaining each.
     - Language-tag (e.g., `ts`, `bash`)
 - Local PDP
-    - Even if you’re using the cloud PDP, please mention the Local PDP and its advantages:
-        - Zero-latency policy decisions
+    - Even if you're using the Cloud PDP, mention the Local PDP and its advantages:
+        - Policy decisions next to your services, without a network round trip to Permit
         - Local testing without the need for a cloud service
 
 ### “Why” Blog Structure

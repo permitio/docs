@@ -1,4 +1,4 @@
-const config = require("./docusaurus.config");
+const redirects = require("./redirects");
 const fs = require("fs").promises;
 const path = require("path");
 const folderPath = "./docs";
@@ -34,10 +34,7 @@ async function searchLinksInFile(filePath, links) {
 // Main function to run the script
 async function run() {
   try {
-    const links = config.plugins
-      .find(([plugin]) => plugin === "@docusaurus/plugin-client-redirects")[1]
-      .redirects.map(({ from }) => from)
-      .flat();
+    const links = redirects.map(({ from }) => from).flat();
     await searchLinksInFolder(folderPath, links);
     if (files.length > 0) {
       console.log("The following files contain links to pages that have been redirected:");
@@ -50,6 +47,7 @@ async function run() {
     console.log("No redirect issues found!");
   } catch (error) {
     console.error("An error occurred:", error);
+    process.exit(1);
   }
 }
 

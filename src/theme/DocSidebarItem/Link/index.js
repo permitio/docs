@@ -1,24 +1,31 @@
+/**
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 import React from 'react';
 import clsx from 'clsx';
-import { ThemeClassNames } from '@docusaurus/theme-common';
+import {ThemeClassNames} from '@docusaurus/theme-common';
+import {isActiveSidebarItem} from '@docusaurus/plugin-content-docs/client';
 import Link from '@docusaurus/Link';
 import isInternalUrl from '@docusaurus/isInternalUrl';
 import IconExternalLink from '@theme/Icon/ExternalLink';
 import styles from './styles.module.css';
-import { isActiveSidebarItem } from '@docusaurus/plugin-content-docs/lib/client/docsUtils.js';
+function LinkLabel({label}) {
+  return <span className={styles.linkLabel}>{label}</span>;
+}
 export default function DocSidebarItemLink({
   item,
   onItemClick,
   activePath,
   level,
   index,
-  svg,
   ...props
 }) {
-  const { href, label, className, autoAddBaseUrl } = item;
+  const {href, label, className, autoAddBaseUrl} = item;
   const isActive = isActiveSidebarItem(item, activePath);
   const isInternalLink = isInternalUrl(href);
-
   return (
     <li
       className={clsx(
@@ -43,8 +50,19 @@ export default function DocSidebarItemLink({
           onClick: onItemClick ? () => onItemClick(item) : undefined,
         })}
         {...props}>
-        {item?.customProps?.icon && <i className={`ri-${item.customProps.icon}`} style={{ paddingInlineEnd: "8px", width: "16.11px", height: "16.16px", inlineSize: "inherit" }} />}
-        {label}
+        {/* Permit customisation: Remixicon from sidebar customProps.icon */}
+        {item?.customProps?.icon && (
+          <i
+            className={`ri-${item.customProps.icon}`}
+            style={{
+              paddingInlineEnd: '8px',
+              width: '16.11px',
+              height: '16.16px',
+              inlineSize: 'inherit',
+            }}
+          />
+        )}
+        <LinkLabel label={label} />
         {!isInternalLink && <IconExternalLink />}
       </Link>
     </li>
