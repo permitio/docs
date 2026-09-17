@@ -34,7 +34,7 @@ The example reads the Permit settings from these variables. It uses `PERMIT_KEY`
 
 ```bash
 PERMIT_KEY=<your-permit-api-key>
-PDP_URL=http://localhost:7766  # Or use the Cloud PDP URL
+PDP_URL=http://localhost:7766  # Your Edge PDP
 ```
 
 | Variable | Value |
@@ -90,30 +90,28 @@ The financial advisor agent follows four rules:
 | `confidential_docs` | Resource set on `financial_document` | `resource.classification` equals `"confidential"` |
 | `finance_advice` | Resource set on `financial_advice` | `resource.is_ai_generated` equals `true` |
 
-The design this example is based on also describes these conditions. Only the first matches an attribute that `config.py` creates, and there under the name `ai_advice_opted_in`:
+- `opted_in_users`:
 
-- AI advice consent:
-
-  ```hcl
-  user.opted_in == true
+  ```text
+  user.ai_advice_opted_in == true
   ```
 
-- Document clearance match. A user set condition can't compare a user attribute to a resource attribute, so `config.py` uses `high_clearance_users` and `confidential_docs` instead:
+- `high_clearance_users`:
 
-  ```hcl
-  user.clearance_level == resource.classification
+  ```text
+  user.clearance_level == "high"
   ```
 
-- Sensitive portfolio access. `role` isn't a user attribute in `config.py`; the example grants portfolio actions through the `premium_user` role:
+- `confidential_docs`:
 
-  ```hcl
-  user.role == "premium_user"
+  ```text
+  resource.classification == "confidential"
   ```
 
-- Response disclaimer required. `config.py` defines the `contains_advice` attribute but no resource set on it:
+- `finance_advice`:
 
-  ```hcl
-  resource.contains_advice == true
+  ```text
+  resource.is_ai_generated == true
   ```
 
 ### Roles and rules \{#defining-roles--user-sets}
@@ -148,13 +146,13 @@ Create the policy with the setup script, or by hand in the [Permit dashboard](ht
 
 ### Create the policy with the setup script
 
-`example/config.py` creates the resources, the user attributes, the `premium_user` and `restricted_user` roles, and the four condition sets. It doesn't create users, role assignments, or the condition set rules. Run the script from the `example/` folder:
+`example/config.py` creates the resources, the user attributes, the `premium_user` and `restricted_user` roles, and the four condition sets. It doesn't create users, role assignments, or the condition set rules. Run the script from the repository root:
 
-```python
-python config.py
+```bash
+uv run python example/config.py
 ```
 
-The block shows a shell command, not Python code. From the repository root, the equivalent command is `uv run python example/config.py`. The script reads `PERMIT_KEY` from the environment.
+The script reads `PERMIT_KEY` from the environment.
 
 ### Create the policy in the dashboard
 
@@ -183,11 +181,11 @@ The block shows a shell command, not Python code. From the repository root, the 
    }
    ```
 
-   `portfolio`. `config.py` also adds the `read` and `analyze` actions.
+   `portfolio`
 
    ```json
    {
-   "actions": ["view", "update"]
+     "actions": ["update", "read", "analyze"]
    }
    ```
 
@@ -204,13 +202,12 @@ The block shows a shell command, not Python code. From the repository root, the 
 
    ![Resources tab with the financial_advice, financial_document, portfolio, and financial_response resources](/img/ai-security/integrations/pydantic/1.png)
 
-2. Open **Directory > Users > Settings** and add the user attributes. `config.py` names the opt-in attribute `ai_advice_opted_in` and doesn't create `role`:
+2. Open **Directory > Users > Settings** and add the user attributes:
 
    ```json
    {
-   "opted_in": "boolean",
-   "clearance_level": "string",
-   "role": "string"
+     "ai_advice_opted_in": "boolean",
+     "clearance_level": "string"
    }
    ```
 
@@ -300,14 +297,12 @@ The example classifies prompts with a keyword list:
 ```python
 def classify_prompt_for_advice(question: str) -> bool:
     advice_keywords = [
-        "should I", "recommend", "advice", "suggest",
+        "should i", "recommend", "advice", "suggest",
         "what's the best", "help me choose", "better option"
     ]
     question_lower = question.lower()
     return any(keyword in question_lower for keyword in advice_keywords)
 ```
-
-The function lowercases the question but not the keywords, so the keyword `"should I"` never matches. Use lowercase keywords, or replace the keyword list with an intent classifier.
 
 ### Expected prompt filtering results \{#expected-behavior}
 
@@ -451,7 +446,7 @@ async def validate_financial_response(
             "requires_disclaimer",
             {
                 "type": "financial_response",
-                "attributes": {"contains_advice": str(contains_advice)},
+                "attributes": {"contains_advice": contains_advice},
             },
         )
 
@@ -470,8 +465,6 @@ async def validate_financial_response(
     except PermitApiError as e:
         raise SecurityError(f"Failed to check response content: {str(e)}")
 ```
-
-The tool sends `contains_advice` as the string `"True"` or `"False"`, while `config.py` defines the attribute as a boolean. A condition that compares `contains_advice` to the boolean `true` doesn't match the string value.
 
 ### Classify responses \{#response-classification}
 
@@ -504,41 +497,39 @@ In production, replace the keyword list with an intent classifier or a moderatio
 2. Clone the example and install its dependencies:
 
    ```bash
-   git clone https://github.com/permitio/langchain-permit  # Update if different
-   cd langchain-permit/pydantic-ai-examples
-   poetry install  # Or use `pip install -r requirements.txt`
+   git clone https://github.com/permitio/Permit-PydanticAI.git
+   cd Permit-PydanticAI
+   uv sync --all-extras
    ```
 
-   :::warning
-   The PydanticAI example isn't in `langchain-permit`, and the repository has no `pydantic-ai-examples` folder. Clone [permitio/Permit-PydanticAI](https://github.com/permitio/Permit-PydanticAI) instead, and install the dependencies with `uv sync --all-extras` from the repository root.
-   :::
-
-   This run command belongs to the same `pydantic-ai-examples` layout, which doesn't exist:
+   Run the agent from the repository root:
 
    ```bash
-   poetry run python -m pydantic_ai_examples.secure_ai_agent
+   uv run python example/main.py
    ```
 
-   In `Permit-PydanticAI`, the agent is `example/main.py`. Run it with `uv run python example/main.py`. The script runs two queries as `user@example.com` and prints each result.
+   The script runs two queries as `user@example.com` and prints each result.
 
-3. Set the environment variables in a `.env` file in the repository root, or export them. Add `ANTHROPIC_API_KEY` as well:
+3. Set the environment variables in a `.env` file in the repository root, or export them:
 
-   ```
+   ```bash
    PERMIT_KEY=your-permit-api-key
    PDP_URL=http://localhost:7766
+   ANTHROPIC_API_KEY=your-anthropic-api-key
    ```
 
-4. Test with both users. The PDP reads the attributes stored on each user in Permit. These JSON blocks describe a fully authorized user and a limited user, but `config.py` uses different attribute names: `ai_advice_opted_in` instead of `opted_in`, `clearance_level` values `high` and `low`, and no `membership_tier`.
+4. Test with both users. The PDP reads the attributes stored on each user in Permit. These JSON blocks describe a fully authorized user and a limited user.
 
    **Fully authorized premium user:**
 
    ```json
    {
-   "sub": "user-001",
-   "attributes": {
-       "membership_tier": ["premium"],
-       "clearance_level": "confidential",
-       "opted_in": true}
+     "key": "user@example.com",
+     "role": "premium_user",
+     "attributes": {
+       "clearance_level": "high",
+       "ai_advice_opted_in": true
+     }
    }
    ```
 
@@ -548,11 +539,12 @@ In production, replace the keyword list with an intent classifier or a moderatio
 
    ```json
    {
-   "sub": "user-002",
-   "attributes": {
-       "membership_tier": ["basic"],
-       "clearance_level": "restricted",
-       "opted_in": false}
+     "key": "restricted@example.com",
+     "role": "restricted_user",
+     "attributes": {
+       "clearance_level": "low",
+       "ai_advice_opted_in": false
+     }
    }
    ```
 

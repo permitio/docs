@@ -41,15 +41,17 @@ Add these dependencies to your `pyproject.toml`:
 ```toml
 [tool.poetry.dependencies]
 python = "^3.9"
-langchain = "^0.1.0"
-langchain-openai = "^0.0.2"
-langchain-permit = "^0.1.2"
+langchain = "^0.3.18"
+langchain-community = "^0.3.17"
+langchain-openai = "^0.3.5"
+langchain-permit = "^0.1.4"
 permit = "^2.7.2"
 pydantic-settings = "^2.7.1"
+faiss-cpu = "^1.8.0"
 ```
 
 :::warning Check the LangChain versions
-This tutorial was written for `langchain-permit` 0.1.x. `langchain-permit` 0.1.4 requires `langchain` 0.3.18 or later (below 0.4) and `langchain-openai` 0.3.5 or later (below 0.4). With the older `langchain` and `langchain-openai` pins above, Poetry can't resolve the dependencies. Check the current requirements on the [langchain-permit PyPI page](https://pypi.org/project/langchain-permit/) before you install. The code in this tutorial also imports `langchain_community` and FAISS, so add `langchain-community` and `faiss-cpu` to your dependencies.
+This tutorial was written for `langchain-permit` 0.1.4, which requires `langchain`, `langchain-community`, and `langchain-openai` 0.3.x. Check the current requirements on the [langchain-permit PyPI page](https://pypi.org/project/langchain-permit/) before you install.
 :::
 
 ### Required environment variables
@@ -58,8 +60,12 @@ Add these variables to a `.env` file in your project root:
 
 ```bash
 PERMIT_API_KEY=your_api_key
-PERMIT_PDP_URL=http://localhost:7766  # Or your cloud PDP
+PERMIT_PDP_URL=http://localhost:7766  # Your Edge PDP
 JWKS_URL=http://localhost:3458/.well-known/jwks.json  # For JWT validation
+JWT_ISSUER=your_jwt_issuer
+JWT_AUDIENCE=your_jwt_audience
+TEST_JWT_TOKEN=your_signed_test_jwt
+VECTOR_STORE_PATH=./data/vectorstore
 OPENAI_API_KEY=sk-...  # From OpenAI
 ```
 
@@ -68,9 +74,13 @@ OPENAI_API_KEY=sk-...  # From OpenAI
 | `PERMIT_API_KEY` | Your environment API key from [Get your API key](/overview/get-api-key) |
 | `PERMIT_PDP_URL` | The URL of your Edge PDP, for example `http://localhost:7766` |
 | `JWKS_URL` | The JWKS endpoint that holds the public key for your test JWT |
+| `JWT_ISSUER` | The issuer of your test JWT |
+| `JWT_AUDIENCE` | The audience of your test JWT |
+| `TEST_JWT_TOKEN` | Your signed test JWT |
+| `VECTOR_STORE_PATH` | The folder for the FAISS vector store |
 | `OPENAI_API_KEY` | Your OpenAI API key |
 
-The `Settings` class in [Configuration settings](#configuration-settings) also requires `JWT_ISSUER`, `JWT_AUDIENCE`, `TEST_JWT_TOKEN`, and `VECTOR_STORE_PATH`. Set `TEST_JWT_TOKEN` to your signed test JWT. If one of these variables is missing, `Settings()` raises a validation error when the app starts. The [example `.env.example` file](https://github.com/permitio/langchain-permit/blob/main/examples/healthcare-ai-security/.env.example) lists all of them.
+The `Settings` class in [Configuration settings](#configuration-settings) requires all of these variables. If one is missing, `Settings()` raises a validation error when the app starts.
 
 ## Plan the access model \{#planning-our-policies}
 
@@ -403,8 +413,8 @@ class RAGSecurityManager:
         vector_retriever = self.vectorstore.as_retriever(search_kwargs={"k": 2})
         secure_retriever = PermitEnsembleRetriever(
             retrievers=[vector_retriever],
-            permit_api_key=settings.permit_api_key,
-            permit_pdp_url=settings.permit_pdp_url,
+            api_key=settings.permit_api_key,
+            pdp_url=settings.permit_pdp_url,
             user=user['key'],
             action="view",
             resource_type="healthcare_document"
@@ -414,9 +424,7 @@ class RAGSecurityManager:
 rag_security_manager = RAGSecurityManager()
 ```
 
-:::warning Retriever parameter names and document attributes
-In `langchain-permit` 0.1.4, `PermitEnsembleRetriever` takes the API key and PDP URL as `api_key` and `pdp_url`. It ignores `permit_api_key` and `permit_pdp_url`, falls back to the `PERMIT_API_KEY` and `PERMIT_PDP_URL` process environment variables, and raises a validation error if `PERMIT_API_KEY` isn't set there. `pydantic-settings` reads `.env` into `Settings` without exporting the values to the process environment.
-
+:::warning Retriever document attributes
 `PermitEnsembleRetriever` also sends only each document's resource type to `filter_objects`. It doesn't send the metadata `attributes`, so the PDP can't match `resource.public` and the `PublicDocs` rule doesn't allow any document. Check the [retriever source](https://github.com/permitio/langchain-permit/blob/main/langchain_permit/retrievers.py) before you rely on attribute-based document filtering.
 :::
 

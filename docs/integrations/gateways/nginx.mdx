@@ -25,7 +25,7 @@ Send an authorization subrequest to the Permit.io policy decision point (PDP) fo
 NGINX decides from the status code of the subrequest: a `2xx` status allows the request, and `401` or `403` denies it. See the [ngx_http_auth_request_module documentation](https://nginx.org/en/docs/http/ngx_http_auth_request_module.html).
 
 :::danger The PDP returns HTTP 200 for denied requests
-The `/nginx_allowed` endpoint returns HTTP `200` for both allowed and denied checks, and puts the decision in the `allow` field of the response body. The `auth_request` module reads only the status code, so NGINX forwards requests that the PDP denies. The endpoint also accepts only `POST` requests and requires an `Authorization: Bearer <API key>` header. Before you rely on this integration to block requests, confirm the behavior of your PDP version with Permit: ask in the [Permit Slack community](https://io.permit.io/slack).
+The `/nginx_allowed` endpoint returns HTTP `200` for both allowed and denied checks, and puts the decision in the `allow` field of the response body. The `auth_request` module reads only the status code, so NGINX forwards requests that the PDP denies. Before you rely on this integration to block requests, confirm the behavior of your PDP version with Permit: ask in the [Permit Slack community](https://io.permit.io/slack).
 :::
 
 ## Prerequisites \{#2-prerequisites}
@@ -67,18 +67,6 @@ http {
             auth_request /auth;
             auth_request_set $auth_status $upstream_status;
 
-            # Set the required Permit.io headers
-            auth_request_set $permit_user_key $upstream_http_permit_user_key;
-            auth_request_set $permit_action $upstream_http_permit_action;
-            auth_request_set $permit_resource_type $upstream_http_permit_resource_type;
-            auth_request_set $permit_tenant_id $upstream_http_permit_tenant_id;
-
-            # Pass the Permit.io headers to the application
-            proxy_set_header permit-user-key $permit_user_key;
-            proxy_set_header permit-action $permit_action;
-            proxy_set_header permit-resource-type $permit_resource_type;
-            proxy_set_header permit-tenant-id $permit_tenant_id;
-
             # ... your existing location configuration ...
         }
 
@@ -86,9 +74,11 @@ http {
             internal;
             # Forward the request to your deployed PDP
             proxy_pass http://localhost:7766/nginx_allowed;
+            proxy_method POST;
             proxy_pass_request_body off;
             proxy_set_header Content-Length "";
             proxy_set_header X-Original-URI $request_uri;
+            proxy_set_header Authorization "Bearer <YOUR_API_KEY>";
 
             # Pass the required Permit.io headers
             proxy_set_header permit-user-key $http_permit_user_key;
@@ -103,7 +93,7 @@ http {
 In this configuration:
 
 - The `location /` block protects every path with `auth_request /auth`.
-- The internal `location = /auth` block proxies the subrequest to the PDP's `/nginx_allowed` endpoint, without the request body, and copies the four `permit-*` headers from the client request.
+- The internal `location = /auth` block proxies the subrequest to the PDP's `/nginx_allowed` endpoint as a `POST` request without a body, adds your environment API key (replace `<YOUR_API_KEY>`) in the `Authorization` header, and copies the four `permit-*` headers from the client request.
 
 :::warning The client sets the permit-* headers
 `$http_permit_user_key` and the other `$http_permit_*` variables hold header values that the client sent. If clients reach NGINX directly, a client can send another user's key and get that user's permissions. Set the `permit-*` headers from a trusted source, such as an authentication layer in front of NGINX that removes client-supplied `permit-*` headers.

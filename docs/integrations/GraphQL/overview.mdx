@@ -55,31 +55,31 @@ type Author {
 
 Add the check in the data source layer, right before the database call. The checks map to the database schema instead of your GraphQL types, which couples authorization to how you store data. Data source checks are the GraphQL equivalent of function-level checks before a database call in a REST API.
 
-The following Apollo Server data source checks whether the user can `get` a `product` before loading it. `permit` is an initialized Permit client, and `JWT.id` stands for the user key from the verified request token:
+The following Apollo Server data source checks whether the user can `get` a `product` before loading it. `permit` is an initialized Permit client, and `userKey` is the user key from the verified request token:
 
 ```javascript
 import DataLoader from 'dataloader';
 
 class ProductsDataSource {
-  private dbConnection;
-
-  constructor(dbConnection) {
+  constructor(dbConnection, permit, userKey) {
     this.dbConnection = dbConnection;
+    this.permit = permit;
+    this.userKey = userKey; // the user key from the verified request token
+    this.batchProducts = new DataLoader(async (ids) => {
+      const productList = await this.dbConnection.fetchAllKeys(ids);
+      return ids.map((id) => productList.find((product) => product.id === id));
+    });
   }
-
-  private batchProducts = new DataLoader(async (ids) => {
-    const productList = await this.dbConnection.fetchAllKeys(ids);
-    return ids.map((id) => productList.find((product) => product.id === id));
-  });
 
   async getProductFor(id) {
-    // permission check - id, action, resource
-     if (permit.check( JWT.id, "get", {type:"product", attributes: {id: id} }){
-       return this.batchProducts.load(id);
-     }
+    // permission check - user, action, resource
+    const allowed = await this.permit.check(this.userKey, "get", { type: "product", attributes: { id } });
+    if (!allowed) {
+      throw new Error("Not allowed");
+    }
+    return this.batchProducts.load(id);
   }
 }
-});
 ```
 
 ### Check permissions in a server plugin \{#add-permission-checks-to-your-graphql-using-middlewareplugins}

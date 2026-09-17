@@ -81,19 +81,34 @@ def check_permissions(event, context):
         token="permit_key_xxxxx", # replace with your API key
     )
 
-    user = {
-        "id": event.get("id"),
-        "email": event.get("email"),
+    headers = event.get("headers") or {}
+    # Replace with the user key from your verified token
+    user_key = headers.get("x-user-key")
+    action = event["httpMethod"].lower()
+    resource = event["resource"].strip("/").split("/")[0] or "index"
+
+    allowed = asyncio.run(permit.check(user_key, action, resource))
+
+    return {
+        "principalId": user_key or "anonymous",
+        "policyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Action": "execute-api:Invoke",
+                    "Effect": "Allow" if allowed else "Deny",
+                    "Resource": event["methodArn"],
+                }
+            ],
+        },
     }
-    return asyncio.get_event_loop().run_until_complete(
-        permit.check(user["id"], event["action"], event["resource"])
-        )
 ```
 
 About the Lambda function code:
 
 - Replace `permit_key_xxxxx` with your environment API key. In production, load the API key from an environment variable or AWS Secrets Manager. Anyone with the API key can change the policy of that environment through the Permit API.
-- `permit.check()` in the Python SDK is an async method, so the function runs it in an `asyncio` event loop.
+- `permit.check()` in the Python SDK is an async method, so the function runs it with `asyncio.run()`.
+- The function reads the request fields of a `Request` authorizer event: the user key from a header (replace it with the user key from your verified token), the action from the HTTP method, and the resource type from the first path segment.
 - The client sends checks to the Permit [Cloud PDP](/concepts/pdp/overview#managed-cloud-pdp), which Permit hosts. The Cloud PDP evaluates role-based access control (RBAC) and relationship-based access control (ReBAC) policies. It doesn't evaluate attribute-based access control (ABAC) policies. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
 - A REST API Lambda authorizer returns an AWS Identity and Access Management (IAM) policy that allows or denies `execute-api:Invoke` on the method. See [Lambda authorizer output](https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-lambda-authorizer-output.html) in the AWS documentation.
 

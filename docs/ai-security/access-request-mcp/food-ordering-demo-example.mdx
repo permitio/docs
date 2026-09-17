@@ -256,8 +256,6 @@ mcp = FastMCP("family_food_ordering_system")
 permit_server = PermitServer(mcp)  # Register default tools
 ```
 
-    End the file with an `if __name__ == "__main__":` block that calls `mcp.run(transport="stdio")`, as the [finished food_ordering_mcp.py](https://github.com/permitio/permit-mcp/blob/main/examples/food-ordering-system/food_ordering_mcp.py) does. Without the call, running the file exits without starting the server.
-
   </TimelineStep>
   <TimelineStep stepNumber={2}>
     **Add the `list_dishes` tool** <br/>
@@ -331,6 +329,12 @@ async def order_dish(user_id: str, restaurant_id: str, dish_name: str) -> str:
 
     return f"✅ Order successfully placed for {dish_name}!"
 ```
+
+    End the file with an entry point that starts the server over stdio:
+    ```python
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
+```
   </TimelineStep>
   <TimelineStep stepNumber={4}>
     **Run the custom server** <br/>
@@ -368,7 +372,7 @@ uv add langchain-mcp-adapters langgraph langchain-google-genai
   <TimelineStep stepNumber={2}>
     **Add a Google API key** <br/>
     Create an API key in [Google AI Studio](https://aistudio.google.com/app/apikey) and add the key to your `.env` file:
-    ```
+    ```bash
 GOOGLE_API_KEY=your-key-here
 ```
   </TimelineStep>
@@ -379,39 +383,41 @@ GOOGLE_API_KEY=your-key-here
     Import the dependencies:
         ```python
         import os
-        from typing_extensionsimport TypedDict, Literal, Annotated
-        from dotenvimport load_dotenv
-        from langchain_google_genaiimport ChatGoogleGenerativeAI
-        from langgraph.graphimport StateGraph, START, END
-        from langgraph.typesimport Command, interrupt
-        from langgraph.checkpoint.memoryimport MemorySaver
-        from langgraph.prebuiltimport ToolNode
-        from mcpimport ClientSession, StdioServerParameters
-        from mcp.client.stdioimport stdio_client
-        from langchain_mcp_adapters.toolsimport load_mcp_tools
+        from typing_extensions import TypedDict, Literal, Annotated
+        from dotenv import load_dotenv
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langgraph.graph import StateGraph, START, END
+        from langgraph.types import Command, interrupt
+        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.prebuilt import ToolNode
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+        from langchain_mcp_adapters.tools import load_mcp_tools
         import asyncio
-        from langgraph.graph.messageimport add_messages
+        from langgraph.graph.message import add_messages
         ```
-        Load the environment and create the Gemini LLM client. The client pins the `gemini-2.0-flash` model. Google retires model versions, so check the [Gemini models list](https://ai.google.dev/gemini-api/docs/models) and use a current model name.
-        ```shell
+        Load the environment and create the Gemini LLM client. The client pins the `gemini-2.5-flash` model. Google retires model versions, so check the [Gemini models list](https://ai.google.dev/gemini-api/docs/models) and use a current model name.
+        ```python
         load_dotenv()
 
         global_llm_with_tools = None
 
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             google_api_key=os.getenv('GOOGLE_API_KEY')
         )
         ```
     - **MCP server parameters**: <br/>
     Tell the client how to start the MCP server as a subprocess:
-        ```shell
+        ```python
         server_params = StdioServerParameters(
-        command="python",
-        args=["src/permit_mcp/server.py"],
+            command="python",
+            args=["src/permit_mcp/server.py"],
         )
+
+        class State(TypedDict):
+            messages: Annotated[list, add_messages]
         ```
-        Then define the graph state: a `State` class that extends `TypedDict` and has a `messages` field of type `Annotated[list, add_messages]`. The `setup_graph` function passes `State` to `StateGraph`.
     - **Graph nodes and graph builder**: <br/>
     Route between the LLM and the tools:
         ```python
@@ -440,22 +446,22 @@ GOOGLE_API_KEY=your-key-here
     - **Response streaming and chat loop**: <br/>
     `stream_responses` prints each LLM reply as the graph runs. `chat_loop` reads queries until you type `quit`, `exit`, or `q`, and adds instructions that tell Gemini to look up resource instance keys first:
         ```python
-        asyncdefstream_responses(graph, config, invokeWith):
-        asyncfor eventin graph.astream(invokeWith, config, stream_mode='updates'):
-        for key, valuein event.items():
-        if key == 'call_llm':
+        async def stream_responses(graph, config, invokeWith):
+            async for event in graph.astream(invokeWith, config, stream_mode='updates'):
+                for key, value in event.items():
+                    if key == 'call_llm':
                         content = value["messages"][-1].content
-        if content:
-        print('\\n' + ", ".join(content)
-        ifisinstance(content,list)else content)
+                        if content:
+                            print('\n' + ", ".join(content)
+                                  if isinstance(content, list) else content)
 
-        asyncdefchat_loop(graph):
-        while True:
-        try:
-                    user_input =input("\\nQuery: ").strip()
-        if user_inputin ["quit", "exit", "q"]:
-        print("Goodbye!")
-        break
+        async def chat_loop(graph):
+            while True:
+                try:
+                    user_input = input("\nQuery: ").strip()
+                    if user_input in ["quit", "exit", "q"]:
+                        print("Goodbye!")
+                        break
 
                     sys_m = """
                     Always provide the resource instance key during tool calls, as the ReBAC authorization model is being used. To obtain the resource instance key, use the list_resource_instances tool to view available resource instances.
@@ -465,48 +471,48 @@ GOOGLE_API_KEY=your-key-here
                     """
 
                     invokeWith = {"messages": [
-                        {"role": "user", "content": sys_m + '\\n\\n' + user_input}]}
+                        {"role": "user", "content": sys_m + '\n\n' + user_input}]}
                     config = {"configurable": {"thread_id": "1"}}
 
-        await stream_responses(graph, config, invokeWith)
+                    await stream_responses(graph, config, invokeWith)
 
-        except Exceptionas e:
-        print(f"Error: {e}")
+                except Exception as e:
+                    print(f"Error: {e}")
         ```
     - **Entry point**: <br/>
     `main` starts the MCP server, converts its tools to LangGraph tools, binds the tools to the LLM, builds the graph, saves a diagram of the graph, and starts the chat loop:
         ```python
-        async defmain():
-        asyncwithstdio_client(server_params)as (read, write):
-        asyncwithClientSession(read, write)as session:
-        await session.initialize()
-                    tools =await load_mcp_tools(session)
+        async def main():
+            async with stdio_client(server_params) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    tools = await load_mcp_tools(session)
                     llm_with_tools = llm.bind_tools(tools)
-                    graph =await setup_graph(tools)
+                    graph = await setup_graph(tools)
 
-        global global_llm_with_tools
+                    global global_llm_with_tools
                     global_llm_with_tools = llm_with_tools
 
-        withopen("workflow_graph.png", "wb")as f:
+                    with open("workflow_graph.png", "wb") as f:
                         f.write(graph.get_graph().draw_mermaid_png())
 
-        awaitchat_loop(graph)
+                    await chat_loop(graph)
 
         if __name__ == "__main__":
             asyncio.run(main())
         ```
     - **Run the client**: <br/>
-        ```
+        ```bash
         uv run client.py
         ```
         The client writes a diagram of the graph to `workflow_graph.png`. The diagram shows the `call_llm` node, which either ends the run or calls `run_tool` and returns to `call_llm`. <br/>
         ![LangGraph diagram with start, call_llm, run_tool, and end nodes, where call_llm routes to run_tool or to end](/img/ai-security/MCP/food-demo/7.png) <br/>
         Send a request as `henry`, then list the requests as `joe`:
-        ```
-        Query: My user id is henry, request accessto pizza palace with the reason: I am now 18,  and the role child-can-order
+        ```text
+        Query: My user id is henry, request access to pizza palace with the reason: I am now 18, and the role child-can-view
         Query: My user id is joe, list all access requests
         ```       
-        After the first query, the agent calls `create_access_request` and reports that the request was sent. After the second query, the agent lists the pending request from `henry`. Use the role name `child-can-view` in the first query, the assignable role of the **Restaurant Requests** element.
+        After the first query, the agent calls `create_access_request` and reports that the request was sent. After the second query, the agent lists the pending request from `henry`.
   </TimelineStep>
 </TimelineWrapper>
 
@@ -524,14 +530,14 @@ The person at the terminal approves or denies the tool call before the agent con
 In `client.py`, before `setup_graph`, add the `human_review_node` function:
 
 ```python
-asyncdefhuman_review_node(state) -> Command[Literal["call_llm", "run_tool"]]:
+async def human_review_node(state) -> Command[Literal["call_llm", "run_tool"]]:
     """Handle human review process."""
     last_message = state["messages"][-1]
     tool_call = last_message.tool_calls[-1]
 
     high_risk_tools = ['approve_access_request', 'approve_operation_approval']
-if tool_call["name"]notin high_risk_tools:
-return Command(goto="run_tool")
+    if tool_call["name"] not in high_risk_tools:
+        return Command(goto="run_tool")
 
     human_review = interrupt({
         "question": "Do you approve this tool call? (yes/no)",
@@ -540,10 +546,10 @@ return Command(goto="run_tool")
 
     review_action = human_review["action"]
 
-if review_action == "yes":
-return Command(goto="run_tool")
+    if review_action == "yes":
+        return Command(goto="run_tool")
 
-return Command(goto="call_llm", update={"messages": [{
+    return Command(goto="call_llm", update={"messages": [{
         "role": "tool",
         "content": f"The user declined your request to execute the {tool_call.get('name', 'Unknown')} tool, with arguments {tool_call.get('args', 'N/A')}",
         "name": tool_call["name"],
@@ -567,10 +573,10 @@ def route_after_llm(state) -> Literal[END, "human_review_node"]:
 
 In `setup_graph`, add `human_review_node` as a node:
 
-```scss
-async defsetup_graph(tools):
-    builder =StateGraph(State)
-    run_tool =ToolNode(tools)
+```python
+async def setup_graph(tools):
+    builder = StateGraph(State)
+    run_tool = ToolNode(tools)
     builder.add_node(call_llm)
     builder.add_node('run_tool', run_tool)
     builder.add_node(human_review_node)  # Add the interrupt node here
@@ -579,7 +585,7 @@ async defsetup_graph(tools):
     builder.add_conditional_edges("call_llm", route_after_llm)
     builder.add_edge("run_tool", "call_llm")
 
-    memory =MemorySaver()
+    memory = MemorySaver()
     return builder.compile(checkpointer=memory)
 ```
 
@@ -590,6 +596,24 @@ When `interrupt()` pauses the graph, `graph.astream()` stops producing updates, 
 1. Detects the interrupt in the streamed updates. With `stream_mode='updates'`, LangGraph reports the interrupt under the `__interrupt__` key, with the question and tool call that `human_review_node` passed to `interrupt()`.
 2. Prints the question and the tool call, and reads `yes` or `no` from the terminal.
 3. Streams the graph again with `Command(resume={"action": user_input})` as the input and the same `config`, so the graph resumes on the same thread.
+
+```python
+async def stream_responses(graph, config, invokeWith):
+    async for event in graph.astream(invokeWith, config, stream_mode='updates'):
+        for key, value in event.items():
+            if key == 'call_llm':
+                content = value["messages"][-1].content
+                if content:
+                    print('\n' + ", ".join(content)
+                          if isinstance(content, list) else content)
+            elif key == '__interrupt__':
+                review = value[0].value
+                print(f"\n{review['question']}")
+                print(f"Tool call: {review['tool_call']['name']} {review['tool_call']['args']}")
+                user_input = input("Approve? (yes/no): ").strip().lower()
+                await stream_responses(graph, config, Command(resume={"action": user_input}))
+                return
+```
 
 For the interrupt API, see the [LangGraph human-in-the-loop documentation](https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/).
 
@@ -723,7 +747,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     - Receive each message, send the message to Gemini, and run the tool calls Gemini returns until Gemini replies with text only.
     - Close the MCP session when the connection ends.
 
-    The endpoint pins the `gemini-2.5-flash-preview-04-17` model. Google retires preview models, so check the [Gemini models list](https://ai.google.dev/gemini-api/docs/models) and use a current model name.
+    The endpoint pins the `gemini-2.5-flash` model. Google retires models, so check the [Gemini models list](https://ai.google.dev/gemini-api/docs/models) and use a current model name.
 
     ```python
 @app.websocket("/ws/chat")
@@ -751,7 +775,13 @@ async def websocket_chat(websocket: WebSocket):
         tools_result = await session.list_tools()
         filtered_tools = filter_tools_by_role(tools_result.tools, current_user["role"])
         mcp_tools = [{"function_declarations": convert_mcp_tools_to_gemini(filtered_tools)}]
-        contents = []
+
+        async def run_tool(fc):
+            result = await retry_tool_call(session, fc.name, fc.args)
+            if isinstance(result, Exception):
+                return {"name": fc.name, "response": {"result": {"error": str(result)}}}
+            content = [{"text": c.text} for c in result.content]
+            return {"name": fc.name, "response": {"result": {"content": content, "is_error": result.isError}}}
 
         while True:
             data = json.loads(await websocket.receive_text())
@@ -759,10 +789,9 @@ async def websocket_chat(websocket: WebSocket):
             history = data.get("history", [])
             contents = history + [{"role": "user", "parts": [{"text": message}]}]
 
-            has_more_function_calls = True
-            while has_more_function_calls:
+            while True:
                 response = genai.Client(api_key=GEMINI_API_KEY).models.generate_content(
-                    model="gemini-2.5-flash-preview-04-17",
+                    model="gemini-2.5-flash",
                     contents=contents,
                     config=types.GenerateContentConfig(
                         tools=mcp_tools,
@@ -783,10 +812,8 @@ async def websocket_chat(websocket: WebSocket):
                         "type": "text", "content": response.text
                     }), client_id)
 
-                # Execute any function calls
-                function_calls = getattr(response, "function_calls", [])
+                function_calls = getattr(response, "function_calls", None)
                 if not function_calls:
-                    has_more_function_calls = False
                     break
 
                 await manager.send_message(json.dumps({
@@ -800,19 +827,17 @@ async def websocket_chat(websocket: WebSocket):
                     }} for fc in function_calls]
                 })
 
-                results = await asyncio.gather(*[
-                    retry_tool_call(session, fc.name, fc.args)
-                    for fc in function_calls
-                ])
+                results = await asyncio.gather(*[run_tool(fc) for fc in function_calls])
 
                 contents.append({
                     "role": "user",
                     "parts": [{"function_response": r} for r in results]
                 })
 
-                await manager.send_message(json.dumps({
-                    "type": "history_update", "content": contents
-                }), client_id)
+            # Send the full history so the CLI client accepts the next message
+            await manager.send_message(json.dumps({
+                "type": "history_update", "content": contents
+            }), client_id)
 
     except Exception as err:
         await manager.send_message(json.dumps({
@@ -876,13 +901,14 @@ async def login(username: str, password: str) -> str | None:
     `chat` holds the message history and two flags: `is_processing` is true while the backend handles a message, and `is_displayed_processing` is true after the client prints the waiting message.
 
     ```python
-asyncdef chat(token: str):
+async def chat(token: str):
     history: List[Dict] = []
     is_processing = False  # Simple flag to track message processing state
     is_displayed_processing = False
 
-print("\n--- Chat session started ---")
-print("Type 'exit' to quit.\n")
+    print("\n--- Chat session started ---")
+    print("Type 'exit' to quit.\n")
+
 ```
   </TimelineStep>
   <TimelineStep stepNumber={4}>
@@ -890,42 +916,42 @@ print("Type 'exit' to quit.\n")
     Connect to the chat endpoint with the token. The nested `receive_messages` function runs in the background, reads each message from the backend, prints the message by type, and updates the history and flags. `nonlocal` lets `receive_messages` change the variables of `chat`.
 
     ```python
-try:
-    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        headers = {"Authorization": f"Bearer {token}"}
 
-asyncwith websockets.connect(
-        f"{WS_URL}/ws/chat",
-        additional_headers=headers
-    )as websocket:
-        # Start a background task for receiving messages
-asyncdef receive_messages():
-nonlocal is_processing, history, is_displayed_processing
+        async with websockets.connect(
+            f"{WS_URL}/ws/chat",
+            additional_headers=headers
+        ) as websocket:
+            # Start a background task for receiving messages
+            async def receive_messages():
+                nonlocal is_processing, history, is_displayed_processing
 
-while True:
-try:
-                    message =await websocket.recv()
-                    data = json.loads(message)
+                while True:
+                    try:
+                        message = await websocket.recv()
+                        data = json.loads(message)
 
-                    message_type = data.get("type")
-                    content = data.get("content")
+                        message_type = data.get("type")
+                        content = data.get("content")
 
-if message_type == "text":
-print(f"Assistant: {content}")
-elif message_type == "status":
-print(f"[Status] {content}")
-elif message_type == "error":
-print(f"⚠️ Error: {content}")
-                        is_processing = False  # Unlock on error
+                        if message_type == "text":
+                            print(f"Assistant: {content}")
+                        elif message_type == "status":
+                            print(f"[Status] {content}")
+                        elif message_type == "error":
+                            print(f"⚠️ Error: {content}")
+                            is_processing = False  # Unlock on error
+                            is_displayed_processing = False
+                        elif message_type == "history_update":
+                            history = content
+                            is_processing = False  # Unlock when complete
+                            is_displayed_processing = False
+                    except Exception as e:
+                        print(f"\n⚠️ Error receiving message: {str(e)}")
+                        is_processing = False
                         is_displayed_processing = False
-elif message_type == "history_update":
-                        history = content
-                        is_processing = False  # Unlock when complete
-                        is_displayed_processing = False
-except Exceptionas e:
-print(f"\n⚠️ Error receiving message: {str(e)}")
-                    is_processing = False
-                    is_displayed_processing = False
-break
+                        break
 ```
     Start `receive_messages` as a background task with `asyncio.create_task()`, so the client receives messages while the main loop reads input.
 
@@ -933,48 +959,49 @@ break
   <TimelineStep stepNumber={5}>
   **Add the main chat loop** <br/>
 
-      ```bash
-# Start the receiver task
-receiver_task = asyncio.create_task(receive_messages())
+      ```python
+            # Start the receiver task
+            receiver_task = asyncio.create_task(receive_messages())
 ```
 The main loop waits while the backend processes a message, and prints the waiting message once.
 
 When the backend is ready, the loop reads input with `input()` in a thread executor, so the input call doesn't block the event loop. If the input is `exit`, the chat ends. Otherwise, the loop sends the message and the history as JSON over the WebSocket.
 
 ```python
-while True:
-if is_processing:
-ifnot is_displayed_processing:
-print("⏳ Processing previous message. Please wait...")
-            is_displayed_processing = True
+            # Main input loop
+            while True:
+                if is_processing:
+                    if not is_displayed_processing:
+                        print("⏳ Processing previous message. Please wait...")
+                        is_displayed_processing = True
 
-await asyncio.sleep(1)
-continue
+                    await asyncio.sleep(1)
+                    continue
 
-    user_input =await asyncio.get_event_loop().run_in_executor(
-        None,lambda: input("You: ")
-    )
+                user_input = await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: input("You: ")
+                )
 
-if user_input.lower() == "exit":
-print("👋 Ending chat session.")
-break
+                if user_input.lower() == "exit":
+                    print("👋 Ending chat session.")
+                    break
 
-    # Set the processing flag before sending
-    is_processing = True
+                # Set the processing flag before sending
+                is_processing = True
 
-    # Send the message
-    payload = {
-        "message": user_input,
-        "history": history
-    }
+                # Send the message
+                payload = {
+                    "message": user_input,
+                    "history": history
+                }
 
-try:
-await websocket.send(json.dumps(payload))
-except Exceptionas e:
-print(f"⚠️ Error sending message: {str(e)}")
-        is_processing = False
-        is_displayed_processing = False
-break
+                try:
+                    await websocket.send(json.dumps(payload))
+                except Exception as e:
+                    print(f"⚠️ Error sending message: {str(e)}")
+                    is_processing = False
+                    is_displayed_processing = False
+                    break
 ```
   </TimelineStep>
   <TimelineStep stepNumber={6}>
@@ -982,44 +1009,42 @@ break
   When the loop exits, because of an error or because the user typed `exit`, cancel the receiver task:
 
 ```python
-# Clean up
-receiver_task.cancel()
-
+            # Clean up
+            receiver_task.cancel()
 ```
 
 Then handle WebSocket errors and other exceptions, and print a warning:
 
 ```python
-except websockets.exceptions.WebSocketExceptionas e:
-print(f"⚠️ WebSocket connection error: {str(e)}")
-except Exceptionas e:
-print(f"⚠️ Unexpected error: {str(e)}")
-
+    except websockets.exceptions.WebSocketException as e:
+        print(f"⚠️ WebSocket connection error: {str(e)}")
+    except Exception as e:
+        print(f"⚠️ Unexpected error: {str(e)}")
 ```
   </TimelineStep>
   <TimelineStep stepNumber={7}>
   **Add the entry point** <br/>
     `main` asks for a username and password, calls `login`, and starts `chat` when sign-in succeeds. The `if __name__ == "__main__":` block runs `main` and exits cleanly on `Ctrl+C`.
     ```python
-    asyncdef main():
-print("👋 Welcome Food Ordering CLI tool!")
+async def main():
+    print("👋 Welcome Food Ordering CLI tool!")
 
     username = input("Username: ").strip()
     password = input("Password: ").strip()
 
-    token =await login(username, password)
+    token = await login(username, password)
 
-if token:
-await chat(token)
+    if token:
+        await chat(token)
 
 
 if __name__ == "__main__":
-try:
+    try:
         asyncio.run(main())
-except KeyboardInterrupt:
-print("\n👋 Program terminated by user.")
-except Exceptionas e:
-print(f"⚠️ Unexpected error: {str(e)}")
+    except KeyboardInterrupt:
+        print("\n👋 Program terminated by user.")
+    except Exception as e:
+        print(f"⚠️ Unexpected error: {str(e)}")
         sys.exit(1)
 ```
   </TimelineStep>
@@ -1029,19 +1054,19 @@ print(f"⚠️ Unexpected error: {str(e)}")
 
 1. Start the FastAPI backend:
 
-```
+```bash
 fastapi dev server.py
 ```
 
 2. In a second terminal, start the CLI client:
 
-```
+```bash
 uv run client.py
 ```
 
 3. Sign in with one of the demo users that `init_db()` creates:
 
-```bash
+```python
 [
     {"username": "joe", "password": 'joe_password',  "role": "parent"},
     {"username": "jane", "password": 'jane_password', "role": "parent"},

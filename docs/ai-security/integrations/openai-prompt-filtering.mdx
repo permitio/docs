@@ -230,19 +230,17 @@ The `AccessClassifier` class turns a prompt into a structured request.
 The constructor takes an optional resource type and a list of attributes to look for. The class adds them to the system prompt it sends to OpenAI:
 
 ```js
-const classifier = new AccessClassifier(resourceType, attributes);
-
-// The system adapts based on what you pass:
-classifier('HotelType', ['rateType']) // For hotel rate requests
-classifier('FinancialAdvice') // For financial requests
-classifier(null, ['sensitivity']) // For generic attribute checking
+// The classifier adapts based on what you pass:
+const hotelClassifier = new AccessClassifier('HotelType', ['rateType']); // For hotel rate requests
+const financeClassifier = new AccessClassifier('FinancialAdvice'); // For financial requests
+const genericClassifier = new AccessClassifier(null, ['sensitivity']); // For generic attribute checking
 ```
 
-The three lines after the first one show constructor arguments. Pass them to `new AccessClassifier(...)`, for example `new AccessClassifier('HotelType', ['rateType'])`. `AccessClassifier` instances aren't callable functions.
-
-The system prompt defines the output format and gives example classifications. This outline of the class shows the constructor and the system prompt builder:
+The system prompt defines the output format and gives example classifications. This outline of the class shows the constructor, the system prompt builder, and the `classify()` method:
 
 ```js
+const OpenAI = require('openai');
+
 class AccessClassifier {
     constructor(resourceType = null, attributes = []) {
         this.openai = new OpenAI({
@@ -299,10 +297,23 @@ Output format:
 
         return prompt;
     }
+
+    async classify(userPrompt) {
+        const response = await this.openai.chat.completions.create({
+            model: "gpt-4",
+            messages: [
+                { role: "system", content: this.systemPrompt },
+                { role: "user", content: userPrompt }
+            ],
+            temperature: 0
+        });
+
+        return JSON.parse(response.choices[0].message.content.trim());
+    }
 }
 ```
 
-The outline doesn't include the `classify()` method that the rest of this tutorial calls. `classify(userPrompt)` sends the system prompt and the user prompt to the OpenAI chat completions API with `temperature: 0`, and returns the parsed JSON from the response. Copy the complete class, including `classify()` and the `const OpenAI = require('openai');` import, from [`src/classifier.js`](https://github.com/permitio/permit-prompt-filtering/blob/main/src/classifier.js) in the example repository.
+`classify(userPrompt)` sends the system prompt and the user prompt to the OpenAI chat completions API with `temperature: 0`, and returns the parsed JSON from the response. The complete class is in [`src/classifier.js`](https://github.com/permitio/permit-prompt-filtering/blob/main/src/classifier.js) in the example repository.
 
 ### Classifier output
 
@@ -310,22 +321,18 @@ For a hotel classifier, `classify()` returns an object like the one in this bloc
 
 ```js
 // The classifier adapts based on configuration
-const classifier = new AccessClassifier(resourceType, attributes);
+const classifier = new AccessClassifier('HotelType', ['rateType']);
 
 // Example usage with output
 const result = await classifier.classify("What's the price for Hilton?");
-// Returns structured data for permission check:
-{
-    resourceType: "HotelType",
-    resourceKey: "hilton",
-    attributes: {
-        rateType: "public"  // Inferred from context
-    },
-    action: "read"
-}
+// result:
+// {
+//     resourceType: "HotelType",
+//     resourceKey: "hilton",
+//     attributes: { rateType: "public" },
+//     action: "read"
+// }
 ```
-
-The object after the `// Returns` comment is the value of `result`, not a statement to run.
 
 ## Check permissions on the classified request \{#permission-check-implementation}
 

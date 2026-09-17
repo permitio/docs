@@ -38,15 +38,15 @@ The PDP can also run AWS Cedar as its engine. See [Policy engines](/integrations
 
 Check out the environment branch you want to change and open `custom/root.rego`. The file starts with the package declaration:
 
-```
-`package permit.custom` 
+```rego
+package permit.custom
 ```
 
 The generated `root.rego` imports the `permit.custom` package, so the PDP evaluates your rules together with the generated policy.
 
 The file then sets the default value of the custom `allow` rule:
 
-```
+```rego
 default allow := false
 ```
 
@@ -58,22 +58,22 @@ By default, the generated `root.rego` allows access when the generated policies 
 
 The custom `allow` rule for the example is `true` in three cases, checked in order:
 
-```
+```text
 false
-   - true if not rbac // since our date boundary rule is 
-   - true if not role `tmp-admin`
-   - true if role `tmp-admin` and now is in the desired date boundaries
+   - true if the decision doesn't come from RBAC
+   - true if the tmp-admin role isn't one of the allowing roles
+   - true if the tmp-admin role allows and the current time is inside the window
 ```
 
 1. **Allow decisions that don't come from RBAC.** Import the generated `permit.policies` package after the package declaration:
 
-   ```
+   ```rego
    import data.permit.policies
    ```
 
    The `policies.__allow_sources` set lists which generated policies allowed the request, such as `"rbac"` or `"abac"`. Add a rule after `default allow := false` that is `true` when RBAC isn't one of them:
 
-   ```
+   ```rego
    allow {
        not "rbac" in policies.__allow_sources
    }
@@ -81,13 +81,13 @@ false
 
 2. **Allow RBAC decisions that don't use the `tmp-admin` role.** Import the generated `permit.rbac` package:
 
-   ```
-   import permit.rbac
+   ```rego
+   import data.permit.rbac
    ```
 
    The `rbac.allowing_roles` set lists the roles that allowed the request. Chain an `else` branch to the previous rule that is `true` when `tmp-admin` isn't one of them:
 
-   ```
+   ```rego
    else {
       not "tmp-admin" in rbac.allowing_roles
    }
@@ -97,7 +97,7 @@ false
 
 3. **Allow the `tmp-admin` role only inside the time window.** Chain a last `else` branch that compares the current time with the start and end of the window:
 
-   ```
+   ```rego
    else {
       time.now_ns() >= time.parse_rfc3339_ns("2023-01-01T00:00:00+02:00")
       time.now_ns() <= time.parse_rfc3339_ns("2024-01-01T00:00:00+02:00")
@@ -108,8 +108,8 @@ false
 
 The complete `custom/root.rego` file:
 
-```
-package package permit.custom
+```rego
+package permit.custom
 
 import future.keywords.in
 import data.permit.policies
@@ -131,7 +131,7 @@ allow {
 
 The generated `root.rego` in the root of the branch has two `allow` rules. In Rego, two rules with the same name combine with **or**, so access is allowed when either rule is `true`:
 
-```
+```rego
 allow {
    policies.allow
 }
@@ -143,7 +143,7 @@ allow {
 
 Replace both rules with one rule that requires both conditions:
 
-```
+```rego
 allow {
     policies.allow
     custom.allow
@@ -166,7 +166,7 @@ After the change, the custom `allow` rule must be `true` for every request you w
 
 The [audit log](/how-to/use-audit-logs/types-and-filtering) shows detailed decision reasons for the generated policies. For custom Rego, the audit log shows only the result. To debug a custom rule, add a Rego `print` call to it. For example, add this line inside the first `allow` rule to write the allowing policies of each evaluation to the PDP logs:
 
-```
+```rego
 print(policies.__allow_sources)
 ```
 
