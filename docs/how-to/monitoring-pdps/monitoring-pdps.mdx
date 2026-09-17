@@ -1,150 +1,99 @@
 ---
 sidebar_position: 1
-title: Monitoring PDPs
-description: "Track connection status, PDP and OPA versions, and deployment consistency across your PDP fleet on the Monitoring page."
+title: Monitor your PDPs
+sidebar_label: Monitoring PDPs
+description: "Use the Permit.io Monitoring page to check the connection status and PDP and OPA versions of every policy decision point (PDP) connected to your organization."
 ---
 
-# Monitoring PDPs
+Use the Monitoring page in the Permit.io dashboard to see which policy decision points (PDPs) are connected to Permit, and which PDP and Open Policy Agent (OPA) versions they run. This page is for operators who run self-hosted PDPs and roll out PDP upgrades.
 
 :::note Early Access Program
-The PDP Monitoring page is an **Early Access Program (EAP)** feature.  
-Behavior, UI semantics, data retention, and displayed metadata may change between releases.
+The Monitoring page is an Early Access Program (EAP) feature. Its behavior, status meanings, data retention, and displayed fields can change between releases.
 :::
 
-## Overview
+The Monitoring page shows the state of PDP instances at the moment you open it. It is not an audit history or an incident timeline. For decision history, use the audit logs.
 
-The **PDP Monitoring** page provides real-time visibility into **PDP instances** registered with the Permit control plane. It is designed for **operational awareness**, not as a historical audit or incident timeline.
+## Open the Monitoring page \{#overview}
 
-Use the Monitoring page to:
+1. Sign in to the [Permit dashboard](https://app.permit.io).
+2. In the organization section of the left sidebar, click **Monitoring**.
+3. On the **Pdps** tab, filter the list with the **Projects**, **Environments**, **Pdp** (PDP version), and **Opa** (OPA version) filters, and the date range picker.
 
-- **Track active PDP instances** across your environments
-- **Verify deployment consistency** during rollouts
-- **Identify version mismatches** between PDP and OPA
-- **Monitor connection status** of your PDP fleet
+![Permit dashboard Monitoring page, Pdps tab, listing PDP instances with a green or red status dot, project, environment, last activation time, data updates, PDP version, and OPA version](/images/monitoring/monitoring-page.png)
 
-![Monitoring Page](/images/monitoring/monitoring-page.png)
+## Columns on the Monitoring page \{#information-displayed-per-pdp}
 
-## Information Displayed per PDP
+| Column | Description |
+|---|---|
+| Status dot (before **PDP ID**) | Green when the PDP is connected to the Permit control plane. Red when it isn't. |
+| **PDP ID** | The identifier of the PDP instance. |
+| **Project** | The project the PDP serves. |
+| **Environment** | The environment the PDP serves. |
+| **Last activation time** | The most recent activity time reported for the PDP. |
+| **Data updates** | The number of data updates shown for the PDP. |
+| **PDP version** | The version of the Permit PDP the instance runs. |
+| **OPA version** | The version of OPA bundled in that PDP. |
 
-For each PDP instance, the Monitoring page displays:
+## What the connection status means \{#understanding-connection-status}
 
-| Information | Description |
-|------------|-------------|
-| **Connection Status** | Current connectivity state (connected / not connected) |
-| **PDP Version** | Version of the PDP software running on the instance |
-| **OPA Version** | Version of Open Policy Agent bundled with the PDP |
-| **Environment** | The environment the PDP is connected to |
-| **Project** | Associated project name |
-| **Last Activation** | Most recent activity timestamp |
-| **Data Updated** | Last data update timestamp |
+### Green status: connected \{#green-status-connected}
 
-This information helps operators:
+A green PDP is connected to the Permit control plane at the time you view the page.
 
-- ✅ Verify **rollout consistency** across deployments
-- ✅ Identify **outdated PDP or OPA versions** that need upgrading
-- ✅ Correlate behavior with specific **PDP builds** during troubleshooting
+### Red status: not connected \{#red-status-not-connected}
 
-## Understanding Connection Status
+A red PDP is not connected to the control plane. A red PDP doesn't always mean a failure. A PDP turns red when:
 
-### Green Status (Connected)
+- The PDP process was stopped.
+- A container or pod restarted during a deployment. The previous instance stays on the list as red.
+- The PDP instance was decommissioned.
+- The PDP stopped checking in with the control plane.
 
-A PDP shown as **green** indicates the instance is currently connected and actively communicating with the Permit control plane.
+Stopped PDPs stay visible on the Monitoring page, so red PDPs accumulate over time. In most production environments, red PDPs are earlier instances that were stopped, not running PDPs that lost their connection.
 
-### Red Status (Not Connected)
+### Why a list shows many red PDPs \{#common-reasons-for-many-red-pdps}
 
-:::warning Red Status ≠ Active Failure
-A PDP shown as **red** does **not necessarily** indicate an active failure or problem.
+| Cause | Why it adds red PDPs |
+|---|---|
+| Frequent deployments | Each release starts new PDP instances. The old instances stay on the list. |
+| Kubernetes rolling updates and pod restarts | Each restart creates a new instance and leaves the previous one on the list. |
+| Autoscaling | Scale-up creates instances. After scale-down, the removed instances show as red. |
+
+When a PDP you expect to be running shows as red, check that PDP's container logs and its health endpoint. See [Verify the PDP is healthy](/how-to/deploy/deploy-to-production#pdp-health-check-endpoints).
+
+## Connection status and PDP log errors \{#health-checks-vs-sync-operations}
+
+### Connection status on the Monitoring page \{#health-check-status-ui}
+
+The status dot shows whether the PDP is connected to the control plane at the time you view the page. It doesn't show past health check results.
+
+### Timeouts and errors in PDP logs \{#sync--create-operations-logs}
+
+PDP logs can show read timeouts during consistent update requests, and HTTP `500` errors during sync operations. These log entries don't mean the PDP disconnected or failed a health check, and they don't change the status dot. They usually come from a client-side timeout that is too short.
+
+## Set the control plane timeout \{#timeout-configuration-guidance}
+
+`PDP_CONTROL_PLANE_TIMEOUT` sets how long, in seconds, the PDP waits for a request to the Permit control plane. The default is `75`.
+
+:::warning Short control plane timeouts
+A short timeout, for example `5` seconds, makes long control plane requests fail with read timeout errors in the PDP logs. Keep the default of `75` seconds unless you have a reason to change it.
 :::
 
-A PDP may appear red when:
+For other PDP settings, see [PDP configuration](/concepts/pdp/configuration).
 
-- The PDP process was **stopped or terminated**
-- A container or pod was **restarted during deployment**
-- The PDP instance was **decommissioned**
-- The PDP has **not checked in recently**
+## Check PDP and OPA versions across a rollout \{#version-management}
 
-These conditions are **expected**, especially in environments with:
+Use the **Pdp** and **Opa** filters, or the version columns, to:
 
-- **Frequent releases** and deployments
-- **Autoscaling** that creates and destroys instances
-- **Rolling updates** that restart pods
+1. Find PDP instances that still run an older PDP or OPA version after a rollout.
+2. Confirm every connected PDP in each environment runs the version you deployed before you finish the rollout.
+3. Match an issue to a specific PDP and OPA version combination when you troubleshoot.
 
-:::info Expected Behavior
-Most red PDPs observed in production are **previously running PDPs that were stopped**, not PDPs experiencing live disconnects. This is normal in dynamic environments.
-:::
+Upgrade PDPs that run an old version to a supported release. To change the PDP version, update the image tag in your deployment, for example `pdp.image.tag` in the [Helm chart](/how-to/deploy/cloud-hosts/helm#common-chart-values).
 
-## Common Reasons for Many Red PDPs
+## Related pages \{#related-documentation}
 
-If you see many red PDPs in your monitoring view, it's often due to:
-
-- **High deployment frequency** — Frequent releases create new PDP instances while old ones remain visible
-- **Rolling updates or pod restarts** — Kubernetes rolling updates restart pods, leaving previous instances visible
-- **Short-lived PDP instances** — Autoscaling creates temporary instances that appear red after scaling down
-- **Autoscaling events** — Scale-up and scale-down events create and remove PDP instances
-
-:::tip
-Stopped PDPs may remain visible in the monitoring view, which can lead to an accumulation of red PDPs over time. This is expected behavior and does not indicate a problem with your active PDPs.
-:::
-
-## Health Checks vs. Sync Operations
-
-It's important to distinguish between two different behaviors when monitoring PDPs:
-
-### Health Check Status (UI)
-
-The connection status shown in the Monitoring UI:
-
-- Reflects whether a PDP is **currently connected** to the control plane
-- Does **not** represent historical health check success or failure
-- Shows the **real-time state** at the moment you view the page
-
-### Sync / Create Operations (Logs)
-
-When reviewing PDP logs, you may see:
-
-- **Read timeouts** during consistent update requests
-- **HTTP 500 errors** during sync operations
-
-:::info
-These log entries do **not** indicate PDP disconnects or health check failures. They are typically related to **client-side timeout configuration** and are separate from the connection status shown in the UI.
-:::
-
-## Timeout Configuration Guidance
-
-PDPs may encounter read timeouts when client-side timeouts are configured too aggressively.
-
-:::tip Recommended Configuration
-Use the default `PDP_CONTROL_PLANE_TIMEOUT` (**75 seconds**) to allow the Permit API to manage request duration properly.
-
-Setting timeouts too low (for example, around 5 seconds) can cause unnecessary timeout errors in logs.
-:::
-
-## Version Management
-
-The Monitoring page helps you maintain version consistency across your PDP fleet.
-
-### Best Practices
-
-- ✅ Always ensure PDP instances are running a **recent, supported version**
-- ✅ Use the Monitoring page to identify **outdated PDP or OPA versions** during and after rollouts
-- ✅ Verify version consistency across environments before completing deployments
-
-### Version Information
-
-The Monitoring page displays both:
-
-- **PDP Version** — The version of the Permit PDP software
-- **OPA Version** — The version of Open Policy Agent bundled with the PDP
-
-This dual version display helps you:
-
-- Identify when PDP instances need upgrading
-- Ensure OPA version consistency across your fleet
-- Troubleshoot issues related to specific version combinations
-
-## Related Documentation
-
-- [PDP Statistics API](/api/pdp-statistics) — Programmatic access to PDP monitoring data
-- [PDP Webhooks](/api/pdp-webhooks) — Real-time notifications for PDP events
-- [PDP Overview](/concepts/pdp/overview) — Learn more about Policy Decision Points
-- [PDP Configuration](/concepts/pdp/configuration) — Configure PDP settings and timeouts
+- [PDP statistics API](/api/pdp-statistics): read PDP uptime and policy update statistics programmatically.
+- [PDP webhooks](/api/pdp-webhooks): get notified about PDP events.
+- [PDP overview](/concepts/pdp/overview): how the PDP works.
+- [PDP configuration](/concepts/pdp/configuration): PDP settings and timeouts.

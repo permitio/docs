@@ -1,100 +1,61 @@
 ---
 sidebar_position: 1
-title: on GCP Cloud Run
-description: "Deploying PDP on GCP Cloud Run"
+title: Deploy the PDP on GCP Cloud Run
+sidebar_label: on GCP Cloud Run
+description: "Deploy the Permit.io policy decision point (PDP) to Google Cloud Run with a service YAML file and the gcloud CLI, or in the Cloud Run console, and verify it is healthy."
 ---
 
-# Deploying PDP on GCP Cloud Run
+Deploy the Permit.io policy decision point (PDP) to Google Cloud Run. This page is for operators who run workloads on Google Cloud Platform (GCP) and want a PDP their services can call.
 
-Our PDP image runs on GCP Cloud Run without any modification. You can deploy it by using our public image on [Docker Hub](https://hub.docker.com/r/permitio/pdp-v2).
+The public PDP image, [`permitio/pdp-v2` on Docker Hub](https://hub.docker.com/r/permitio/pdp-v2), runs on Cloud Run without changes. You can deploy the image in two ways:
 
-## Step by step guide
+- [Deploy with a service YAML file and gcloud](#known-good-reference-deployment-yaml--cli). Recommended: the file sets every required option in one place, and you can keep it in version control.
+- [Deploy in the Cloud Run console](#step-by-step-guide).
 
-In the following step, we will show you how to deploy our PDP image on GCP Cloud Run,
-And in the end we'll share the final YAML file that you can use to deploy the PDP on GCP Cloud Run.
+## Settings the PDP needs on Cloud Run \{#settings-the-pdp-needs-on-cloud-run}
 
-### 1. Create a new Cloud Run service
+Both deployment paths set these options. Missing one of them is the most common cause of a failing PDP on Cloud Run.
 
-Create a new Cloud Run service by clicking on the `Create Service` button in the Cloud Run dashboard.
-![Create Service](/img/deployments/gcp/1.png)
+| Setting | Value | Why |
+|---|---|---|
+| Container port | `7000` | The PDP API listens on port `7000` inside the container. |
+| `PDP_API_KEY` | Your environment API key | The PDP uses the key to fetch its configuration and policy. |
+| CPU throttling (`run.googleapis.com/cpu-throttling`) | `"false"` (CPU always allocated) | The PDP keeps a background connection to Permit for policy updates. With CPU allocated only during requests, Cloud Run can terminate the PDP container with signal 6 (SIGABRT). |
+| Minimum instances (`autoscaling.knative.dev/minScale`) | `"1"` | Keeps one PDP running. Without it, the first permission check after an idle period waits for a cold start, and checks can fail or time out. |
 
-### 2. Configure the service
+For how Cloud Run allocates CPU, see [Cloud Run CPU allocation](https://cloud.google.com/run/docs/configuring/cpu-allocation).
 
-Now, we'll set the name, image and some other configurations for the service.
-First, in the "Container Image URL" field, enter the following image `permitio/pdp-v2:latest`.
-Then, set the name of the service to the name that fits you.
-![Configure Service](/img/deployments/gcp/2.png)
-Obviously, you can change the region and other configurations as you wish.
+## Deploy with a service YAML file and gcloud \{#known-good-reference-deployment-yaml--cli}
 
-### 3. Adjust the Auto Scaling configuration (Recommended)
+The following configuration is known to work on Cloud Run. It sets autoscaling, CPU throttling, a startup probe, and the API key from Secret Manager. An older variant of the file, with the API key as a plain environment value instead of a secret, is in the [permit-pdp-deployments-examples repository](https://github.com/permitio/permit-pdp-deployments-examples/blob/main/gcp/cloud-run.yaml).
 
-In the "Auto Scaling" section, set the "Minimum number of instances" to 1.
-This will make sure that there is always at least one instance of the PDP running - to avoid cold starts.
-We don't want that authorization queries and requests to the PDP will fail or take a long time because of cold starts.
-![Auto Scaling](/img/deployments/gcp/3.png)
+### Prerequisites
 
-### 4. Set the container port
+- The [gcloud CLI](https://cloud.google.com/sdk/docs/install), installed and signed in to your GCP project.
+- Your environment API key. See [Get your API key](/overview/get-api-key).
 
-Our PDP image runs on port `7000`, so we need to set the container port to `7000`.
-![Container Port](/img/deployments/gcp/4.png)
+Use an environment API key. This configuration sets only `PDP_API_KEY`. An organization or project API key also needs the `PDP_ACTIVE_*` variables described in [Run the PDP with an organization or project API key](/how-to/deploy/deploy-to-production#running-the-pdp-with-organizationproject-api-key).
 
-### 5. Set the environment variables
+### 1. Enable the Cloud Run and Secret Manager APIs \{#step-1--enable-required-apis}
 
-Now, we need to set the environment variables for the PDP.
-The only required environment variable is `PDP_API_KEY`, which is the API key that you got from Permit.io.
-See [Get your API Key](/api/api-with-cli) for more information.
-Note that you can and should set the environment variables from a secret, using your selected secret store provider.
-![Environment Variables](/img/deployments/gcp/5.png)
-:::important
-Use an Environment-level API key (not Project or Org key) for Cloud Run deployments
-:::
-
-### 6. Ready to deploy !
-
-Now, we are ready to deploy the PDP.
-Click on the "Create" button to deploy the PDP.
-You can see the logs of the deployment in the "Logs" tab, and if the deployment succeeded, you will see the URL of the PDP in the top section of the Cloud Run service.
-![Deploy](/img/deployments/gcp/6.png)
-
-:::info Signal 6 in Cloud Run
-A common misconfiguration issue that can be encountered when deploying the PDP to Google Cloud Run is  having the platform unexpectedly terminate the PDP container with a Signal 6 (SIGABRT). This issue stems from Cloud Run's CPU allocation settings, which allow background task processes, such as the PDP, to release CPU resources when idle. Consequently, this results in the container's termination due to insufficient CPU availability.
-To address this issue and ensure uninterrupted service, we recommend adding the `run.googleapis.com/cpu-throttling: false` annotation in the YAML configuration.
-
-For a deeper understanding of CPU allocation settings in Cloud Run and how they impact your applications, please refer to the following documentation: [Cloud Run CPU Allocation Settings](https://cloud.google.com/run/docs/configuring/cpu-allocation).
-:::
-
-## YAML file
-
-We shared the YAML file that we used to deploy the PDP on GCP Cloud Run.
-Take a look at the following [Deployments Github Repository](https://github.com/permitio/permit-pdp-deployments-examples/blob/main/gcp/cloud-run.yaml)
-
-### Known-Good Reference Deployment (YAML / CLI)
-
-The following configuration is known to work on Cloud Run and addresses autoscaling, CPU throttling, startup probes, and environment variables appropriately.
-
-#### Prerequisites
-
-- gcloud installed and authenticated
-- Cloud Run and Secret Manager APIs enabled
-- Permit Environment API Key stored in Secret Manager
-
-#### Step 1 — Enable Required APIs
 ```bash
 gcloud services enable secretmanager.googleapis.com
 gcloud services enable run.googleapis.com
 ```
 
-#### Step 2: Create a Secret for the API Key
-Store your Permit API key securely in GCP Secret Manager:
+### 2. Store the API key in Secret Manager \{#step-2-create-a-secret-for-the-api-key}
+
+Replace `YOUR_PERMIT_API_KEY` with your environment API key. The command creates a secret named `permit-pdp-api-key`.
+
 ```bash
 echo -n "YOUR_PERMIT_API_KEY" | gcloud secrets create permit-pdp-api-key \
   --data-file=- \
   --replication-policy=automatic
 ```
 
-#### Step 3: Grant Secret Access to the Service Account
+### 3. Grant the service account access to the secret \{#step-3-grant-secret-access-to-the-service-account}
 
-Get your default compute service account and grant it access to the secret:
+The commands find the default Compute Engine service account and let it read the `permit-pdp-api-key` secret. Cloud Run runs the PDP as this service account.
 
 ```bash
 # Get the service account email
@@ -106,7 +67,9 @@ gcloud secrets add-iam-policy-binding permit-pdp-api-key \
   --role="roles/secretmanager.secretAccessor"
 ```
 
-#### Step 4: Create the Cloud Run Service YAML
+Run `echo $SERVICE_ACCOUNT` and copy the email address for the next step.
+
+### 4. Create the Cloud Run service YAML file \{#step-4-create-the-cloud-run-service-yaml}
 
 Create a file named `permit-pdp-service.yaml`:
 ```yaml
@@ -160,32 +123,34 @@ spec:
       latestRevision: true
 ```
 
-**Important Configuration Notes:**
+Replace `YOUR_SERVICE_ACCOUNT_EMAIL` with the service account email from step 3 (the value of `$SERVICE_ACCOUNT`). The file deploys to the `us-central1` region. To use another region, change the `cloud.googleapis.com/location` label and the `--region` flag in the commands below.
+
+The settings that matter for the PDP:
 
 | Setting | Value | Purpose |
 |---------|-------|---------|
-| `run.googleapis.com/cpu-throttling` | `"false"` | Prevents SIGABRT errors by keeping CPU allocated |
-| `autoscaling.knative.dev/minScale` | `"1"` | Avoids cold starts that cause authorization failures |
-| `containerPort` | `7000` | Default PDP port |
-| `startupProbe.timeoutSeconds` | `240` | Allows time for initial policy sync |
+| `run.googleapis.com/cpu-throttling` | `"false"` | Keeps CPU allocated between requests, which prevents SIGABRT terminations |
+| `autoscaling.knative.dev/minScale` | `"1"` | Keeps one instance running, which avoids cold starts that make checks fail |
+| `autoscaling.knative.dev/maxScale` | `"10"` | Caps the number of PDP instances |
+| `containerPort` | `7000` | The PDP API port |
+| `secretKeyRef` | `permit-pdp-api-key`, version `latest` | Reads `PDP_API_KEY` from Secret Manager |
+| `startupProbe.timeoutSeconds` | `240` | Gives the PDP time for its first policy sync |
 
-:::note
-Replace `YOUR_SERVICE_ACCOUNT_EMAIL` with the service account email obtained in Step 3 (the `$SERVICE_ACCOUNT` variable value).
-:::
-
-#### Step 5: Deploy the Service
+### 5. Deploy the service \{#step-5-deploy-the-service}
 
 ```bash
 gcloud run services replace permit-pdp-service.yaml --region=us-central1
 ```
 
-#### Step 6: Allow Public Access (Optional)
+The command creates or updates the `permit-pdp` service.
 
-:::warning Security Risk
-Exposing the PDP publicly allows anyone to query your authorization decisions. Only use this for development or testing environments. For production, use Cloud Run's IAM authentication or VPC connectors for private access.
+### 6. Optional: allow unauthenticated access \{#step-6-allow-public-access-optional}
+
+:::warning Security risk
+A PDP that allows unauthenticated invocation answers permission checks for anyone on the internet who has the service URL. Use this setting only for development or testing. In production, require Cloud Run IAM authentication, or reach the PDP privately through a VPC connector.
 :::
 
-If you need unauthenticated access to the PDP:
+To let callers without Google credentials invoke the PDP, grant the invoker role to `allUsers`:
 
 ```bash
 gcloud run services add-iam-policy-binding permit-pdp \
@@ -194,9 +159,9 @@ gcloud run services add-iam-policy-binding permit-pdp \
   --role="roles/run.invoker"
 ```
 
-#### Step 7: Verify the Deployment
+### 7. Verify the deployment \{#step-7-verify-the-deployment}
 
-Check the health endpoint:
+Get the service URL and call the PDP's health endpoint. If you skipped step 6, the request needs a Google identity token, for example an `Authorization: Bearer $(gcloud auth print-identity-token)` header.
 
 ```bash
 # Get the service URL
@@ -205,7 +170,7 @@ SERVICE_URL=$(gcloud run services describe permit-pdp --region=us-central1 --for
 # Check health
 curl ${SERVICE_URL}/health
 ```
-Expected response:
+A healthy PDP returns HTTP `200` and a response like this:
 ```json
 {
   "components": {
@@ -227,25 +192,74 @@ Expected response:
 ```
 
 :::note
-The `"watchdog": "error"` in the response is expected behavior in Cloud Run environments due to how Cloud Run handles background processes. As long as `"status": "ok"` appears at the top level, your PDP is healthy and operational.
+The top-level `"status"` is the result that matters. `"watchdog": "error"` under `horizon.details` doesn't change the result: the PDP reports the `horizon` component as `ok` when its direct check succeeds. When the PDP is not healthy, the endpoint returns HTTP `503` with `"status": "error"`.
 :::
-#### Endpoints
 
-Once deployed, your PDP exposes:
+### PDP endpoints on Cloud Run \{#endpoints}
 
-- **Health Check**: `https://YOUR_SERVICE_URL/health`
-- **Authorization**: `https://YOUR_SERVICE_URL/allowed`
+| Endpoint | Purpose |
+|---|---|
+| `https://YOUR_SERVICE_URL/health` | Health check. See [Verify the PDP is healthy](/how-to/deploy/deploy-to-production#pdp-health-check-endpoints). |
+| `https://YOUR_SERVICE_URL/allowed` | Permission checks. Set `https://YOUR_SERVICE_URL` as the PDP URL in your SDK. |
 
+Replace `YOUR_SERVICE_URL` with the host name from `$SERVICE_URL`. Cloud Run serves the PDP over HTTPS on the default port, so the URL has no port number.
 
-#### Troubleshooting
+## Deploy in the Cloud Run console \{#step-by-step-guide}
 
-##### Signal 6 (SIGABRT) Errors
-Ensure `run.googleapis.com/cpu-throttling: "false"` is set in your annotations.
+Use the console to try the PDP on Cloud Run without the CLI. The steps set the same options as [the YAML file](#known-good-reference-deployment-yaml--cli), except CPU throttling. Set CPU to always allocated in the service's CPU allocation settings, as described in [Settings the PDP needs on Cloud Run](#settings-the-pdp-needs-on-cloud-run).
 
-##### Cold Start Authorization Failures
-Ensure `autoscaling.knative.dev/minScale: "1"` to keep at least one instance running.
+### 1. Create a Cloud Run service \{#1-create-a-new-cloud-run-service}
 
-##### Quota Errors
-Reduce `autoscaling.knative.dev/maxScale` if you hit CPU/memory quota limits.
+In the Cloud Run dashboard, click **Create Service**.
 
+![Cloud Run dashboard with the Create Service button](/img/deployments/gcp/1.png)
 
+### 2. Set the image and service name \{#2-configure-the-service}
+
+In **Container Image URL**, enter `permitio/pdp-v2:latest`. Enter a service name, and choose a region.
+
+![Cloud Run create service form with the container image URL permitio/pdp-v2:latest and the service name](/img/deployments/gcp/2.png)
+
+### 3. Set the minimum number of instances \{#3-adjust-the-auto-scaling-configuration-recommended}
+
+In the **Auto Scaling** section, set **Minimum number of instances** to `1`. One PDP instance then stays running, and permission checks don't wait for a cold start.
+
+![Cloud Run Auto Scaling section with the minimum number of instances set to 1](/img/deployments/gcp/3.png)
+
+### 4. Set the container port \{#4-set-the-container-port}
+
+Set the container port to `7000`, the port the PDP API listens on.
+
+![Cloud Run container settings with the container port set to 7000](/img/deployments/gcp/4.png)
+
+### 5. Set the API key environment variable \{#5-set-the-environment-variables}
+
+Add the environment variable `PDP_API_KEY` with your environment API key as the value. `PDP_API_KEY` is the only required variable. See [Get your API key](/overview/get-api-key).
+
+For anything beyond a test, reference the key from Secret Manager instead of typing the value. A typed value is visible to anyone who can view the service configuration.
+
+![Cloud Run Environment variables section with Name 1 set to PDP_API_KEY and a placeholder API key as Value 1](/img/deployments/gcp/5.png)
+
+Use an environment API key. An organization or project API key also needs the `PDP_ACTIVE_*` variables.
+
+### 6. Create and check the service \{#6-ready-to-deploy-}
+
+Click **Create**. Cloud Run shows the deployment progress in the **Logs** tab. When the deployment succeeds, the service URL appears at the top of the service page.
+
+![Cloud Run service page after deployment, with the service URL at the top](/img/deployments/gcp/6.png)
+
+To confirm the PDP is healthy, send a `GET` request to `<SERVICE_URL>/health`, as in [Verify the deployment](#step-7-verify-the-deployment).
+
+## Troubleshoot the PDP on Cloud Run \{#troubleshooting}
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Container terminated with signal 6 (SIGABRT) | CPU is allocated only during requests | Set `run.googleapis.com/cpu-throttling: "false"` in the template annotations, or set CPU to always allocated in the console. |
+| Permission checks fail or time out after idle periods | Cold starts with zero instances | Set `autoscaling.knative.dev/minScale: "1"`. |
+| Quota errors when the service scales | CPU or memory quota limits in the region | Lower `autoscaling.knative.dev/maxScale`, or request more quota. |
+
+## Next steps
+
+- [Size the PDP for production](/how-to/deploy/deploy-to-production#system-requirements-and-performance-optimization)
+- [Choose a PDP deployment model](/how-to/deploy/overview)
+- [Monitor your PDPs](/how-to/monitoring-pdps)

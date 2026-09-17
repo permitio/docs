@@ -1,77 +1,86 @@
 ---
 sidebar_position: 2
-title: on Kubernetes (Raw Yamls)
-description: "Deploying PDP on Kubernetes (Raw Yamls)"
+title: Deploy the PDP on Kubernetes with YAML manifests
+sidebar_label: on Kubernetes (Raw Yamls)
+description: "Deploy the Permit.io policy decision point (PDP) on Kubernetes with plain YAML manifests, configure its health probes, and connect your services to it."
 ---
 
-# Deploying PDP using raw Kubernetes YAMLs
+Deploy the Permit.io policy decision point (PDP) on Kubernetes with plain YAML manifests, without Helm. This page is for operators who manage Kubernetes resources as manifests. To install with Helm instead, see [Deploy the PDP on Kubernetes with Helm](/how-to/deploy/cloud-hosts/helm).
 
-In this example, we will show you how to deploy the Permit PDP on Kubernetes using raw YAMLs.
+The [kubernetes directory of the permit-pdp-deployments-examples repository](https://github.com/permitio/permit-pdp-deployments-examples/tree/main/kubernetes) has three manifests:
 
-Resources included in this example:
+| File | Resource | Name | Notes |
+|---|---|---|---|
+| `deployment.yaml` | Deployment | `permitio-pdp` | One replica of `permitio/pdp-v2:latest`, with liveness, readiness, and startup probes on port `7000`. |
+| `service.yaml` | Service | `permitio-pdp` | Listens on port `80` and forwards to container port `7000`. |
+| `secret.yaml` | Secret | `permitio-pdp-secret` | Holds the API key in the `PDP_API_KEY` field. |
 
-- Deployment
-- Service
-- Secret
+The manifests don't set a namespace. Kubernetes creates the resources in the namespace you pass to `kubectl`, or in your context's default namespace.
 
-## To deploy the PDP on Kubernetes, follow these steps:
+## Prerequisites
 
-1. Download the YAML files from [this directory](https://github.com/permitio/permit-pdp-deployments-examples/tree/main/kubernetes).
-2. Replace the `PDP_API_KEY` value in the `secret.yaml` file with your API key.
-3. Create a new namespace for the PDP - (You can choose which namespace you want).
+- A Kubernetes cluster, and `kubectl` configured for it.
+- Your environment API key. See [Get your API key](/overview/get-api-key).
+
+## Deploy the PDP with kubectl \{#to-deploy-the-pdp-on-kubernetes-follow-these-steps}
+
+1. Download `deployment.yaml`, `service.yaml`, and `secret.yaml` from the [kubernetes example directory](https://github.com/permitio/permit-pdp-deployments-examples/tree/main/kubernetes) into one local directory.
+2. In `secret.yaml`, replace `<Your PDP API Key in base64>` with your environment API key, base64-encoded. For example, run `echo -n '<YOUR_API_KEY>' | base64` and paste the output. A key that isn't base64-encoded makes the Secret invalid.
+3. Create a namespace for the PDP. The example uses `permit-pdp`; you can choose another name.
 
 ```bash
 kubectl create namespace permit-pdp
 ```
 
-4. Apply the YAML files - make sure you are in the directory that contains the YAML files.
+4. From the directory that holds the three files, apply them. Add `-n permit-pdp` to the command so the resources go into the namespace from step 3. Without `-n`, `kubectl` creates them in your context's default namespace.
 
 ```bash
 kubectl apply -f.
 ```
 
-5. (Optional) Wait for the PDP to be ready.
+5. Optional: wait for the PDP to become available. The Deployment in the example manifests is named `permitio-pdp`, so use `deployment/permitio-pdp` in the command.
 
 ```bash
 kubectl wait --for=condition=available --timeout=600s deployment/permit-pdp -n permit-pdp
 ```
 
-Once the PDP is ready, you can start sending authorization requests to it.
+## Verify the PDP is running
 
-## Interacting with the PDP
+1. Run `kubectl get pods -n permit-pdp`. The `permitio-pdp` pod shows `1/1` in the `READY` column.
+2. Run `kubectl port-forward svc/permitio-pdp 7766:80 -n permit-pdp`, then send a `GET` request to `http://localhost:7766/health`. A healthy PDP returns HTTP `200` with `"status": "ok"`.
 
-To interact with the PDP **internally** (from inside the cluster), you can use the service name `permit-pdp.<Your Namespace>.svc.cluster.local`.
+## Connect to the PDP \{#interacting-with-the-pdp}
 
-To interact with the PDP **externally** (from outside the cluster), you must expose the service using a load balancer or an ingress of your choice.
+From inside the cluster, services reach the PDP through the `permitio-pdp` Service on port `80`:
 
-## Liveness, Readiness and Startup Probes
+`http://permitio-pdp.<NAMESPACE>.svc.cluster.local`
 
-The PDP exposes several endpoints that can be used for liveness, readiness, and startup probes.
+Replace `<NAMESPACE>` with the namespace you deployed to (`permit-pdp` in the example). Set this URL as the PDP URL in your SDK. See [Connect your SDK to the PDP](/how-to/deploy/deploy-to-production#using-the-pdp).
 
-### Liveness Probe
+From outside the cluster, expose the `permitio-pdp` Service with a load balancer or an ingress. Anyone who can reach an exposed PDP can send it permission checks, so restrict access to your own services.
 
-The liveness probe is used to determine if the PDP is alive and healthy and should be restarted if it's not,
-it returns a 200 status code if the PDP is alive and healthy. The liveness probe endpoint is `/health`.<br />
-An unhealthy PDP will return a 503 status code when The PDP failure rate exceeds the configured threshold.
-{/* An unhealthy PDP will return a 503 status code on one of the following scenarios: */}
-{/* 1. The Policy Engine healthcheck returned an error or timed out. */}
-{/* 2. The PDP failure rate is more than the configured threshold */}
+## PDP liveness, readiness, and startup probes \{#liveness-readiness-and-startup-probes}
 
-You can configure the failure threshold using environment variables:
-1. `PDP_OPA_CLIENT_FAILURE_THRESHOLD_PERCENTAGE` - The failure threshold percentage for the Policy Engine healthcheck. The default value is 10%.
-2. `PDP_OPA_CLIENT_FAILURE_THRESHOLD_INTERVAL` - The interval (in seconds) to calculate the failure threshold. The default value is 60 seconds.
+The PDP serves one health check on three paths on port `7000`: `/health`, `/healthy`, and `/ready`. Every path checks the PDP's internal API service (Horizon) and its policy engine, Open Policy Agent (OPA). The check returns HTTP `200` with `"status": "ok"` when both are healthy. It returns HTTP `503` with `"status": "error"` and the failing component when either one is not healthy. The health paths don't require an API key.
 
-The default configuration will return a 503 status code if at least 10% of the requests made to the PDP in the last 60 seconds failed.
+The example `deployment.yaml` assigns one path to each probe.
 
-### Readiness Probe
+### Liveness probe
 
-The readiness probe determines if the PDP is ready to receive traffic; it returns a 200 status code if the PDP is ready to receive traffic. The readiness probe endpoint is `/healthy`.<br />
-An unready PDP will return a 503 status code if the Policy Engine's latest policy update fails.
+Kubernetes restarts the PDP container when the liveness probe fails. The example manifest calls `/health` on port `7000` every 10 seconds and restarts the container after 3 failures in a row.
 
-### Startup Probe
+### Readiness probe
 
-The startup probe is used to determine if the PDP is ready to receive traffic on startup; it returns a 200 status code if the PDP has finished the startup and is ready to receive traffic. The startup probe endpoint is `/ready`.<br />
-A PDP will be considered ready and return 200 once the Policy Engine has finished loading the policy from the policy store ( Git repository ) successfully.
+Kubernetes sends Service traffic to a pod only while its readiness probe passes. The example manifest calls `/healthy` on port `7000` every 10 seconds and removes the pod from the Service after 10 failures in a row.
 
+### Startup probe
 
-Take a look at the following [Deployments Github Repository](https://github.com/permitio/permit-pdp-deployments-examples/blob/main/kubernetes)
+Kubernetes holds the liveness and readiness probes until the startup probe passes. The PDP needs time at startup to fetch its configuration and load the policy. The example manifest waits 30 seconds, then calls `/ready` on port `7000` every 10 seconds, for up to 12 attempts.
+
+For the same endpoints outside Kubernetes, see [Verify the PDP is healthy](/how-to/deploy/deploy-to-production#pdp-health-check-endpoints).
+
+## Next steps
+
+- [Size the PDP for production](/how-to/deploy/deploy-to-production#system-requirements-and-performance-optimization)
+- [Run the PDP in offline mode](/how-to/deploy/offline-mode)
+- [Monitor your PDPs](/how-to/monitoring-pdps)
