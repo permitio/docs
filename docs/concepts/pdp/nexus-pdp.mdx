@@ -1,91 +1,85 @@
 ---
-title: Nexus PDP
+title: Permit Nexus PDP
 sidebar_label: Overview
-description: A PDP with an embedded on-disk database that keeps a local copy of your policy and authorization data in sync over a durable event stream — no network in the decision path.
+description: "Learn what Permit Nexus PDP is, how it differs from the container PDP, and when to run it in your network."
 sidebar_position: 1
 ---
 
 import ProductOverviewLink from "@site/src/components/ProductOverviewLink";
 
-# Nexus PDP
-
 <ProductOverviewLink href="https://www.permit.io/nexus-pdp" label="Nexus PDP" />
 
-**A Policy Decision Point with an embedded on-disk database, kept in sync over a durable event stream.**
+Permit Nexus PDP is a self-hosted policy decision point (PDP) that keeps your environment's policy and authorization data in an embedded on-disk database. This page is for architects and platform engineers who decide whether to run Nexus PDP instead of, or next to, the container PDP.
 
-The **Permit Nexus PDP** is a ground-up rewrite of the PDP runtime, shipped as `permitio/pdp-v3`. It runs one container per Permit environment, holds a **local, on-disk copy** of that environment's policy and authorization data, and answers authorization queries with **no network call in the decision path**.
+Nexus PDP ships as the `permitio/pdp-v3` container image. You run one Nexus PDP container per Permit environment in your own network. Nexus PDP answers each authorization query from its local copy of the data, so no hop in the decision path leaves the container.
 
-:::note Availability
-Nexus PDP is a **new deployment option**, not a replacement. The [container PDP](/concepts/pdp/overview#run-an-edge-pdp-with-docker) (`permitio/pdp-v2`) remains fully supported and continues to be the right choice for the capabilities listed under [Feature Parity](./nexus-pdp-feature-parity).
+:::note Early access and relationship to the container PDP
+Nexus PDP is an additional deployment option. It does not replace the container PDP (`permitio/pdp-v2`), which remains supported and is the PDP to use for the capabilities listed as unsupported in [Nexus PDP feature parity](/concepts/pdp/nexus-pdp-feature-parity).
 
-It is currently in early access and enabled per account. [Contact us](mailto:support@permit.io) to have it turned on.
+As of September 2026, Nexus PDP is in early access and Permit enables it per account. To request access, [book a call with Permit](https://www.permit.io/demo).
 :::
 
----
+## Terms used on this page
 
-## Why a new runtime
-
-The container PDP holds your authorization data inside OPA, and **OPA's data store is a single in-memory JSON document**. That one design choice sets two ceilings.
-
-### It is not a graph store
-
-A JSON document has no indexes and no concept of edges. It cannot be optimized for graph traversal, or for the granular, relationship-heavy queries that ReBAC and derived roles depend on — questions like *"does this user reach this resource through some chain of roles and relationships?"*
-
-The Nexus PDP moves those questions out of the JSON document entirely. Relationship data lives in an embedded database built for graph traversal, and OPA queries it over a local loopback while it evaluates policy. Policy evaluation and graph traversal each run on something designed for the job.
-
-### It is expensive in memory
-
-Because the fact graph lives in memory, a large environment needs a large PDP. OPA's own documentation is direct about the cost:
-
-> Memory usage scales with the size of the policy (i.e., Rego) and data (e.g., JSON) that you load into OPA. Raw JSON data loaded into OPA uses approximately 20x more memory compared to the same data stored in a compact, serialized format (e.g., on disk).
->
-> — [OPA documentation: Policy Performance](https://www.openpolicyagent.org/docs/policy-performance)
-
-The Nexus PDP stores exactly that compact, serialized form on disk, and keeps a bounded cache in memory. Memory becomes a number you set rather than a function of how much data your environment holds.
-
-### Updates cost a round trip
-
-There is a third ceiling, in how data arrives rather than where it lives. The container PDP refreshes by reacting to a notification and then **fetching the changed data back from Permit's API**. A notification says *that* something changed; a second call is needed to find out *what*. And catching up after a disconnect means re-fetching, because there is no server-side record of what a given PDP has and hasn't seen.
-
-On the Nexus PDP, updates **arrive already containing the change**, and the control plane **durably retains** each PDP's unacknowledged changes until that specific PDP confirms it applied them.
-
----
-
-## What it gives you
-
-- **Decisions that never leave the container.** Every hop in the request path is loopback or local disk, so no authorization query depends on reaching Permit.
-- **Memory you control.** The data set lives on disk; a configurable cache bounds what is resident.
-- **Sync that survives disconnection.** Changes are retained per-PDP, server-side, until that PDP acknowledges them — no re-fetch on reconnect.
-- **Availability over freshness.** A control-plane outage costs you freshness, never the ability to answer. The PDP serves from its local copy indefinitely, and reports how stale it is.
-
-See [Architecture](./nexus-pdp-architecture) for what runs inside the container, and [How It Works](./nexus-pdp-how-it-works) for how the local copy is kept current.
-
----
-
-## Choosing between the two
-
-| Choose the **container PDP** when you need | Choose the **Nexus PDP** when you need |
+| Term | Meaning |
 | --- | --- |
-| ABAC, condition sets, user or resource sets | Large data sets without a large memory footprint |
-| Policy-as-Code / custom Rego bundles | Relationship queries served from a graph-capable store |
-| Read-your-own-writes / local facts | Decisions that never depend on reaching Permit's API |
-| URL-based enforcement or Kong integration | Sync that survives long disconnections without a re-fetch |
-| Custom data sources | To drop the Python and OPAL layer entirely |
-| A Prometheus `/metrics` pipeline, or deployment without persistent storage | Observability through structured logs and detailed health endpoints |
+| **Container PDP** | The Edge PDP image `permitio/pdp-v2`. It runs an API server, the Open Policy Administration Layer (OPAL) client, and Open Policy Agent (OPA) in one container. See [Run an Edge PDP with Docker](/concepts/pdp/overview#run-an-edge-pdp-with-docker). |
+| **Control plane** | The Permit cloud service that stores your policies and data and sends updates to your PDPs. |
+| **Change stream** | The ordered, durable stream of data changes that the control plane sends to each Nexus PDP. |
 
-Both connect to the same Permit environment and enforce the same policies you author in Permit. You can run them side by side while you evaluate.
+## Limits of the container PDP that Nexus PDP removes \{#why-a-new-runtime}
 
-Feature parity with the Classic PDP (the container PDP) is in progress and ships continually. See [Feature Parity](./nexus-pdp-feature-parity) for what's supported today.
+The container PDP stores your authorization data inside OPA as a single in-memory JSON document. That storage model limits the container PDP in three ways.
 
----
+### Relationship queries run against a JSON document \{#it-is-not-a-graph-store}
 
-## Related documentation
+A JSON document has no indexes and no edges between records. The container PDP cannot optimize graph traversal for relationship-based access control (ReBAC) and derived roles. Those policies ask whether a user reaches a resource through a chain of roles and relationships.
 
-- [Architecture](./nexus-pdp-architecture) — what runs inside the container and the request path
-- [How It Works](./nexus-pdp-how-it-works) — sync, consistency, cold start, and resource profile
-- [Feature Parity](./nexus-pdp-feature-parity) — capability comparison against the container PDP
-- [Deployment](./nexus-pdp-deployment) — requirements, observability, and the security model
-- [Configuration](./nexus-pdp-configuration) — environment variable reference (beta)
-- [PDP Overview](/concepts/pdp/overview) — deployment models for the container PDP
-- [Cloud PDP Capabilities](/concepts/pdp/cloud-pdp-capabilities) — the managed PDP's capability envelope, which the Nexus PDP mirrors
-- [Monitoring PDPs](/how-to/monitoring-pdps) — fleet visibility in the Permit dashboard
+Nexus PDP stores relationship data in an embedded database built for graph traversal. OPA queries that database over the container's loopback interface while OPA evaluates the policy.
+
+### Container PDP memory grows with your data set \{#it-is-expensive-in-memory}
+
+The container PDP holds all authorization data in memory, so a large environment needs a large container PDP. The [OPA policy performance documentation](https://www.openpolicyagent.org/docs/policy-performance) states that raw JSON loaded into OPA uses about 20 times the memory of the same data in a compact serialized form.
+
+Nexus PDP stores the compact form on disk and keeps a cache of configurable size in memory. You set the memory budget instead of deriving it from the size of your data.
+
+### Container PDP updates need a second request \{#updates-cost-a-round-trip}
+
+The container PDP receives a notification that data changed, then fetches the changed data from the Permit API. After a disconnection, the container PDP fetches the data again, because the control plane does not track which updates each container PDP has applied.
+
+Nexus PDP receives each update with the changed data inside the message. The control plane keeps each Nexus PDP's unacknowledged changes until that Nexus PDP confirms that it applied them.
+
+## What Nexus PDP provides \{#what-it-gives-you}
+
+- **Decisions inside the container.** Every hop in a decision runs over loopback or reads local disk. No authorization query depends on reaching Permit.
+- **Memory you configure.** The data set lives on disk, and a configurable cache limits resident memory.
+- **Sync that resumes after a disconnection.** The control plane keeps changes for each Nexus PDP until that PDP acknowledges them, so a reconnecting Nexus PDP does not fetch its data set again.
+- **Decisions during control-plane outages.** When the control plane is unreachable, Nexus PDP keeps answering from its local copy and reports how stale that copy is on its health endpoint.
+
+To see the processes inside the container, read [Nexus PDP architecture](/concepts/pdp/nexus-pdp-architecture). To see how Nexus PDP keeps its local copy current, read [How Nexus PDP syncs data](/concepts/pdp/nexus-pdp-how-it-works).
+
+## Choose between the container PDP and Nexus PDP \{#choosing-between-the-two}
+
+| Choose the **container PDP** when you need | Choose **Nexus PDP** when you need |
+| --- | --- |
+| Attribute-based access control (ABAC): condition sets, user sets, or resource sets | Large data sets without a matching memory footprint |
+| Policy as code or custom Rego bundles | Relationship queries served from a graph-capable store |
+| Read-your-own-writes with local facts | Decisions that never depend on reaching the Permit API |
+| URL-based enforcement or the Kong integration | Sync that resumes after long disconnections without fetching data again |
+| Custom data sources | A PDP without the Python runtime and the OPAL client |
+| A Prometheus `/metrics` endpoint, or a deployment without persistent storage | Observability through structured logs and detailed health endpoints |
+
+Both PDP types connect to the same Permit environment and enforce the role-based access control (RBAC) and ReBAC policies you author in Permit. You can run both side by side while you evaluate Nexus PDP.
+
+The set of capabilities Nexus PDP supports changes between releases. Check [Nexus PDP feature parity](/concepts/pdp/nexus-pdp-feature-parity) for the current list.
+
+## Next steps \{#related-documentation}
+
+- [Nexus PDP architecture](/concepts/pdp/nexus-pdp-architecture): the processes and ports inside the container, and the path of one request
+- [How Nexus PDP syncs data](/concepts/pdp/nexus-pdp-how-it-works): sync, consistency, cold start, and sizing
+- [Nexus PDP feature parity](/concepts/pdp/nexus-pdp-feature-parity): supported endpoints and capabilities compared with the container PDP
+- [Deploy Nexus PDP](/concepts/pdp/nexus-pdp-deployment): storage, probes, logs, and the security model
+- [Nexus PDP configuration reference](/concepts/pdp/nexus-pdp-configuration): environment variables
+- [PDP overview](/concepts/pdp/overview): the Cloud PDP, Edge PDP, and Nexus PDP deployment types
+- [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities): the managed Cloud PDP's capabilities, which Nexus PDP matches
+- [Monitor PDPs](/how-to/monitoring-pdps): PDP fleet visibility in the Permit dashboard
