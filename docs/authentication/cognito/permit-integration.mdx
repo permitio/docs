@@ -35,7 +35,7 @@ if (searchParams.get("code") !== null) {
   //...
   const syncUser = await fetch("api/sync", {
     method: "POST",
-    headers: new Headers({ Authorization: `Bearer ${tokens.access_token}` }),
+    headers: new Headers({ Authorization: `Bearer ${tokens.id_token}` }),
   });
   //...
 }
@@ -50,14 +50,14 @@ import { CognitoJwtVerifier } from "aws-jwt-verify";
 import { Permit } from "permitio";
 // verifier for the id token:
 const verifierIdToken = CognitoJwtVerifier.create({
-    userPoolId: [your user pool id],
+    userPoolId: "[your user pool id]",
     tokenUse: "id",
-    clientId: [your client id],
+    clientId: "[your client id]",
 }
 );
 const permit = new Permit(
     {
-      token: [your permit token],
+      token: process.env.PERMIT_API_KEY, // [your permit token]
       // in production, you might need to change this url to fit your deployment
       pdp: "https://cloudpdp.api.permit.io",
     }
@@ -83,12 +83,14 @@ const permit = new Permit(
 
 // sync user route
 app.post("/api/sync", async (req, res) => {
+    let cognitoUser;
     try {
-        const cognitoUser = await verifier.verify(
+        cognitoUser = await verifierIdToken.verify(
         req.headers.authorization?.split(" ")[1] // the JWT as string
         );
     } catch (error) {
         res.status(403).send("Token not valid!");
+        return;
     }
     const syncUser = await permit.api.syncUser({
         "first_name": cognitoUser.name,
@@ -99,7 +101,7 @@ app.post("/api/sync", async (req, res) => {
     // you can also assign role to a user here if you have mapping between Cognito groups and Permit roles
     // with the assign role SDK method
     // await permit.api.assignRole({
-    //     "key": cognitoUser.sub,
+    //     "user": cognitoUser.sub,
     //     "role": caseSensitiveRoleKey,
     //     "tenant": caseSensitiveTenantKey, // if you don't use tenants, use 'default'
     // });
@@ -116,9 +118,9 @@ Replace these placeholders in the backend code:
 |---|---|---|
 | `[your user pool id]` | Your Cognito user pool ID, as a string | Amazon Cognito > User pools > your user pool |
 | `[your client id]` | Your Cognito app client ID, as a string | Amazon Cognito > User pools > your user pool > App clients > your app client |
-| `[your permit token]` | Your Permit environment API key, as a string | [Get your API key](/overview/get-api-key) |
+| `PERMIT_API_KEY` environment variable | Your Permit environment API key | [Get your API key](/overview/get-api-key) |
 
-Load the Permit API key from an environment variable instead of writing it in the file. Anyone with the key can change your environment's policy through the Permit API.
+Keep the Permit API key in an environment variable instead of writing it in the file. Anyone with the key can change your environment's policy through the Permit API.
 
 The route reads `first_name` and `email` from the verified token. Cognito puts the `name` and `email` claims in the ID token, not in the access token. The commented `cognitoUser` example in the code is an ID token payload.
 
@@ -130,8 +132,11 @@ Call `permit.check()` before each action you protect, such as each create, read,
 
 ```ts
 // An example of a protected route
-// app.delete("/api/tasks/:id", async (req, res) => {
-  const permitted = permit.check(
+app.delete("/api/tasks/:id", async (req, res) => {
+  const cognitoUser = await verifierIdToken.verify(
+    req.headers.authorization?.split(" ")[1] // the JWT as string
+  );
+  const permitted = await permit.check(
     cognitoUser.sub, // the user key from the syncUser step
     'delete', // the action name
     'task' // the resource name
@@ -160,7 +165,7 @@ Call `permit.check()` before each action you protect, such as each create, read,
 When you delete a user from your app, delete the user from both Cognito and Permit. Add a Permit delete call to your remove user function, and pass the user key you synced (the Cognito `sub`):
 
 ```ts
-const removedUser = await permit.api.deleteUser(permitUserObj.key);
+const removedUser = await permit.api.deleteUser(cognitoUser.sub);
 ```
 
 ## Next steps \{#4-next-steps}

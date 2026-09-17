@@ -32,10 +32,10 @@ npm install @stytch/nextjs @stytch/vanilla-js stytch --save
 
 Add your Stytch project's API keys to your application's environment variables, for example in `.env.local`. Copy the values from the Stytch dashboard:
 
-```
+```bash
 STYTCH_PROJECT_ENV=test
 STYTCH_PROJECT_ID="YOUR_STYTCH_PROJECT_ID"
-STYTCH_PUBLIC_TOKEN="YOUR_STYTCH_PUBLIC_TOKEN"
+NEXT_PUBLIC_STYTCH_PUBLIC_TOKEN="YOUR_STYTCH_PUBLIC_TOKEN"
 STYTCH_SECRET="YOUR_STYTCH_SECRET"
 ```
 
@@ -47,7 +47,7 @@ In `pages/_app.js`, create the Stytch client and wrap the app in `StytchProvider
 import { StytchProvider, createStytchUIClient } from "@stytch/nextjs";
 import Head from "next/head";
 
-const stytch = createStytchUIClient(process.env.STYTCH_PUBLIC_TOKEN);
+const stytch = createStytchUIClient(process.env.NEXT_PUBLIC_STYTCH_PUBLIC_TOKEN);
 
 export default function App({ Component, pageProps }) {
   return (
@@ -66,7 +66,8 @@ export default function App({ Component, pageProps }) {
 Create a `Login` component. The `products` array sets the sign-in methods. This example offers email magic links and Google OAuth:
 
 ```javascript
-import { StytchLogin, Products } from "@stytch/vanilla-js";
+import { StytchLogin } from "@stytch/nextjs";
+import { Products } from "@stytch/vanilla-js";
 
 const Login = () => {
   const REDIRECT_URL = "SEE_STEP_5";
@@ -120,10 +121,11 @@ The redirect page reads the `token` and `stytch_token_type` query parameters tha
 ```javascript
 import { useRouter } from "next/router";
 import { useEffect } from "react";
-import stytch from "stytch";
+import { useStytch } from "@stytch/nextjs";
 
 export default function RedirectPage() {
   const router = useRouter();
+  const stytch = useStytch();
 
   useEffect(() => {
     const stytch_token_type = router?.query?.stytch_token_type?.toString();
@@ -138,7 +140,7 @@ export default function RedirectPage() {
         session_duration_minutes: 60,
       });
     }
-  }, [router]);
+  }, [router, stytch]);
 
   return <div>Loading...</div>;
 }
@@ -206,7 +208,7 @@ export async function getServerSideProps({ req }) {
   const stytchClient = loadStytch();
 
   try {
-    await stytchClient.sessions.authenticateJwt(sessionJWT);
+    await stytchClient.sessions.authenticateJwt({ session_jwt: sessionJWT });
     return { props: {} };
   } catch (e) {
     return redirectRes;
@@ -254,24 +256,20 @@ Run the Permit calls right after Stytch authenticates the session, before you re
 
 ### Get the Stytch user ID \{#fetching-the-stytch-userid}
 
-Read the Stytch user ID. Permit uses it as the user key:
+Authenticate the session JWT with the Stytch backend SDK, then read the Stytch user ID and email from the session. Permit uses the user ID as the user key:
 
 ```javascript
-const { user } = useStytchUser();
-
-const userId = user.user_id;
+// authenticateJwt throws if the session JWT is invalid
+const { session } = await stytchClient.sessions.authenticateJwt({ session_jwt: sessionJWT });
+const userId = session.user_id;
+const { emails } = await stytchClient.users.get({ user_id: userId });
+const userEmail = emails[0]?.email;
+// perform all Permit SDK calls here, passing in the userId.
 ```
 
 ### Run the Permit calls after authentication \{#performing-the-authentication-check}
 
-Run the Permit calls only after the session JWT is authenticated:
-
-```javascript
-const isAutenticated = await stytchClient.sessions.authenticateJwt(sessionJWT);
-if (isAutenticated) {
-  // perform all SDK function calls here, passing in the userId.
-}
-```
+Run the Permit calls only after the session JWT is authenticated. `authenticateJwt()` throws when the JWT is invalid, so place the calls after it inside the `try` block from step 6.
 
 The handoff runs three Permit SDK calls, in this order.
 
@@ -280,8 +278,9 @@ The handoff runs three Permit SDK calls, in this order.
 Each user in this example gets a tenant, so the user's data and role assignments stay separate from other users:
 
 ```javascript
+const tenantKey = userId; // one tenant per user
 await permit.api.tenants.create({
-  key: userEmailId,
+  key: tenantKey,
   name: userEmail,
 });
 ```
@@ -304,7 +303,7 @@ Assign the `AccountOwner` role to the user in the user's tenant. The role assign
 ```javascript
 await permit.api.assignRole({
   role: "AccountOwner",
-  tenant: tenantId,
+  tenant: tenantKey,
   user: userId,
 });
 ```
@@ -319,9 +318,9 @@ await permit.api.assignRole({
 3. Check a permission in your backend. This check asks whether the user can take the `view-all` action on the `Account` resource in the user's tenant:
 
 ```javascript
-const isPermitted = await permit.check(id, "view-all", {
+const isPermitted = await permit.check(userId, "view-all", {
   type: "Account",
-  tenant: currentTenant,
+  tenant: tenantKey,
 });
 ```
 
