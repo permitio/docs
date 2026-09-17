@@ -44,7 +44,7 @@ Audit of docs.permit.io against [Impeccable](https://impeccable.style/) (Paul Ba
 | P2 | Proximity: a lead-in sentence ("Admin setup:", "Yes. Here is how...") sits as far from its list (20px) as the list sits from the next block (20px) | permit-mcp-gateway/architecture, how-does-it-work, ai-security/framework, faq, pdp/overview | `admonitions-tables-mcp-arch-1440-light-mid.png` | Tighten `p + ul/ol` to 0.5rem so the list binds to its lead-in. |
 | P2 | Home card arrow is absolutely positioned at the card foot; with a four-line description the arrow sits 4px under the text and collides at intermediate widths | Home "Choose your path" | `home-1440-light.png` (third card) | Put the arrow in flow with `margin-top: auto`. |
 | P2 | Touch target: the mobile nav toggle is 30x30px (Impeccable and WCAG 2.5.8 guidance: 44px, 24px minimum) | Every page below 996px | `quickstart-390-light.png` | Pad the toggle to a 44px hit area without changing the drawn icon. |
-| P3 | Mobile gutter: 32px each side (column padding plus article padding) leaves 35-39 characters per line at 390px | Every doc page at 390px | `quickstart-390-light.png`, `admonitions-tables-mcp-arch-390-dark-mid.png` | 20px per side below 996px. |
+| P3 | Mobile gutter: 32px each side (column padding plus article padding) leaves a 326px text column at 390px | Every doc page at 390px | `quickstart-390-light.png`, `admonitions-tables-mcp-arch-390-dark-mid.png` | 20px per side below 996px. |
 
 ### colorize
 
