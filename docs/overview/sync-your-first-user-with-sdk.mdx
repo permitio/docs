@@ -27,10 +27,17 @@ You can repeat the same calls for any number of users, roles, and tenants. To lo
 
 - Your environment API key ([Get your API key](/overview/get-api-key))
 - Your project ID and environment ID ([Use the Permit API and SDK](/overview/use-the-permit-api-and-sdk)). To see how workspaces, projects, and environments relate, read [Projects and environments](/manage-your-account/projects-and-env#managing-access-to-a-project).
-- A role to assign, for example `admin` ([Configure your first RBAC policy](/overview/configure-your-first-rbac-policy))
-- `cURL` or an HTTP client such as Postman
+- Two roles to assign, with the keys `admin` and `manager` ([Configure your first RBAC policy](/overview/configure-your-first-rbac-policy))
+- `cURL`, an HTTP client such as Postman, or Node.js with the `permitio` package installed
 
-The code samples show the request as `cURL` and as Node.js. The screenshots show the requests sent with `cURL` and Postman.
+The code samples show each request as `cURL` and as Node.js. In the samples, replace these placeholders:
+
+| Placeholder | Replace with |
+|---|---|
+| `{proj_id}`, `{env_id}` | Your project and environment keys or IDs |
+| `YOUR_API_KEY` (cURL), `PERMIT_API_KEY` environment variable (Node.js) | Your environment API key |
+
+The Node.js sample in step 1 creates the `permit` client. The Node.js samples in later steps reuse that client. The screenshots show the requests sent with `cURL` and Postman.
 
 ## API endpoints used in this walkthrough \{#our-api-reference}
 
@@ -48,7 +55,9 @@ Every request authenticates with your environment API key as a bearer token. Syn
 
 ## 1. Create a user with the API \{#sync-users-from-your-identity-provider}
 
-Send a `POST` request to the users endpoint. Replace `your_project_id` and `your_env_id` with your project and environment IDs, and `your_bearer_token` with your API key. The request body holds the user's unique `key` and optional profile fields. Permit creates the user in that environment, ready for role assignments.
+Send a `POST` request to the users endpoint. The request body holds the user's unique `key` and optional profile fields. Permit creates the user in that environment, ready for role assignments.
+
+The `POST` request fails with HTTP `409` if a user with the same key already exists. The Node.js sample calls `permit.api.users.sync()`, which creates the user or replaces an existing user with the same key.
 
 <Tabs groupId="code-snippets">
 <TabItem value="example.bash" label="cURL">
@@ -89,6 +98,8 @@ console.log("User synced:", user.key, "created:", created);
 </TabItem>
 </Tabs>
 
+The API returns the user object as JSON, with `"key": "user|123456789"`. The Node.js sample prints `User synced: user|123456789 created: true` the first time you run it.
+
 :::tip Sync users with SCIM
 Permit also syncs users with System for Cross-domain Identity Management (SCIM). A SCIM connection to an identity provider such as [Microsoft Entra ID](/integrations/SCIM/EntraID) or [Okta](/integrations/SCIM/OKTA) provisions, updates, and deprovisions users in Permit.
 :::
@@ -107,7 +118,7 @@ In the Permit dashboard, open **Directory** and select **All Tenants**. John Smi
 />
 
 :::tip Assign roles when you create the user
-To create a user with a role in one request, add the `role_assignments` field to the request body. Each entry is a `role` and the `tenant` it applies in:
+To create a user with a role in one request, add the `role_assignments` field to the create user request body. Each entry is a `role` key and the `tenant` key it applies in:
 
 ```json
 {
@@ -139,7 +150,7 @@ Macy Smith appears in the Directory with `default • Admin` under **Top Level A
 
 ## 3. Assign a role to the user (optional) \{#assign-a-role-to-the-user-optional}
 
-If you created the user without `role_assignments`, assign a role in a separate request. Send a `POST` request to the user's `roles` endpoint with the `role` key and the `tenant` key:
+If you created the user without `role_assignments`, assign a role in a separate request. Send a `POST` request to the user's `roles` endpoint with the `role` key and the `tenant` key. In the URL, the `|` in the user key is encoded as `%7C`. The Node.js SDK sends the same request with `permit.api.users.assignRole()`.
 
 <Tabs groupId="code-snippets">
 <TabItem value="example.bash" label="cURL">
@@ -170,14 +181,14 @@ console.log("Role assigned:", assignment.role, "in tenant:", assignment.tenant);
 </TabItem>
 </Tabs>
 
-In the Directory, the role appears under **Top Level Access** for the user.
+The Node.js sample prints `Role assigned: admin in tenant: default`. In the Directory, the `admin` role appears under **Top Level Access** for John Smith.
 
 </TimelineStep>
 <TimelineStep>
 
 ## 4. Create a second tenant \{#create-a-new-tenant}
 
-A tenant is an isolated space in your application, with its own role assignments and resource instances. Tenants are how Permit supports multitenancy: the same user can have a different role in each tenant, for example Admin in one tenant and Manager in another.
+A tenant is an isolated space in your application, with its own role assignments and resource instances. Permit uses tenants for multitenancy: the same user can have a different role in each tenant, for example `admin` in one tenant and `manager` in another.
 
 Create a tenant with the key `marketing` and the name `Marketing`:
 
@@ -209,7 +220,7 @@ console.log("Tenant created:", tenant.key);
 </TabItem>
 </Tabs>
 
-The Marketing tenant appears in the tenant selector of the Directory:
+The Node.js sample prints `Tenant created: marketing`. The Marketing tenant appears in the tenant selector of the Directory:
 
 <img
   src="/img/updated/walkthroughs/sync-users/new-tenant.png"
@@ -222,7 +233,10 @@ The Marketing tenant appears in the tenant selector of the Directory:
 
 ## 5. Give the user a different role in the second tenant \{#add-a-user-to-a-new-tenant-and-assign-them-a-different-role}
 
-Add John Smith to the Marketing tenant with the `Manager` role. Send the user object with a `role_assignments` entry for the Marketing tenant to the tenant's users endpoint:
+Add John Smith to the `marketing` tenant with the `manager` role. You can use either request:
+
+- **cURL:** send the user object, with a `role_assignments` entry for the `marketing` tenant, to the tenant's users endpoint.
+- **Node.js:** assign the `manager` role in the `marketing` tenant with `permit.api.users.assignRole()`.
 
 <Tabs groupId="code-snippets">
 <TabItem value="example.bash" label="cURL">
@@ -261,9 +275,11 @@ console.log("Role assigned:", assignment.role, "in tenant:", assignment.tenant);
 </TabItem>
 </Tabs>
 
-John Smith now has the `Manager` role in the Marketing tenant. His role in the default tenant doesn't change.
+The Node.js sample prints `Role assigned: manager in tenant: marketing`. John Smith has the `manager` role in the `marketing` tenant, and his `admin` role in the `default` tenant doesn't change.
 
-### John Smith in the Marketing tenant \{#marketing-tenant}
+### Check John Smith's roles in both tenants \{#marketing-tenant}
+
+In the Directory, select the Marketing tenant. John Smith appears with the Manager role:
 
 <img
   src="/img/updated/walkthroughs/sync-users/marketing-tenant.png"
@@ -271,13 +287,7 @@ John Smith now has the `Manager` role in the Marketing tenant. His role in the d
   data-zoomable
 />
 
-### John Smith in the default tenant \{#default-tenant}
-
-<img
-  src="/img/updated/walkthroughs/sync-users/default-tenant.png"
-  alt="Directory filtered to the Default Tenant, showing John Smith with the Employee role and Macy Smith"
-  data-zoomable
-/>
+Select **Default Tenant**. John Smith appears with the `admin` role from step 3.
 
 </TimelineStep>
 </TimelineWrapper>
