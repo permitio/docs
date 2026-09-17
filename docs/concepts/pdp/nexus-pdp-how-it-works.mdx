@@ -1,13 +1,13 @@
 ---
-title: New Edge PDP — How It Works
+title: Nexus PDP — How It Works
 sidebar_label: How It Works
-description: How the New Edge PDP keeps its local copy in sync, what consistency that gives you, how cold start and warm resume differ, and what it costs to run.
+description: How the Nexus PDP keeps its local copy in sync, what consistency that gives you, how cold start and warm resume differ, and what it costs to run.
 sidebar_position: 3
 ---
 
-# How the New Edge PDP Works
+# How the Nexus PDP Works
 
-How the [New Edge PDP](./new-edge-pdp) keeps its local copy of your policy and authorization data current, what consistency that gives you, and what it costs to run.
+How the [Nexus PDP](./nexus-pdp) keeps its local copy of your policy and authorization data current, what consistency that gives you, and what it costs to run.
 
 ---
 
@@ -38,7 +38,7 @@ Two background tasks keep the local copy honest:
 Crucially, **the PDP keeps answering from the existing database while the rebuild runs**. The public port is never re-bound, no request is refused, and no decision waits on the rebuild. Staleness is surfaced on the health endpoint rather than turned into errors.
 
 :::info Design principle
-The New Edge PDP **serves stale before it serves nothing**. A control-plane outage costs you freshness, never availability — decisions keep flowing from the local copy indefinitely.
+The Nexus PDP **serves stale before it serves nothing**. A control-plane outage costs you freshness, never availability — decisions keep flowing from the local copy indefinitely.
 :::
 
 ---
@@ -60,7 +60,7 @@ Together these give **convergence by construction**: two PDPs in the same enviro
 :::note What this does and does not guarantee
 The consistency model is **eventual, with a convergent merge**. It guarantees that PDPs converge, that no update is lost, and that replays are safe.
 
-It does **not** provide read-your-own-writes. The New Edge PDP is read-only with respect to your data: a fact written through Permit's API becomes visible once it propagates. If you need write-then-immediately-read semantics today, use the container PDP's [local facts uploader](/how-to/manage-data/local-facts-uploader).
+It does **not** provide read-your-own-writes. The Nexus PDP is read-only with respect to your data: a fact written through Permit's API becomes visible once it propagates. If you need write-then-immediately-read semantics today, use the container PDP's [local facts uploader](/how-to/manage-data/local-facts-uploader).
 
 A PDP that restarts with a backlog becomes ready and begins serving while it is still catching up. Whether it is serving stale data, and by how long, is reported on the health endpoint.
 :::
@@ -71,7 +71,7 @@ A PDP that restarts with a backlog becomes ready and begins serving while it is 
 
 The sync path is structurally shorter than the container PDP's:
 
-| | Container PDP (`pdp-v2`) | New Edge PDP (`pdp-v3`) |
+| | Container PDP (`pdp-v2`) | Nexus PDP (`pdp-v3`) |
 | --- | --- | --- |
 | Change notification | WebSocket notification | Push delivery on a durable per-PDP subscription |
 | Data fetch | **A second call back to Permit's API** | None — the change travels *in* the message |
@@ -82,7 +82,7 @@ The sync path is structurally shorter than the container PDP's:
 Removing the fetch leg removes both a round trip and a dependency: propagation no longer depends on the PDP being able to reach Permit's API, only on the event stream.
 
 :::caution Numbers not yet published
-Permit has not yet published measured propagation-latency figures for the New Edge PDP. The improvement described above is architectural. If you have a latency target to validate against, [talk to us](mailto:support@permit.io) before designing around a specific number.
+Permit has not yet published measured propagation-latency figures for the Nexus PDP. The improvement described above is architectural. If you have a latency target to validate against, [talk to us](mailto:support@permit.io) before designing around a specific number.
 :::
 
 ---
@@ -119,7 +119,7 @@ Set a **generous startup probe** and let readiness, not liveness, gate traffic. 
 
 ## Running at high volume
 
-What makes the New Edge PDP suitable for high request rates is mostly what it *doesn't* do per request:
+What makes the Nexus PDP suitable for high request rates is mostly what it *doesn't* do per request:
 
 - **No network in the decision path** — every hop is loopback or local disk.
 - **No control-plane call to authenticate** — the API key is verified against the PDP's own key in constant time. Permit's API is never contacted to authorize a request.
@@ -128,16 +128,16 @@ What makes the New Edge PDP suitable for high request rates is mostly what it *d
 - **The same evaluation core as the managed Cloud PDP**, which is already tuned for large-scale checks.
 
 :::caution Numbers not yet published
-As with propagation latency, Permit has not published measured throughput figures for the New Edge PDP. The [Cloud PDP benchmarks](/concepts/pdp/cloud-pdp-benchmarks) measure a different deployment and should not be read as New Edge PDP numbers.
+As with propagation latency, Permit has not published measured throughput figures for the Nexus PDP. The [Cloud PDP benchmarks](/concepts/pdp/cloud-pdp-benchmarks) measure a different deployment and should not be read as Nexus PDP numbers.
 :::
 
 ---
 
 ## Resource footprint
 
-The New Edge PDP changes **where** your authorization data lives, and that is the change that matters for sizing.
+The Nexus PDP changes **where** your authorization data lives, and that is the change that matters for sizing.
 
-| | Container PDP (`pdp-v2`) | New Edge PDP (`pdp-v3`) |
+| | Container PDP (`pdp-v2`) | Nexus PDP (`pdp-v3`) |
 | --- | --- | --- |
 | Fact graph | In OPA's **in-memory** document | **On disk**, in an embedded database |
 | Memory vs. data size | Scales with your data set | Bounded by a configurable cache |
@@ -145,12 +145,12 @@ The New Edge PDP changes **where** your authorization data lives, and that is th
 | Python runtime | Required, for the OPAL client | Not present |
 | Persistent storage | Not required | **Required** |
 
-The architectural consequence is that **memory stops scaling linearly with your data set**. On the container PDP the fact graph is raw JSON held in memory, which [OPA documents](https://www.openpolicyagent.org/docs/policy-performance) as costing roughly **20x** what the same data occupies in a compact on-disk form. On the New Edge PDP the data set lives on disk in exactly that compact form, and memory is governed by the database's cache size, which you set.
+The architectural consequence is that **memory stops scaling linearly with your data set**. On the container PDP the fact graph is raw JSON held in memory, which [OPA documents](https://www.openpolicyagent.org/docs/policy-performance) as costing roughly **20x** what the same data occupies in a compact on-disk form. On the Nexus PDP the data set lives on disk in exactly that compact form, and memory is governed by the database's cache size, which you set.
 
 :::caution Size generously to start, then tune
-The New Edge PDP's **default** configuration is not tuned for a small footprint. It inherits cloud-scale storage-engine defaults — a 512 MiB block cache and a 256 MiB write buffer — so a container given only a few hundred MiB will be OOM-killed on startup. Permit currently sizes it at **4 GiB** of memory.
+The Nexus PDP's **default** configuration is not tuned for a small footprint. It inherits cloud-scale storage-engine defaults — a 512 MiB block cache and a 256 MiB write buffer — so a container given only a few hundred MiB will be OOM-killed on startup. Permit currently sizes it at **4 GiB** of memory.
 
-A smaller footprint is possible by tuning the storage engine's cache and write-buffer sizes — see [Storage engine](./new-edge-pdp-configuration#storage-engine). Benchmark against your own data set before committing to a size.
+A smaller footprint is possible by tuning the storage engine's cache and write-buffer sizes — see [Storage engine](./nexus-pdp-configuration#storage-engine). Benchmark against your own data set before committing to a size.
 :::
 
 ### Disk
@@ -161,8 +161,8 @@ Two paths must be on persistent storage — the embedded database and the event 
 
 ## Related documentation
 
-- [New Edge PDP](./new-edge-pdp) — overview
-- [Architecture](./new-edge-pdp-architecture) — what runs inside the container and the request path
-- [Feature Parity](./new-edge-pdp-feature-parity) — capability comparison against the container PDP
-- [Deployment](./new-edge-pdp-deployment) — requirements, observability, and the security model
-- [Configuration](./new-edge-pdp-configuration) — environment variable reference (beta)
+- [Nexus PDP](./nexus-pdp) — overview
+- [Architecture](./nexus-pdp-architecture) — what runs inside the container and the request path
+- [Feature Parity](./nexus-pdp-feature-parity) — capability comparison against the container PDP
+- [Deployment](./nexus-pdp-deployment) — requirements, observability, and the security model
+- [Configuration](./nexus-pdp-configuration) — environment variable reference (beta)

@@ -102,10 +102,12 @@ export function CardGrid({ items, numbered = false, columns = 4, category }) {
             className={styles.card}
             onClick={() => trackLandingClick(category, title)}
           >
-            <span className={styles.cardMarker} aria-hidden="true">
-              {numbered ? String(index + 1).padStart(2, "0") : <i className={icon} />}
+            <span className={styles.cardHead}>
+              <span className={styles.cardMarker} aria-hidden="true">
+                {numbered ? String(index + 1).padStart(2, "0") : <i className={icon} />}
+              </span>
+              <span className={styles.cardTitle}>{title}</span>
             </span>
-            <span className={styles.cardTitle}>{title}</span>
             {method && <code className={styles.cardMethod}>{method}</code>}
             <span className={styles.cardDescription}>{description}</span>
             <i className={clsx("ri-arrow-right-line", styles.cardArrow)} aria-hidden="true" />

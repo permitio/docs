@@ -29,7 +29,7 @@ export const homePaths = [
   },
   {
     title: "Deploy the PDP",
-    description: "Run the policy decision point as a container next to your services, in your own network.",
+    description: "Use the managed Cloud PDP, run a container PDP next to your services, or run Nexus PDP for large data sets in your network.",
     href: "/concepts/pdp/overview",
     icon: "ri-server-line",
   },
