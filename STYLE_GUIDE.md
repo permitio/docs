@@ -112,6 +112,7 @@ Use these terms, spelled this way.
 | **Permit MCP Gateway** | The product name. Not "Agent Security MCP Gateway". "The gateway" is fine after first mention. |
 | **AI agents** | The section and the thing being secured. Not "AI security agents". |
 | **PDP** | Expand on first use on each page: "policy decision point (PDP)". The managed one is the **Cloud PDP**; self-hosted ones are **Edge PDPs** or container PDPs. |
+| **Nexus PDP** | The product name. "Permit Nexus PDP" on first mention, "Nexus PDP" after. A self-hosted PDP with an embedded on-disk database; a new deployment option, not a replacement for the Edge/container PDP. |
 | **PEP** | "policy enforcement point (PEP)" on first use. |
 | **OPAL** | "Open Policy Administration Layer (OPAL)" on first use. Open source. |
 | **OPA**, **Cedar** | "Open Policy Agent (OPA)"; "AWS Cedar" or "Cedar". |
