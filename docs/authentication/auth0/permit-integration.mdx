@@ -1,65 +1,32 @@
 ---
 sidebar_position: 1
 title: Auth0 and Permit Integration
-description: "Integrate Auth0 authentication with Permit.io authorization in a Next.js app, syncing users and roles at login."
+description: "Add Permit.io authorization to a Next.js app that uses Auth0: check permissions in API routes, add Auth0 roles to tokens, and sync users and roles at login."
 ---
 
-## Introduction
+Add Permit.io authorization to an application that signs users in with [Auth0](https://auth0.com). You create a policy in Permit, check permissions in your API routes, add Auth0 roles to the user's tokens with an Auth0 Action, and sync each user and their roles to Permit after login. This guide is for developers with an Auth0-based Next.js app. The examples come from the [Auth0 demo application](/authentication/auth0/auth0-demo-app), so you can compare each step with working code.
 
-Auth0 is one of the leading authentication platforms for developers, and Permit.io is the leading authorization platform for developers.
-By integrating Auth0 with Permit, you can easily add secure, feature-rich, and scalable authentication and authorization systems to your application.
-
-You can see more information about [RBAC Permit and Auth0 in this great blog post](https://www.permit.io/blog/add-rbac-authorization-to-auth0) by Gabriel L. Manor
-
-## What you'll build
-
-In this tutorial, you'll learn how to integrate Auth0 with Permit.
-We will create a WebApp that uses Auth0 for secure authentication and Permit.io for easily manageable authorization, allowing us to change our application's permissions on the fly.
+For background on combining RBAC with Auth0, read the Permit blog post [Add RBAC authorization to Auth0](https://www.permit.io/blog/add-rbac-authorization-to-auth0).
 
 ## Prerequisites
 
-- [Auth0 account](https://auth0.com/signup)
-- [Permit account](https://app.permit.io/)
-- An application that uses Auth0 for authentication; in this example, we will use a NextJS app [Check out the demo explanation for more details](/authentication/auth0/auth0-demo-app).
+- An [Auth0 account](https://auth0.com/signup) and an application that signs users in with Auth0. The examples use the `@auth0/nextjs-auth0` SDK.
+- A [Permit.io account](https://app.permit.io/) and your environment API key. See [Get your API key](/overview/get-api-key).
+- The Permit Node.js SDK installed in your app: `npm install permitio`.
 
-## Getting Started
+## 1. Create the policy in Permit \{#1-setting-up-permit}
 
-## 1. Setting up Permit
+Create the roles, resources, and permissions that your application checks. You can use the [Permit dashboard](https://app.permit.io/policy-editor), the [Permit API](https://api.permit.io/v2/redoc#tag/Roles/operation/create_role), or [one of the Permit SDKs](/sdk/sdks-overview).
 
-### 1.1. Setup roles in Permit
+1. **Create roles.** If you manage roles in Auth0, create a Permit role for each Auth0 role, with the same key. Role keys are case-sensitive, so `Admin` in Auth0 doesn't match `admin` in Permit. If you don't use Auth0 roles, create the roles your application needs.
+2. **Create resources.** Create a Permit resource for each part of your application you protect, with the actions users take on it. For example, a task list needs a `task` resource with `get`, `post`, and `delete` actions. See the [create resource API](https://api.permit.io/v2/redoc#tag/Resources/operation/create_resource) or the [Policy Editor resources tab](https://app.permit.io/policy-editor/resources).
+3. **Assign permissions.** In the [Policy Editor](https://app.permit.io/policy-editor), check the actions each role can take on each resource, or use the [assign permissions API](https://api.permit.io/v2/redoc#tag/Roles/operation/assign_permissions_to_role).
 
-To sync users and roles from Auth0 to Permit, we must recreate identical roles in Permit.
+## 2. Confirm the Auth0 session in your app \{#21-auth0}
 
-:::note info
-If you don't use Auth0's roles, you can skip this step and create your roles according to your application's needs.
+Permit decides what a user can do. Auth0 still decides who the user is. Your app needs both parts:
 
-:::
-
-Setting up roles and resources can be done through the [Permit dashboard](https://app.permit.io/policy-editor/roles), by using the [Permit API](https://api.permit.io/v2/redoc#tag/Roles/operation/create_role), or [with one of our SDKs]( /sdk/sdks-overview).
-
-### 1.2. Create the right resources in Permit
-
-Create a corresponding resource in Permit for each of your application's resources. For instance, if you have a user management section in your app, you will need a `user` resource with `create`, `delete`, and `get` actions. If you have a task management section, you will need a `task` resource with `create`, `delete`, `get`, and `check` actions.
-
-Setting up resources can be done through the [Permit dashboard](https://app.permit.io/policy-editor/resources), by using the [Permit API](https://api.permit.io/v2/redoc#tag/Roles/operation/create_resource), or [with one of our SDKs]( /sdk/sdks-overview).
-
-### 1.3. Set up the right permissions in Permit.io:
-
-For each role you created in step 1.1, you will need to set up the right permissions.
-
-Check each action you want to allow for each resource in each role.
-
-As noted earlier, these permissions can be set up through either the [Permit policy editor](https://app.permit.io/policy-editor) or by using the [Permit API](https://api.permit.io/v2/redoc#tag/Roles/operation/assign_permissions_to_role).
-
-## 2. Integrate your own application
-
-### 2.1. Auth0
-
-As we want to use Auth0 for authentication, we will use the Auth0 SDK to get each user's information and access token.
-You will need to add in your FE code a check to see if the user is logged in and redirect them to the login page if they are not.
-
-In our demo application it look like this:
-We have the Auth0 `useUser` at `index.tsx` that will give us the user's information, and the `userProvider` in `_app.tsx` that redirects the user to the login page if they have not logged in.
+- **Frontend:** redirect users who aren't signed in to the Auth0 login page. In the demo app, `_app.tsx` wraps the app in `UserProvider`, and `index.tsx` reads the user with `useUser`:
 
 ```tsx
 // index.tsx
@@ -77,9 +44,7 @@ const { user, isLoading } = useUser();
 //...
 ```
 
-On your backend side, you will need to add code that will check the validity of the Auth0 JWT and retrieve user information from it.
-
-In our demo app, we used an Auth0 and NextJs integration to achieve this with very few lines of code (as you can see in `[auth0].ts` and the getSession in `tasks.ts`).
+- **Backend:** validate the Auth0 session and read the user from it. In the demo app, `pages/api/auth/[...auth0].ts` handles the Auth0 routes, and each API route calls `getSession`:
 
 ```ts
 // pages/api/auth/[...auth0].ts
@@ -101,13 +66,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 //...
 ```
 
-### 2.2. Permit
+## 3. Check permissions in your API routes \{#22-permit}
 
-As we want to use Permit for authorization, we will use the Permit SDK to get the user's permissions and check if they have the right ones.
-
-Authorization is only done on the backend side, so we will use the `permit` checks before each action. You can add them to your CRUD APIs or as a middleware for the entire API.
-
-All you need to do is add the `permit.check` function before each action you want to protect.
+Call `permit.check()` on the backend before each action you protect. You can call it in each API route or in middleware for the whole API. Pass the user's Auth0 ID (`session.user.sub`) as the user key, the action, and the resource:
 
 ```ts
 permit.check(
@@ -117,7 +78,9 @@ permit.check(
 );
 ```
 
-In the demo app, you can see it at `pages/api/tasks.ts` as a middleware that manages all task CRUD requests.
+`permit.check()` returns a promise. Await it before you use the result.
+
+In the demo app, `pages/api/tasks.ts` creates the Permit client and checks every task request, using the HTTP method as the action. The client reads the API key from the `PERMIT_SDK_TOKEN` environment variable:
 
 ```ts
 // pages/api/tasks.ts
@@ -151,30 +114,19 @@ export default withApiAuthRequired(async function handler(
 });
 ```
 
-## 3. The integration
+The route returns HTTP 401 when there is no Auth0 session and HTTP 403 when Permit denies the action.
 
-Now that we have the user's information and permissions, we can integrate them.
-We need to make sure that Permit is synced with Auth0 so that each user who logs in will have the right roles and permissions.
+## 4. Add Auth0 roles to the user's tokens \{#31-sync-auth0-with-permit}
 
-### 3.1. Sync Auth0 with Permit
+Skip this step if you don't manage roles in Auth0.
 
-First, we need to make sure each user that logs into our app is synced with Permit.
-This can be done by adding a `postLogin` function that will be called after each login.
+Auth0 doesn't put a user's roles in the ID token or access token by default. Add them as a custom claim with an Auth0 Action on the Post Login trigger. For details, see the Auth0 guide [Add user roles to tokens](https://auth0.com/docs/manage-users/access-control/sample-use-cases-rules-with-authorization#add-user-roles-to-tokens).
 
-This function will make sure that the users and roles are synced with Permit. You can check the [NextJS demo app for the full code.](http://localhost:3000/integrations/authentication/auth0-demo)
-
-If you are using Auth0 roles you will need to add them to the user's token in order to easily sync them with Permit.
-This can be done following this [Auth0 guide](https://auth0.com/docs/manage-users/access-control/sample-use-cases-rules-with-authorization#add-user-roles-to-tokens).
-
-Here's a quick recap on how this can be done (Please use the Auth0 guide for a more detailed description):
-This can be done by configuring Auth0 Actions with a Post-Login trigger to add roles to the user's tokens. Here's how:
-
-1. Go to your Auth0 dashboard > Actions > Triggers
-2. Click on "post-login" under "Sign Up & Login" 
-3. Click the "+" button to add a new action
-4. Select "Build from scratch"
-5. Name your action (e.g., "Add Roles to Tokens")
-6. Replace the default code with the following Action code:
+1. In the Auth0 dashboard, go to **Actions** > **Triggers**.
+2. Under **Sign Up & Login**, click **post-login**.
+3. Click **+** to add an action, then select **Build from scratch**.
+4. Name the action, for example `Add Roles to Tokens`.
+5. Replace the default code with this Action code:
 
 ```javascript
 /**
@@ -190,11 +142,11 @@ exports.onExecutePostLogin = async (event, api) => {
 };
 ```
 
-7. Click "Deploy"
-8. Click "Back to triggers arrow" and in the Post Login flow, drag your new action into the flow where you want it to execute
-9. Click "Apply"
+6. Click **Deploy**.
+7. Click the back arrow to return to the trigger. In the Post Login flow, drag your action into the flow.
+8. Click **Apply**.
 
-Now you can see that the session.user object from Auth0 has `my_app_name/roles` section with our roles (of course, you can set `<my_app_name>` to whatever you want):
+After the user signs in again, `session.user` includes the roles under the `my_app_name/roles` claim. Replace `my_app_name` with a namespace for your app, and use the same claim name in step 5:
 
 ```js
 auth0User {
@@ -210,7 +162,9 @@ auth0User {
 }
 ```
 
-Then when a user logs into our app, we can also sync their roles with Permit by using `permit.api.syncUser` function and then assign the roles to the user using `permit.api.assignRole` function.
+## 5. Sync the user and roles to Permit after login \{#sync-the-user-and-roles}
+
+Permit can only match a user to roles after the user exists in Permit. After login, sync the user with `permit.api.syncUser()`, then assign each Auth0 role with `permit.api.assignRole()`. Use the Auth0 user ID as the user key, so the key matches the one you pass to `permit.check()`.
 
 ```ts
 // sync the user with Permit
@@ -233,35 +187,11 @@ auth0User.roles.map(async (role) => {
 });
 ```
 
-Now if you assign a role to a user (Either in Auth0 or in Permit), the user will have the correct roles and permissions.
-(Make sure you use the exact same role names in both Auth0 and Permit - they are case-sensitive!)
+In the demo app, the Auth0 login handler returns the user to a `/postLogin` page, and that page's `getServerSideProps` runs the sync. Read [Sync Auth0 with Permit in the demo application](/authentication/auth0/auth0-demo-app#41-sync-auth0-with-permit), or the full [postLogin page on GitHub](https://github.com/permitio/permit-next-todo-starter/blob/auth0-integration/pages/postLogin/index.tsx).
 
-[Check out the postLogin page in this NextJS example to see a working example.](https://github.com/permitio/permit-next-todo-starter/blob/auth0-integration/pages/postLogin/index.tsx)
+### Keep role changes made in Permit
 
-#### 3.2. Removing a user
-
-If you want to remove a user from your app, make sure you remove the user from both Auth0 and Permit.
-You can do this by adding the following code to your remove user function:
-
-```ts
-const removedUser = await permit.api.deleteUser(permitUserObj.key);
-```
-
-### 4. Let's test it!
-
-Create a new user in Auth0 and assign them with the `manager` role.
-Then, log in to the app with the new user.
-You should be able to create tasks, but not delete them.
-Now go to the [Permit policy editor](https://app.permit.io/policy-editor) and add the delete action to the `manager` role and save the policy.
-
-Otherwise, you can go to the [Permit user management](https://app.permit.io/user-management) screen and add the `admin` role to the logged-in user.
-You should now be able to delete tasks immediately without logging out and logging in again.
-
-:::note info
-If you remove a role in Permit but the user still has the role in Auth0, our code will reassign the role to the user.
-You can fix this by adding the following code at the begging of the postLogin function:
-
-:::
+The sync in step 5 assigns every Auth0 role on each login. If you remove a role in Permit while the user still has it in Auth0, the next login assigns the role again. To sync roles only the first time a user signs in, return early when the user already exists in Permit:
 
 ```ts
 const session = await getSession(req, res);
@@ -273,3 +203,31 @@ if (user) {
 	return { props: {} };
 }
 ```
+
+With this check, role changes you make later in Auth0 don't reach Permit through the login sync. Choose one system to own role changes after the first login. See [Where to manage roles](/authentication/permit-and-authentication#where-to-manage-roles).
+
+## 6. Verify the integration \{#4-lets-test-it}
+
+This test uses the roles from the demo app: `manager` can `get` and `post` tasks, and only `admin` can `delete` them.
+
+1. In Auth0, create a user and assign the `manager` role.
+2. Sign in to your app with that user. In the Permit dashboard, open **Directory**. The user appears with the Auth0 user ID as its key and the `manager` role.
+3. Create a task. The request succeeds.
+4. Delete a task. The API returns HTTP 403.
+5. In the [Policy Editor](https://app.permit.io/policy-editor), allow `delete` on `task` for `manager` and save. Or, in **Directory**, assign the `admin` role to the user.
+6. Delete a task again. The request succeeds without signing out and in again.
+
+## Remove a user from Permit \{#32-removing-a-user}
+
+When you delete a user from your app, delete the user from both Auth0 and Permit. Add a Permit delete call to your remove user function, with the same user key you synced:
+
+```ts
+const removedUser = await permit.api.deleteUser(permitUserObj.key);
+```
+
+## Next steps
+
+- [Auth0 demo application](/authentication/auth0/auth0-demo-app): clone and run the working Next.js example.
+- [Sync existing Auth0 users and roles](/authentication/auth0/auth0-sync-script): import users who signed up before the integration.
+- [Check permissions](/how-to/enforce-permissions/check): pass tenants, resource instances, and attributes to `permit.check()`.
+- [How authentication connects to Permit.io](/authentication/permit-and-authentication): sync methods and role ownership models.

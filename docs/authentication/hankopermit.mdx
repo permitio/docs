@@ -1,107 +1,89 @@
 ---
 sidebar_position: 8
 title: Hanko and Permit
-description: "Integrate Hanko passkey authentication with Permit.io authorization, from RBAC role checks to ABAC and ReBAC policies."
+description: "Build a Next.js notes app that signs users in with Hanko passkeys and authorizes note actions with Permit.io RBAC and ABAC policies."
 sidebar_label: Hanko
 ---
 
-## Introduction
+Build a Next.js notes app that signs users in with [Hanko](https://www.hanko.io) passkeys and uses Permit.io to decide who can read, create, update, and delete notes. This tutorial is for developers who use Hanko, or plan to, and want to add authorization. You start with role-based access control (RBAC), sync Hanko users into Permit, and then limit updates and deletes to the note's owner with attribute-based access control (ABAC).
 
-Hanko is an open-source tool and a cloud service that allows us to implement passkey authentication,
-and Permit is the leading authorization platform for developers. By integrating Hanko with Permit you can easily add secure,
-feature-rich, and scalable passkey authentication and fine-grained authorization systems to your application.
+For background on passkeys and fine-grained authorization, read the Permit blog post [Better access control with passkeys and fine-grained authorization](https://www.permit.io/blog/better-access-control-with-passkeys-and-fine-grained-authorization).
 
-You can see more information about adding
-[Passkeys and Fine-Grained Authorization](https://www.permit.io/blog/better-access-control-with-passkeys-and-fine-grained-authorization) to
-your application in this great blog by Gabriel L. Manor.
+## What you build
 
-## What you'll build
+- Passkey sign-in with Hanko Cloud, enforced by Next.js middleware.
+- A Permit policy where every user can read and create notes, and only admins can update and delete them.
+- A sync route that adds each Hanko user to Permit with the `user` role.
+- An ABAC rule that lets users update and delete the notes they own.
 
-In this tutorial, you'll learn how to integrate Hanko with Permit.
-We will create a web app that uses Hanko for passkey authentication and Permit.io for easily manageable authorization,
-allowing us to change our application's permissions on the fly.
-
-Although this application code is built with Next.js,
-Permit provides SDKs for any common language, so this example can give you a good figure for how it should look in your language.
-
-The code for this application is [available on GitHub](https://www.github.com/permitio/permit-hanko/).
+The app is written in Next.js. Permit has SDKs for other languages, so you can apply the same pattern in another stack. The full code is in the [permit-hanko repository](https://www.github.com/permitio/permit-hanko/).
 
 ## Prerequisites
 
-- [A Hanko Account](https://cloud.hanko.io/login)
+- A [Hanko Cloud account](https://cloud.hanko.io/login).
+- A [Permit.io account](https://app.permit.io/).
+- Node.js and npm.
+- For the ABAC section: Docker, to run a local policy decision point (PDP).
 
-- [A Permit Account](https://app.permit.io/)
-
-- An application that uses Hanko for authentication; in this example, we will use a demo NextJS app.
-
-## Getting Started
-
-:::note
-If you are already using Hanko in your application and just want to learn about the Permit authorization part,
-skip to the [Setup Basic Role Based Authorization section](/authentication/hankopermit#setup-basic-role-based-authorization).
+:::note Already using Hanko?
+If your application already signs users in with Hanko, skip to [Set up basic role-based authorization](#setup-basic-role-based-authorization).
 :::
 
-### Cloning the demo application
+## Run the demo application \{#cloning-the-demo-application}
 
-We highly recommend cloning our [demo application](https://www.github.com/permitio/permit-hanko/) so you can follow the steps more easily.
+Clone the [demo application](https://www.github.com/permitio/permit-hanko/) to follow the steps with working code.
 
-If you prefer to read the article without cloning the application, you can skip this section and continue to the next one.
-
-To clone the demo application, run the following commands:
-
-#### 1.  Clone the application:
+1. Clone the application:
 
 ```
 git clone <git@github.com>:permitio/permit-hanko.git
 ```
 
-#### 2.  Install the dependencies:
+2. Install the dependencies:
 
 ```
 npm install
 ```
 
-#### 3.  Run the application:
+3. Run the application:
 
 ```
 npm run dev
 ```
 
-At this point, the application will fail to run as we need to set up the Hanko and Permit services.
+The application shows a configuration error page until you set the Hanko API URL in the next section.
 
-![Setup Services](/ui-videos/integrations/authentication/hankopermit/1.png)
+![Configuration error page listing the NEXT_PUBLIC_HANKO_API_URL environment variable](/ui-videos/integrations/authentication/hankopermit/1.png)
 
-Let's set up the Hanko account so we can log in to the application.
+## Set up Hanko passkey authentication \{#setting-up-hanko-passkey-authentication}
 
-## Setting up Hanko Passkey Authentication
+You can run Hanko locally or use Hanko Cloud. These steps use Hanko Cloud.
 
-To use Hanko for passkey authentication, you can either run it locally in your environment or use the cloud service. Here we will utilize the cloud service as it is easier to set up and use.
+1. Open [Hanko Cloud](https://cloud.hanko.io/), create an organization, and give it a name.
 
-1.  Visit the [Hanko webapp](https://cloud.hanko.io/), create a new organization, and give it the name you want.
+![Hanko Cloud form to create an organization](/ui-videos/integrations/authentication/hankopermit/2.jpg)
 
-![Create new org](/ui-videos/integrations/authentication/hankopermit/2.jpg)
+2. In the dashboard, create a project and set the App URL to `http://localhost:3000`.
 
-2.  In the main dashboard, create a new project - assign `http://localhost:3000` as the App URL.
+![Hanko Cloud form to create a project with the App URL field](/ui-videos/integrations/authentication/hankopermit/3.jpg)
 
-![New project](/ui-videos/integrations/authentication/hankopermit/3.jpg)
+3. In the project, open **Settings** > **General** and copy the API URL.
 
-3.  From the Settings > General section of the project, copy the API URL.
+![Hanko project General settings with the read-only API URL field](/ui-videos/integrations/authentication/hankopermit/4.jpg)
 
-![API URL](/ui-videos/integrations/authentication/hankopermit/3.jpg)
-
-4.  Paste it to a new file called `.env.local`, in the root directory of the application.
+4. Create a file named `.env.local` in the root of the application and add the API URL. Replace the example value with your project's API URL:
 
 ```
 NEXT_PUBLIC_HANKO_API_URL=https://a0ae8d5d-9505-415f-ad70-51839c285726.hanko.io
 ```
 
-5.  Now, when we run the application again, we can see that the error is gone, and we can see the login page.
+5. Restart the application. The configuration error is gone, and the login page appears.
 
-![Login Screen](/ui-videos/integrations/authentication/hankopermit/5.jpg)
+![Hanko passkey login page in the notes app](/ui-videos/integrations/authentication/hankopermit/5.jpg)
 
-6.  To add this authentication window, we just use the Hanko SDK for JavaScript.
-    You can see the element that implemented the login flow in the
-    [`app/auth/login/page.tsx`](https://github.com/permitio/permit-hanko/blob/main/src/app/auth/login/page.tsx) file.
+### How the app uses Hanko
+
+The login page renders the Hanko authentication component from the Hanko JavaScript SDK. See [`app/auth/login/page.tsx`](https://github.com/permitio/permit-hanko/blob/main/src/app/auth/login/page.tsx):
 
 ```javascript
 <Paper sx={{ p: 2 }}>
@@ -109,8 +91,7 @@ NEXT_PUBLIC_HANKO_API_URL=https://a0ae8d5d-9505-415f-ad70-51839c285726.hanko.io
 </Paper>
 ```
 
-7.  We added the following middleware logic to the [`middleware.ts`](https://github.com/permitio/permit-hanko/blob/main/src/middleware.ts)
-    file that redirects the user to the login page if they are not authenticated:
+The middleware in [`middleware.ts`](https://github.com/permitio/permit-hanko/blob/main/src/middleware.ts) reads the `hanko` cookie, verifies the token against the Hanko JSON Web Key Set (JWKS), and uses the token's `sub` claim as the user ID. If the token is missing or invalid, the middleware sends the user to the login page:
 
 ```
 const authenticateUser = async (req: NextRequest): Promise<string> => {
@@ -133,21 +114,11 @@ return NextResponse.rewrite(urlToRedirect);
 }
 ```
 
-With the authentication configuration and flow configured, we are ready to continue with the implementation of Permit.io
-for authorization in our application.
+## Set up basic role-based authorization \{#setup-basic-role-based-authorization}
 
-## Setup Basic Role Based Authorization
+The notes API in [`/app/api/notes/route.ts`](https://github.com/permitio/permit-hanko/blob/main/src/app/api/notes/route.ts) has four handlers: `GET`, `POST`, `PUT`, and `DELETE`. They read, create, update, and delete notes.
 
-With authentication done, it is time to set up our authorization layer.
-We'll start with setting up basic role-based access control (RBAC) to determine the actions our users can perform.
-
-In the [`/app/api/notes/route.ts`](https://github.com/permitio/permit-hanko/blob/main/src/app/api/notes/route.ts),
-you'll find four functions, `GET`, `POST`, `PUT`, and `DELETE` - responsible for the logic of getting, creating, updating, and deleting notes,
-respectively.
-
-If you look at the `route.ts` file, you will see that we are going to use a generic
-[`permit.check`](/how-to/enforce-permissions/check/) [middleware.ts](https://github.com/permitio/permit-hanko/blob/main/src/middleware.ts)
-file.
+The handlers don't check permissions themselves. The same [`middleware.ts`](https://github.com/permitio/permit-hanko/blob/main/src/middleware.ts) file sends every request to the PDP's `/allowed` endpoint, which is the endpoint that [`permit.check()`](/how-to/enforce-permissions/check/) calls:
 
 ```
 const response = await fetch(`${pdpUrl}/allowed`, {
@@ -166,68 +137,57 @@ body: JSON.stringify({
 });
 ```
 
-This code is a generic `permit.check` function that checks the permissions configured for the application using three factors:
+The request passes three values to the PDP:
 
-User - the entity that attempts to perform the operation (in our case, a user authenticated with Hanko).
+| Value | In the demo app |
+|---|---|
+| `user` | The Hanko user ID from the verified token |
+| `action` | The HTTP method in lowercase: `get`, `post`, `put`, or `delete` |
+| `resource` | The resource type from the request path (`notes`). For requests other than `GET`, the middleware also sends the JSON request body, the note, as resource attributes. |
 
-Action - the operation that the user will attempt to perform (in our case, `GET`).
-
-Resource - the entity that the user will attempt to perform the operation on (in our case, the note).
-
-:::note
-At this point, we haven't configured the Permit SDK key in the app, so any user can perform any operation.
-Setting up Permit will fix this.
+:::warning The middleware allows every request until you set a Permit API key
+When `PERMIT_API_KEY` is not set, the middleware skips the check and allows all requests. Set the key before you test the policy.
 :::
 
-Now, we must configure these permissions in Permit.
-Not that we can adapt them to our needs without having to change any of the application code!
+### Create the policy in Permit
 
-Let's begin by setting everything up within the Permit Dashboard:
+1. Sign in to the [Permit dashboard](https://app.permit.io/) and open the environment you want to use.
+2. Open **Policy**, go to the **Roles** tab, and create two roles: `admin` and `user`.
 
-1.  Create a Permit account, set up a new organization, and give it whichever name you want.
+![Permit Roles tab with the admin and user roles](/ui-videos/integrations/authentication/hankopermit/6.jpg)
 
-2.  In the left sidebar, click on Policy, then go to the Roles tab, and create the following roles: Admin and User.
+3. In the **Resources** tab, create a resource named `notes` with the actions `get`, `post`, `put`, and `delete`, and an `owner` attribute.
 
-![Roles](/ui-videos/integrations/authentication/hankopermit/6.jpg)
+![Permit resource form for notes with four actions and an owner attribute](/ui-videos/integrations/authentication/hankopermit/7.jpg)
 
-3.  In the Resources tab, create a new resource called notes, with the following four actions and an owner attribute:
-    `get`, `post`, `delete`, and `put`.
+4. In the **Policy Editor** tab, allow `get` and `post` on `notes` for both roles. Allow `put` and `delete` only for `admin`.
 
-![Resources](/ui-videos/integrations/authentication/hankopermit/7.jpg)
+![Permit Policy Editor where user can get and post notes and admin has all four actions](/ui-videos/integrations/authentication/hankopermit/8.jpg)
 
-4.  Back in the Policy tab, let's allow all users to get and `post` notes, and only admins to `put`, and `delete` notes.
+### Add your Permit credentials to the app
 
-![Policies](/ui-videos/integrations/authentication/hankopermit/8.jpg)
-
-Next, we need to place the Permit.io API credentials in our application config.
-
-1.  To use Permit in your application, you get the API key from Permit dashboard.
-
-2.  Add the key in your in the `env.local` file:
+1. Copy your environment API key. See [Get your API key](/overview/get-api-key).
+2. Add the key to the `.env.local` file:
 
 ```
 PERMIT_API_KEY=<YOUR_COPIED_API_KEY>
 ```
 
-3.  We will also want to configure the API endpoint of Permit to check the permissions. For this purpose, we will use the Permit cloud service.
+3. Set the PDP URL. This section uses the Cloud PDP:
 
 ```
 PERMIT_PDP_URL=[https://cloudpdp.api.permit.io](https://cloudpdp.api.permit.io)
 ```
 
-To make sure all environment variables are in place, restart the application.
+Set the value to the plain URL, `https://cloudpdp.api.permit.io`, without brackets. If you leave `PERMIT_PDP_URL` unset, the middleware uses the Cloud PDP by default.
 
-Now that we have everything set up within Permit, it is time to sign up with a user and test if it works.
+4. Restart the application so it loads the environment variables.
 
-## Sync Hanko Users to Permit.io 
+## Sync Hanko users to Permit.io
 
-To check the permissions we configured, we need to sync the users from Hanko to Permit,
-so our users will be known to the Permit policy engine.
+The PDP can only match a user to a role if the user exists in Permit. The demo app syncs each user after Hanko sign-in: the Hanko component calls the `/api/permit` route when the authentication flow completes. The route gives every new user the `user` role in the `default` tenant, so new users start with the least privilege in the policy.
 
-We will want to automatically assign a user role to every new user, so they will also be part of our newly configured policy.
-This role helps us to keep the principle of least privilege and give new users only very basic permissions in the application.
-
-In the demo application, you can find the following code in the `src/app/api/permit/route.ts` file:
+The code is in `src/app/api/permit/route.ts`:
 
 ```
 const response = await permit.api.syncUser({
@@ -248,68 +208,58 @@ role: "user",
 });
 ```
 
-This code, as you can see, syncs the user to Permit if they do not exist yet.
+The route first looks the user up with `permit.api.getUser()`. It runs the sync and the role assignment only for users that don't exist in Permit yet.
 
-## Check the Permissions
+## Verify the RBAC policy \{#check-the-permissions}
 
-1.  In the `localhost:3000` page, log in with a user of your choice, and make sure you have the right passkey configured.
+1. Open `http://localhost:3000` and sign in with Hanko. Create a passkey when Hanko asks for one.
+2. Create a note. The note appears in the list.
+3. In the Permit dashboard, open **Audit Log**. A `post` entry for your user shows an allowed decision, because the `user` role allows `post` on `notes`.
 
-2.  On the first screen of the application, try to create a new note. It should appear on the list.
+![Permit Audit Log entry for an allowed post action on notes](/ui-videos/integrations/authentication/hankopermit/9.jpg)
 
-3.  In the Permit Dashboard, go to the Audit Log tab in the left sidebar. You should see that the `post` action was logged.
-Clicking the log will allow you to see detailed information about the authorization decision that allowed for this action to be performed.
-`Allow` will equal `true` as this user has the User role.
+4. Delete the note. The app shows an error: `You are not allowed to access this resource.` The `user` role doesn't allow `delete`.
+5. In the Permit dashboard, open **Directory** and assign the `admin` role to your user in the `default` tenant.
+6. Delete the note again. The delete succeeds, and you didn't change any application code.
 
-![Audit Logs](/ui-videos/integrations/authentication/hankopermit/9.jpg)
+![Permit user list where the first user has the User and Admin roles](/ui-videos/integrations/authentication/hankopermit/10.jpg)
 
-4.  If we try to delete the note, we will get an error message saying we are not allowed to access this resource.
-If we grant an Admin role to this user via the Permit UI, the error will be resolved and we will be able to delete the note.
+## Add fine-grained attribute-based authorization \{#add-fine-grained-attribute-based-authorization}
 
-![Policy Change](/ui-videos/integrations/authentication/hankopermit/10.jpg)
+With the RBAC policy, only admins can update and delete notes. In this section, you also let each user update and delete the notes they own. This rule needs the note's `owner` attribute, so you add an ABAC rule.
 
-Now that we are done with the Role Based model in our application let's go to the next phase and make our permissions more fine-grained
+:::warning ABAC rules need a container PDP
+The Cloud PDP doesn't support ABAC policies, so it can't apply the owner rule in this section. Run the PDP as a container and set `PERMIT_PDP_URL` to its address. See [Deploy the PDP to production](/how-to/deploy/deploy-to-production) and [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+:::
 
-## Add Fine-Grained Attribute-Based Authorization
+1. In the Permit dashboard, open **Policy** > **ABAC Rules** and enable ABAC.
 
-Note: For this section to run properly, you need to run the Permit.io PDP as a sidecar,
-[You can read how to do that here](/how-to/deploy/deploy-to-production).
+![Permit ABAC Rules tab with the ABAC option enabled](/ui-videos/integrations/authentication/hankopermit/11.jpg)
 
-As stated before, the delete action in our app is supposed to be limited to the same user who created the role.
-This is a more complex policy that cannot be defined by using simple roles - it needs attributes as well.
+2. Create a resource set named `Owned Notes` (key `owned_notes`) on the `notes` resource type. Add the condition `resource.owner` **equals (ref)** `user.key`. The set matches a note only when its `owner` attribute equals the key of the user who makes the request.
 
-We can configure this policy in Permit and see it take effect immediately in the application.
+![Permit Edit Resource Set dialog for Owned Notes with the condition resource.owner equals user.key](/ui-videos/integrations/authentication/hankopermit/12.jpg)
 
-1.  In the Permit dashboard, go to ABAC Rules on the Policy page, and enable the ABAC option.
+3. In the **Policy Editor**, allow `put` and `delete` on the `Owned Notes` resource set for the `user` role. Keep `put` and `delete` on `notes` for the `admin` role, so admins can change any note.
 
-![Enable ABAC](/ui-videos/integrations/authentication/hankopermit/11.jpg)
+![Permit Policy Editor with actions allowed on the Owned Notes resource set for the Admin and User roles](/ui-videos/integrations/authentication/hankopermit/13.jpg)
 
-2.  In the Resources tab, create a new Resource Set rule - this set will create a condition that will be true only if the user
-    is the owner of the note.
+### Verify the ABAC policy
 
-![Resource Set](/ui-videos/integrations/authentication/hankopermit/12.jpg)
+The first user from the RBAC section has the `admin` role. Sign up a second user to test the owner rule.
 
-3.  Back in the Policy tab, create a new policy that will allow `put`, and `delete` only for the owner of the note.
-    Mind that we leave the privileged admin role to do all actions.
+1. Sign out, then sign up with a second user. The sync route gives the second user the `user` role.
+2. As the second user, delete a note that the first user created. The delete fails. The Audit Log shows a denied `delete` decision for the second user.
 
-![ABAC Policy](/ui-videos/integrations/authentication/hankopermit/13.jpg)
+![Permit Audit Log with a denied delete decision on notes for the second user](/ui-videos/integrations/authentication/hankopermit/14.jpg)
 
-4.  At this point, let's add another user to the application. Log out of the application with the current user,
-    and sign up with a new one. This new user should not be able to delete tasks.
+3. As the second user, create a note, then delete it. The delete succeeds, because the second user owns the note.
+4. Create another note as the second user. Sign out, and sign in as the first user.
+5. As the first user, delete the second user's note. The delete succeeds, because the first user has the `admin` role.
 
-![ABAC Audit Logs](/ui-videos/integrations/authentication/hankopermit/14.jpg)
+## Check permissions inside application logic
 
-5.  With this new user, create a new note. You should also be able to delete it.
-
-6.  If you log in with a different user after creating the note, you should not be able to delete it anymore,
-    as you are not the one who created it!
-
-## Enforce Permissions Everywhere
-
-Sometimes, you will encounter a situation where you need to check permissions in the middle of the application logic.
-For example, you could want to restrict a particular operation to premium users only.
-
-Using Permit, the policy configuration always remains the same, and you'll only have to use the `permit.check` function in
-every place within the code to determine allowed/not allowed permissions.
+The middleware checks each API request. Some decisions belong inside your application logic, for example an operation that only premium users can run. Call `permit.check()` at that point in the code. The policy stays in Permit, so a policy change doesn't need a code change.
 
 ```
 new Permit({token: <your_permit_token>});
@@ -317,14 +267,12 @@ new Permit({token: <your_permit_token>});
 permit.check(user, action, resource);
 ```
 
-Using the `permit.check` function also lets you make decisions based on data that might not exist in the scope of the request in the
-middleware, so you get more granular decisions with no code changes.
+Replace `<your_permit_token>` with your environment API key, loaded from an environment variable. Inside the application logic, `permit.check()` can use data that isn't in the HTTP request, such as attributes you load from your database.
 
-## Add Fine-Grained Relationship Based Authorization
+## Next step: relationship-based authorization
 
-Another approach for fine-grained authorization that we can use is Relationship-Based Access Control (ReBAC).
-Assuming a note app, we might want to create workspaces, organizations, and folders for our notes.
-In this case, we might do not have a dedicated owner field in the note entity, but we have a relationship between the note and the workspace.
+Relationship-based access control (ReBAC) grants access through relationships between resources. For example, a notes app with workspaces and folders might have no `owner` field on a note, but each note belongs to a workspace, and the user's role in the workspace decides access to its notes. You configure ReBAC policies in Permit, and the `permit.check()` calls and middleware in the app stay the same.
 
-Permit also supports the configuration of ReBAC policies, we can easily implement it in our application without changing the
-`permit.check` or any enforcement code in the app. [Read more about modeling ReBAC here](/modeling/google-drive).
+- [Model a Google Drive-style app with ReBAC](/modeling/google-drive)
+- [Check permissions](/how-to/enforce-permissions/check)
+- [How authentication connects to Permit.io](/authentication/permit-and-authentication)

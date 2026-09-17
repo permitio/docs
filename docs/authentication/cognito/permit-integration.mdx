@@ -1,73 +1,33 @@
 ---
 sidebar_position: 1
 title: Cognito and Permit Integration
-description: "Integrate AWS Cognito authentication with Permit.io authorization, syncing users and enforcing permit.check() on requests."
+description: "Add Permit.io authorization to an app that signs users in with Amazon Cognito: verify Cognito tokens, sync users to Permit, and check permissions on the backend."
 ---
 
-## Introduction
+Add Permit.io authorization to an application that signs users in with Amazon Cognito. You create a policy in Permit, sync each Cognito user to Permit after login, and call `permit.check()` before each protected backend action. This guide is for developers with a Cognito user pool and a Node.js backend. The examples come from the [Cognito demo application](/authentication/cognito/cognito-demo-app), a vanilla JavaScript frontend with an Express backend.
 
-This tutorial will show you how to integrate Cognito with Permit.
-Cognito is a fully managed identity provider service offered by AWS. It allows you to create and manage user pools that can be used for authentication in your application.
-Permit is a fully managed authorization service that allows you to manage all your application's authorization policies in one place.
-
-Using Cognito and Permit together allows you to easily manage your application's authentication and authorization in a secure and scalable way.
-
-## What you'll build
-
-In this tutorial, you'll learn how to integrate Cognito with Permit.
-We will create a WebApp that uses Cognito for secure authentication and Permit.io for easily manageable authorization, allowing us to change our application's permissions on the fly.
+Amazon Cognito authenticates users and issues JSON Web Tokens (JWTs). Permit stores your authorization policy, and a policy decision point (PDP) evaluates each permission check against it.
 
 ## Prerequisites
 
-- [AWS account](https://console.aws.amazon.com/cognito/)
-- [Permit account](https://app.permit.io/)
-- An application that uses Cognito for authentication; in this example, we will use a Vanilla JS WebApp with a Node server [Check out the demo explanation for more details](/authentication/cognito/cognito-demo-app).
+- An [AWS account](https://console.aws.amazon.com/cognito/) with a Cognito user pool and an app client.
+- A frontend that sends users who aren't signed in to the Cognito login page.
+- A [Permit.io account](https://app.permit.io/) and your environment API key. See [Get your API key](/overview/get-api-key).
+- The `permitio` and `aws-jwt-verify` npm packages installed in your backend.
 
-## Getting Started
+## 1. Create the policy in Permit \{#1-setting-up-permit}
 
-## 1. Setting up Permit
+Create the roles, resources, and permissions your application checks. You can use the [Permit dashboard](https://app.permit.io/policy-editor/roles), the [Permit API](https://api.permit.io/v2/redoc#tag/Roles/operation/create_role), or [one of the Permit SDKs](/sdk/sdks-overview). For help designing roles, read the Permit blog post [Planning your app's RBAC](https://www.permit.io/blog/planning-app-rbac).
 
-### 1.1. Setup roles in Permit
+1. **Create roles.** Create the roles your application needs, for example `admin`, `editor`, and `viewer`. If you map Cognito groups to roles, use the same keys. Role keys are case-sensitive.
+2. **Create resources.** Create a resource for each part of your application you protect, with the actions users take on it. For example, a task list needs a `task` resource with `create`, `get`, and `delete` actions. See the [Policy Editor resources tab](https://app.permit.io/policy-editor/resources) or the [create resource API](https://api.permit.io/v2/redoc#tag/Resources/operation/create_resource).
+3. **Assign permissions.** In the [Policy Editor](https://app.permit.io/policy-editor), check the actions each role can take on each resource, or use the [assign permissions API](https://api.permit.io/v2/redoc#tag/Roles/operation/assign_permissions_to_role).
 
-To sync users and roles from Cognito to Permit, we must recreate identical roles in Permit.
+## 2. Sync Cognito users with Permit after login \{#22-sync-cognito-with-permit-after-successful-login}
 
-:::note info
-Create your roles according to your application's needs.
+Permit can only match a user to roles after the user exists in Permit. Sync the user right after login. You can set the Cognito redirect URL to a page that runs the sync, or run the sync when your frontend sees the `code` query parameter that Cognito adds after login.
 
-For example, many simple RBAC applications will have three roles: `admin`, `editor`, and `viewer`.
-
-:::
-
-Setting up roles and resources can be done through the [Permit dashboard](https://app.permit.io/policy-editor/roles), by using the [Permit API](https://api.permit.io/v2/redoc#tag/Roles/operation/create_role), or [with one of our SDKs](/sdk/sdks-overview).
-You can also follow this [Permit RBAC guide](https://www.permit.io/blog/planning-app-rbac)
-
-### 1.2. Create the right resources in Permit
-
-Create a corresponding resource in Permit for each of your application's resources. For instance, if your app has a user management section, you will need a `user` resource with `create`, `delete`, and `get` actions. If you have a task management section, you need a `task` resource with `create`, `delete`, `get`, and `check` actions.
-
-Setting up resources can be done through the [Permit dashboard](https://app.permit.io/policy-editor/resources), by using the [Permit API](https://api.permit.io/v2/redoc#tag/Roles/operation/create_resource), or [with one of our SDKs](/sdk/sdks-overview).
-
-### 1.3. Set up the right permissions in Permit.io:
-
-You must set up the right permissions for each role you create in step 1.1.
-
-Check each action you want to allow for each resource in each role.
-
-As noted earlier, these permissions can be set up through either the [Permit policy editor](https://app.permit.io/policy-editor) or by using the [Permit API](https://api.permit.io/v2/redoc#tag/Roles/operation/assign_permissions_to_role).
-
-## 2. Integrate your application with Cognito and Permit
-
-### 2.1. Connect Cognito to your frontend application
-
-As we want to use Cognito for authentication, we will use the Cognito JWT to get each user's information and access token.
-You will need to add in your FE code a check to see if the user is logged in and redirect them to the login page if they are not.
-
-### 2.2. Sync Cognito with Permit after successful login
-
-After the user logs in, we must sync their information with Permit. There are two options to achieve this:
-We can tell Cognito to redirect us to a specific URL after the user is logged in, or we can use the `code` query parameter they send after the login to sync the user to Permit.
-
-Here we show an example of syncing the user if we see the code query parameter in the URL.
+The demo app uses the `code` parameter. After it exchanges the code for tokens, the frontend calls a backend sync route and sends a Cognito token in the `Authorization` header:
 
 ```js
 // frontend/app.mjs
@@ -81,7 +41,7 @@ if (searchParams.get("code") !== null) {
 }
 ```
 
-On your backend side, you will need to add code that will check the validity of the Cognito JWT, retrieve user information, and sync the user to Permit.
+The backend verifies the token, then syncs the user with the Cognito `sub` claim as the user key:
 
 ```js
 // standalone_be/index.mjs
@@ -150,18 +110,23 @@ app.post("/api/sync", async (req, res) => {
 
 ```
 
-You need to add the following information to the code above:
+Replace these placeholders in the backend code:
 
-- `your user pool id` - the user pool id of your Cognito user pool, can be found in the Cognito dashboard: Amazon Cognito > User pools > Select your user pool
-- `your client id` - the client id of your Cognito user pool client, can be found in the Cognito dashboard: Amazon Cognito > User pools > Select your user pool > App clients > Select your app client
-- `your permit token` - the token of your Permit account, [Get your environment API Key](/overview/connecting-your-app#1-get-your-permit-environment-api-key)
+| Placeholder | Value | Where to find it |
+|---|---|---|
+| `[your user pool id]` | Your Cognito user pool ID, as a string | Amazon Cognito > User pools > your user pool |
+| `[your client id]` | Your Cognito app client ID, as a string | Amazon Cognito > User pools > your user pool > App clients > your app client |
+| `[your permit token]` | Your Permit environment API key, as a string | [Get your API key](/overview/get-api-key) |
 
-### 2.2. Enforce permissions with Permit
+Load the Permit API key from an environment variable instead of writing it in the file. Anyone with the key can change your environment's policy through the Permit API.
 
-After we have the policy that we created in step 1, and synced the user to Permit in the previous step, we can enforce the permissions on the backend side.
-We will use the Permit SDK to get the user's permissions and check if they have the right ones.
+The route reads `first_name` and `email` from the verified token. Cognito puts the `name` and `email` claims in the ID token, not in the access token. The commented `cognitoUser` example in the code is an ID token payload.
 
-All you need to do is add the `permit.check` function before each action you want to protect (All of your CRUD actions in the API).
+To assign roles during the sync, for example from a mapping between Cognito groups and Permit roles, call `permit.api.assignRole()` with the user key, role key, and tenant key. See the [Node.js `assignRole` reference](/sdk/nodejs/role/assign-role).
+
+## 3. Check permissions on the backend \{#22-enforce-permissions-with-permit}
+
+Call `permit.check()` before each action you protect, such as each create, read, update, and delete route in your API. Pass the Cognito `sub` as the user key, the action, and the resource. Return HTTP 403 when Permit denies the action:
 
 ```ts
 // An example of a protected route
@@ -180,22 +145,27 @@ All you need to do is add the `permit.check` function before each action you wan
 });
 ```
 
-#### 2.3. Removing a user
+`permit.check()` returns a promise that resolves to `true` or `false`. Await it inside an `async` route handler before you read the result.
 
-If you want to remove a user from your app, make sure you remove the user from both Cognito and Permit.
-You can do this by adding the following code to your remove user function:
+## 4. Verify the integration \{#3-lets-test-it}
+
+1. Sign in to your app with a Cognito user.
+2. In the Permit dashboard, open **Directory**. The user appears with the Cognito `sub` as its key. Assign a role if the sync didn't assign one.
+3. Call a route for an action the role allows. The route runs.
+4. In the Policy Editor, remove that permission from the role and save.
+5. Call the same route again. The route returns HTTP 403. You don't need to sign in again, because the backend checks Permit on every request.
+
+## Remove a user from Permit \{#23-removing-a-user}
+
+When you delete a user from your app, delete the user from both Cognito and Permit. Add a Permit delete call to your remove user function, and pass the user key you synced (the Cognito `sub`):
 
 ```ts
 const removedUser = await permit.api.deleteUser(permitUserObj.key);
 ```
 
-### 3. Let's test it!
+## Next steps \{#4-next-steps}
 
-Now that we have everything set up, let's test it out.
-Login to your app and try to perform actions that you have permissions for.
-Now revoke some of the permissions in the Permit dashboard and try to perform the same actions again, it will take effect immediately without refresh.
-
-## 4. Next steps
-
-- [Check out the demo app explanation](/authentication/cognito/cognito-demo-app)
-- [For production use container / sidecar PDP](/sdk/nodejs/quickstart-nodejs)
+- [Cognito demo application](/authentication/cognito/cognito-demo-app): run the working example.
+- [Deploy the PDP to production](/how-to/deploy/deploy-to-production): run a container PDP next to your backend instead of the Cloud PDP.
+- [Check permissions](/how-to/enforce-permissions/check): pass tenants, resource instances, and attributes to `permit.check()`.
+- [How authentication connects to Permit.io](/authentication/permit-and-authentication): sync methods and role ownership models.

@@ -1,68 +1,61 @@
 ---
 sidebar_position: 10
 title: Fine-Grained Authorization with Logto.io and Permit.io
-description: "Integrate Logto authentication with Permit.io in a Next.js app, syncing users by webhook and checking permissions in the UI."
+description: "Add Logto sign-in to a Next.js app, sync new Logto users into Permit.io with a webhook, and show or hide UI based on permission checks."
 sidebar_label: Logto.io
 ---
 
 import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
 
-Logto is an identity solution designed for secure authentication. This guide will show you how to integrate it into your [Permit.io](https://www.permit.io) implementation to create a complete authentication and authorization system for your Next.js application.
+Add [Logto](https://logto.io) sign-in to a Next.js app (Pages Router), sync each new Logto user into Permit.io with a webhook, and show or hide dashboard actions based on Permit permission checks. This tutorial is for developers who use Logto for authentication and want role-based access control (RBAC) from Permit.
 
-This guide will show you a simple method using the Next.js framework to get you started. Logto also supports multiple other frameworks and programming languages to suit your specific needs.
+## What you build
 
-## What You'll Build
-In this tutorial, you'll learn how to integrate Logto with [Permit.io](https://www.permit.io/) to:
--   Authenticate users with Logto
--   Automatically sync users to [Permit.io](https://www.permit.io/) upon registration
--   Implement permission checks in your UI components
--   Create role-based access control for your application
+- Sign-in and sign-out with Logto.
+- A Logto webhook that syncs each newly registered user to Permit and assigns the `viewer` role.
+- An API route that checks a permission with Permit.
+- A dashboard that shows the view, edit, and delete controls for a `Reports` resource only when the user's role allows them.
 
 ## Prerequisites
--   A Logto account (sign up at [logto.io](https://cloud.logto.io/))
--   A [Permit.io](https://www.permit.io/) account (sign up at [permit.io](https://www.permit.io/))
--   Basic familiarity with Next.js (Pages Router)
 
-:::note
-There are several ways to use Logto, and the best approach for you will depend on what you need and how your technology is set up.
-:::
+- A [Logto Cloud account](https://cloud.logto.io/).
+- A [Permit.io account](https://app.permit.io/).
+- Node.js and npm, and basic familiarity with the Next.js Pages Router.
+- A way to expose your local app on a public URL for the Logto webhook, such as ngrok.
 
 <TimelineWrapper>
 <TimelineStep>
 
-### Set Up Logto
+### 1. Create a Logto application \{#set-up-logto}
 
-First, create and configure your Logto application:
-
-1.  Sign up or log in to your Logto account
-2.  Navigate to the "Applications" section in the dashboard
-3.  Create a new application:
-    -   Select "Next.js (Pages Router)" as the framework
-    -   Name your application (e.g., "Next.js Demo")
-    -   Set the redirect URI to: `http://localhost:3000/api/logto/sign-in-callback`
-    -   Add a post sign-out redirect URI: `http://localhost:3000/`
-4.  Copy your App ID, App Secret, Endpoint, and generate a Cookie Secret
+1. Sign in to the Logto Console.
+2. Open **Applications** and create an application:
+    -   Select **Next.js (Pages Router)** as the framework.
+    -   Name the application, for example `Next.js Demo`.
+    -   Set the redirect URI to `http://localhost:3000/api/logto/sign-in-callback`.
+    -   Set the post sign-out redirect URI to `http://localhost:3000/`.
+3. Copy the App ID, App Secret, and Endpoint. Generate a random cookie secret of at least 32 characters.
 
 </TimelineStep>
 <TimelineStep>
 
-### Install and Configure Logto SDK
+### 2. Install and configure the Logto SDK \{#install-and-configure-logto-sdk}
 
-Create a new Next.js project if you don't have one already:
+Create a Next.js project if you don't have one:
 
 ```bash
 npx create-next-app my-auth-app
 cd my-auth-app
 ```
 
-Install the Logto SDK and SWR for data fetching:
+Install the Logto Next.js SDK and SWR, which the pages use to fetch the signed-in user:
 
 ```bash
 npm install @logto/next swr
 ```
 
-Create a `.env.local` file in your project root with your Logto credentials:
+Create a `.env.local` file in the project root. Replace each value with your Logto values from step 1 and your Permit environment API key ([Get your API key](/overview/get-api-key)):
 
 ```bash
 LOGTO_ENDPOINT=your-logto-endpoint
@@ -73,12 +66,14 @@ PERMIT_API_KEY=your-permit-api-key
 NODE_ENV="development"
 ```
 
+Install the Permit Node.js SDK as well, because step 6 imports it: `npm install permitio`.
+
 </TimelineStep>
 <TimelineStep>
 
-### Set Up Logto Client
+### 3. Create the Logto client \{#set-up-logto-client}
 
-Create a configuration file for Logto:
+Create a configuration file for the Logto client. The `UserScope.Email` scope adds the user's email to the ID token claims.
 
 ```js
 // libraries/logto.js
@@ -98,9 +93,9 @@ export const logtoClient = new LogtoClient({
 </TimelineStep>
 <TimelineStep>
 
-### Create API Routes for Authentication
+### 4. Create the Logto authentication routes \{#create-api-routes-for-authentication}
 
-Set up the necessary API routes for Logto:
+Add a dynamic API route that hands every `/api/logto/*` request to the Logto client:
 
 ```js
 // pages/api/logto/[action].js
@@ -110,41 +105,35 @@ export default logtoClient.handleAuthRoutes();
 
 ```
 
-This creates multiple endpoints:
+The route handles these endpoints:
 
--   `/api/logto/sign-in`: Initiates the login flow
--   `/api/logto/sign-in-callback`: Handles the redirect after successful authentication
--   `/api/logto/sign-out`: Logs users out
--   `/api/logto/user`: Returns the current user's information
-
-</TimelineStep>
-<TimelineStep>
-
-### Set Up Authorization in [Permit.io](https://www.permit.io)
-
-Before implementing the integration, set up your authorization structure in [Permit.io](https://www.permit.io):
-
-> To get started with [Permit.io](https://www.permit.io), refer to their [Quickstart guide](/quickstart). This guide provides step-by-step instructions for setting up a workspace, defining roles and resources, and assigning permissions to roles.
-
-1.  Sign up or log in to your [Permit.io](https://www.permit.io/) account
-2.  Create a new project from the dashboard
-3.  Set up your resources and actions:
-    -   Create a resource (e.g., `Reports`)
-    -   Add actions for that resource (e.g., `view`, `edit`, `delete`)
-4.  Define roles (e.g., `admin`, `editor`, `viewer`)
-5.  Configure permissions by assigning actions to roles in the Policy Editor
-6.  Copy your API key from the project settings
-
-![Creating policies in Permit.io](/img/authentication/logto/create-policy.png)
-
-Creating policies in [Permit.io](https://www.permit.io)
+| Endpoint | What it does |
+|---|---|
+| `/api/logto/sign-in` | Starts the sign-in flow |
+| `/api/logto/sign-in-callback` | Handles the redirect from Logto after sign-in |
+| `/api/logto/sign-out` | Signs the user out |
+| `/api/logto/user` | Returns the current user's authentication state and claims |
 
 </TimelineStep>
 <TimelineStep>
 
-### Create the [Permit.io](https://www.permit.io) Integration
+### 5. Create the policy in Permit.io \{#set-up-authorization-in-permitio}
 
-Create a file for [Permit.io](https://www.permit.io) integration:
+Create the resource and roles that the dashboard checks. The [Quickstart](/quickstart) shows each screen in detail.
+
+1. In the [Permit dashboard](https://app.permit.io/), open the project and environment that match your API key.
+2. Create a resource with the key `Reports` and the actions `view`, `edit`, and `delete`. Resource keys are case-sensitive.
+3. Create the roles `admin`, `editor`, and `viewer`.
+4. In the Policy Editor, allow actions for each role. For example: `viewer` can `view`, `editor` can `view` and `edit`, and `admin` can do all three.
+
+![Permit Policy Editor with Reports actions assigned to the admin, editor, and viewer roles](/img/authentication/logto/create-policy.png)
+
+</TimelineStep>
+<TimelineStep>
+
+### 6. Add the Permit.io client \{#create-the-permitio-integration}
+
+Create a module that initializes the Permit SDK and exports two helpers: `syncUserToPermit` syncs a user and assigns a role in the `default` tenant, and `checkPermission` calls `permit.check()`.
 
 ```js
 // libraries/permit.js
@@ -190,12 +179,14 @@ export const checkPermission = async (userId, action, resource) => {
 };
 ```
 
+The `pdp` value points to the Cloud policy decision point (PDP), which evaluates RBAC policies. Replace it with the address of your own PDP if you run one.
+
 </TimelineStep>
 <TimelineStep>
 
-### Create a Permission Check API Endpoint
+### 7. Create a permission check API route \{#create-a-permission-check-api-endpoint}
 
-Add an API endpoint to check permissions:
+Add an API route that the browser calls to check one permission:
 
 ```
 // pages/api/check-permission.js
@@ -218,12 +209,16 @@ export default async function handler(req, res) {
 }
 ```
 
+:::warning Read the user from the session in production
+This route takes `userId` from the query string, so any browser can ask about any user's permissions. In production, read the user ID from the Logto session on the server instead of trusting a request parameter.
+:::
+
 </TimelineStep>
 <TimelineStep>
 
-### Set Up User Synchronization with Webhooks
+### 8. Sync new users with a webhook \{#set-up-user-synchronization-with-webhooks}
 
-Create an API endpoint to receive Logto webhooks:
+Add an API route that receives Logto webhooks. When the event is `PostRegister`, the route syncs the new user to Permit with the Logto user ID as the user key, and assigns the `viewer` role:
 
 ```js
 // pages/api/webhooks/logto.js
@@ -261,31 +256,29 @@ export default async function handler(req, res) {
 }
 ```
 
-</TimelineStep>
-<TimelineStep>
-
-### Configure the Webhook in Logto
-
-Set up the webhook in your Logto dashboard:
-
-1.  Navigate to the "Webhooks" section
-2.  Click "Create Webhook"
-3.  Enter a name and description for your webhook
-4.  Add your webhook URL (e.g., `https://your-domain.com/api/webhooks/logto`)
-    -   For local development, use a tool like ngrok to create a public URL
-5.  Select the "PostRegister" event
-6.  Save your webhook
-
-![Registering a webhook in Logto](/img/authentication/logto/logto-dashboard.png)
-
-Registering a webhook in Logto
+:::warning Verify the webhook signature
+This route accepts any request that reaches it. Logto signs webhook requests with the webhook's signing key. Verify the signature before you sync the user, or anyone who finds the URL can create users and role assignments in your Permit environment.
+:::
 
 </TimelineStep>
 <TimelineStep>
 
-### Create a Permission Hook for UI Components
+### 9. Register the webhook in Logto \{#configure-the-webhook-in-logto}
 
-Add a custom hook to check permissions in your UI components:
+1. In the Logto Console, open **Webhooks** and click **Create Webhook**.
+2. Enter a name and description.
+3. Enter the public URL of the route, for example `https://your-domain.com/api/webhooks/logto`. For local development, expose `http://localhost:3000` with a tunnel such as ngrok and use that URL.
+4. Select the `PostRegister` event.
+5. Save the webhook.
+
+![Logto Console webhook form with the PostRegister event selected](/img/authentication/logto/logto-dashboard.png)
+
+</TimelineStep>
+<TimelineStep>
+
+### 10. Add a permission hook for UI components \{#create-a-permission-hook-for-ui-components}
+
+Add a React hook that calls the permission check route and returns whether the action is allowed:
 
 ```js
 // hooks/usePermission.js
@@ -325,9 +318,9 @@ export function usePermission(userId, action, resource) {
 </TimelineStep>
 <TimelineStep>
 
-### Create Login and Dashboard Pages
+### 11. Create the login and dashboard pages \{#create-login-and-dashboard-pages}
 
-Create a simple login page:
+Create a login page. The page redirects signed-in users to the dashboard and shows a **Sign in with Logto** button to everyone else:
 
 ```js
 // pages/login.js
@@ -371,7 +364,7 @@ export default function Login() {
 }
 ```
 
-Create a dashboard page with permission-based UI elements:
+Create a dashboard page. The page reads the user ID from the `sub` claim, checks `view`, `edit`, and `delete` on `Reports`, and renders only the controls the user is allowed to use:
 
 ```js
 // pages/dashboard.js
@@ -465,30 +458,27 @@ export default function Dashboard() {
 </TimelineStep>
 <TimelineStep>
 
-### Testing and Verification
+### 12. Verify the integration \{#testing-and-verification}
 
-1.  Start your Next.js application:
+1. Start your Next.js application:
 
     ```bash
     npm run dev
     ```
 
-2.  Visit `http://localhost:3000/login` and sign in with Logto
+2. Open `http://localhost:3000/login` and sign up with a new user through Logto. The `PostRegister` webhook runs only for new registrations.
+3. In the Permit dashboard, open **Directory**. The new user appears with the Logto user ID as its key and the `viewer` role in the `default` tenant.
+4. On the dashboard page, the **Monthly Report** card appears without the **Edit Report** and **Delete Report** buttons, because `viewer` can only `view`.
+5. In Permit, assign the `admin` role to the user and reload the dashboard. The **Edit Report** and **Delete Report** buttons appear.
 
-3.  After signing in, check the [Permit.io](https://www.permit.io) dashboard to verify that your user has been synced and assigned the correct role
-
-4.  Test different permission scenarios by creating users with different roles and observing how the UI adapts
-
-![Logto Users Synced to Permit.io with Role Assignments](/img/authentication/logto/permit-users.png)
-
-Logto Users Synced to [Permit.io](https://www.permit.io) with Role Assignments
+![Permit Directory listing Logto users with their role assignments](/img/authentication/logto/permit-users.png)
 
 </TimelineStep>
 </TimelineWrapper>
 
-### Using [Permit.io](https://www.permit.io) in Your Application Logic
+## Check permissions in server-side code \{#using-permitio-in-your-application-logic}
 
-Now that you've set up the integration, you can use [Permit.io](https://www.permit.io)'s permission checks throughout your application:
+You can also check permissions before a page renders. The example below redirects users who aren't allowed to `view` a `data` resource. It is a pattern, not a drop-in file: replace `getSession` with the way your app reads the Logto session on the server, and import `permit` from your Permit client module.
 
 ```js
 // Example of a server-side permission check
@@ -518,22 +508,9 @@ export async function getServerSideProps(context) {
 }
 ```
 
-## Conclusion
+## Next steps
 
-You've successfully integrated Logto for authentication with [Permit.io](https://www.permit.io) for authorization in your Next.js application. This combination provides:
-
-1.  **Seamless user authentication** through Logto
-2.  **Automatic user synchronization** to [Permit.io](https://www.permit.io)
-3.  **Fine-grained permission controls** for your application
-4.  **Flexible UI rendering** based on user permissions
-
-By keeping authentication and authorization separate but integrated, you can easily adapt your security model as your application evolves without changing your code.
-
-For more advanced use cases, consider exploring:
-
--   Multi-tenancy support in [Permit.io](https://www.permit.io)
--   Attribute-based access control (ABAC)
--   Role inheritance and hierarchies
--   Custom permission checks based on user attributes
-
-If you need help, reach out through the [Permit.io](https://www.permit.io) [Slack Community](https://io.permit.io/docs-to-slack) or Logto's [Discord server](https://discord.com/invite/UEPaF3j5e6).
+- [How authentication connects to Permit.io](/authentication/permit-and-authentication): the handoff point, the user key, and where to manage roles.
+- [Check permissions](/how-to/enforce-permissions/check): pass tenants, resource instances, and attributes to `permit.check()`.
+- [Set up attribute-based access control (ABAC)](/overview/setup-attribute-based-access-control): write policies based on user and resource attributes.
+- Ask questions in the [Permit Slack community](https://io.permit.io/slack) or the [Logto Discord server](https://discord.com/invite/UEPaF3j5e6).
