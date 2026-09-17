@@ -170,11 +170,11 @@ Every colour is a role, defined once in `tokens.scss` for light (`:root`) and re
 ### Hierarchy
 
 - **Page title** (h1, 2.25rem / 700, 1.875rem below 996px) with a 1.125rem muted **intro** for the first one or two paragraphs.
-- **Section** (h2, 1.625rem / 700, 3rem above) and **subsection** (h3, 1.25rem / 700, 2.25rem above). Sections are separated by space, never by a rule.
+- **Section** (h2, 1.625rem / 700, 3.75rem above) and **subsection** (h3, 1.25rem / 700, 2.8125rem above), each 0.9375rem above its content; a heading stacked directly under another sits 1.25rem below it. Sections are separated by space, never by a rule.
 - **h4-h6** (1.0625 / 1 / 0.875rem, 700) lean on weight rather than size.
-- **Body** 1rem / 1.7, prose capped at `--pm-measure`.
+- **Body** 1rem / 1.7. Paragraphs, lists and quotes are capped at `--pm-measure` (34rem, about 75 characters); code, tables and figures use the full column.
 - **UI text** 0.8125-0.875rem / 500 in navigation, TOC, breadcrumbs, table cells (0.9375rem).
-- **Code** 0.8125rem in blocks, 0.875em inline.
+- **Code** 0.8125rem in blocks, 0.875em inline (never below 12px, including inline code in TOC entries).
 - **Label** Rajdhani 0.75-0.8125rem, uppercase, 0.12em tracking.
 
 **The Label Rule.** Rajdhani uppercase is for one-to-three word names of a category. A title a reader has to read as a phrase (a custom admonition title, a question) is set in Manrope sentence case.
@@ -228,7 +228,7 @@ Primary: link-purple fill, `--pm-on-primary` text (white in light, page navy in 
 
 ### Code
 
-Blocks on `--pm-code-bg` with a hairline border and no shadow; a title bar one surface step up; highlighted lines get a 10-16% purple tint and a 2px inset purple rule. Language tabs (SDK `CodeBlock` and Elements `CodeDropdown`) share one strip: Rajdhani labels, active label in link purple over a 2px rule. Inline code is a quiet surface-2 chip.
+Blocks on `--pm-code-bg` with a hairline border and no shadow; a title bar one surface step up; highlighted lines get a 10-16% purple tint and a 2px inset purple rule. Language tabs (SDK `CodeBlock` and Elements `CodeDropdown`) share one strip: Rajdhani labels, active label in link purple over a 2px rule. Inline code is a borderless surface-3 chip.
 
 ### Admonitions
 
@@ -245,6 +245,10 @@ Coded React diagrams (`DiagramFrame` and friends): a 2px text-colour top rule an
 ### Timeline steps
 
 `TimelineWrapper` / `TimelineStep`: numbered circles on a vertical rail for long step-by-step guides. Drawn like the diagrams' stage nodes: a 1px `--pm-border-strong` rail and outlined circles with the number in `--pm-text` on the page colour (they were white on Tailwind orange-500, 2.80:1, with a fixed `#a666f4` rail in both themes).
+
+### Browser surfaces
+
+Text selection is a purple wash (`--pm-selection`, 16% light / 20% dark, chosen so selected link text still clears 4.5:1) under unchanged text colour. Focus is always the token ring. Scrollbars in the sidebar and TOC stay transparent until hovered.
 
 ## Do's and Don'ts
 
