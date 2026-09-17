@@ -189,10 +189,10 @@ kubectl get all -n permit-platform
    kubectl get ingress -n permit-platform
    ```
 
-2. Test the frontend from inside the cluster, bypassing the ingress. The `permit-frontend` service listens on port `80` and forwards to container port `3000`. If the port-forward below fails, forward to the service port instead: `kubectl port-forward -n permit-platform svc/permit-frontend 3000:80`.
+2. Test the frontend from inside the cluster, bypassing the ingress. The `permit-frontend` service listens on port `80` and forwards to container port `3000`.
    ```bash
    # Check if services are responding
-   kubectl port-forward -n permit-platform svc/permit-frontend 3000:3000 &
+   kubectl port-forward -n permit-platform svc/permit-frontend 3000:80 &
    curl http://localhost:3000
    ```
 
@@ -221,10 +221,10 @@ kubectl get all -n permit-platform
    # For production, ensure DNS points to server IP
    ```
 
-2. **The ingress doesn't route traffic.** The chart names the ingress `permit-platform-ingress`. Use that name in `kubectl describe ingress` if `permit-frontend` isn't found.
+2. **The ingress doesn't route traffic.** The chart names the ingress `permit-platform-ingress`.
    ```bash
    # Check ingress status
-   kubectl describe ingress permit-frontend -n permit-platform
+   kubectl describe ingress permit-platform-ingress -n permit-platform
    
    # Restart ingress controller if needed
    kubectl rollout restart deployment/ingress-nginx-controller -n ingress-nginx
@@ -497,7 +497,7 @@ See [push images to a private registry](/how-to/deploy/on-prem/installation#step
 - The sign-in form reloads.
 - The browser redirects in a loop.
 
-The installer stores the admin password in the `global-infrastructure-secret` secret under the `KEYCLOAK_ADMIN_PASSWORD` key. [Retrieve service credentials](/how-to/deploy/on-prem/management#retrieving-service-credentials) shows the command. The commands in this section read `keycloak-admin-secret`, where older installations keep the admin password.
+The installer stores the admin password in the `global-infrastructure-secret` secret under the `KEYCLOAK_ADMIN_PASSWORD` key. [Retrieve service credentials](/how-to/deploy/on-prem/management#retrieving-service-credentials) shows the command.
 
 **Find the cause.** Check Keycloak, the authentication logs of the backend, and the stored admin password:
 
@@ -510,7 +510,7 @@ kubectl logs -n permit-platform deployment/keycloak
 kubectl logs -n permit-platform deployment/permit-backend-v2 | grep -i auth
 
 # Verify admin password
-kubectl get secret keycloak-admin-secret -n permit-platform -o jsonpath='{.data.password}' | base64 -d
+kubectl get secret global-infrastructure-secret -n permit-platform -o jsonpath='{.data.KEYCLOAK_ADMIN_PASSWORD}' | base64 -d
 ```
 
 **Fix the cause:**
@@ -518,7 +518,7 @@ kubectl get secret keycloak-admin-secret -n permit-platform -o jsonpath='{.data.
 1. **The password doesn't match.** Read the stored password again and check that Keycloak created the admin user on startup:
    ```bash
    # Get current admin password from secret
-   kubectl get secret keycloak-admin-secret -n permit-platform -o jsonpath='{.data.password}' | base64 -d
+   kubectl get secret global-infrastructure-secret -n permit-platform -o jsonpath='{.data.KEYCLOAK_ADMIN_PASSWORD}' | base64 -d
    
    # If password doesn't work, check if Keycloak initialized properly
    kubectl logs -n permit-platform deployment/keycloak | grep -i "admin user"
@@ -574,19 +574,19 @@ kubectl exec -n permit-platform deployment/permit-backend-v2 -- psql -h postgres
    kubectl exec -n permit-platform deployment/postgres -- psql -U permit -c "\l"
    ```
 
-3. **The password in the secret is wrong.** The installer stores the PostgreSQL password in `global-infrastructure-secret` under `POSTGRES_PASSWORD` (see [Retrieve service credentials](/how-to/deploy/on-prem/management#retrieving-service-credentials)). The chart doesn't create a `postgres-secret` secret. The command below works only in clusters where someone created that secret:
+3. **The password in the secret is wrong.** The installer stores the PostgreSQL password in `global-infrastructure-secret` under `POSTGRES_PASSWORD` (see [Retrieve service credentials](/how-to/deploy/on-prem/management#retrieving-service-credentials)). Read the stored password:
    ```bash
    # Check database password in secret
-   kubectl get secret postgres-secret -n permit-platform -o jsonpath='{.data.password}' | base64 -d
+   kubectl get secret global-infrastructure-secret -n permit-platform -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d
    ```
 
 ### Policy sync fails \{#policy-sync-issues}
 
 **Symptom:** The `permit-policy-sync-v2` pod crashes, or its logs show Git errors.
 
-Policy sync reads the repository URL from `permitServices.policySync.policyRepoUrl` and the SSH deploy key from `permitServices.policySync.sshPrivateKey` in `values.yaml`. The chart passes both values to the deployment as environment variables and fails to render when `sshPrivateKey` isn't a multi-line block that starts with `|`. The chart doesn't create a `policy-sync-ssh-key` secret. If the secret commands below return `NotFound`, check `sshPrivateKey` in `values.yaml` instead.
+Policy sync reads the repository URL from `permitServices.policySync.policyRepoUrl` and the SSH deploy key from `permitServices.policySync.sshPrivateKey` in `values.yaml`. The chart passes both values to the deployment as environment variables and fails to render when `sshPrivateKey` isn't a multi-line block that starts with `|`.
 
-**Find the cause.** Check the pod, its logs, and the key:
+**Find the cause.** Check the pod, its logs, and the repository URL:
 
 ```bash
 # Check Policy Sync pod status
@@ -595,16 +595,16 @@ kubectl get pods -n permit-platform -l app=permit-policy-sync-v2
 # Check Policy Sync logs
 kubectl logs -n permit-platform deployment/permit-policy-sync-v2
 
-# Verify SSH key secret
-kubectl get secret policy-sync-ssh-key -n permit-platform -o jsonpath='{.data.private-key}' | base64 -d | head -1
+# Verify the repository URL passed to policy sync
+kubectl get deployment permit-policy-sync-v2 -n permit-platform -o jsonpath='{.spec.template.spec.containers[*].env[?(@.name=="POLICY_REPO_URL")].value}'
 ```
 
 **Fix the cause:**
 
 1. **The key or repository is wrong.** Test the key against your Git host from a machine that has the private key. Add the public key to the repository as a deploy key if the test fails. To change the key or URL, follow [Change the repository or SSH key](/how-to/deploy/on-prem/management#repository-updates).
    ```bash
-   # Check if SSH key is properly configured
-   kubectl describe secret policy-sync-ssh-key -n permit-platform
+   # Check the key format in values.yaml (must be a multi-line block)
+   grep -A3 "sshPrivateKey:" charts/permit-platform/values.yaml
    
    # Test SSH connection manually (if possible)
    ssh -T git@github.com -i /path/to/permit-policy-key

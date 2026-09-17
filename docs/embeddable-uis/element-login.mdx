@@ -42,7 +42,7 @@ Skip this step if you use the `frontendOnly` method.
 The backend login route identifies the signed-in user from your own authentication, then calls `loginAs` with the user's key and a tenant key or ID. Both values are required:
 
 ```js
-permit.elements.loginAs({ userId, tenant });
+permit.elements.loginAs({ userId, tenantId });
 ```
 
 :::warning User must belong to the tenant
@@ -57,24 +57,23 @@ Create a Permit client in your backend with your environment API key. Replace `<
 <TabItem value="nodejs" label="Node.js">
 
 ```js
-from permitio import Permit
 const { Permit } = require("permitio");
-const permit = new Permit({token: "<YOUR_API_KEY>", ...});
+const permit = new Permit({ token: "<YOUR_API_KEY>" });
 ```
 </TabItem>
 <TabItem value="python" label="Python">
 
 ```python
-from permitio import Permit
+from permit import Permit
 
-permit = Permit(token="<YOUR_API_KEY>", ...)
+permit = Permit(token="<YOUR_API_KEY>")
 ```
 
 </TabItem>
 <TabItem value="dotnet" label=".NET">
 
 ```csharp
-using PermitIO;
+using PermitSDK;
 
 var permit = new Permit("<YOUR_API_KEY>");
 ```
@@ -96,7 +95,7 @@ Permit permit = new Permit(
 
 ### Call `loginAs` from the login route \{#use-the-loginas-function}
 
-Choose the tab that matches your authentication method, then your backend language. In each example, replace the commented `get_user_from_jwt` placeholder with the code that reads the user key from your own session, and set the tenant variable to the tenant the element shows.
+Choose the tab that matches your authentication method, then your backend language. In each example, replace the commented `get_user_from_jwt` placeholder, or the `<USER_KEY>` placeholder in the .NET and Java examples, with the code that reads the user key from your own session, and set the tenant variable or `<TENANT_KEY>` to the tenant the element shows.
 
 - **Cookies:** the route handles a `GET` request and redirects to `ticket.redirect_url`. `permit.elements.login()` loads the route in a hidden iframe and appends the tenant as a `tenant` query parameter.
 - **Bearer token** and **Other headers:** the route handles a `POST` request and returns `ticket.content` as JSON. `ticket.content` holds the redirect URL in a `url` field, which `permit.elements.login()` reads.
@@ -125,58 +124,57 @@ const express = require("express");
 
 ```python
 from fastapi import FastAPI
- from starlette.responses import JSONResponse
- app = FastAPI()
- @app.post("/login_cookie")
- async def login():
-     # get user from jwt
-     # user_id = get_user_from_jwt(request)
-     ticket = await permit.elements.login_as(USER, TENANT)
-     return JSONResponse(status_code=302, headers={"Location": ticket.redirect_url}, content={})
+from starlette.responses import JSONResponse
+app = FastAPI()
+@app.get("/login_cookie")
+async def login():
+    # get user from jwt
+    # user_id = get_user_from_jwt(request)
+    ticket = await permit.elements.login_as(USER, TENANT)
+    return JSONResponse(status_code=302, headers={"Location": ticket.redirect_url}, content={})
 ```
 
 </TabItem>
 <TabItem value="dotnet" label=".NET">
 
 ```csharp
+using System;
+using System.Net;
+using System.Threading.Tasks;
 using PermitSDK;
- namespace PermitOnboardingApp
- {
-     class HttpServer
-     {
-         public static HttpListener listener;
-         public static string url = "http://localhost:4000/login_cookie";
 
-         public static async Task HandleIncomingConnections()
-         {
-             bool runServer = true;
+namespace PermitOnboardingApp
+{
+    class HttpServer
+    {
+        public static HttpListener listener;
+        public static string url = "http://localhost:4000/login_cookie/";
+        static Permit permit = new Permit("<YOUR_API_KEY>");
 
-             while (runServer)
-                    HttpListenerContext ctx = await listener.GetContextAsync();
-                              HttpListenerResponse resp = ctx.Response;
-                              // In the next 4 lines we have the acutal code that is relevant to the Permit SDK
-                              // string testUserId = getUserIdFromJWT();
-                              EmbeddedLoginContentRequestOutput ticket = await permit.Elements.LoginAs(testUserId, TENANT_ID);
-                              resp.Redirect(ticket.RedirectUrl);
-                              resp.OutputStream.Close();
-                          }
-                      public static void Main(string[] args)
-                      {
-                          // Create a Http server and start listening for incoming connections
-                          listener = new HttpListener();
-                          listener.Prefixes.Add(url);
-                          listener.Start();
-                          Console.WriteLine("Listening for connections on {0}", url);
+        public static async Task HandleIncomingConnections()
+        {
+            while (true)
+            {
+                HttpListenerContext ctx = await listener.GetContextAsync();
+                HttpListenerResponse resp = ctx.Response;
+                string userId = "<USER_KEY>"; // read the user key from your own session
+                EmbeddedLoginContentRequestOutput ticket = await permit.Elements.LoginAs(userId, "<TENANT_KEY>");
+                resp.Redirect(ticket.RedirectUrl);
+                resp.OutputStream.Close();
+            }
+        }
 
-                          // Handle requests
-                          Task listenTask = HandleIncomingConnections();
-                          listenTask.GetAwaiter().GetResult();
-
-                          // Close the listener
-                          listener.Close();
-                      }
-                  }
-              }
+        public static void Main(string[] args)
+        {
+            listener = new HttpListener();
+            listener.Prefixes.Add(url);
+            listener.Start();
+            Console.WriteLine("Listening for connections on {0}", url);
+            HandleIncomingConnections().GetAwaiter().GetResult();
+            listener.Close();
+        }
+    }
+}
 ```
 
 </TabItem>
@@ -188,7 +186,7 @@ package com.example.myproject;
 import io.permit.sdk.Permit;
 import io.permit.sdk.PermitConfig;
 import io.permit.sdk.api.PermitApiException;
-import io.permit.sdk.api.models.UserLoginResponse;
+import io.permit.sdk.api.models.ElementsLoginResult;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.http.HttpHeaders;
@@ -211,8 +209,9 @@ public class DemoApplication {
 
             	@GetMapping("/login_cookie")
             	public ResponseEntity<Object> loginWithCookie() throws IOException, PermitApiException {
-                // String userId = getUserIdFromJWT();
-            		UserLoginResponse ticket = permit.elements.loginAs(userId, tenantId);
+                String userId = "<USER_KEY>"; // read the user key from your own session
+                String tenantId = "<TENANT_KEY>";
+            		ElementsLoginResult ticket = (ElementsLoginResult) permit.elements.loginAs(userId, tenantId);
             		HttpHeaders headers = new HttpHeaders();
             		headers.add("Location", ticket.redirectUrl);
             		return new ResponseEntity<>(ticket.content, headers, HttpStatus.FOUND);
@@ -252,58 +251,64 @@ const express = require("express");
 
 ```python
 from fastapi import FastAPI
- from starlette.responses import JSONResponse
- app = FastAPI()
+from starlette.responses import JSONResponse
+app = FastAPI()
 
 
- @app.post("/login_header")
- async def main():
-     # get user from jwt
-     # user_id = get_user_from_jwt(request)
-     ticket = await permit.elements.login_as(USER, TENANT)
-     return JSONResponse(content=ticket.content, status_code=200)
+@app.post("/login_header")
+async def main():
+    # get user from jwt
+    # user_id = get_user_from_jwt(request)
+    ticket = await permit.elements.login_as(USER, TENANT)
+    return JSONResponse(content=ticket.content, status_code=200)
 ```
 
 </TabItem>
 <TabItem value="dotnet" label=".NET">
 
 ```csharp
+using System;
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
 using PermitSDK;
- namespace PermitOnboardingApp
- {
-     class HttpServer
-     {
-         public static HttpListener listener;
-         public static string url = "http://localhost:4000/login_cookie";
-         public static async Task HandleIncomingConnections()
-         {
-             bool runServer = true;
-             while (runServer)
-                 HttpListenerContext ctx = await listener.GetContextAsync();
-                 HttpListenerResponse resp = ctx.Response;
-                 // In the next 6 lines we have the acutal code that is relevant to the Permit SDK
-                 // string testUserId = getUserIdFromJWT();
-                 EmbeddedLoginContentRequestOutput ticket = await permit.Elements.LoginAs(testUserId, TENANT_ID);
-                 byte[] data = Encoding.UTF8.GetBytes(ticket.Content);
-                 resp.StatusCode = 200;
-                 await resp.OutputStream.WriteAsync(data, 0, data.Length);
-                 resp.OutputStream.Close();
-             }
-         public static void Main(string[] args)
-          {
-                      // Create a Http server and start listening for incoming connections
-                      listener = new HttpListener();
-                      listener.Prefixes.Add(url);
-                      listener.Start();
-                      Console.WriteLine("Listening for connections on {0}", url);
-                      // Handle requests
-                      Task listenTask = HandleIncomingConnections();
-                      listenTask.GetAwaiter().GetResult();
-                      // Close the listener
-                      listener.Close();
-                  }
-              }
-          }
+
+namespace PermitOnboardingApp
+{
+    class HttpServer
+    {
+        public static HttpListener listener;
+        public static string url = "http://localhost:4000/login_header/";
+        static Permit permit = new Permit("<YOUR_API_KEY>");
+
+        public static async Task HandleIncomingConnections()
+        {
+            while (true)
+            {
+                HttpListenerContext ctx = await listener.GetContextAsync();
+                HttpListenerResponse resp = ctx.Response;
+                string userId = "<USER_KEY>"; // read the user key from your own session
+                EmbeddedLoginContentRequestOutput ticket = await permit.Elements.LoginAs(userId, "<TENANT_KEY>");
+                byte[] data = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(ticket.Content));
+                resp.StatusCode = 200;
+                resp.ContentType = "application/json";
+                await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                resp.OutputStream.Close();
+            }
+        }
+
+        public static void Main(string[] args)
+        {
+            listener = new HttpListener();
+            listener.Prefixes.Add(url);
+            listener.Start();
+            Console.WriteLine("Listening for connections on {0}", url);
+            HandleIncomingConnections().GetAwaiter().GetResult();
+            listener.Close();
+        }
+    }
+}
 ```
 
 </TabItem>
@@ -315,13 +320,13 @@ package com.example.myproject;
 import io.permit.sdk.Permit;
 import io.permit.sdk.PermitConfig;
 import io.permit.sdk.api.PermitApiException;
-import io.permit.sdk.api.models.UserLoginResponse;
+import io.permit.sdk.api.models.ElementsLoginResult;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
@@ -336,10 +341,11 @@ public class DemoApplication {
 					.build()
 	);
 
-	@GetMapping("/login_header")
+	@PostMapping("/login_header")
 	public ResponseEntity<Object> loginWithHeader() throws IOException, PermitApiException {
-    // String userId = getUserIdFromJWT();
-		UserLoginResponse ticket = permit.elements.loginAs(userId, tenantId);
+		String userId = "<USER_KEY>"; // read the user key from your own session
+		String tenantId = "<TENANT_KEY>";
+		ElementsLoginResult ticket = (ElementsLoginResult) permit.elements.loginAs(userId, tenantId);
 		return new ResponseEntity<>(ticket.content, HttpStatus.OK);
 	}
 
@@ -379,58 +385,64 @@ const express = require("express");
 
 ```python
 from fastapi import FastAPI
- from starlette.responses import JSONResponse
- app = FastAPI()
+from starlette.responses import JSONResponse
+app = FastAPI()
 
 
- @app.post("/login_header")
- async def main():
-     # get user from jwt
-     # user_id = get_user_from_jwt(request)
-     ticket = await permit.elements.login_as(USER, TENANT)
-     return JSONResponse(content=ticket.content, status_code=200)
+@app.post("/login_header")
+async def main():
+    # get user from jwt
+    # user_id = get_user_from_jwt(request)
+    ticket = await permit.elements.login_as(USER, TENANT)
+    return JSONResponse(content=ticket.content, status_code=200)
 ```
 
 </TabItem>
 <TabItem value="dotnet" label=".NET">
 
 ```csharp
+using System;
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
 using PermitSDK;
- namespace PermitOnboardingApp
- {
-     class HttpServer
-     {
-         public static HttpListener listener;
-         public static string url = "http://localhost:4000/login_cookie";
-         public static async Task HandleIncomingConnections()
-         {
-             bool runServer = true;
-             while (runServer)
-                 HttpListenerContext ctx = await listener.GetContextAsync();
-                 HttpListenerResponse resp = ctx.Response;
-                 // In the next 6 lines we have the acutal code that is relevant to the Permit SDK
-                 // string testUserId = getUserIdFromJWT();
-                 EmbeddedLoginContentRequestOutput ticket = await permit.Elements.LoginAs(testUserId, TENANT_ID);
-                 byte[] data = Encoding.UTF8.GetBytes(ticket.Content);
-                 resp.StatusCode = 200;
-                 await resp.OutputStream.WriteAsync(data, 0, data.Length);
-                 resp.OutputStream.Close();
-             }
-         public static void Main(string[] args)
-         {
-             // Create a Http server and start listening for incoming connections
-             listener = new HttpListener();
-             listener.Prefixes.Add(url);
-             listener.Start();
-             Console.WriteLine("Listening for connections on {0}", url);
-             // Handle requests
-             Task listenTask = HandleIncomingConnections();
-             listenTask.GetAwaiter().GetResult();
-             // Close the listener
-             listener.Close();
-         }
-     }
- }
+
+namespace PermitOnboardingApp
+{
+    class HttpServer
+    {
+        public static HttpListener listener;
+        public static string url = "http://localhost:4000/login_header/";
+        static Permit permit = new Permit("<YOUR_API_KEY>");
+
+        public static async Task HandleIncomingConnections()
+        {
+            while (true)
+            {
+                HttpListenerContext ctx = await listener.GetContextAsync();
+                HttpListenerResponse resp = ctx.Response;
+                string userId = "<USER_KEY>"; // read the user key from your own session
+                EmbeddedLoginContentRequestOutput ticket = await permit.Elements.LoginAs(userId, "<TENANT_KEY>");
+                byte[] data = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(ticket.Content));
+                resp.StatusCode = 200;
+                resp.ContentType = "application/json";
+                await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                resp.OutputStream.Close();
+            }
+        }
+
+        public static void Main(string[] args)
+        {
+            listener = new HttpListener();
+            listener.Prefixes.Add(url);
+            listener.Start();
+            Console.WriteLine("Listening for connections on {0}", url);
+            HandleIncomingConnections().GetAwaiter().GetResult();
+            listener.Close();
+        }
+    }
+}
 ```
 
 </TabItem>
@@ -442,13 +454,13 @@ package com.example.myproject;
 import io.permit.sdk.Permit;
 import io.permit.sdk.PermitConfig;
 import io.permit.sdk.api.PermitApiException;
-import io.permit.sdk.api.models.UserLoginResponse;
+import io.permit.sdk.api.models.ElementsLoginResult;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
@@ -463,10 +475,11 @@ public class DemoApplication {
 					.build()
 	);
 
-	@GetMapping("/login_header")
+	@PostMapping("/login_header")
 	public ResponseEntity<Object> loginWithHeader() throws IOException, PermitApiException {
-    // String userId = getUserIdFromJWT();
-		UserLoginResponse ticket = permit.elements.loginAs(userId, tenantId);
+		String userId = "<USER_KEY>"; // read the user key from your own session
+		String tenantId = "<TENANT_KEY>";
+		ElementsLoginResult ticket = (ElementsLoginResult) permit.elements.loginAs(userId, tenantId);
 		return new ResponseEntity<>(ticket.content, HttpStatus.OK);
 	}
 
@@ -518,9 +531,9 @@ npm install @permitio/permit-js
 
 This example shows the parameter shape for the bearer token method:
 
-```js
+```ts
 permit.elements.login({
-    loginUrl: 'https://your_app_url.com/login_cookie',
+    loginUrl: 'https://your_app_url.com/login_header',
     tenant: 'your_tenant_key',
     token: '<TOKEN>',
     loginMethod: LoginMethod.bearer
@@ -538,9 +551,9 @@ permit.elements.login({
 
 Set `loginUrl` to your cookie login route. `LoginMethod.cookie` is the default, so you can omit `loginMethod`.
 
-```js
+```ts
 permit.elements.login({
-    loginUrl: 'https://your_app_url.com/permit_login,
+    loginUrl: 'https://your_app_url.com/permit_login',
     tenant: 'your_tenant_key'
 }).then((res: any) => {//optional handle success
  }).catch((err: any) => {//handle error
@@ -553,7 +566,7 @@ permit.elements.login({
 
 Set `loginMethod` to `LoginMethod.bearer` and `token` to the signed-in user's token.
 
-```js
+```ts
 permit.elements.login({
     loginUrl: backendUrl,
     tenant: 'your_tenant_key',
@@ -570,7 +583,7 @@ permit.elements.login({
 
 Set `loginMethod` to `LoginMethod.header` and `headers` to the signed-in user's authentication headers.
 
-```js
+```ts
 permit.elements.login({
     loginUrl: backendUrl,
     tenant: 'your_tenant_key',
@@ -587,7 +600,7 @@ permit.elements.login({
 
 Set `loginMethod` to `LoginMethod.frontendOnly`, and pass the user's JWT, the tenant key, and the environment ID. The environment must have a JWKS configured, and the user's key in Permit must match the JWT `sub` claim or the claim you pass as `userKeyClaim`. See [Embed Permit Elements](/embeddable-uis/embedding-elements) for the full `frontendOnly` walkthrough.
 
-```js
+```ts
 permit.elements.login({
     loginMethod: LoginMethod.frontendOnly,
     userJwt: "<YOUR_USER_JWT>",
@@ -648,7 +661,7 @@ In the backend route, return `ticket.element_bearer_token` in a JSON field named
 
 Set `loginMethod` to `LoginMethod.supportsPrivateBrowser`, and set `elementIframeUrl` to the exact `src` of the element iframe. If your backend route expects a bearer token or custom headers, pass `token` or `headers` as well.
 
-```js
+```ts
     permit.elements.login({
         loginUrl: backendUrl,
             tenant: 'your_tenant_key',

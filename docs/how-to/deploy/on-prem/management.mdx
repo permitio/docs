@@ -156,32 +156,32 @@ permitServices:
         cpu: "2000m"
 ```
 
-Increase storage for PostgreSQL and for OpenSearch, which stores audit logs. The chart reads `persistence.size`. The chart doesn't set a storage class, so the volumes use the cluster's default storage class and `storageClass` has no effect. Kubernetes can only expand an existing volume when the storage class allows volume expansion.
+Increase storage for PostgreSQL and for OpenSearch, which stores audit logs. The chart reads `persistence.size`. The chart doesn't set a storage class, so the volumes use the cluster's default storage class. Kubernetes can only expand an existing volume when the storage class allows volume expansion.
 
 ```yaml
 thirdPartyServices:
   postgres:
     persistence:
       size: "50Gi"  # Increase for production
-      storageClass: "fast-ssd"  # Use specific storage class
   
   opensearch:
     persistence:
       size: "100Gi"  # For production audit logs
 ```
 
-Tune OpenSearch shards, replicas, and index rollover for the audit log index. The example shows the keys without their parent. In `values.yaml`, nest the `opensearch` block under `thirdPartyServices`, because the chart reads `thirdPartyServices.opensearch.indexSettings` and `thirdPartyServices.opensearch.ism`:
+Tune OpenSearch shards, replicas, and index rollover for the audit log index:
 
 ```yaml
-opensearch:
-  indexSettings:
-    auditLogs:
-      numberOfShards: 1  # Single-node: 1, Multi-node: 3-5
-      numberOfReplicas: 0  # Single-node: 0, HA: 1+
-  ism:
-    rollover:
-      minSize: "50gb"  # Adjust based on volume
-      minAge: "30d"   # Retention period
+thirdPartyServices:
+  opensearch:
+    indexSettings:
+      auditLogs:
+        numberOfShards: 1  # Single-node: 1, Multi-node: 3-5
+        numberOfReplicas: 0  # Single-node: 0, HA: 1+
+    ism:
+      rollover:
+        minSize: "50gb"  # Adjust based on volume
+        minAge: "30d"   # Retention period
 ```
 
 ### Apply configuration changes \{#applying-configuration-changes}
@@ -199,7 +199,12 @@ helm upgrade third-party-services charts/permit-platform \
 
 # 2. Run migrations (database schema updates)
 helm upgrade migrations charts/permit-platform \
+  --set permitServices.enabled=false \
+  --set thirdPartyServices.enabled=false \
   --set migrations.enabled=true \
+  --set migrations.tag=<backend-image-tag> \
+  --set ingress.enabled=false \
+  --set secrets.enabled=false \
   -n permit-platform
 
 # 3. Update platform services (all 35 Permit services)
@@ -392,17 +397,14 @@ kubectl rollout restart deployment/permit-policy-sync-v2 -n permit-platform
 
 ### Change the repository or SSH key \{#repository-updates}
 
-The chart reads the repository URL from `permitServices.policySync.policyRepoUrl` and the deploy key from `permitServices.policySync.sshPrivateKey` in `values.yaml`. The chart passes both values to the `permit-policy-sync-v2` deployment as environment variables. To change either one, edit `values.yaml` and run the installer again. The chart doesn't create or read a `policy-sync-ssh-key` secret, so the `kubectl create secret` command in the block below doesn't change the key that policy sync uses.
+The chart reads the repository URL from `permitServices.policySync.policyRepoUrl` and the deploy key from `permitServices.policySync.sshPrivateKey` in `values.yaml`. The chart passes both values to the `permit-policy-sync-v2` deployment as environment variables. To change either one, edit `values.yaml` and run the installer again.
 
 ```bash
 # Update Git repository configuration in values.yaml
 vi charts/permit-platform/values.yaml
 
-# Update the policy sync secret with new SSH key
-kubectl create secret generic policy-sync-ssh-key -n permit-platform \
-  --from-literal=private-key="$(cat new-private-key)" \
-  --from-literal=repo-url="git@github.com:neworg/new-policies.git" \
-  --dry-run=client -o yaml | kubectl apply -f -
+# Re-apply configuration (use the flags you installed with)
+./scripts/install-permit-platform.sh --gke --skip-images
 
 # Restart services to pick up new configuration
 kubectl rollout restart deployment/permit-policy-sync-v2 -n permit-platform
@@ -532,13 +534,9 @@ The certificate is replaced when the `openssl x509 -noout -dates` command prints
 
 ### Rotate passwords \{#password-rotation}
 
-The installer keeps service passwords in `global-infrastructure-secret` and builds the database connection string in `permit-backend-v2-secret` from `values.yaml`. Every installer run reuses the passwords already in `global-infrastructure-secret`. The chart doesn't create a `postgres-secret` secret, so the first command in the block below applies only to clusters where you created that secret yourself. Patching a secret doesn't change the password of the PostgreSQL user in the database. For help planning a rotation, contact [Permit support](#support).
+The installer keeps service passwords in `global-infrastructure-secret` and builds the database connection string in `permit-backend-v2-secret` from `values.yaml`. Every installer run reuses the passwords already in `global-infrastructure-secret`. Patching a secret doesn't change the password of the PostgreSQL user in the database. For help planning a rotation, contact [Permit support](#support).
 
 ```bash
-# Update database passwords in secrets
-kubectl patch secret postgres-secret -n permit-platform \
-  --type='merge' -p='{"data":{"password":"'$(echo -n 'new-password' | base64)'"}}'
-
 # Update service passwords in backend secret  
 kubectl patch secret permit-backend-v2-secret -n permit-platform \
   --type='merge' -p='{"data":{"PG_DSN":"'$(echo -n 'postgresql+asyncpg://permit:new-password@postgres:5432/permit' | base64)'"}}'
@@ -580,7 +578,7 @@ kubectl describe nodes
 kubectl get events --all-namespaces --sort-by='.lastTimestamp'
 
 # Check cluster health
-kubectl get componentstatuses
+kubectl get --raw='/readyz?verbose'
 ```
 
 ### Ingress and service connectivity \{#load-balancing}
@@ -610,8 +608,8 @@ kubectl top nodes
 kubectl top pods -n permit-platform
 
 # Network connectivity test
-kubectl exec -n permit-platform deployment/permit-backend-v2 -- curl -s http://postgres:5432 || echo "Database connection failed"
-kubectl exec -n permit-platform deployment/permit-backend-v2 -- curl -s http://redis:6379 || echo "Redis connection failed"
+kubectl exec -n permit-platform deployment/permit-backend-v2 -- python3 -c "import socket; socket.create_connection(('postgres', 5432), 3)" || echo "Database connection failed"
+kubectl exec -n permit-platform deployment/permit-backend-v2 -- python3 -c "import socket; socket.create_connection(('redis', 6379), 3)" || echo "Redis connection failed"
 
 # Storage health check
 kubectl get pv,pvc -n permit-platform
@@ -666,9 +664,6 @@ kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres >
 kubectl get pods,svc,ingress,pv,pvc -n permit-platform -o wide > system-info.txt
 kubectl get events -n permit-platform --sort-by='.lastTimestamp' > events.txt
 
-# Create support bundle
-tar -czf permit-platform-support-$(date +%Y%m%d-%H%M%S).tar.gz \
-  permit-platform-logs.txt system-info.txt events.txt
 # Add resource usage information
 kubectl top pods -n permit-platform > resource-usage.txt
 kubectl top nodes > node-usage.txt

@@ -149,23 +149,23 @@ After all images are pushed, the script sets `imageRegistry` in `charts/permit-p
 
 ```bash
 ╔══════════════════════════════════════════════════════════════╗
-║     Permit Platform Image Push Script                      ║
+║     Permit Platform Image Push Script                        ║
 ╚══════════════════════════════════════════════════════════════╝
 
 Target Registry: us-central1-docker.pkg.dev/my-project/permit-platform
-Images Directory: ../images
+Images Directory: /path/to/permit-platform-on-prem-installer/scripts/../images
 
-Found 35 images to push
+Found <N> images to push
 
-[1/35] Processing permit-backend-v2.tar
+[1/<N>] Processing permit-backend-v2.tar
+  Target image name: permit-backend-v2
   Loading image from tar...
-  Loaded: permitio/permit-backend-v2:latest
-  Tagging as us-central1-docker.pkg.dev/my-project/permit-platform/permit-backend-v2:latest
-  Pushing...
+  Loaded (original): <source-image>:<tag>
+  Tagging as us-central1-docker.pkg.dev/my-project/permit-platform/permit-backend-v2:<tag>
+  Pushing us-central1-docker.pkg.dev/my-project/permit-platform/permit-backend-v2:<tag>...
   ✓ Done
 
-[2/35] Processing permit-frontend.tar
-  ...
+...
 
 ╔══════════════════════════════════════════════════════════════╗
 ║     All images pushed successfully!                         ║
@@ -178,9 +178,11 @@ Next steps:
 1. Update charts/permit-platform/values.yaml with your frontend domain:
    frontendDomain: "your-domain.company.com"
 
-2. Run the installer with --skip-images flag:
-   cd scripts
-   ./install-permit-platform.sh --gke --skip-images
+2. If using a private registry requiring authentication:
+   Add imagePullSecrets to values.yaml and create the Kubernetes secret
+
+3. Run the installer:
+   ./install-permit-platform.sh --skip-images
 ```
 
 The same script works with any Docker-compatible registry. Pass the registry path in the same form:
@@ -201,8 +203,9 @@ List the pushed images and describe one of them:
 gcloud artifacts docker images list us-central1-docker.pkg.dev/YOUR_PROJECT_ID/permit-platform
 
 # Check a specific image
+# IMAGE_TAG is the tag shown in the push script output or in values.yaml
 gcloud artifacts docker images describe \
-  us-central1-docker.pkg.dev/YOUR_PROJECT_ID/permit-platform/permit-backend-v2:latest
+  us-central1-docker.pkg.dev/YOUR_PROJECT_ID/permit-platform/permit-backend-v2:IMAGE_TAG
 ```
 
 ### Add credentials for a registry that requires authentication \{#important-registry-authentication-for-kubernetes}
@@ -249,14 +252,13 @@ global:
 
 ### Run the installer with --skip-images \{#important-skip-image-loading-when-using-private-registry}
 
-When the images are already in your registry, pass `--skip-images` so the installer does not load the `.tar` files again. On EKS, AKS, or self-managed Kubernetes, use the `--gke --skip-images` line, as explained in [Deployment targets](#deployment-target-options):
+When the images are already in your registry, pass `--skip-images` so the installer does not load the `.tar` files again:
 
 ```bash
 # After pushing images to your private registry, run installer with --skip-images
 cd scripts
-./install-permit-platform.sh --gke --skip-images              # For GKE
-./install-permit-platform.sh --skip-images                    # For EKS/AKS/on-prem
-./install-permit-platform.sh --openshift --skip-images        # For OpenShift
+./install-permit-platform.sh --gke --skip-images                                 # For GKE, EKS, AKS, or self-managed Kubernetes
+./install-permit-platform.sh --openshift --skip-openshift-registry --skip-images  # For OpenShift with an external registry
 ```
 
 ## Step 5: Run the installer \{#step-4-run-installation}
@@ -279,7 +281,7 @@ Run `scripts/install-permit-platform.sh` with the flag for your cluster type. To
 `--openshift` and `--kind` can't be combined.
 
 :::warning Pass a target flag on an existing Kubernetes cluster
-The `--help` output lists a run without a target flag as the production Kubernetes target. Without `--gke`, `--openshift`, or `--kind`, the installer runs the Kind steps: it tries to create a Kind cluster named `permit-platform-on-prem` and reads the backend image tag from that cluster's control-plane container. On an existing EKS, AKS, or self-managed cluster, the installation fails at those steps. Add `--gke` to every command on an existing Kubernetes cluster, including the examples on this page that show no target flag.
+The `--help` output lists a run without a target flag as the production Kubernetes target. Without `--gke`, `--openshift`, or `--kind`, the installer runs the Kind steps: it tries to create a Kind cluster named `permit-platform-on-prem` and reads the backend image tag from that cluster's control-plane container. On an existing EKS, AKS, or self-managed cluster, the installation fails at those steps.
 :::
 
 ### Installer options \{#tlscertificate-options}
@@ -298,13 +300,11 @@ The [on-premises reference](/how-to/deploy/on-prem/reference) lists the commands
 
 ### Common flag combinations \{#common-installation-combinations}
 
-The Kubernetes examples follow the `--help` output and omit `--gke`. On an existing Kubernetes cluster, add `--gke` to them.
-
 Kubernetes with self-signed certificates generated by the installer:
 
 ```bash
 # Production K8s with auto-generated certificates
-./scripts/install-permit-platform.sh --generate-tls
+./scripts/install-permit-platform.sh --gke --generate-tls
 ```
 
 OpenShift with an external registry such as Amazon ECR, in a custom namespace:
@@ -332,6 +332,7 @@ Amazon EKS with TLS terminated at an Application Load Balancer:
 ```bash
 # AWS EKS with ALB and ACM certificates
 ./scripts/install-permit-platform.sh \
+  --gke \
   --skip-tls-check \
   --namespace production
 ```
@@ -372,7 +373,6 @@ When the installer finishes, it prints the frontend URL, the admin credentials, 
 [INFO]   • Certificate warnings are normal for self-signed certificates
 [INFO]   • Click 'Advanced' → 'Proceed to site' in browser
 [INFO] For troubleshooting, run: kubectl get pods -n permit-platform
-✅ Deployment completed successfully
 ```
 
 :::warning Generated passwords are stored in values.yaml
@@ -487,14 +487,9 @@ ingress:
   tls:
     enabled: true
     certificate:
-      cert: |
-        -----BEGIN CERTIFICATE-----
-        [Your certificate content]
-        -----END CERTIFICATE-----
-      key: |
-        -----BEGIN PRIVATE KEY-----
-        [Your private key content]  
-        -----END PRIVATE KEY-----
+      # Base64-encoded PEM files on one line, for example: base64 < tls.crt | tr -d '\n'
+      cert: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t..."
+      key: "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0t..."
 ```
 
 The TLS secret is named `permit-frontend-tls` by default (`ingress.tls.secretName`).
@@ -597,8 +592,8 @@ Check the Policy Sync logs for SSH or repository errors:
 # Check Policy Sync service logs
 kubectl logs -n permit-platform deployment/permit-policy-sync-v2
 
-# Verify SSH key configuration
-kubectl get secret policy-sync-ssh-key -n permit-platform -o yaml
+# Verify the repository URL (the SSH key and URL are environment variables on the deployment)
+kubectl set env deployment/permit-policy-sync-v2 -n permit-platform --list | grep POLICY_REPO_URL
 ```
 
 ### Check service logs \{#check-service-logs}
@@ -624,7 +619,7 @@ kubectl logs -n permit-platform deployment/postgres
 kubectl get pods -n ingress-nginx
 
 # Test internal connectivity
-kubectl exec -n permit-platform deployment/permit-backend-v2 -- curl -k https://permit-frontend/health
+kubectl exec -n permit-platform deployment/permit-backend-v2 -- curl -s -o /dev/null -w '%{http_code}\n' http://permit-frontend/
 ```
 
 ## Next steps

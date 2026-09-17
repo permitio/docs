@@ -19,7 +19,7 @@ When you finish, your Django app has two endpoints:
 ## Prerequisites
 
 - A Permit.io account. See [Create a Permit.io account](/quickstart).
-- Python 3 with [Django](https://www.djangoproject.com) installed, and a Django project named `permit_demo`. To create the project, run `django-admin startproject permit_demo`.
+- Python 3 with [Django](https://www.djangoproject.com) 5.0 or later installed, and a Django project named `permit_demo`. To create the project, run `django-admin startproject permit_demo`.
 - [Node.js](https://nodejs.org/en) and npm, to install the Permit CLI.
 - [Docker](https://www.docker.com/), to run the policy decision point (PDP) container.
 
@@ -65,7 +65,7 @@ Permit CLI templates create a policy with predefined resources, roles, and rules
 Apply the **blogging-platform** template to your environment:
 
 ```bash
-permit template apply --template blogging-platform
+permit env template apply --template blogging-platform
 ```
 
 The CLI prints a success message when the template is applied.
@@ -153,10 +153,6 @@ ROOT_URLCONF = "permit_demo.urls"
 
 `ROOT_URLCONF` points Django at `permit_demo/urls.py`. `ALLOWED_HOSTS = ['*']` accepts requests for any host name, which is acceptable only for local testing.
 
-:::warning CSRF protection blocks the test requests
-If the `MIDDLEWARE` setting includes `django.middleware.csrf.CsrfViewMiddleware`, as the `startproject` settings do, Django rejects the `curl` POST requests in this tutorial with HTTP `403`. For a local test, remove that middleware from `MIDDLEWARE`, or exempt the two views with Django's `csrf_exempt` decorator.
-:::
-
 In `permit_demo/urls.py`, map URLs to views:
 
 ```python
@@ -166,7 +162,7 @@ from . import views
 
 urlpatterns = [
     path("", views.root),
-    path("register", views.sync_user),
+    path("register", views.register),
 ]
 ```
 
@@ -184,6 +180,7 @@ Create a file named `views.py` in the `permit_demo` package with the following c
 import os
 import json
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from permit import Permit
 from pydantic import BaseModel, EmailStr, ValidationError
 
@@ -218,6 +215,7 @@ async def root(request):
     return JsonResponse({"message": "Hello, Permit-Django!"})
 
 # Register a new user
+@csrf_exempt
 async def register(request):
     try:
         data = json.loads(request.body)
@@ -264,12 +262,13 @@ class PermissionCheck(BaseModel):
     user: str
 
 # Check access to the resource
+@csrf_exempt
 async def posts(request):
     action = 'create'
     resource = 'Post'
     try:
         data = json.loads(request.body)
-        check = Posts(**data)
+        check = PermissionCheck(**data)
     except ValidationError as e:
         return JsonResponse(e.errors(), status=422, safe=False)
     except Exception as e:
@@ -295,6 +294,8 @@ Add a `posts` path to the existing `urlpatterns` list in `permit_demo/urls.py`, 
 ```python
 # permit_demo/urls.py
 urlpatterns = [
+    path("", views.root),
+    path("register", views.register),
     path("posts", views.posts),
 ]
 ```

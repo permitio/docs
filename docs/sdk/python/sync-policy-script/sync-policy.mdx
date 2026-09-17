@@ -6,10 +6,6 @@ description: "Write a Python script that creates resources and roles, with their
 
 Write a Python script that defines your resources and roles in code and creates them in a Permit.io environment with the Python SDK. This guide is for backend developers who keep the policy schema in source control instead of editing it in the Permit dashboard.
 
-:::warning Run the Python script once per environment
-The script doesn't check whether a resource or role already exists. If you run the script against an environment that already has a `secret` resource or a `secret_manager` role, the Permit API returns status code 409 and the SDK raises `PermitAlreadyExistsError`, which stops the script. To make the script safe to run again, check for existing items first, as the [Node.js policy script](/sdk/nodejs/sync-policy-script/sync-policy) does.
-:::
-
 ## Prerequisites
 
 - Python 3 and the `permit` package installed in your project. See [Check permissions with the Python SDK (asyncio)](/sdk/python/quickstart-python).
@@ -73,9 +69,11 @@ roles = [
 
 The script creates every resource first, because role permissions reference resource actions. For each role, the script converts the permissions to the `resource:action` format, for example `secret:create`, and creates the role.
 
-The `Permit` client from `from permit import Permit` is asynchronous, so the script runs each call with `asyncio.run()`. Add `import asyncio` at the top of the file.
+The `Permit` client from `from permit import Permit` is asynchronous, so the script runs each call with `asyncio.run()`.
 
 ```python
+import asyncio
+
 if __name__ == "__main__":
     for resource in resources:
         # Creating each resource
@@ -94,12 +92,12 @@ if __name__ == "__main__":
 
 ## Full policy script \{#attached-the-full-code-for-reference}
 
-The full script combines the parts and prints each role object before it creates the role.
+The full script combines the parts. Before it creates a resource or role, the script checks whether the item exists. If `get()` raises `PermitNotFoundError`, the script creates the item. Otherwise, it prints a message and skips the item.
 
 ```python
 import asyncio
 
-from permit import Permit
+from permit import Permit, PermitNotFoundError
 
 
 # This line initializes the SDK and connects your python app
@@ -136,41 +134,33 @@ resources = [
     }
 ]
 
-# create a script to create policy in permit this policy will be have a resource and a role with permissions
-if __name__ == "__main__":
+async def create_policy():
     for resource in resources:
-        resource_obj = {
-            "name": resource.get("name"),
-            "key": resource.get("name"),
-            "actions": resource.get("actions"),
-            "description": "",
-        }
-        asyncio.run(permit.api.resources.create(resource))
+        try:
+            await permit.api.resources.get(resource["key"])
+            print(f"resource already exists: {resource['key']}")
+        except PermitNotFoundError:
+            await permit.api.resources.create(resource)
 
     for role in roles:
-        role_permissions = []
-        for permission in role.get("permissions", []):
-            role_permissions = role_permissions + [f"{permission.get('resource')}:{action}" for action in permission.get("actions")]
-        role_obj = {
-            "name": role.get("name"),
-            "key": role.get("name"),
-            "permissions": role_permissions,
-        }
-        print(role_obj)
+        role_permissions = [f"{p['resource']}:{a}" for p in role["permissions"] for a in p["actions"]]
+        try:
+            await permit.api.roles.get(role["name"])
+            print(f"role already exists: {role['name']}")
+        except PermitNotFoundError:
+            await permit.api.roles.create({"key": role["name"], "name": role["name"], "permissions": role_permissions})
 
-        asyncio.run(permit.api.roles.create(role_obj))
-
+if __name__ == "__main__":
+    asyncio.run(create_policy())
 ```
-
-The full script builds a `resource_obj` dictionary but passes the original `resource` dictionary to `permit.api.resources.create()`. Both dictionaries have the same key, name, and actions.
 
 ## Run and verify the policy script \{#running-the-script}
 
 1. Save the full script as `sync_policy.py`, replace `permit_key_` with your API key, and run `python sync_policy.py`.
-2. The script prints the role object: `{'name': 'secret_manager', 'key': 'secret_manager', 'permissions': ['secret:create', 'secret:read', 'secret:update']}`.
+2. Run the script a second time. The second run prints `resource already exists: secret` and `role already exists: secret_manager`, and doesn't change the environment.
 3. In the Permit dashboard, open the Policy Editor. The `secret` resource and the `secret_manager` role appear, and `secret_manager` has the `create`, `read`, and `update` permissions on `secret`.
 
-To change the definitions, edit the `resources` and `roles` lists. Before you run the script again, delete the existing resource and role, or add existence checks to the script.
+To add resources and roles, edit the `resources` and `roles` lists and run the script again. The script skips items that already exist, so it doesn't apply changed actions or permissions to an existing resource or role. To change an existing item, delete it first.
 
 ## Next steps \{#notes}
 

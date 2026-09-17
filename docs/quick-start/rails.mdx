@@ -65,7 +65,7 @@ Permit CLI templates create a policy with predefined resources, roles, and rules
 Apply the **blogging-platform** template to your environment:
 
 ```bash
-permit template apply --template blogging-platform
+permit env template apply --template blogging-platform
 ```
 
 The CLI prints a success message when the template is applied.
@@ -172,11 +172,13 @@ Create `app/controllers/permit_controller.rb` with the following code:
 
 ```ruby
 # app/controllers/permit_controller.rb
+require 'net/http'
+
 class PermitController < ApplicationController
   skip_before_action :verify_authenticity_token
 
   def register
-    user = PERMIT.api.users.sync(
+    user = PERMIT.api.users.sync_user(
       key: params[:email],
       email: params[:email],
       first_name: params[:first_name],
@@ -187,10 +189,10 @@ class PermitController < ApplicationController
       role: 'Reader',
       tenant: 'default'
     }
-    response = PERMIT.api.users.assignRole(assigned_role)
+    response = assign_role(assigned_role)
     render json: {
       message: 'User registered and role assigned',
-      user,
+      user: user,
       role_assignment: response
     }, status: :created
   rescue => e
@@ -211,6 +213,19 @@ class PermitController < ApplicationController
   rescue => e
     render json: { error: e.message }, status: :internal_server_error
   end
+
+  private
+
+  # The Ruby SDK has no role assignment method, so call the Permit REST API
+  def assign_role(assignment)
+    api = URI('https://api.permit.io')
+    headers = { 'Authorization' => "Bearer #{ENV['PERMIT_API_KEY']}", 'Content-Type' => 'application/json' }
+    Net::HTTP.start(api.host, api.port, use_ssl: true) do |http|
+      scope = JSON.parse(http.get('/v2/api-key/scope', headers).body)
+      path = "/v2/facts/#{scope['project_id']}/#{scope['environment_id']}/role_assignments"
+      JSON.parse(http.post(path, assignment.to_json, headers).body)
+    end
+  end
 end
 ```
 
@@ -218,7 +233,7 @@ The controller has two actions:
 
 | Action | What it does |
 |---|---|
-| `register` | Syncs the user to Permit.io with the email address as the user key, then assigns the **Reader** role in the `default` tenant. Returns `201` with the user and the role assignment. |
+| `register` | Syncs the user to Permit.io with the email address as the user key, then assigns the **Reader** role in the `default` tenant with the `assign_role` helper, which calls the Permit REST API because the Ruby SDK has no role assignment method. Returns `201` with the user and the role assignment. |
 | `posts` | Asks the PDP whether the user key in `params[:user]` can `create` a `Post`. Returns `"User is permitted"`, or `403` with `"User is not permitted"`. |
 
 Both actions return `500` with the error message when a call to Permit.io or the PDP raises an error.
