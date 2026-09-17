@@ -127,6 +127,88 @@ Use these terms, spelled this way.
 | **HIPAA** | Permit.io is HIPAA compliant; "HIPAA compliant" is the wording to use. Don't claim ISO 27001, PCI, or FedRAMP for Permit. |
 | **sign in** / **sign-in** | Verb / noun. Not "log into" in new copy. |
 
+## Content quality rules (technical-docs-writing)
+
+This section adds the stricter rules of the technical-docs-writing standard. Where it and the sections above disagree, the stricter rule wins, except for the owner decisions listed at the end of this section. The page-by-page scores live in `docs-content-audit.md` at the repo root.
+
+### One reader and one content type per page
+
+- **Name one primary reader.** New user, implementer, operator, decision maker, or AI agent builder. The intro says who the page is for and what they get. When two readers need different things, link between two pages instead of writing one page for both.
+- **Pick one Diataxis type.** Tutorial (learn by doing a guided sequence), how-to (solve one task for a reader who has context), reference (exact facts, parameters, tables), or explanation (concepts, architecture, tradeoffs). Move content of another type to the page that owns it and link to it.
+- **Shortest working path first.** Outcome, prerequisites, then the recommended path. Alternatives, advanced options, and edge cases come after the path works.
+- **Show success.** Every how-to and tutorial ends with a check the reader can run and the output they should see.
+
+### Sections that stand alone
+
+Readers and AI assistants often land on a single section from search. Write every section so it answers its question when quoted alone.
+
+- **Explicit names over pronouns.** "The PDP returns `false`", not "it returns `false`". Never "as described above", "the previous step", or "this" without a noun.
+- **Descriptive headings.** "Run the PDP as a Docker container", not "Step 2" or "Setup". Put a number in front of a descriptive heading if the order matters: "1. Run the PDP as a Docker container".
+- **No skipped heading levels.** H2 then H3. No H1 in the body; the title is the H1.
+- **Define before use.** Expand an acronym and define a product term the first time a page uses it, even if another page already did.
+
+### Words to avoid
+
+These add to the filler list in [Voice](#voice).
+
+- **No metaphors, clichés, or generalizations.** "The PDP is the brain of your authorization" becomes "The PDP evaluates each permission check against the policy".
+- **No "not only ... but also".** Write two plain statements.
+- **No "we", "our", or "let's"** in instructions. Name the actor: "you", "Permit", or "the PDP".
+- **No meta-commentary.** "In this section", "It's worth noting that", "As you can see", "In conclusion".
+- **No dated wording** for stable behavior: "new", "now", "recently", "coming soon", "currently", "on the roadmap". Use present tense for stable behavior. Use a date for a historical event: "Since SDK version 2.5.0".
+
+### Specific warnings
+
+A warning states the condition and the consequence.
+
+| Instead of | Write |
+|---|---|
+| Be careful with your API key. | Anyone with your environment API key can change that environment's policy through the Permit API. Load the key from an environment variable, and don't commit it. |
+| Be careful when renaming headings. | Renaming a heading changes its anchor. Links from other pages to the old anchor break, and `npm run build` fails. |
+
+### Links
+
+- **Link text names the destination.** "See [Sync users](/how-to/sync-users)", never "click [here]" or "this [guide]".
+- **Link to the page that owns a topic** instead of repeating its steps. Copies drift: two pages with the same steps end up with two different sets of steps.
+
+### Examples
+
+- Examples are complete: imports, client setup, the call, and the expected result or output.
+- Placeholders are explained in the text before or right after the block.
+- Samples use fictional people and companies (`john@permit.io`, `acme-corp`), not real public figures or customers.
+
+### Accuracy
+
+- Ground every behavior claim in a source: the SDK repositories, the [API reference](https://api.permit.io/v2/redoc), the PDP repository, or observed product behavior. If a claim cannot be verified, remove it and raise it in the pull request for the owner to confirm.
+- Don't describe unreleased or planned features in docs pages.
+
+### Owner decisions
+
+These override the generic rules above.
+
+- **Confirmed product claims:** Permit.io is HIPAA compliant and SOC 2 Type II attested. PDP performance figures (thousands of checks per second, sub-millisecond latency, under 10 ms at p95, millions of decisions a day from a single PDP instance) are confirmed. A sidecar PDP over loopback has "no network latency".
+- **Fun-fact admonitions stay** when they cite a primary source. They are the one allowed exception to "no clichés".
+- **Names:** Permit Elements, Permit MCP Gateway, Mix and Match Policies (the Policies landing page), Nexus PDP, and X (not Twitter).
+- **URLs never change.** No file renames, and no `id` or `slug` changes. Keep linked anchors with `\{#old-id}` when a heading changes.
+- **Code samples stay byte-identical** in content edits unless they are verifiably wrong. A code fix goes in its own commit that says what was wrong.
+
+### Scoring rubric
+
+Score a page 0 to 2 on each dimension. A page is publishable with no zeroes and at least 16 of 20. A page is world-class at 18 or higher.
+
+| Dimension | 0 | 1 | 2 |
+|---|---|---|---|
+| Audience fit | Audience is unclear or mixed | Audience can be inferred | Primary reader and goal are explicit |
+| Task success | Reader cannot complete the task | Task works with outside context | Task is complete, ordered, and success is recognizable |
+| Content type discipline | Tutorial, how-to, reference, and explanation are muddled | Mostly one type with digressions | Structure matches the reader's goal |
+| Accuracy | Claims are unverified or stale | Mostly accurate with gaps | Claims are grounded in source truth |
+| Structure | Dense or hard to scan | Usable but uneven | Headings, lists, tables, and links form a clear map |
+| Examples | Missing, partial, or non-runnable | Useful but incomplete | Complete, realistic, and easy to adapt |
+| Terminology | Inconsistent or undefined terms | Minor inconsistency | Terms are defined and used consistently |
+| AI retrievability | Sections depend on hidden context | Some sections stand alone | Sections are self-contained and explicit |
+| Maintenance | Likely to rot or over-specifies volatile details | Some maintenance risk | Evergreen where possible and clear about volatile facts |
+| Style | Wordy, passive, product-centric | Clear with rough spots | Concise, active, reader-centered |
+
 ## Before you open a pull request
 
 - [ ] Title is the task; frontmatter `description` is one sentence.
@@ -134,4 +216,7 @@ Use these terms, spelled this way.
 - [ ] Every claim names its mechanism, and no number, customer, or compliance claim is unverified.
 - [ ] Glossary terms are used as listed.
 - [ ] No file, `id`, or `slug` changed; renamed headings keep linked anchors.
+- [ ] The page has one primary reader and one content type, and a how-to or tutorial ends with a success check.
+- [ ] Every section makes sense when quoted alone: no "it", "this", or "above" without a noun.
+- [ ] Warnings state the condition and the consequence. Link text names the destination.
 - [ ] `npm run build` passes.
