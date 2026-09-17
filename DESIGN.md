@@ -256,7 +256,7 @@ Text selection is a purple wash (`--pm-selection`, 16% light / 20% dark, chosen 
 
 - Use `--pm-*` tokens or the Infima variables mapped onto them; add a token (with its measured ratios) before adding a colour.
 - Target `ThemeClassNames`, Infima and `pm-*` classes; restate upstream module styles on a stable class when you swizzle.
-- Keep motion to 120-180ms colour and border transitions, and honour `prefers-reduced-motion`.
+- Keep motion to 120-180ms colour and border transitions (ease-out), and honour `prefers-reduced-motion`. Hover never lifts or glows a card; the one movement is a 0.25rem nudge of an arrow on home cards and task links.
 - Check both themes at 1440px and 390px, and run `scripts/audit-a11y.mjs`, before shipping a visual change.
 
 ### Don't:
