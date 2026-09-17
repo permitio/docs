@@ -168,6 +168,7 @@ const sidebars = {
       collapsible: false,
       className: "category-as-header",
       items: [
+        "how-to/build-policies/overview",
         {
           type: "category",
           label: "Roles (RBAC)",
