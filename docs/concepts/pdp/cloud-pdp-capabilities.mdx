@@ -1,87 +1,73 @@
 ---
 sidebar_position: 2
 title: Cloud PDP Capabilities
-description: "Learn what the Cloud PDP is, which policy models it supports, and when to use it instead of a container PDP."
+description: "Reference for the Cloud PDP: supported policy models, permission check APIs, rate limits, observability, and differences from an Edge PDP."
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
+Look up what the Permit Cloud PDP supports: policy models, permission check APIs, rate limits, and observability. This page is for developers who decide between the Cloud PDP and a self-hosted Edge PDP, or who hit a Cloud PDP limit.
 
 ## What is the Cloud PDP?
 
-The **Cloud PDP** is Permit's **managed Policy Decision Point** that runs in Permit.io's infrastructure and serves authorization decisions over HTTPS.
-It exposes the same high‑level APIs as the container PDP and is **backward compatible** with existing SDK integrations that target
-`https://cloudpdp.api.permit.io`.
+The Cloud PDP is the managed policy decision point (PDP) that Permit.io runs in its own infrastructure. The Cloud PDP serves authorization decisions over HTTPS at `https://cloudpdp.api.permit.io`. It exposes the same permission check APIs as an Edge PDP (the `permitio/pdp-v2` container you run), so an SDK connects to the Cloud PDP by setting the PDP URL.
 
-Use the Cloud PDP when you want:
+Use the Cloud PDP when you don't want to run, upgrade, or scale PDP containers.
 
-- **Managed infrastructure** – No containers, upgrades, or scaling to maintain.
-- **High throughput & data volume** – Optimized for large‑scale policy checks.
+Use an [Edge PDP](/concepts/pdp/overview#run-an-edge-pdp-with-docker) when you need attribute-based access control (ABAC), control over network placement, or container-level configuration.
 
-For full control over deployment topology, network placement, and container‑level tuning, use the
-[`permitio/pdp-v2` container PDP](/concepts/pdp/overview#run-an-edge-pdp-with-docker).
+## Supported policy models \{#supported-policy-models}
 
-## Supported Policy Models
+| Policy model | Cloud PDP | Edge PDP |
+|---|---|---|
+| Role-based access control (RBAC) | Supported | Supported |
+| Relationship-based access control (ReBAC) | Supported | Supported |
+| Multi-tenant authorization | Supported | Supported |
+| Attribute-based access control (ABAC) | Not supported | Supported |
+| Custom policy as code (custom Rego through GitOps) | Not supported | Supported |
 
-- **RBAC (Role‑Based Access Control)** – **Supported**
-- **ReBAC (Relationship‑Based Access Control)** – **Supported**
-- **Multi‑tenant authorization** – **Supported**
+The Cloud PDP and an Edge PDP evaluate the same policy model from your Permit project. The difference is where the PDP runs and which runtime features you configure yourself.
 
-### Not Supported on Cloud PDP
+### Not supported on Cloud PDP \{#not-supported-on-cloud-pdp}
 
-- **ABAC (Attribute‑Based Access Control)** – **Not supported on Cloud PDP**  
-  Use the container PDP when you need ABAC today.
-- **Policy‑as‑Code (PBAC) / custom OPA bundles** – Not supported on Cloud PDP  
-  Use the container PDP together with GitOps / PBAC flows for this use case.
+- **ABAC:** use an Edge PDP.
+- **Custom policy as code:** use an Edge PDP with [GitOps](/integrations/gitops/overview).
 
-Cloud PDP and the container PDP share the same policy model as defined in your Permit project; the main difference is **where**
-the PDP runs and which runtime features you can configure yourself.
+## Supported permission check APIs \{#supported-permission-evaluation-types}
 
-## Supported Permission Evaluation Types
+The Cloud PDP serves these permission check APIs for the policy models above. The SDKs call these endpoints for you, so most applications use SDK methods instead of HTTP requests.
 
-The Cloud PDP supports the same core **permission evaluation types** as the container PDP for the models listed above:
+| Question | HTTP endpoint | Docs |
+|---|---|---|
+| Can this user perform this action on this resource? | `POST /allowed` | [Check](/how-to/enforce-permissions/check) (`permit.check()`) |
+| Several checks in one request | `POST /allowed/bulk` | [Bulk check](/how-to/enforce-permissions/bulk-check) |
+| What can this user do? | `POST /user-permissions` | [User permissions](/how-to/enforce-permissions/user-permissions) |
+| Which users can perform this action on this resource? | `POST /authorized_users` | [Authorized users](/how-to/enforce-permissions/authorized-users) |
 
-- **`/allowed` – Single permission check**  
-  See [Check](/how-to/enforce-permissions/check).
-  - SDK: `permit.check(...)`
-  - HTTP: `POST /allowed`
-- **`/allowed/bulk` – Bulk permission checks**  
-  See [Bulk Check](/how-to/enforce-permissions/bulk-check).
-  - HTTP: `POST /allowed/bulk`
-- **`/user-permissions` – User permissions for a subject**  
-  See [User Permissions](/how-to/enforce-permissions/user-permissions).
-  - "What can this user do?"
-  - HTTP: `POST /user-permissions`
-- **`/authorized_users` – Authorized users for a resource**  
-  See [Authorized Users](/how-to/enforce-permissions/authorized-users).
-  - "Which users are allowed to do X on Y?"
-  - HTTP: `POST /authorized_users`
-- **AuthZen (OpenID AuthZen Authorization API 1.0)** – standard evaluation and search APIs:
-  - **Access Evaluation**: `POST /v1/access/evaluation`
-  - **Bulk Access Evaluations**: `POST /v1/access/evaluations`
-  - **Subject Search**: `POST /v1/subjects`
-  - **Resource Search**: `POST /v1/resources`
-  - **Action Search**: `POST /v1/actions`
+### AuthZen API endpoints \{#authzen-api-endpoints}
 
-:::note
-The SDKs abstract most of these endpoints – in day‑to‑day usage you will primarily call higher‑level helpers on the client side.
-:::
+The Cloud PDP implements the [OpenID AuthZen Authorization API 1.0](https://openid.github.io/authzen/) evaluation and search endpoints:
 
-:::warning Container‑only helpers
-The following helper APIs are **container PDP only** and are **not supported** by the Cloud PDP:
+| AuthZen operation | HTTP endpoint |
+|---|---|
+| Access evaluation | `POST /access/v1/evaluation` |
+| Bulk access evaluations | `POST /access/v1/evaluations` |
+| Subject search | `POST /access/v1/search/subject` |
+| Resource search | `POST /access/v1/search/resource` |
+| Action search | `POST /access/v1/search/action` |
 
-- [`permit.AllTenantsCheck`](/how-to/enforce-permissions/all-tenants-check) (all‑tenants check across a PDP cluster)
-- Local enforcement APIs such as `/local/role_assignments`
-  (see [`Local Enforcement APIs`](/how-to/enforce-permissions/list-role-assignments))
-:::
+### APIs available only on an Edge PDP \{#container-only-helpers}
 
-## Rate Limiting
+The Cloud PDP doesn't serve these APIs. A call to them requires an Edge PDP:
 
-The Cloud PDP includes built-in rate limiting to prevent abuse. No configuration is required on your end.
+- [All-tenants check](/how-to/enforce-permissions/all-tenants-check) (`permit.checkAllTenants()` in Node.js, `permit.AllTenantsCheck()` in Go).
+- Local APIs under `/local/`, such as `/local/role_assignments`. See [List role assignments](/how-to/enforce-permissions/list-role-assignments).
 
-### Rate Limits
+## Rate limiting
 
-Rate limits are applied per IP address over a 1-minute window. If a limit is exceeded, the Cloud PDP returns an **HTTP 429** response.
+The Cloud PDP applies rate limits to protect the shared service. You don't configure the limits.
+
+### Rate limits \{#rate-limits}
+
+The Cloud PDP counts requests per client IP address over a 1-minute window. When a client exceeds a limit, the Cloud PDP returns HTTP `429 Too Many Requests`.
 
 | Endpoint | Method | Limit |
 | --- | --- | --- |
@@ -95,7 +81,7 @@ Rate limits are applied per IP address over a 1-minute window. If a limit is exc
 | All POST requests | POST | 1500 req/min |
 | All requests | Any | 3000 req/min |
 
-If a rate limit is exceeded, the response body contains:
+When a client exceeds a rate limit, the response body is:
 
 ```json
 {
@@ -104,96 +90,83 @@ If a rate limit is exceeded, the response body contains:
 }
 ```
 
-:::note Corporate NAT
-Rate limits are designed to accommodate corporate networks where many users share a single public IP. If you encounter rate limiting in a large deployment, contact [Permit support](https://permit.io/support).
+:::note Shared public IP addresses
+The limits are set to accommodate corporate networks where many users share one public IP address. If a large deployment behind a shared IP address receives `429` responses, email [support@permit.io](mailto:support@permit.io).
 :::
 
-### Handling 429 Responses
+### Handle 429 responses \{#handling-429-responses}
 
-If your application receives an HTTP 429 response:
+When your application receives an HTTP `429` response from the Cloud PDP:
 
-1. **Wait and retry** — back off for a few seconds before retrying the request.
-2. **Reduce concurrency** — if multiple services share the same IP, reduce parallel requests.
-3. **Check the response body** — the JSON body confirms the rate limit was triggered (as opposed to an application-level error).
+1. **Check the response body.** An `"error": "rate_limited"` body confirms a rate limit, not an application error.
+2. **Retry with backoff.** Wait a few seconds, then retry the request.
+3. **Reduce concurrency.** If several services share one public IP address, reduce their parallel requests, or use `/allowed/bulk` to combine checks.
 
-## Observability & Logs
+If your workload needs a higher request rate than these limits, run an Edge PDP. An Edge PDP has no built-in rate limits.
 
-- **Audit logs & decision logs**
-  - Cloud PDP sends decision logs to Permit Cloud and they appear in the **Audit Logs** UI and APIs in the **same format**
-    as logs from the container PDP.
-  - Any dashboards, filters, or exports you rely on today continue to work.
-- **Debug Mode**
-  - You can enable **Debug Mode** per environment or PDP configuration; this enriches decision logs with additional context.
-  - For configuration details, see [Debug Mode](/how-to/use-audit-logs/debug-mode).
+## Observability and logs \{#observability--logs}
 
-:::info
-For the Cloud PDP, Debug Mode is managed via **Permit environment configuration** (UI/API).
-You do **not** run or configure the Cloud PDP container directly.
-:::
+- **Decision logs:** the Cloud PDP sends decision logs to Permit. They appear in the **Audit Logs** screen and the audit log APIs in the same format as logs from an Edge PDP.
+- **Debug Mode:** Debug Mode adds context to decision logs. For the Cloud PDP, you enable Debug Mode through the PDP configuration of your environment with the Permit API. You don't run or configure a Cloud PDP container. See [Debug Mode](/how-to/use-audit-logs/debug-mode).
 
-### Not Provided by Cloud PDP
+### Not provided by Cloud PDP \{#not-provided-by-cloud-pdp}
 
-Because the Cloud PDP is a **managed service**, some container‑level observability features are **not exposed**:
+The Cloud PDP is a managed service, so it doesn't expose these container-level features:
 
-- No direct `/metrics` endpoint or custom metrics sink.
-- No Helm‑based **logs forwarder** (Fluent Bit sidecar) configuration.
-- No direct access to the underlying OPA process, OPAL services, or internal logs.
+- A `/metrics` endpoint or a custom metrics sink.
+- The [logs forwarder](/how-to/use-audit-logs/logs-forwarder) (Fluent Bit) configuration.
+- Access to the underlying OPA process, OPAL services, or internal logs.
 
-You should rely on:
+To monitor Cloud PDP usage, use the **Audit Logs** screen, and add metrics and logging around the PDP calls in your application.
 
-- **Audit Logs** in the Permit dashboard.
-- Application‑side metrics and logging around your PDP calls.
+## Data handling \{#data-handling--scale}
 
-## Data Handling & Scale
+Permit manages policy and data ingestion, replication, and storage for the Cloud PDP, and operates the service: patching, upgrades, and tuning. With an Edge PDP, you own that lifecycle: image upgrades, rollout strategy, and observability stack.
 
-The Cloud PDP is designed for **high data volume and high throughput**.
-Policy and data ingestion, replication, and storage are fully managed by Permit.
+The Cloud PDP reads only the data you store in Permit: users, tenants, resource instances, relationship tuples, and role assignments. You can't configure OPAL Scopes or custom data sources for the Cloud PDP.
 
-- The Cloud PDP service is **continuously and consistently updated, secured, and operated by Permit** (patching, upgrades, performance tuning).
-- With the container PDP, **you own the operational lifecycle** (image upgrades, rollout strategies, observability stack, etc.).
+Use an Edge PDP if you need any of these:
 
-- You **do not** manage any embedded data engines for the Cloud PDP.
-- You **cannot** configure OPAL Scope or custom data sources for the Cloud PDP – instead, you load data into Permit as **users, resource instances, tenants, relationship tuples, and role assignments**, and the Cloud PDP consumes that managed data.
-- You get a single, stable HTTPS endpoint that serves decisions for your project/environment.
+- Custom external data sources through OPAL Scopes. See [Use an external data source](/how-to/manage-data/use-external-data-source).
+- Read-your-own-writes with [Send Consistent Updates](/how-to/manage-data/local-facts-uploader).
+- Offline mode, backups, or control over the network path to Permit.
 
-If you need full control over:
+## Cloud PDP vs Edge PDP comparison \{#comparison-cloud-pdp-vs-container-pdp}
 
-- Custom external data sources via OPAL Scope.
-- Embedded data stores or other on-disk state inside the PDP container.
-- Consistent updates / read‑your‑own‑writes behavior using the Local Facts **Send Consistent Updates** feature (see [Send Consistent Updates](/how-to/manage-data/local-facts-uploader)).
-- Offline mode, backups, and network path to Permit Cloud.
+| Capability | Cloud PDP | Edge PDP (`permitio/pdp-v2`) |
+| --- | --- | --- |
+| Deployment | Managed by Permit | You run and operate the container image |
+| Policy models | RBAC, ReBAC | RBAC, ReBAC, ABAC |
+| Multi-tenant authorization | Supported | Supported |
+| Single and bulk checks, user permissions, authorized users | Supported | Supported |
+| AuthZen API | Supported | Supported |
+| All-tenants check | Not supported | Supported |
+| Local APIs (`/local/*`) | Not supported | Supported |
+| External data through OPAL Scopes | Not supported | Supported |
+| Debug Mode configuration | Environment PDP configuration through the Permit API | Environment PDP configuration, or the `PDP_DEBUG` environment variable per container |
+| Logs forwarder (Fluent Bit) | Not supported | Supported |
+| Metrics and APM | Not supported | `/metrics` endpoint and Datadog APM tracing |
+| Updates and maintenance | Operated by Permit | You manage image versions, rollouts, and maintenance |
+| Send Consistent Updates (read-your-own-writes) | Not supported | Supported with `proxy_facts_via_pdp` |
+| Rate limiting | Built in, per IP address | None built in |
 
-then you should use the **container PDP** instead.
+## When to use each PDP \{#when-to-use-which}
 
-## Comparison: Cloud PDP vs Container PDP
+**Use the Cloud PDP when:**
 
-| Capability                                    | Cloud PDP (managed)                     | Container PDP (`permitio/pdp-v2`)              |
-| ---                                          | ---                                     | ---                                            |
-| Deployment                                   | Fully managed by Permit                 | You run and operate the Docker image           |
-| Policy models                                | RBAC, ReBAC                             | RBAC, ReBAC, ABAC                              |
-| Multi‑tenant                                 | ✅ Supported                            | ✅ Supported                                   |
-| Single / bulk checks, user‑permissions, etc. | ✅ Supported                            | ✅ Supported                                   |
-| AuthZen API                                  | ✅ Supported                            | ✅ Supported                                   |
-| All‑tenants check helper                     | ❌ Not supported                        | ✅ `permit.AllTenantsCheck`                    |
-| Local enforcement APIs (`/local/*`)          | ❌ Not supported                        | ✅ Supported                                   |
-| External data via OPAL Scope                 | ❌ Not exposed                          | ✅ Supported                                   |
-| Debug mode configuration                     | Managed via Permit environment / PDP configuration | Per‑container configuration and environment flags |
-| Logs forwarder / Fluent Bit                  | ❌ Not supported                        | ✅ Configurable log forwarder sidecar (e.g., Fluent Bit) |
-| Metrics & APM                                | ❌ Not supported                        | ✅ Exposed metrics / APM integrations (Datadog, etc.) |
-| Updates & maintenance                        | Continuously updated and operated by Permit | You manage container versions, rollouts, and maintenance |
-| Send Consistent Updates (read‑your‑own‑writes) | ❌ Not supported                        | ✅ Supported via Local Facts / `proxy_facts_via_pdp` |
-| Rate limiting                                | ✅ Built-in — managed automatically by Permit | Your responsibility to configure if needed |
+- You want a managed PDP without containers to operate.
+- Your policies use RBAC and ReBAC.
+- You call the standard check APIs: `/allowed`, `/allowed/bulk`, `/user-permissions`, `/authorized_users`, and the AuthZen endpoints.
+- Your request rate fits within the [rate limits](#rate-limits).
 
-## When to Use Which?
+**Use an Edge PDP when:**
 
-- **Use Cloud PDP when**:
-  - You want a **fully managed**, production‑ready PDP with minimal operational overhead.
-  - You need to support **RBAC and ReBAC** at high scale without running containers.
-  - You rely on standard permission evaluations such as `check` / `/allowed`, `/allowed/bulk`, `/user-permissions`, `/authorized_users`, and the AuthZen API endpoints.
+- You need ABAC.
+- You need control over deployment topology, networks, and scaling.
+- You depend on local APIs, custom data sources, read-your-own-writes, or container-level observability.
 
-- **Use the container PDP when**:
-  - You need **ABAC** support today.
-  - You require fine‑grained control over deployment topology, networks, and scaling.
-  - You depend on **local helper APIs**, custom data sources, or advanced observability.
+## Related pages
 
-
+- [PDP overview](/concepts/pdp/overview): connect an SDK to the Cloud PDP or run an Edge PDP.
+- [Cloud PDP benchmarks](/concepts/pdp/cloud-pdp-benchmarks): server-side latency measurements.
+- [PDP configuration](/concepts/pdp/configuration): environment variables for an Edge PDP.
