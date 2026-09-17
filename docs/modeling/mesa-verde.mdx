@@ -1,44 +1,106 @@
 ---
 sidebar_position: 2
-title: Fintech / Banking Demo Application
-description: "Explore Mesa Verde, a fintech demo app that models multi-tenant RBAC and secure collaboration flows with Permit.io."
+title: "Banking app example: Mesa Verde"
+description: "Learn how the Mesa Verde banking demo models multi-tenant RBAC, attribute-based wire transfer rules, ReBAC transactions, and approval flows with Permit.io."
 ---
 
-Mesa Verde Bank is a demo web application that showcases multiple fine-grained authorization flows for a self-service Fintech/banking system.
+Learn how Mesa Verde Bank, an open source Next.js banking demo, models its authorization with Permit.io: tenant roles, attribute-based wire transfer limits, per-transaction relationships, and approval flows. This page is for developers who implement authorization in a fintech or banking application and want a worked example to copy from.
 
-If you're planning to implement authorization for a Fintech use case, this intuitive demo should help you better understand fine-grained authorization policy modeling and enforcement basics.
+:::tip Try the demo
 
-:::tip See how it works Live!
-
-- [Sign up to the live demo and experience the authorization flows](https://io.permit.io/mesa-verde-docs-link)
-
-- [See the application code on GitHub](https://github.com/permitio/mesa-verde-banking-demo)
+- [Sign up to the live Mesa Verde demo](https://io.permit.io/mesa-verde-docs-link)
+- [Read the application code on GitHub](https://github.com/permitio/mesa-verde-banking-demo)
 
 :::
 
-## Authorization Flows
+## What you build
 
-Before we start with the configuration guide, let's understand the authorization flows we are showcasing in this application:
+The Mesa Verde model answers these authorization questions for a bank account:
 
-### Multi-Tenancy Hierarchical Role-Based Access Control (RBAC)
+- **Who can use an account.** Each new user gets their own tenant and the `AccountOwner` role in it. Owners invite beneficiaries and members.
+- **Who can send a wire transfer, and how much.** Rules combine the user's role, the transfer amount, where the user signs in from, and whether the user entered a one-time password (OTP).
+- **Who can see a transaction.** The sender and the receiver of each transaction get a role on that transaction instance.
+- **Who can approve a blocked transfer.** When a transfer is denied, the account owner reviews it in an embedded approval UI.
 
-This is our application's most basic self-service flow, which auto-assigns user permissions when they open an account in the bank application. By signing up for an account, the user is automatically assigned a role and permissions that allow them to perform all the operations on their account as an `Account Owner`.
+## Model overview
 
-In Mesa Verde, we use events from the authentication provider (Stytch) to call the Permit's role assignment and create tenant APIs to perform this flow.
+The schema is defined in Terraform in [`main.tf`](https://github.com/permitio/mesa-verde-banking-demo/blob/main/main.tf). The tables below summarize it.
 
-### Secure Collaboration
+**Resources**
 
-This [self-service ability](https://www.permit.io/blog/announcing-permit-share-if) allows users to manage their account's beneficiaries and members.
+| Resource key | Actions | Attributes |
+|---|---|---|
+| `Account` | `read`, `add-beneficiaries`, `add-members` | None |
+| `Wire_Transfer` | `approve`, `review`, `deny`, `operate`, `create` | `id`, `description`, `date`, `currency` (string), `amount` (number) |
+| `Transaction` | `create`, `list` | `id`, `description`, `date`, `currency` (string), `amount` (number) |
 
-The app utilizes [Permit Elements](/embeddable-uis/overview) — a set of Authorization UI components that allow users to manage other users and their roles in their accounts. This flow is a good example of using Permit's UI components to build secure collaboration features.
+**Tenant roles** (role-based access control, RBAC)
 
-![User Management](/img/modeling/mesa-verde/user-management.jpg)
+| Role key | Permissions |
+|---|---|
+| `AccountOwner` | `Account:add-members`, `Account:add-beneficiaries`, `Account:read`, `Transaction:list`, `Wire_Transfer:create`, `Wire_Transfer:approve` |
+| `AccountBeneficiary` | `Account:add-members`, `Account:read`, `Transaction:list` |
+| `AccountMember` | `Account:read` |
 
-### Dynamic UI Feature Toggling
+**Resource roles** (relationship-based access control, ReBAC)
 
-One of the most common needs in the distributed architectures of banking applications is streamlining the permissions model across the whole stack - backend to frontend.
+| Resource role | Permissions | Assigned to |
+|---|---|---|
+| `Transaction#Sender` | `list` | The sender of a transaction |
+| `Transaction#Receiver` | `list` | The owner of the receiving account |
+| `Wire_Transfer#_Reviewer_` | `approve`, `deny`, `review` | The account owner who reviews a blocked transfer |
+| `Wire_Transfer#_Approved_` | `operate` | The requesting user, after a reviewer approves the request |
 
-This application uses Permit's authorization enforcement with the [isomorphic authorization CASL library](/integrations/feature-flagging/casl) to toggle UI features based on user permissions.
+**Attribute-based sets** (attribute-based access control, ABAC)
+
+| Set | Type | Condition |
+|---|---|---|
+| `Small_Transaction`, `Small_Wire` | Resource set | `resource.amount` less than or equal to 1000 |
+| `Large_Transaction`, `Large_Wire` | Resource set | `resource.amount` greater than or equal to 1000 |
+| `Safe_Owners` | User set | `user.location` equals `user.country`, and the user has the `AccountOwner` role |
+| `Unsafe_Owners` | User set | `user.location` doesn't equal `user.country`, and the user has the `AccountOwner` role |
+| `Strong_Auth_Owners` | User set | `user.strongAuth` is `true`, and the user has the `AccountOwner` role |
+
+**User attributes**, created by the demo's `setup.js` script: `location` (country of the request IP address), `country` (country the user is from), and `strongAuth` (the user entered an OTP).
+
+The model has no relations between resource types. For a model built on relations and role derivations, see [Google Drive permissions with ReBAC](/modeling/google-drive).
+
+## Prerequisites
+
+To run the demo locally, you need:
+
+- [Node.js](https://nodejs.org/en/download/), [Docker](https://docs.docker.com/get-docker/), [Terraform](https://developer.hashicorp.com/terraform/install), and [ngrok](https://ngrok.com/download). ngrok exposes your local app so Permit can call the approval webhook.
+- A Permit.io account and an environment with no existing policy. Create an environment as described in [Projects and environments](/manage-your-account/projects-and-env), then copy its environment API key ([Get your API key](/overview/get-api-key)).
+- Accounts on [Stytch](https://stytch.com/dashboard) (authentication and OTP) and [JSONBin.io](https://jsonbin.io/) (stores each user's home country).
+
+## Run the demo locally
+
+The [repository README](https://github.com/permitio/mesa-verde-banking-demo#running-the-application) owns the full setup. The short version:
+
+1. Clone `permitio/mesa-verde-banking-demo` and run `npm install`.
+2. Copy `.env.template` to `.env` and fill in the Stytch, Permit, JSONBin, webhook secret, and ngrok values.
+3. Run `npm run setup`. The script creates the user attributes, applies `main.tf` with Terraform, and creates the Permit Elements configurations.
+4. Run `docker-compose up --build`. Docker Compose starts the Next.js app, a policy decision point (PDP) container on port 7766, and ngrok.
+
+To verify the setup, open the [Policy Editor](https://app.permit.io/policy-editor) in your environment. It shows the `Account`, `Wire_Transfer`, and `Transaction` resources with the roles from the model overview. Then open your ngrok URL and sign up. The app shows your account with the **Send Wire Transfer** and **Manage Account Users** buttons.
+
+## Authorization flows in the demo \{#authorization-flows}
+
+Each flow below maps to part of the model and to code in the repository.
+
+### Multi-tenant RBAC for new accounts \{#multi-tenancy-hierarchical-role-based-access-control-rbac}
+
+When a user signs up, the app creates a tenant for that user, syncs the user to Permit, and assigns the `AccountOwner` role in the new tenant. The sign-up event comes from Stytch, the authentication provider. The code is in [Sync users, tenants, and roles](#data).
+
+### Secure collaboration with Permit Elements \{#secure-collaboration}
+
+Account owners and beneficiaries manage the people on an account with [Permit Elements](/embeddable-uis/overview), embeddable UI components for permission management. The User Management element lets a user invite members and assign them roles.
+
+![Mesa Verde account page with the embedded User Management element listing account users and their roles](/img/modeling/mesa-verde/user-management.jpg)
+
+### Feature toggling in the UI \{#dynamic-ui-feature-toggling}
+
+The frontend shows or hides buttons based on the same policy the backend enforces. The app uses [CASL](/integrations/feature-flagging/casl) with `permit-fe-sdk`: the browser sends the list of actions to the app's `/account/api/frontend-permissions` route, which runs `permit.bulkCheck()` and returns one decision per action. The React components read the results through `@casl/react`:
 
 ```javascript
 {
@@ -61,189 +123,160 @@ This application uses Permit's authorization enforcement with the [isomorphic au
 }
 ```
 
-The Mesa Verde application enforces permissions in the UI components using the `@casl/react` library.
+### Multi-step wire transfer authorization \{#fine-grained-wire-transfer-permissions}
 
-### Fine-Grained Wire Transfer Permissions
+A wire transfer passes more than one permission check before the app records it. The `POST` handler in `src/app/account/api/transactions/route.ts` runs these steps:
 
-Wire transfers are a great example of complex flows in a banking system. Unlike other operations that can get the atomic binary decision of `allowed`/`denied,` performing a wire transfer requires multiple authorization steps. This app uses Permit's fine-grained authorization APIs to enforce a multi-step wire transfer flow. The following diagram shows the flow of the wire transfer operation:
+1. **Check the transfer.** `permit.check(user, "create", Wire_Transfer)` with the transfer attributes. Owners pass through the `AccountOwner` role. Beneficiaries pass only for transfers in `Small_Wire`.
+2. **Start an approval if the transfer check fails.** The app creates a `Wire_Transfer` resource instance, assigns the account owner the `_Reviewer_` role on it, and returns HTTP 403 with `Wire transfer needs approval`.
+3. **Check the transaction.** `permit.check()` on `Transaction:create` with the user attributes `location` and `strongAuth`. The condition set rules decide the result (see [Condition set rules](#condition-sets)).
+4. **Ask for an OTP if the transaction check fails.** The app sends an OTP email through Stytch and returns HTTP 403 with `Wire transfer needs strong authentication`. When the user resubmits the transfer with the OTP, the app verifies the code with Stytch and runs the checks again with `strongAuth: true`.
+5. **Record the transaction.** The app creates a `Transaction` resource instance and assigns the `Sender` and `Receiver` resource roles.
 
-![Wire Transfer Flow](/img/modeling/mesa-verde/transfer-flow-diagram.png)
+![Wire transfer flow diagram showing the role check, the location and OTP checks, and the approval request path](/img/modeling/mesa-verde/transfer-flow-diagram.png)
 
-In the flow above, we are utilizing three different advanced flows of a Fine-Grained Authorization system:
+The flow uses three patterns:
 
-- **External Data Sources:** The system uses [external data sources](/how-to/manage-data/loading-data/) (a dummy identity provider) to determine user operation anomalies by comparing their location attribute from external sources with a real-time IP-based location.
-- **A Feedback Loop of Authentication and Authorization:** The application uses the authentication APIs to create a feedback loop between the authentication and authorization systems. With this feedback flow, the application sends and authorizes one-time passwords with the authentication provider along with the authorization check.
-- **Transaction Approval Flow:** Account owners can approve wire transfers made by other users.
+- **External data.** The user's home `country` comes from JSONBin.io, a stand-in for an identity provider. The app's middleware looks up the request IP address with ipinfo.io and passes the result as the `location` attribute at check time. See [Load external data](/how-to/manage-data/loading-data).
+- **Authentication and authorization feedback.** A denied check triggers a stronger authentication step (OTP), and the OTP result becomes an attribute in the next check.
+- **Transaction approval.** Account owners approve transfers that other users can't perform on their own.
 
-The transaction flow in Mesa Verde intentionally ignores the basic question, `Does this user have the balance to perform this operation?` and focuses on the complex flow of, `Does this user have the permission to perform this operation?`
-After reading the documentation, you should see that a balance check is a basic operation that can be added to the flow in minutes.
+The demo doesn't check the account balance. It checks only whether the user has permission to send the transfer.
 
-### Relationship-Based Access Control (ReBAC)
+### Transactions with ReBAC \{#relationship-based-access-control-rebac}
 
-All the transactions users perform in the Mesa Verde application are stored in a [Google-Zanzibar-like graph database](https://www.permit.io/blog/what-is-google-zanzibar), along with their relationships with other users and entities.
+Each transaction is a resource instance in Permit. The app assigns the `Sender` and `Receiver` resource roles on that instance, so each party's access comes from its relationship to the transaction, not from a tenant-wide role. To learn the ReBAC terms, see [What is ReBAC?](/how-to/build-policies/rebac/overview).
 
-:::info Relationship-Based Access Control
-While the application only shows some of the basic capabilities of [relationship-based access control](https://www.permit.io/blog/what-is-rebac), which allows the `Sender` and `Reciever` of a transaction to have separate permissions on those instances, using this approach can later create more complex flows like `An associated advisor to a saving plan can also get an implicit grant to view the particular transactions of the plan`.
-:::
+### Access requests and approvals \{#authorization-ui-components}
 
-### Authorization UI Components
+The demo uses three more Permit Elements:
 
-The Mesa Verde application also showcases the ability to implement complex access request flows in the UI using [Permit's UI components](/embeddable-uis/overview/).
+1. **Access request.** A member asks for more access on an account, such as permission to view transactions.
+2. **Operation approval request.** A user asks for approval of a wire transfer that the policy denies.
+3. **Approval management.** The account owner approves or denies the pending requests.
 
-The following flows are showcased in the application:
+![Access request element in Mesa Verde where an account member requests access to view transactions](/img/modeling/mesa-verde/access-request.jpg)
 
-1. **Access Request** Users can ask for leveraged access on the accounts they are members of (e.g., ask for permission to view the account transactions).
-2. **Approval Request** Users can request a wire transfer approval, which they are not allowed to perform.
-3. **Approval Flow** Users can approve or deny particular transactions on their account.
+[Configure Permit Elements](#permit-elements) describes each configuration.
 
-![Access Request](/img/modeling/mesa-verde/access-request.jpg)
+## Application architecture
 
-Implementing this flow from scratch can take a long time, but with Permit.io, you can do it in minutes, as we will show in the following sections.
+Mesa Verde is a Next.js application. It uses these services:
 
-To understand the flow we want to achieve in our application, let's start with the configuration guide.
-The next section will go through a step-by-step configuration of Permit, synchronizing the data with the authentication provider, and implementing fine-grained authorization enforcement in the Mesa Verde application.
+| Component | Role in the demo |
+|---|---|
+| [Stytch](https://stytch.com/) | Authenticates users and sends and verifies OTP codes. |
+| JSONBin.io | Stores each user's home country. In a production application, this data usually comes from the identity provider. |
+| Docker Compose | Runs the app, a PDP container, and ngrok. |
+| ngrok | Exposes the local app so Permit can send webhooks to it. |
+| ipinfo.io | Resolves the request IP address to a country. |
 
-## Application Architecture
+![Mesa Verde architecture diagram showing the Next.js app, Stytch, JSONBin, the PDP container, and the Permit cloud](/img/modeling/mesa-verde/architecture-diagram.png)
 
-The Mesa Verde application is based on the Next.js framework, and uses the following technologies to implement the fine-grained authorization flows:
+### Where the authorization code lives \{#application-code}
 
-- [Stytch](https://stytch.com/) - Authenticates the users in the application.
-- JSONbin — Stores the users' locations in the application. In a real application, this data will probably come from the Identity Provider.
-- Docker - Containerizes the application and runs a sidecar of the Permit's Policy Decision Point.
-- ngrok - Runs the application locally and allows Permit to send webhooks to the application.
+| Path | Contents |
+|---|---|
+| `package.json` | Dependencies and the `setup` scripts. |
+| `main.tf` | The policy schema, applied with the Permit Terraform provider. |
+| `setup.js` | Creates the user attributes and the Permit Elements configurations. |
+| `docker-compose.yml` | Runs the app with the PDP and ngrok. |
+| `lib/permit.ts` | Initializes the Permit SDK and holds the data sync functions. |
+| `lib/stytch.ts` | Initializes the Stytch client. |
+| `src/middleware.ts` | Authenticates each request with Stytch and resolves the user's location. |
+| `src/app/account/api/*` | API routes. Most `permit.check()` calls are here. |
+| `src/app/account/webhook/route.ts` | Receives the approval result from Permit. |
+| `src/components/*` | UI components, including feature toggles and the embedded elements. |
 
-![Application Architecture](/img/modeling/mesa-verde/architecture-diagram.png)
+## Build the authorization model \{#configuration-guide}
 
-### Application Code
+Permit separates authorization into three parts. The demo configures them in this order:
 
-To help you navigate through the application code, here is a brief overview of the main files and directories in the Mesa Verde application:
+1. **Schema.** Resources, actions, roles, and condition sets. Mesa Verde defines the schema with the [Permit Terraform provider](/integrations/infra-as-code/terraform-provider). You can also use the API or the Permit dashboard.
+2. **Data.** Users, tenants, role assignments, attributes, and resource instances. Mesa Verde syncs data with the Node.js SDK from its existing sign-up and transaction code.
+3. **Enforcement.** `permit.check()` decides a single request. `permit.getUserPermissions()` returns what a user can access.
 
-- `package.json` - contains the application's dependencies and important scripts to run the application easily.
-- `main.tf` - used to configure the policy schema of the application in Permit.
-- `setup.js` - setting up the Permit elements.
-- `docker-compose.yml` - running the application with all the relevant sidecars.
-- `lib/permit.ts` - initialize the Permit SDK and some data sync functions.
-- `lib/stytch.ts` - the file where we initialize the Stytch SDK and store some authentication functions.
-- `src/middleware.ts` - where we authenticate all the users with Stytch and check users' location.
-- `src/app/account/api/*` - the API routes of the application, most of the enforcement functions are here.
-- `src/app/*` - the UI pages of the application. Most of the UI components are here. Here, you'll also find feature toggling components and the Permit Elements components.
+### Define the policy schema in Terraform \{#schema}
 
-In the following sections, we will walk you through the configuration guide of the Mesa Verde application. You can find all the code we are describing in the [GitHub repository](https://github.com/permitio/mesa-verde-banking-demo)
+A Permit policy is a table: rows are resources (or resource sets) with their actions, and columns are roles (or user sets). Each checked cell is a permission.
 
-## Configuration Guide
+![Policy Editor table for Mesa Verde with Account, Transaction, and Wire Transfer actions as rows and the three account roles as columns](/img/modeling/mesa-verde/policy-editor.jpg)
 
-One of the key points in the Permit architecture is the separation of duties [between the system's three main components](https://www.permit.io/blog/how-to-model-and-implement-cloud-native-authorization). The guide will follow the three components in the following order:
+The diagram shows how the schema components relate:
 
-- **Schema** - the policy model we want to enforce in the application.
-  The schema can be configured in Permit using its API, IaC, or UI. In our example, we will use Permit's Terraform provider to configure the schema.
-  Examples of the schema components are resource types, roles, policy rules, etc. We are using this schema to define the fine-grained authorization policies that we want to enforce in our application.
-- **Data** - the data of our application that will be used as part of the policy decision.
-  We will use Permit's SDKs to synchronize the data with the authentication provider and the application.
-  While you can also use Permit's UI to manage the data, the best practice is to use the SDKs to synchronize the data with the application as part of the application's existing state flow.
-  Examples of the data components are the users, roles that are assigned to them, resource instances, etc.
-- **Enforcement**—the code that enforces the application's policies or queries the relevant data for users according to their permissions.
-  on the enforcement side, we will use Permit's SDKs to enforce the policies in the application.
-  The main functions we will use are the `check` to enforce the application policies and the `getUserPermissions` to query the relevant data for the users according to their permissions.
-
-Now that we understand the steps let's start with the configuration guide.
-
-### Schema
-
-In Permit, policy rules can be represented in a table where the rows are segmentations of resources with their actions, and the columns are the segmentations of users by roles, conditions, etc.
-
-Here is an example of the RBAC policy table of our application where we allow different roles of users to perform different actions on the resources:
-![RBAC Policy Table](/img/modeling/mesa-verde/policy-editor.jpg)
-
-In the following section, we will walk you through the configuration of the schema of the Mesa Verde application. Here is an overview components diagram of the schema we will configure:
-![Schema Components](/img/modeling/mesa-verde/policy-schema-diagram.png)
+![Mesa Verde schema diagram showing resources, resource sets, roles, user sets, and resource roles](/img/modeling/mesa-verde/policy-schema-diagram.png)
 
 #### Resources
 
-- **Account** - the main resource on our account that will allow users to perform basic actions like reading the account details, updating the account details, etc. <br/>
-  In our application, the Account resource has the following actions:
+The `Account` resource covers actions on the account itself:
 
-  ```hcl
-  resource "permitio_resource" "Account" {
-    key = "Account"
-    name = "Account"
-    actions = {
-        "read" = {
-            name = "Read"
-        }
-        "add-beneficiaries" = {
-            name = "Add Beneficiaries"
-        }
-        "add-members" = {
-            name = "Add Members"
-        }
-    }
-    attributes = {
-    }
+```hcl
+resource "permitio_resource" "Account" {
+  key = "Account"
+  name = "Account"
+  actions = {
+      "read" = {
+          name = "Read"
+      }
+      "add-beneficiaries" = {
+          name = "Add Beneficiaries"
+      }
+      "add-members" = {
+          name = "Add Members"
+      }
   }
-  ```
-
-  As you can see in the code above, we are defining the `Account` resource with three actions: `read`, `add-beneficiaries`, and `add-members`. These actions will be used in the policy rules to define the permissions of the account users.
-
-- **Wire Transfer** - the resource allowing users to perform wire transfers on their account. <br/>
-  In our application, the Wire Transfer resource has the following actions:
-
-  ```hcl
-  resource "permitio_resource" "Wire_Transfer" {
-    name        = "Wire"
-    key         = "Wire_Transfer"
-    actions = {
-        "approve" = { name = "Approve"}
-        "review" = { name = "Review" }
-        "deny" = { name = "Deny" }
-        "operate" = { name = "Operate" }
-        "create" = { name = "Operate" }
-    }
-    attributes = {
-        "id" = {
-        name = "ID"
-        type = "string"
-        }
-        "description" = {
-        name = "Description"
-        type = "string"
-        }
-        "date" = {
-        name = "Date"
-        type = "string"
-        }
-        "currency" = {
-        name = "Currency"
-        type = "string"
-        }
-        "amount" = {
-        name = "Amount"
-        type = "number"
-        }
-    }
+  attributes = {
   }
-  ```
+}
+```
 
-  Looking at the code above, you'll see that here we also defined attributes for the resource. These attributes will later allow us to configure conditions on policy rules.<br />
-  These conditions will allow us to distinguish between wire transfer operations based on the amount, currency, etc.
+The `Wire_Transfer` resource has attributes, so condition sets can match transfers by amount or currency. The `approve`, `review`, `deny`, and `operate` actions support the approval flow:
 
-  In addition to the `create` action, we added various actions that will allow us to better control the wire transfer operation approval flow.
+```hcl
+resource "permitio_resource" "Wire_Transfer" {
+  name        = "Wire"
+  key         = "Wire_Transfer"
+  actions = {
+      "approve" = { name = "Approve"}
+      "review" = { name = "Review" }
+      "deny" = { name = "Deny" }
+      "operate" = { name = "Operate" }
+      "create" = { name = "Operate" }
+  }
+  attributes = {
+      "id" = {
+      name = "ID"
+      type = "string"
+      }
+      "description" = {
+      name = "Description"
+      type = "string"
+      }
+      "date" = {
+      name = "Date"
+      type = "string"
+      }
+      "currency" = {
+      name = "Currency"
+      type = "string"
+      }
+      "amount" = {
+      name = "Amount"
+      type = "number"
+      }
+  }
+}
+```
 
-- **Transaction** - this resource will allow users to view the transactions on their account. This is different from the wire transfer because we want to also authorize transactions that are not wire transfers by definition<br/>
-  Configuring the Transaction resource is similar to the Wire Transfer resource but with different actions and attributes.
+:::note Action key and display name
+In `main.tf`, the `create` action has the display name `Operate`, the same display name as the `operate` action. Checks use the action key, so `permit.check(user, "create", ...)` matches `create`. The Policy Editor shows two columns labeled **Operate** for `Wire_Transfer`. To tell them apart in the UI, set `name = "Create"` on the `create` action.
+:::
 
-  The actions we will have in the Transaction object are `list` and `create`. We will also have the same attributes as in the Wire Transfer object.
+The `Transaction` resource covers every money movement, including ones that aren't wire transfers. It has the actions `create` and `list`, and the same attributes as `Wire_Transfer`.
 
-As we are done with the top-level resources, let's continue creating condition-based resources to support Attribute-Based Access Control (ABAC) authorization policies.
+#### Resource sets
 
-#### Resource Sets
-
-As part of its fine-grained authorization offer, Permit also allows us to configure `Resource Sets` that will allow us to distinguish particular resources in real time based on their attributes.
-
-In our application, we want to differentiate small and large wire transfer operations based on the amount attribute of an object.
-
-Looking at the code, you'll see that we are creating four resource sets for the Wire Transfer and Transaction objects, respectively.
-
-Here is an example of configuring the resource sets for a small wire transaction:
+A resource set groups resource instances by their attributes at check time. Mesa Verde defines four resource sets: `Small_Transaction`, `Large_Transaction`, `Small_Wire`, and `Large_Wire`. The small transaction set matches amounts up to 1000:
 
 ```hcl
 resource "permitio_resource_set" "Small_Transaction" {
@@ -259,13 +292,11 @@ resource "permitio_resource_set" "Small_Transaction" {
 }
 ```
 
-With all our resources and resource sets configured, let's continue segmenting the users by roles to create Role-Based Access Control (RBAC) policies.
+The large sets use `greater-than-equals` 1000, so an amount of exactly 1000 matches both the small and the large set.
 
 #### Roles
 
-The basic capability of defining rules per group of users is creating top-level roles and assigning users to them.
-
-In the schema, we will configure the following three roles, `AccountOwner`, `AccountBeneficiary`, and `AccountMember`:
+Tenant roles grant permissions across the whole tenant, which in Mesa Verde is one bank account:
 
 ```hcl
 resource "permitio_role" "AccountOwner" {
@@ -303,27 +334,19 @@ resource "permitio_role" "AccountMember" {
 }
 ```
 
-As you can see in the configuration above, we are defining three roles: `AccountOwner`, `AccountBeneficiary` and `AccountMember`.
+None of these roles grants `Transaction:create`. Condition set rules grant it.
 
-We also configure a set of permissions for each role that will allow the users assigned to these roles to perform different actions on the resources.
+#### User sets
 
-At this point, we are done with our RBAC policy. We have the resources, the top-level roles, and the policy rules resulting from them. Now, let's continue with creating sets of users that will allow us to create ABAC policies.
+A user set groups users by their attributes. The schema holds only the condition. The attribute values come from data sync or from the `permit.check()` call.
 
-#### User Sets
+| User set | Matches |
+|---|---|
+| `Safe_Owners` | Account owners whose request location matches their home country. |
+| `Unsafe_Owners` | Account owners whose request location doesn't match their home country. |
+| `Strong_Auth_Owners` | Account owners who entered an OTP for the request. |
 
-In Permit, User Sets are used to segment users by their attributes and create fine-grained policies based on these attributes.
-
-The user sets are the same as the resource sets we defined above, but they consider conditions in addition to the users' attributes.
-
-In the schema, we are just configuring the conditions, while the attribute values are synced to Permit in the data sync or later in the policy enforcement.
-
-For the Mesa Verde application, we want to create three user sets:
-
-- **Safe Owners** - users that are located in real-time in the same location as their address in the Identity Provider.
-- **Unsafe Owners** - users that are located in real time in different locations than their address in the Identity Provider or users that still have not verified their location.
-**Strong Auth Users** are users that we can't locate in their location but who provided a strong authentication method (e.g., OTP).
-
-Here is an example of how we configure the `Safe Owners` user set:
+The `Safe_Owners` user set:
 
 ```hcl
 resource "permitio_user_set" "Safe_Owners" {
@@ -348,21 +371,11 @@ resource "permitio_user_set" "Safe_Owners" {
 }
 ```
 
-As you can see, we created a condition that compares the user's location with the country attribute of the user. This condition will allow us to create policies that will allow the users in the `Safe Owners` user set to perform different actions on the resources.
+The condition compares two user attributes with `ref`, and also requires the `AccountOwner` role.
 
-Now that we have our user sets, it is time to set their policies and give the right permissions to the users in the user sets.
+#### Condition set rules \{#condition-sets}
 
-#### Condition Sets
-
-As we did in the roles, where we added actions in the role configuration, we will create sets that combine user and resource sets to give the relevant action permissions to the users.
-
-When configuring condition sets, we will need the following 3 elements:
-
-- **User Sets** - the users that will be affected by the policy.
-- **Resource Sets** - the resources that will be affected by the policy.
-- **Permissions** - the action and the resource we want to give permission to.
-
-Here is an example of the condition set where we are allowing the `Safe Owners` user set to perform the `create` action on a `Large Transaction` resource set:
+A condition set rule grants a permission to a user set (or role) on a resource set. Each rule needs a user set, a resource set, and a permission. This rule lets `Safe_Owners` create large transactions:
 
 ```hcl
 resource "permitio_condition_set_rule" "allow_safeowners_large_transactions" {
@@ -373,28 +386,31 @@ resource "permitio_condition_set_rule" "allow_safeowners_large_transactions" {
 }
 ```
 
-You can find all the sets and policies in the `main.tf` file in the root directory of the Mesa Verde application.
+All condition set rules in `main.tf`:
 
-After we have completed the RBAC and ABAC policies, let's move on to the Relationship-Based Access Control (ReBAC) policies. We will start by configuring the resource roles.
+| User set or role | Resource set | Permission |
+|---|---|---|
+| `Safe_Owners` | `Large_Transaction`, `Small_Transaction` | `Transaction:create` |
+| `Strong_Auth_Owners` | `Large_Transaction`, `Small_Transaction` | `Transaction:create` |
+| `Unsafe_Owners` | `Small_Transaction` | `Transaction:create` |
+| `AccountBeneficiary` | `Small_Transaction` | `Transaction:create` |
+| `AccountBeneficiary` | `Small_Wire` | `Wire_Transfer:create` |
 
-#### Resource Roles
+An account owner who signs in from outside their home country can send only small transfers until they enter an OTP.
 
-Unlike RBAC roles, where we assign a user a top-level role in the context of the whole tenant, in ReBAC, we would like to create roles that declare the user's relationship to a particular resource instance.
+#### Resource roles
 
-In the Mesa Verde application, we want to create resource roles on the `Transaction` and `Wire Transfer` resources. These roles will allow us to declare the user's relationship to the transaction and manage the user's permissions on the transaction.
+A resource role grants permissions on one resource instance instead of the whole tenant. Mesa Verde defines four:
 
-These are the resource roles we would like to create:
+- `Transaction#Sender` and `Transaction#Receiver` grant `list` on one transaction.
+- `Wire_Transfer#_Reviewer_` grants `approve`, `deny`, and `review` on one transfer.
+- `Wire_Transfer#_Approved_` grants `operate` on one transfer. The [Operation Approval element](/embeddable-uis/element/operation-approval) uses the `_Reviewer_` and `_Approved_` roles. When a reviewer approves a request, Permit assigns the requesting user `_Approved_` on that instance.
 
-- **Transaction#Sender** - the role that will allow the user to perform actions on the transaction as the sender of the transaction.
-- **Transaction#Receiver** - the role that will allow the user to perform actions on the transaction as the receiver of the transaction.
-- **Wire Transfer#_Approved_** is the role assigned to a user who requests approval for a wire transfer.
-- **Wire Transfer#_Reviewer_** - the role that will allow the user to review and approve a particular wire transfer.
-
-:::info Google Zanzibar
-The `#` symbol on the resource role is a tuple convention from the [Google Zanzibar paper](https://www.permit.io/blog/what-is-google-zanzibar) that describes the relation of the role with a resource.
+:::info Resource role notation
+`Transaction#Sender` means the `Sender` role on the `Transaction` resource type. The `#` separator follows the tuple notation of the [Google Zanzibar paper](https://www.permit.io/blog/what-is-google-zanzibar).
 :::
 
-Here is an example of how we configure the `Transaction#Sender` resource role:
+The `Transaction#Sender` resource role:
 
 ```hcl
 resource "permitio_role" "Sender" {
@@ -406,247 +422,215 @@ resource "permitio_role" "Sender" {
 }
 ```
 
-As you can see, we also assign the `list` permission on the `Transaction` resource to the `Sender` role. This will allow the user to view the transaction as the sender of the transaction.
+#### Apply the schema \{#summary}
 
-#### Summary
+Run `terraform apply` (or `npm run setup:schema`) in the repository root. The Policy Editor then shows the full schema:
 
-At this point, we have configured the schema of our application's policy. If you run the `terraform apply` command in the root directory of the Mesa Verde application, you will see the schema configured in Permit.
-![Permit Schema](/img/modeling/mesa-verde/full-policy-editor.jpg)
+![Policy Editor showing the complete Mesa Verde schema with resource sets, user sets, and resource roles](/img/modeling/mesa-verde/full-policy-editor.jpg)
 
-:::tip Policy as Code
-When configuring the schema in Permit, the Permit policy as code engine generates it in Policy Languages such as Rego or Cedar and pushes it to a Git repository.
-
-If you want, you can own the policy by using Permit's GitOps capabilities and manage the policy as code in your repository.
+:::tip Manage the policy as code
+Permit generates policy code from the schema. To store and review that code in your own Git repository, see [GitOps](/integrations/gitops/overview).
 :::
 
-To recap some of the rules we created in the schema:
+The applied schema enforces rules such as:
 
-- Only account owners can add members and beneficiaries to the account.
-- Account owners and beneficiaries can view the transactions on the account.
-- Safe owners can create large transactions.
-- Senders can view the transactions they sent.
-- _Reviewer_ can approve wire transfers.
+- Only account owners can add beneficiaries. Owners and beneficiaries can add members.
+- Account owners and beneficiaries can list the account's transactions.
+- Account owners in their home country, or with an OTP, can create large transactions.
+- The sender and the receiver of a transaction can list that transaction.
+- The `_Reviewer_` of a wire transfer can approve or deny it.
 
-With the schema configured, let's move to the data configuration.
+### Sync users, tenants, and roles \{#data}
 
-### Data
+The PDP evaluates checks against the data it holds, so the app syncs users, tenants, role assignments, attributes, and resource instances to Permit when they change in the app. Most of the sync code is in [`lib/permit.ts`](https://github.com/permitio/mesa-verde-banking-demo/blob/main/lib/permit.ts).
 
-In order to evaluate the policy we have configured, our [Policy Decision Point](/overview/how-does-it-work#the-policy-decision-point-pdp) — the software component provided by Permit.io to enforce the policies—needs to have the application's data in real-time.
+#### Sync the user
 
-In the following section, we will discuss the types of data that need to be synced with Permit and show examples of how our application is doing it.
+When a user signs up through Stytch, the app syncs the user by email:
 
-- **Users** — the application's users. We would like to inform Permit each time a new user is created.
-  Here is an example code from our application when we are syncing new users created using Stytch into our application:
+```javascript
+// Add User to Tenant
+await permit.api.syncUser({
+  key: email,
+  email,
+});
+```
 
-  ```javascript
-  // Add User to Tenant
-  await permit.api.syncUser({
-    key: email,
-    email,
-  });
-  ```
+#### Create a tenant for each account
 
-  - **Tenants** — the tenants of the application. In our application, we will create a tenant for each user. That will help us manage roles such as `Account Owners` of the users in the context of the whole tenant.
-    Here is an example code from our application when we are creating a new tenant for every new user on our application:
+Each user gets a tenant. The tenant key is the email address with the domain and non-alphanumeric characters removed (`cleanedEmail`), and the tenant name is the full email:
 
-    ```javascript
-    await permit.api.tenants.create({
-      key: cleanedEmail,
-      name: email,
-    });
-    ```
+```javascript
+await permit.api.tenants.create({
+  key: cleanedEmail,
+  name: email,
+});
+```
 
-    As you can see, we just use the user email as the tenant key and name. This will allow us to manage the roles of the users in the context of their owned tenant.
+To list the accounts in the UI, the app lists tenants:
 
-    Another usage of the tenant's data is where we want to check what tenants a user has assigned roles in. For example, the following function returns us a list of tenants so we can display the user's accounts in the UI:
+```javascript
+const tenants = await permit.api.tenants.list({
+  perPage: 100,
+});
+```
 
-    ```javascript
-    const tenants = await permit.api.tenants.list({
-      perPage: 100,
-    });
-    ```
+#### Assign a tenant role
 
-- **Role Assignments**—the roles assigned to the users. In Permit, there are two levels of assignment: for multi-tenancy RBAC and for ReBAC.
+Permit has two kinds of role assignment: a tenant role applies to the whole tenant, and a resource role applies to one resource instance. The app assigns the new user `AccountOwner` in their tenant:
 
-  - **Tenant Role assignment** — the roles assigned to the users in the context of the whole tenant.
-    Here is an example of how we are assigning the `AccountOwner` role to the user in the context of the tenant:
+```javascript
+await permit.api.assignRole({
+  role: "AccountOwner",
+  tenant: cleanedEmail,
+  user: email,
+});
+```
 
-    ```javascript
-    await permit.api.assignRole({
-      role: "AccountOwner",
-      tenant: cleanedEmail,
-      user: email,
-    });
-    ```
+#### Assign a resource role
 
-  - **Resource Role assignment** — the roles assigned to users in the context of a particular resource instance.
-    Here is an example of how we are assigning the `Sender` role to the user in the context of the transaction:
+When the app records a transaction, it assigns the `Sender` role on that transaction instance. The `resource_instance` value is `<resource type>:<instance key>`:
 
-    ```javascript
-    await permit.api.roleAssignments.assign({
-      role: "Sender",
-      tenant,
-      resource_instance: `Transaction:${transaction.id}`,
-      user,
-    });
-    ```
+```javascript
+await permit.api.roleAssignments.assign({
+  role: "Sender",
+  tenant,
+  resource_instance: `Transaction:${transaction.id}`,
+  user,
+});
+```
 
-    As you can see here, we also pass the transaction's resource instance ID. This allows us to manage the user's permissions in the context of a single transaction in the system.
+#### Sync user attributes \{#sync-user-attributes}
 
-    In more advanced cases, we will also be able to create relationships between instances of resources and simply grant users permissions based on these relationships.
+The app copies each user's home country from JSONBin.io into the `country` user attribute:
 
-- **User Attributes** — the attributes of users. In our application, for example, we will sync the user's location with Permit. This will allow us to enforce ABAC policies based on the user's location.
+```javascript
+const response = await fetch(`https://api.jsonbin.io/v3/b/${process.env.JSONBIN_KEY}/latest`);
+const data = await response.json();
 
-  Syncing attributes in Permit can be done in advance with the SDK. For example, here we are syncing the user location from an external JSON file in JSONbin:
+const envUsers = await permit.api.users.list();
+const users = envUsers.data.map((user) => user.key);
 
-  ```javascript
-  const response = await fetch(`https://api.jsonbin.io/v3/b/${process.env.JSONBIN_KEY}/latest`);
-  const data = await response.json();
+await Promise.all(
+  Object.entries(data.record)
+    .filter(([key]) => users.includes(key))
+    .map(([key, country]) => permit.api.users.update(key, { attributes: { country } }))
+);
+```
 
-  const envUsers = await permit.api.users.list();
-  const users = envUsers.data.map((user) => user.key);
+The function updates every user in one pass. In a production application, sync the attribute when the user is created or updated. To sync attributes from your identity provider, use [SCIM provisioning](/integrations/SCIM/SCIM_overview). Attributes that change per request, such as `location` and `strongAuth`, go in the `permit.check()` call instead (see [Check a transaction](#check)).
 
-  await Promise.all(
-    Object.entries(data.record)
-      .filter(([key]) => users.includes(key))
-      .map(([key, country]) => permit.api.users.update(key, { attributes: { country } }))
-  );
-  ```
+#### Create resource instances
 
-  The code above iterates the JSON and syncs all users' locations, but in a real application, you would like to sync users' locations when they are created or updated.
+The app creates a `Transaction` resource instance with the transaction's fields as attributes. Resource roles such as `Sender` attach to this instance:
 
-  :::info SCIM Provisioning
-  You can use Permit's SCIM client to listen to changes in user attributes and groups in your Identity Provider and sync them with Permit.
+```javascript
+const resourceInstance = await permit.api.resourceInstances.create({
+  resource: "Transaction",
+  key: transaction.id,
+  tenant,
+  attributes: {
+    ...transaction,
+  },
+});
+```
 
-  Read more about the SCIM client [here](/integrations/SCIM/SCIM_overview)
-  :::
+### Enforce permissions in the API routes \{#enforcement}
 
-  You can also use the Permit enforcement layer to sync attributes in real time; we will discuss this in the next section.
+The app uses two SDK calls:
 
-  - **Resource Instances** - the instances of the resources. In our application, for example, we will sync the transactions and wire transfers with Permit. This will allow us to create ReBAC policies based on the relationship of the user to the resource instance.
+- `permit.check(user, action, resource)` returns `true` or `false` for one request.
+- `permit.getUserPermissions(user, tenants, resources, resource_types)` returns the resource instances a user has permissions on, with the user's roles on each.
 
-    Here is an example code from our application when we are syncing a new transaction with Permit:
+Each argument to `permit.check()` takes a key or an object:
 
-    ```javascript
-    const resourceInstance = await permit.api.resourceInstances.create({
-      resource: "Transaction",
-      key: transaction.id,
-      tenant,
-      attributes: {
-        ...transaction,
-      },
-    });
-    ```
+| Argument | Key form | Object form |
+|---|---|---|
+| User | `"john@permit.io"` | `{ key, attributes }` |
+| Action | `"read"` | Not used in the demo |
+| Resource | `"Account"` | `{ type, key, tenant, attributes }` |
 
-    As you can see, we are syncing the transaction with Permit, and we are also syncing the attributes of the transaction. This will allow us to create ReBAC policies based on the attributes of the transaction.
+#### Check a transaction \{#check}
 
-The examples above show us a glimpse of the methods we are using to sync and retrieve the data to and from the Mesa Verde application with Permit. You can find all the data sync functions in the application code. Most of the code sits in the [`lib/permit.ts`](https://github.com/permitio/mesa-verde-banking-demo/blob/main/lib/permit.ts) file.
+To check whether a user can read an account, pass the user key, the action, and the resource type with the tenant:
 
-After creating the policy schema and syncing the relevant data, let's proceed to the core of our authorization system—the enforcement of the rules we created on our application.
+```javascript
+await permit.check(user, "read", { type: "Account", tenant });
+```
 
-### Enforcement
+To check a transaction, pass request-time user attributes and the transaction attributes. The PDP matches them against the user sets and resource sets:
 
-In our application, we have two enforcement functionalities we want to achieve:
+```javascript
+const transactionAllowed = await permit.check(
+  {
+    key: user,
+    attributes: { strongAuth: !!OTP, location },
+  },
+  "create",
+  {
+    type: "Transaction",
+    attributes: { ...transaction },
+    tenant,
+  }
+);
+```
 
-- **Check** - the function that will return a `true` or `false` value per the decision we tried to evaluate.
-- **getUserPermissions** - the function that will return us the relevant instances for the user based on their permissions.
+#### List allowed transactions \{#getuserpermissions}
 
-Every `check` function in Permit, consist of the following elements:
-
-- **User**—the user for whom we want to evaluate the decision. The user argument could be only the user ID or token or the user object with its attributes.
-- **Action** — the action for which we want to evaluate the decision. The action argument could be only the action name or the action object with its attributes.
-- **Resource** - the resource that we want to evaluate the decision for. The resource argument could be only the resource ID or token and also the resource object with its attributes. In the resource, we would also like to pass the relevant tenant where we want to evaluate the decision.
-
-#### Check
-
-Here are some examples of how we are using the `check` function in our application:
-
-- The `check` function where we check if a user can read an account in the context of the tenant:
-  ```javascript
-  await permit.check(user, "read", { type: "Account", tenant });
-  ```
-  As you can see, we just pass the user ID, the action name, the resource type, and the tenant whom we want to evaluate the decision.
-- The `Check` function that enforces the transaction rules in the application:
-  ```javascript
-  const transactionAllowed = await permit.check(
-    {
-      key: user,
-      attributes: { strongAuth: !!OTP, location },
-    },
-    "create",
-    {
-      type: "Transaction",
-      attributes: { ...transaction },
-      tenant,
-    }
-  );
-  ```
-  As you can see, we are passing the user object with their attributes, the action name, the resource type, the resource attributes, and the tenant where we want to evaluate the decision.
-
-#### getUserPermissions
-
-The following example is the function where we query all the allowed transactions from the transactions graph in the application:
+To build the transaction list, the app gets the account owner's permissions on `Transaction` instances in the tenant:
 
 ```javascript
 const transactionInstances = await permit.getUserPermissions(key, [tenant], [], ["Transaction"]);
 ```
 
-As you can see, the `getUserPermissions` function allows us to filter the relevant instances based on multiple factors. In the example above, we filter the transaction instances based on the user's tenant.
+The arguments filter by tenant (`[tenant]`) and resource type (`["Transaction"]`). The empty array means no filter on specific resource instances. The app reads the `Sender` or `Receiver` role on each result to show the amount as outgoing or incoming.
 
-#### Summary
+#### Verify the enforcement \{#summary-1}
 
-The three components we just walked through are the core of the Permit system. The schema, the data, and the enforcement are the components that will allow us to enforce the fine-grained authorization policies in the Mesa Verde application.
+Sign up in the demo and open your account. The balance route runs `permit.check(user, "read", { type: "Account", tenant })`, and the account page loads because `AccountOwner` has `Account:read`. In the Permit [audit log](https://app.permit.io/audit-log), the `read` decision on `Account` for your email is allowed.
 
-In our application, we also use the feature of Permit Elements, which are the UI components that allow us to build complex access request flows in the UI. The next section will walk you through the implementation of the Permit Elements in the Mesa Verde application.
+Send a wire transfer to test the multi-step flow. A denied check returns one of the HTTP 403 messages listed in [Multi-step wire transfer authorization](#fine-grained-wire-transfer-permissions), and the audit log shows the denied decision.
 
-## Permit Elements
+## Configure Permit Elements \{#permit-elements}
 
-Apart from enforcing the permissions on our application, a basic functionality we would like to have on applications is the delegation of permissions management to our users in the UI.
+Permit Elements let your users manage permissions inside your application. The demo's `setup.js` script creates each element configuration through the Permit API. You can also edit each configuration in the Permit dashboard.
 
-For example, allowing our users to add and remove users from their accounts or approve wire transfers.
+### User Management
 
-In the Mesa Verde application, we are utilizing the Permit Elements - a set of UI components that allow us to build complex access request flows in the UI.
+The **Account Members Management** element lets users invite people to an account and assign roles. Open it with the **Manage Account Users** button.
 
-:::tip Permit Elements Configuration
-The Permit Elements are configured in the `setup.js` file in the Mesa Verde application's root directory. In this file, we initialize the Permit Elements and pass the relevant settings to the components.
+![User Management element configuration with permission levels for Account Owner, Account Beneficiary, and Account Member](/img/modeling/mesa-verde/user-management-config.jpg)
 
-To fully experience configuring the Permit Elements, we recommend visiting the Permit Elements Configuration in Permit UI and enjoying the components' customization capabilities.
-:::
+The element maps roles to [permission levels](/embeddable-uis/permission-levels): `AccountOwner` is level 1, `AccountBeneficiary` level 2, and `AccountMember` level 3. Owners assign the beneficiary and member roles. Beneficiaries assign only the member role.
 
-Below is the list of the elements we are using in the Mesa Verde application:
+### Access Request
 
-1. **User Management** - This component allows our application users to manage the beneficiaries and members in their accounts. This component is accessible via the `Manage Account Users` button in the UI.
+The **Wire Transfer Request** element lets a user without permission to view transactions ask for more access. The **Request Access to Transactions** button appears only for those users.
 
-   Looking at the configuration screen of the element, we can see that we can configure which roles will be eligible to view the elements and what roles they can assign to the users.
+![Access Request element configuration showing the role an account member can request](/img/modeling/mesa-verde/access-request-config.jpg)
 
-   ![User Management Configuration](/img/modeling/mesa-verde/user-management-config.jpg)
+In the demo configuration, account members request the `AccountBeneficiary` role. See [Access Request element](/embeddable-uis/element/access-request).
 
-   You can also see we are allowing different roles to assign different roles to users. This will allow us to create complex user management delegation flows in the UI.
+### Operation Approval request
 
-   In our application, we allow `Account Owners` to assign users the `Account Beneficiary` and `Account Member` roles, while `Account Beneficiaries` can only assign users the `Account Member` role.
+The **Wire Transfer Approval Request** element lets a user ask for approval of one `Wire_Transfer` instance that the policy denies, such as a beneficiary's transfer above 1000.
 
-2. **Access Request** — This component allows `Account Member` users to ask for leveraged permission to view the account's transactions. It is accessible via the `Request Access` button in the UI only for users who don't have permission to view the transactions.
+![Operation Approval element configuration with the Wire_Transfer resource type and the webhook URL](/img/modeling/mesa-verde/approval-flow-request.jpg)
 
-   ![Access Request Configuration](/img/modeling/mesa-verde/access-request-config.jpg)
+The configuration sets the resource type and a webhook. When the reviewer approves or denies, Permit calls the app's `/account/webhook` route with the webhook secret as a bearer token. On approval, the route records the transaction. On denial, it deletes the `Wire_Transfer` instance. See [Operation Approval element](/embeddable-uis/element/operation-approval) and [Webhooks](/embeddable-uis/webhooks).
 
-   As you can see here, we are configuring the level of access that users can request. In our application, we are allowing `Account Member` users to request the `Account Beneficiary` role.
+### Approval Management
 
-3. **Approval Flow—Request** — This component allows a beneficiary to request approval for a specific instance of a transaction larger than the condition we created. The component will show up only if a user is not allowed to create a large transfer and is not an `Account Owner`.
+The **Wire Transfer Approval Management** element lists pending requests for the reviewer. Account owners open it with the **Review Wire Transfers** button.
 
-   ![Approval Request Configuration](/img/modeling/mesa-verde/approval-flow-request.jpg)
+![Approval Management element configuration with display settings for the reviewer view](/img/modeling/mesa-verde/approval-flow-review.jpg)
 
-  As you can see here, we are configuring the resource type so users can ask for approval for a particular instance. An important configuration point here is the webhook that will be called when the user approves the transaction.
+See [Approval Management element](/embeddable-uis/element/approval-management).
 
-4. **Approval Flow—Review**—This component allows the approver to review and approve the transaction. It is accessible only to `Account Owners` via the `Review Wire Transfer` button in the UI.
+## Next steps \{#conclusion}
 
-    ![Approval Review Configuration](/img/modeling/mesa-verde/approval-flow-review.jpg)
-
-  Here, we can configure more personalization factors, such as the message that will be sent to the approver.
-   
-
-Using Permit Elements allows us to implement smart permissions delegation flows in our application's UI. This results in an end-to-end fine-grained authorization system in the Mesa Verde application.
-
-## Conclusion
-In this document, we've demonstrated multiple [fine-grained authorization](https://www.permit.io/blog/what-is-fine-grained-authorization-fga) flows that are common in banking applications. As a next step, you're invited to configure similar flows in the Permit.io app and see how easy it is to implement them in your application.
-
-We are looking forward to hearing from you on our [Slack community](https://io.permit.io/slack) and sharing the cool Fintech and Banking use cases you are implementing with Permit.io.
+- Build a relationship graph with role derivations in [Google Drive permissions with ReBAC](/modeling/google-drive).
+- Define attribute-based rules in [Build an ABAC policy](/how-to/build-policies/abac/building-abac-policy).
+- Manage your schema in code with the [Terraform provider](/integrations/infra-as-code/terraform-provider).
+- Embed approval flows with [Permit Elements](/embeddable-uis/overview).
+- Ask questions about your fintech model in the [Permit Slack community](https://io.permit.io/slack).

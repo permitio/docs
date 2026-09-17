@@ -1,109 +1,85 @@
 ---
 sidebar_position: 6
 title: Custom UX with Feature Toggling
-description: "Build ABAC policies with Permit.io to create a custom UX that adapts to a user's role and attributes."
+description: "Show or hide UI components in a Next.js app based on the signed-in user's role and attributes, using Permit.io policies, the permit-fe-sdk, and CASL."
 ---
 
-This tutorial will guide you through setting up **[ABAC](/how-to/build-policies/abac/overview)**
-(Attribute-based Access Control) policies with Permit and show you how to create a custom user experience.
-This will depend on who's **logged in**, the **role** assigned to them, and the specific **attributes** set for
-that role.
+Show or hide UI components in a Next.js app based on the signed-in user's role and attributes. This worked example is for frontend developers who want to toggle features per user: it models each UI tile as a Permit.io resource, checks permissions in bulk from a backend route, and renders only the tiles the user is allowed to view.
 
-The method is especially useful when you want to limit the use of new features in your application to a select group of test users.
-It's also common to use this method to adjust the app experience of paying users based on their payment status or location.
+Use this pattern to limit a feature to a group of test users, or to change the app for paying users based on their plan or location.
 
-### What we'll build
+## What you build \{#what-well-build}
 
-Attribute-Based Access Control (ABAC) is a flexible security model that uses attributes as the basis for access control decisions.
-Unlike traditional models like Role-Based Access Control (RBAC), which grant permissions based on predefined roles, ABAC allows
-for more granular and dynamic control by considering a wide range of attributes related to users or resources.
+The demo app is a dashboard that loads four tiles: **Products**, **Product Configurators**, **Project Builder**, and **Topics for you**. For each tile, the app asks Permit whether the signed-in user can `view` it, and renders the tile only when the answer is `true`.
 
-:::note
-A significant advantage of ABAC is its ability to dynamically utilize attributes from the user's Identity Provider (IDP) without
-the need for syncing this information to the access control system, such as Permit. This capability ensures that access decisions
-are always based on the most current data directly linked to the user's identity, enhancing both security and efficiency.
+The example uses attribute-based access control (ABAC), which bases decisions on attributes of the user and the resource, on top of role-based access control (RBAC), which bases decisions on the user's role. Each user carries a `country` and a `channel` attribute. To learn how ABAC policies work, see [ABAC overview](/how-to/build-policies/abac/overview).
+
+:::note Attributes from your identity provider
+The `country` and `channel` values don't have to be stored in Permit. Your app reads them from the identity provider and passes them in each permission check as just-in-time (JIT) attributes. The policy decision point (PDP) evaluates the policy with the values in the request. The user and the user's role assignment must still exist in Permit. See [Pass just-in-time (JIT) attributes](/how-to/enforce-permissions/check#just-in-time-jit-attributes).
 :::
 
-In this project, we aim to develop a demo application that dynamically displays tiles based on a user's role and permissions.
-The application will take into account various resources and their attributes to enforce permissions meticulously.
+The flow has three parts:
 
-Our dashboard will be designed to dynamically load tiles that are relevant to specific factors, such as the user's country and
-their associated sales channel. This approach ensures that each user experience is personalized and secure, aligning with their
-access rights and organizational role.
+| Part | Where it runs | What it does |
+|---|---|---|
+| Permission check route | Your backend (Next.js API route) | Receives a list of actions and resources, calls `permit.check()` for each one against the PDP, and returns the list of results. |
+| `AbilityLoader` | Your frontend (React) | Uses `permit-fe-sdk` to call the permission check route once for all tiles, and stores the results. |
+| Conditional rendering | Your frontend (React) | Calls `permitState.check()` for each tile and renders the tile when the stored result is `true`. |
 
 ## Prerequisites
 
-Before we begin, make sure you have the following prerequisites in place:
+- A Permit.io account and an environment API key. See [Get your API key](/overview/get-api-key).
+- A running PDP that your backend can reach at `http://localhost:7766`. See [Run the PDP](/overview/run-pdp).
+- A Next.js (React) app to render the dashboard in.
+- The `permitio` package installed in your backend, and the `permit-fe-sdk` and `@casl/ability` packages installed in your frontend.
+- An authentication provider that stores user metadata. This example uses [Clerk](https://clerk.com/). Any provider works if your app can read the user's ID and attributes after sign-in.
+- The signed-in users synced to Permit with the `Viewer` role assigned. See [Sync users](/how-to/sync-users).
 
-1. An account with Permit
-2. A properly configured PDP (Policy Decision Point) with the correct API Key
-3. The Permit SDK package installed
-4. An authentication provider of your choosing (we support them all). For this tutorial, we used [clerk.com](https://clerk.com/)
-5. A basic app where you'll enforce permissions and adjust the UI. For this demo, you can clone a
-   `nextjs/react` boilerplate starter.
+## 1. Model the attributes and resources in Permit \{#modeling-basic-roles-and-resources}
 
-## Modeling basic roles and resources
+Define the attributes, the resources, and the role that the dashboard checks.
 
-As part of this project, we will work with our `fe-permit-sdk` and CASL to build a feature-toggling solution that uses Permit to manage who can view specific components in your application.
+1. In your authentication provider, store the attributes on each user. In Clerk, the example stores `country` and `channel` in the user's public metadata.
 
-In this walkthrough, we will use Attribute-based Access Control to decide which components are rendered.
-This will allow us to not just check against a role for the currently logged-in user but also against specific conditions.
+   ![Clerk user metadata editor with country and channel values in the public metadata](/ui-videos/modeling/custom-ui-demo/clerk-attributes.png)
 
-If you want to dive deeper into understanding ABAC, check out our guide [here](/how-to/build-policies/abac/overview).
+2. In Permit, define the same attributes with their names and data types. Both `country` and `channel` are of type `String`.
 
-The first step is to define the attributes we will be working with. In our example, we are working with Clerk as our authentication provider.
-Clerk allows us to store metadata for individual users. In this case, we will store each user's `country` and `channel`.
+   ![Permit ABAC Options form with a country attribute and a channel attribute, both of type String](/ui-videos/modeling/custom-ui-demo/attributes.png)
 
-![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/clerk-attributes.png)
+3. On the **Policy** screen, open the **Resources** tab and create one resource for each UI component you want to toggle. Start with the Product Configurators resource.
 
-The attributes defined in the authentication provider need to be mapped into the Permit. Permit needs to know their name and
-data type. In this case, both are a `String` - but many different data types are available for you to choose from.
+   ![New Resource form with the name Product Configurators, the key Product_Configurators, and a view action](/ui-videos/modeling/custom-ui-demo/new-resource.png)
 
-![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/attributes.png)
+4. Create the other three resources, so the environment has all four: `Products`, `Product_Configurators`, `Project_Builder`, and `Topics_for_you`. Each resource has a `view` action.
 
-Once we define our attributes, we must define the resources we will work with. Each defined resource should be the UI
-component that we want to conditionally render. Let's start off by defining the first resource.
+   ![Permit Resources tab listing the Products, Product Configurators, Project Builder, and Topics for you resources](/ui-videos/modeling/custom-ui-demo/all-resources.png)
 
-![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/new-resource.png)
+5. Add the `country` and `channel` attributes to each resource. The permission check route passes resource attributes along with the resource and action.
 
-Now, we can define all the four resources we want to work with.
+   ![Permit Resources tab showing the four tile resources, each with country: string and channel: string attributes](/ui-videos/modeling/custom-ui-demo/resources-with-attributes.png)
 
-![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/all-resources.png)
+## 2. Create the Viewer role and its policy \{#rendering-the-ui-based-on-permissions}
 
-Each resource will need corresponding attributes to be defined as part of it. We will be using the values of these resources for our
-`loadLocalStateBulk` function, passing in the `resource`, `resource attributes` and `action`.
+Create a `Viewer` role on the **Roles** tab. The policy for the `Viewer` role decides which tiles a viewer sees.
 
-![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/resources-with-attributes.png)
+![Permit Roles tab with the Viewer role](/ui-videos/modeling/custom-ui-demo/viewer-role.png)
 
-## Rendering the UI based on permissions
+In the **Policy Editor**, check `view` for each resource the `Viewer` role may see. A user with the `view` permission on a resource sees the matching tile. In the following policy, viewers see only the **Topics for you** tile:
 
-The below guide is a quick implementation of what needs to be done to get CASL to render our components based
-on this example project. If you want to go into more detail about what CASL is and how it works, check out
-our in-depth guide [here](/integrations/feature-flagging/casl).
+![Policy Editor where the Viewer role has view checked only on Topics for you](/ui-videos/modeling/custom-ui-demo/viewer-role-policy-limited.png)
 
-To control access to resources within an application, we must first define a `Viewer` role that outlines specific permissions for
-accessing resources. This role allows us to set up a policy to define which resources are viewable by which users.
+Check `view` on all four resources to show every tile:
 
-![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/viewer-role.png)
+![Policy Editor where the Viewer role has view checked on all four tile resources](/ui-videos/modeling/custom-ui-demo/viewer-role-policy.png)
 
-Resources are conditionally rendered based on this policy; if a user has the `"view"` permission for a particular resource, that
-resource will be displayed to them. This approach ensures that each user sees only the resources they are authorized to access.
-Below is an example where we can only view one resource called `Topics for you`.
+To make a tile depend on `country` or `channel` instead of the role alone, create user sets or resource sets with conditions on those attributes in the **ABAC Rules** tab, and grant `view` to those sets. See [Build ABAC policies](/how-to/build-policies/abac/building-abac-policy).
 
-![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/viewer-role-policy-limited.png)
+## 3. Create the permission check route \{#creating-an-api-endpoint-to-handle-permission-checks}
 
-We also can adjust the policy to view all the components.
+`permit-fe-sdk` doesn't call Permit directly. The frontend sends its checks to a route in your backend, and the route calls the PDP. When the frontend loads permissions in bulk, `permit-fe-sdk` sends a `POST` request to the route with the user ID in the `user` query parameter and a `resourcesAndActions` array in the body. The route must return a `permittedList` array with one boolean per item, in the same order.
 
-![Clerk Attributes](/ui-videos/modeling/custom-ui-demo/viewer-role-policy.png)
-
-### Creating an API endpoint to handle permission checks
-
-As part of the CASL component that we will be creating later in this guide, we will need to specify an API
-route that we can call. This API route will perform bulk `permit.check()` operations for us, returning the result for
-each.
-
-Here is a basic implementation of such an endpoint, which we have under `/api/something`. You can name the file
-as you wish.
+The following route handles that request. The example serves it at `/api/something`; use any path, and pass the same path as `backendUrl` in the `AbilityLoader`.
 
 ```js
 import { Permit } from "permitio";
@@ -153,21 +129,13 @@ export default async function handler(req, res) {
 }
 ```
 
-Notice that we have imported the Permit library, and initialized the Permit object. You can follow
-this [guide](/overview/connecting-your-app#1-get-your-permit-environment-api-key) to understand where to fetch your API key.
+Replace `YOUR_PERMIT_API_KEY` with your environment API key, loaded from an environment variable in production. Anyone with the environment API key can change that environment's policy through the Permit API, so keep the key on the server and don't commit it. The `pdp` value is the address of your PDP container. See [Get your API key](/overview/get-api-key) and [Run the PDP](/overview/run-pdp).
 
-Once we are done with this step, we need to make sure to pull and launch our PDP - you can also find the steps on
-how to do this [here](/overview/connecting-your-app#2-setup-your-pdp-policy-decision-point-container).
+## 4. Load the user's permissions with the AbilityLoader \{#creating-the-abilityloader}
 
-### Creating the `AbilityLoader`
+The `AbilityLoader` component runs after the user signs in. It reads the user ID from Clerk, initializes `permit-fe-sdk` with the route from the previous step as `backendUrl`, and calls `loadLocalStateBulk()` once with every action and resource the dashboard checks. `permit-fe-sdk` stores the results so later checks don't call the backend. The component also converts the results into CASL rules and shares them through a React context. To learn more about CASL with Permit, see [CASL](/integrations/feature-flagging/casl).
 
-The AbilityLoader component is integral to this setup, diligently working to asynchronously retrieve and
-establish user-specific permissions, particularly upon user sign-in.
-
-In this scenario, we're employing Clerk.com as our authentication provider to obtain the userId, which we have
-synchronized with Permit. This allows us to identify the currently logged-in user and correlate them with the
-associated policy for their role. It's crucial to highlight that you can choose any authentication provider
-that best fits your needs—Permit is designed to integrate seamlessly with all of them.
+The user ID must match the user key synced to Permit. Any authentication provider works if it gives you that ID.
 
 ```js
 import React, { createContext, useEffect, useState } from "react";
@@ -240,16 +208,19 @@ export const AbilityLoader = ({ children }) => {
 };
 ```
 
-### Conditionally rendering the UI
+The `userAttributes` in each item are sent to the permission check route and passed to `permit.check()`. The sample hardcodes a different `country` and `channel` for each tile to show the format. In your app, pass the signed-in user's values, such as `user.publicMetadata.country`.
 
-First of all, in the file where you want to render part of the UI based on a condition, make sure you import
-`permitState`.
+Wrap the dashboard in `AbilityLoader` so the permissions load before the tiles render.
+
+## 5. Render tiles based on the stored permissions \{#conditionally-rendering-the-ui}
+
+In the file that renders the dashboard, import `permitState`:
 
 ```js
 import { permitState } from "permit-fe-sdk";
 ```
 
-Then, utilize permitState to render parts of the HTML.
+Call `permitState.check()` for each tile. `permitState.check()` reads the result stored by `loadLocalStateBulk()` and doesn't call the backend. When no stored result matches, `permitState.check()` returns `false` by default, and the tile stays hidden.
 
 ```js
 <div className="flex h-full">
@@ -277,29 +248,37 @@ Then, utilize permitState to render parts of the HTML.
 </div>
 ```
 
-In conclusion, we've explored a streamlined approach to integrating feature toggling in your frontend UI using Permit,
-which effectively manages access to specific components.
+:::warning Stored results must match the render check
+`permitState.check()` finds a stored result only when the action, the resource, and the attributes object match an item that `loadLocalStateBulk()` loaded. The `permit-fe-sdk` implementation matches the third argument of `permitState.check()` as resource attributes. If the render check passes attributes that the bulk load didn't, no stored result matches, and every tile stays hidden.
+:::
 
-Next, we'll provide a visualization of what the Policy Editor might look like, alongside how the UI will appear once these
-settings are implemented. This will help illustrate the practical application of feature toggles in enhancing user interface
-management and security.
+## 6. Verify the dashboard
 
-### UI example with all permissions enabled
+Sign in as a user with the `Viewer` role, change the policy in the **Policy Editor**, and reload the dashboard. The permission check route logs the `permittedList` array for each load, so you can compare the results with the tiles on the page.
 
-#### The UI
+### UI example with all permissions enabled \{#ui-example-with-all-permissions-enabled}
 
-![All tiles](/ui-videos/modeling/custom-ui-demo/feature-flagging-1.png)
+#### The Permit policy for all tiles \{#the-permit-policy}
 
-#### The Permit Policy
+![Policy Editor where the Viewer role has view checked on all four tile resources](/ui-videos/modeling/custom-ui-demo/feature-flagging-1.png)
 
-![All Permissions](/ui-videos/modeling/custom-ui-demo/feature-flagging-2.png)
+#### The dashboard with all tiles \{#the-ui}
 
-### UI example with some permissions enabled
+![Custom UI via Permissions dashboard showing all four tiles](/ui-videos/modeling/custom-ui-demo/feature-flagging-2.png)
 
-#### The UI
+### UI example with some permissions enabled \{#ui-example-with-some-permissions-enabled}
 
-![One tile](/ui-videos/modeling/custom-ui-demo/feature-flagging-3.png)
+#### The Permit policy for one tile \{#the-permit-policy-1}
 
-#### The Permit Policy
+![Policy Editor where the Viewer role has view checked only on Topics for you](/ui-videos/modeling/custom-ui-demo/feature-flagging-3.png)
 
-![One Permission](/ui-videos/modeling/custom-ui-demo/feature-flagging-4.png)
+#### The dashboard with one tile \{#the-ui-1}
+
+![Custom UI via Permissions dashboard showing only the Topics for you tile next to the Support Cases panel](/ui-videos/modeling/custom-ui-demo/feature-flagging-4.png)
+
+## Next steps
+
+- [Integrate CASL with Permit](/integrations/feature-flagging/casl) for the full `permit-fe-sdk` and CASL setup.
+- [Build ABAC policies](/how-to/build-policies/abac/building-abac-policy) to make tiles depend on `country` or `channel`.
+- [Check permissions with permit.check()](/how-to/enforce-permissions/check) for the backend check options, including JIT attributes.
+- [Sync users](/how-to/sync-users) to create the users and role assignments the checks rely on.

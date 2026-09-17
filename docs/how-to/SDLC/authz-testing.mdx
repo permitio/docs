@@ -1,46 +1,55 @@
 ---
 sidebar_position: 2
-title: Authorization Testing
-description: "Structure authorization policy testing with unit tests, PDP integration tests, and CI automation before deploying policy changes."
+title: Test authorization policies
+description: "Test Permit policies before they reach production with policy unit tests, integration tests against a PDP synced to a test environment, and CI automation that gates environment merges."
 sidebar_label: Testing with Permit
 ---
 
-Authorization policies must be thoroughly tested in a controlled setting before being deployed to production.
-Effective testing strategies confirm that the system behaves as expected under various conditions and help catch
-potential issues before they affect the production environment.
+Test an authorization policy change in a controlled environment before you merge the change into production. This page is for developers and platform engineers who add policy tests to a continuous integration and continuous deployment (CI/CD) pipeline. It describes three test layers and the Permit tools for each one.
 
-Here's how testing should be structured:
+| Test layer | What it tests | Tool |
+|---|---|---|
+| Unit tests | The logic of the policy code, without your application | [`opa test`](https://www.openpolicyagent.org/docs/latest/policy-testing/) on the policy repository |
+| Integration tests | Permission checks against a PDP that runs the policy of a test environment | [`permit test generate e2e`](/how-to/permit-cli/permit-cli-test#permit-test-generate-e2e), [`permit pdp check`](/how-to/permit-cli/permit-cli-pdp#permit-pdp-check), your application tests |
+| Regression tests | Whether a policy change or a new PDP changes past decisions | [`permit test run audit`](/how-to/permit-cli/permit-cli-test#permit-test-run-audit) |
 
-### **Unit Testing**
+## Unit tests for policy code \{#unit-testing}
 
-Unit tests are essential for verifying the individual components of your authorization policies.
-These tests should be designed to run independently from the rest of the system,
-allowing for quick checks on the logic and functionality of each policy.
+Unit tests check the logic of the policy on its own, without your application or a running PDP. Unit tests run fast, so run them on every policy change.
 
-At Permit, unit tests can be executed using policy as code,
-where the policy code is loaded directly onto the policy engine
-([such as via the OPA test command line](https://www.openpolicyagent.org/docs/latest/policy-testing/)),
-ensuring that each component functions correctly in isolation.
+Permit stores the policy of each environment as Rego code in a policy repository. With [GitOps](/integrations/gitops/overview), you connect that repository to your own Git provider, and each environment is a branch. Write Rego tests next to the policy code and run them with the Open Policy Agent (OPA) [`opa test` command](https://www.openpolicyagent.org/docs/latest/policy-testing/). The OPA engine loads the policy code directly and runs each test in isolation.
 
-### **Application and Integration Testing**
+## Integration tests against a PDP \{#application-and-integration-testing}
 
-Application and integration tests evaluate how well different parts of your application
-work together under real-world scenarios. This involves deploying a
-[PDP](/overview/how-does-it-work#the-policy-decision-point-pdp) that is synced to the development environment
-and running tests that simulate actual application queries against the PDP. This method ensures that policies are not only theoretically correct,
-but are also effectively enforced within the application context.
+Integration tests check that the policy returns the expected decisions when your application sends real permission checks. Run the tests against a [policy decision point (PDP)](/overview/how-does-it-work#the-policy-decision-point-pdp) that uses the API key of a test environment, so the PDP syncs the policy and data of that environment.
 
-In Permit, we incorporate these tests into our development cycles, allowing for thorough validation of policy implementations in a
-controlled yet realistic setting.
+1. Create or copy a test environment. See [Copy and merge environments](/manage-your-account/creating-environments#coping--merging-environments).
+2. Run a PDP with the API key of the test environment. Use [`permit pdp run`](/how-to/permit-cli/permit-cli-pdp#permit-pdp-run) or see [Run the PDP](/overview/run-pdp).
+3. Generate test cases and test data with [`permit test generate e2e`](/how-to/permit-cli/permit-cli-test#permit-test-generate-e2e), and generate a Jest, Vitest, or pytest file with [`permit test generate code-sample`](/how-to/permit-cli/permit-cli-test#permit-test-generate-code-sample). You can also write tests that call `permit.check()` from your application code.
+4. Run the tests against the PDP at `http://localhost:7766`.
 
-### **Automation of Testing Processes**
+A passing run means every check returned the decision the test case expects. For a single check, `permit pdp check --pdpurl http://localhost:7766` prints `ALLOWED` or `DENIED`.
 
-Automation plays a vital role in maintaining efficiency and consistency in testing.
-Automated tests can be configured to run as part of the CI/CD pipeline, ensuring that every change is vetted before it goes live.
-We suggest you consider the following triggers and hooks, which you can mix and match according to your needs:
+:::warning Test data in a shared environment
+Without `--dry-run`, `permit test generate e2e` creates users and data in the environment of your credentials. Run the command without `--dry-run` only in a test environment, or the test data mixes with production data.
+:::
 
-- The CI system deploys PDPs specifically for testing policy changes.
-- Developers can trigger tests automatically through the CI system.
-- Tests must pass before environments are merged; if tests fail, the CI system will not proceed with merging changes.
-- The CI system uses APIs like Create/Copy-env to establish environments purely for testing purposes, guaranteeing
-  that each test environment mirrors the target deployment scenario accurately.
+## Regression tests from audit logs
+
+Before you move production traffic to a changed policy or a new PDP, run [`permit test run audit`](/how-to/permit-cli/permit-cli-test#permit-test-run-audit) with `--pdp-url` set to the PDP that runs the changed policy. The command replays recent checks from the audit logs of your environment against that PDP, and lists every decision that differs. When every decision matches, the command prints `All decisions match!`.
+
+## Automate policy tests in CI \{#automation-of-testing-processes}
+
+Run the tests in your CI/CD pipeline, so every policy change is tested before it reaches production. Combine these steps to fit your pipeline:
+
+- The pipeline creates a test environment with the Create Environment or Copy Environment API, so the test environment matches the target environment. See [Manage the policy life cycle with CI/CD](/how-to/SDLC/CI-CD).
+- The pipeline starts a PDP for the test environment.
+- A pull request to the policy branch triggers the unit tests and the integration tests.
+- The pipeline merges the test environment into the target environment only when all tests pass. When a test fails, the pipeline stops before the merge.
+
+## Next steps
+
+- [Manage the policy life cycle with CI/CD](/how-to/SDLC/CI-CD)
+- [Policy testing commands in the Permit CLI](/how-to/permit-cli/permit-cli-test)
+- [Write custom Rego policies](/integrations/gitops/custom_policy)
+- [Run the PDP](/overview/run-pdp)

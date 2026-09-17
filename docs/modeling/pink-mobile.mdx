@@ -1,14 +1,14 @@
 ---
 sidebar_position: 4
 title: Teleco Demo Application
-description: "Explore Pink Mobile, a telecom demo app that models fine-grained authorization for Customer, Representative, and Manager personas."
+description: "Learn how the Pink Mobile telecom demo app models resources, roles, relationships, and conditions with the Permit.io Node.js SDK, syncs its data, and enforces decisions."
 ---
 
-Pink Mobile is a simple mobile plan management application that demonstrates the basic principles of fine-grained authorization by applying the impersonation of three different user personas: Customer, Representative, and Manager.
+Learn how the Pink Mobile demo app models fine-grained authorization with Permit.io, from resources and roles to relationships and conditions. This page is for developers who want to see a complete policy model built in code with the Permit Node.js SDK before they design their own.
 
-By utilizing this simple web application based on Node.js, you can learn how to model fine-grained authorization using Permit, and how to enforce policy decisions in your application.
+Pink Mobile is a mobile plan management app built with Next.js. You switch between three personas (Customer, Representative, and Manager) to see what each one can do. The code is in the [pink-mobile-demo-app repository](https://github.com/permitio/pink-mobile-demo-app).
 
-Take a look at the application in action -
+The following interactive demo shows the app in action:
 
 <div className={"arcade-demo-container"} style={{height: '100%', padding: 0}}>
 	<iframe
@@ -20,43 +20,48 @@ Take a look at the application in action -
 		allowfullscreen
         style={{width: '500px', height: '730px', position: 'relative'}}
 		className={"arcade-demo-iframe"}
+		title="Interactive demo of the Pink Mobile app switching between the Customer, Representative, and Manager personas"
 	></iframe>
 </div>
 
-## Modeling Fine-Grained Authorization
+## How the authorization model is organized \{#modeling-fine-grained-authorization}
 
-The first step to understanding fine-grained authorization is to find the appropriate policy model for our needs. We will use the plane model to explain the different aspects of policy modeling.
-Authorization can be divided into several different decoupled planes; the **control plane** (the configuration of the rules), the **data plane** (the data that helps us make decisions), and the **enforcement plane** (the actual enforcement of the rules).
-The decoupling of these plains helps us ensure that policies are streamlined and easy to manage.
+The Pink Mobile setup splits authorization into three parts. Each part has its own section on this page:
 
-In the following sections, we will go over each of the planes and see how our application handles them.
+| Part | What it contains | Where Pink Mobile defines it |
+|---|---|---|
+| [Policy model](#control-plane) | Resources, actions, roles, relationships, role derivations, condition sets, and the rules that connect them | `setup.js`, through the Permit API |
+| [Authorization data](#data-plane) | Users, role assignments, and relationship tuples | `setup.js`, through the Permit API |
+| [Enforcement](#enforcement-plane) | Permission checks and filtered queries in the app | `lib/authorizer.js` |
+
+Both the policy model and the authorization data are stored in the Permit control plane, which runs in Permit's cloud. The Permit control plane syncs both to the policy decision point (PDP), the data plane component that runs in your network and answers each check. To learn how the two planes work, see [Control & Data planes](/concepts/control-plane-and-data-plane).
+
 :::tip
-While we are using the Permit Node.js SDK to configure permissions, you can also use the [Permit dashboard](https://app.permit.io) to configure fine-grained authorization for your application.
+Pink Mobile creates everything with the Permit Node.js SDK. You can create the same policy model in the [Permit dashboard](https://app.permit.io).
 :::
 
-## Control Plane
-The control plane is where all the policy rules and the entities required to create fine-grained rules are configured. 
-Here's a diagram with the entities used in our application:
+## Configure the policy model \{#control-plane}
 
-![Control Plane Entities](/img/modeling/pink-mobile/control-plane-entities.png)
+The policy model defines what can be protected and who can do what. The following diagram shows the Pink Mobile entities:
+
+![Pink Mobile policy model: Representatives, Users, Account, and Plan resources, with Plan linked to Account by a parent relation; Owner, Member, and Editor roles on Account, with Account Editor deriving Plan Editor; Manager and Representative environment-level roles; and the Active Users and Owned Plans condition sets](/img/modeling/pink-mobile/control-plane-entities.png)
 
 :::info
-You can view the full configuration in the [setup.js](https://github.com/permitio/pink-mobile-demo-app/blob/main/setup.js) file
+The full configuration is in the [setup.js](https://github.com/permitio/pink-mobile-demo-app/blob/main/setup.js) file.
 :::
 
-Let's go over each of the entities and see how we configured them in our application - 
-
 ### Resources
-The first step in protecting data is understanding which resources we wish to protect. In Pink Mobile, we have four types of resources:
 
-- Users: Customers who might want an agent to manage their plan
-- Representatives: An agent that can manage customers
-- Accounts: A top-level resource for everything user-related (e.g., personal details)
-- Plans: The plan used by the user
+A resource is a type of object that you protect. Pink Mobile has four resources:
 
-Of course, in a real mobile management application, there would be many more resources. For the sake of simplicity, we'll stick to these four.
+| Resource | What it represents |
+|---|---|
+| Users | Customers who can have a representative manage their plan |
+| Representatives | Agents who manage customers |
+| Account | The top-level resource for everything that belongs to a customer, such as personal details |
+| Plan | The customer's mobile plan |
 
-The following code from the `setup.js` file is an example of setting up the `Representatives` resource:
+The following code from `setup.js` creates the `Representatives` resource with its `list` and `assign` actions:
 
 ```javascript
 await permit.api.resources.create({
@@ -73,12 +78,11 @@ await permit.api.resources.create({
   });
 ```
 
-#### Resource Relationships
+#### Resource relationships
 
-As we mentioned, the account resource is acting as a top-level resource for the user. This means the account permissions need to be propagated to all resources related to this account. 
-For example, if a user is allowed to perform an operation on their account, they should also be allowed to perform the same operations on their plan.
+The `Account` resource is the parent of the `Plan` resource. A relationship lets permissions on an account apply to the plan that belongs to it. For example, a user who can edit an account can also edit the account's plan.
 
-To create this kind of relationship, we need to declare the relations between resources in our system. Here's an example of how we can declare the relationship between the `Account` and `Plan` resources using the Permit Node.js SDK:
+The following code declares `account` as the `parent` of `plan` when it creates the `Plan` resource. The `...` lines stand for fields that the excerpt omits:
 
 ```javascript
 await permit.api.resources.create({
@@ -92,16 +96,19 @@ await permit.api.resources.create({
 ```
 
 ### Roles
-Now that we've modeled and configured the resources, we can define the roles allowed to perform operations on these resources. In Pink Mobile, we can identify the following roles:
 
-#### Environment-level Roles
+Roles group permissions on resources. Pink Mobile uses two kinds of roles.
 
-These roles allow users to perform operations on all the resources from a particular type in the environment.
+#### Environment-level roles
 
-- Manager: Can perform some operations on all Representatives in the system
-- Representative: Can perform some operations on all Users in the system
+An environment-level role grants permissions on every instance of a resource type in the environment.
 
-Here's a code example of adding the `Manager` role to the environment using the Permit Node.js SDK:
+| Role | Permissions |
+|---|---|
+| Manager | Assign and list representatives, create and list users, view accounts and plans |
+| Representative | List users |
+
+The following code creates the `Manager` role:
 
 ```javascript
 await permit.api.roles.create({
@@ -118,16 +125,18 @@ await permit.api.roles.create({
   });
 ```
 
-#### Resource-level Roles
+#### Resource-level roles
 
-These roles are more fine-grained, and allow to perform operations on a specific resource a user is assigned to. We will write this role in the following convention: `Resource#Role`
+A resource-level role grants permissions only on the resource instances a user is assigned to. This page writes resource-level roles as `Resource#Role`.
 
-- Account#Owner: Can perform every operation on a User's account
-- Account#Member: Can perform some viewing operations on a User's account
-- Account#Editor: Can perform some editing operations on a User's account
-- Plan#Editor: Can perform some editing operations on a User's plan
+| Role | Permissions |
+|---|---|
+| `Account#Owner` | `view` and `manage` on the account |
+| `Account#Member` | `view` on the account |
+| `Account#Editor` | `view` on the account, and derives `Plan#Editor` on the account's plan |
+| `Plan#Editor` | `view` and `change` on the plan |
 
-Here's a code example of adding the `Account#Owner` role as part of the resource configuration using the Permit Node.js SDK:
+The following code defines the `Plan#Editor` role as part of the `Plan` resource:
 
 ```javascript
 await permit.api.resources.create({
@@ -145,14 +154,11 @@ await permit.api.resources.create({
   });
 ```
 
-#### Role Derivations
+#### Role derivations
 
-Looking at the previous list, we can see a hierarchy in the roles, the same as we had with resources. One example is granting additional permissions on related resources, such as plans, to users with a specific role on the account.
-To do so, we can configure a role derivation. This will allow us to derive the permissions from the account to the plan. The role derivation will be configured as such:
+A role derivation grants a role on a related resource. Pink Mobile derives `Plan#Editor` from `Account#Editor`: every user with the `Account#Editor` role on an account gets the `Plan#Editor` role on the plan whose `parent` is that account.
 
-`Account#Editor` -> `Plan#Editor` - every user that has the `Account#Editor` role, derives all the relevant permissions in the `Plan#Editor` role.
-
-Here's a code example of adding role derivation to the environment using the Permit Node.js SDK:
+The following code adds the derivation to the `Plan#Editor` role with `granted_to`:
 
 ```javascript
 await permit.api.resources.create({
@@ -180,18 +186,18 @@ await permit.api.resources.create({
 
 ### Conditions
 
-To create even fine-grained authorization, we can leverage our resource and user attributes to create **condition sets** based on our resources. Creating such conditions will give us the option to match them in the policy, and allow/deny an operation based on the condition.
+Condition sets group users or resources by their attributes. You grant permissions to a condition set in the policy, and the PDP includes a user or resource in the set when its attributes match the conditions.
 
-#### User Sets
+#### User sets
 
-The first type of condition we can create is a **user set**. A condition (or set of conditions) that's based on user attributes. In our application, we'll create the following conditions:
+A user set is a condition set based on user attributes. Pink Mobile creates two user sets:
 
-| User Set | Condition | Description |
+| User set | Condition | Description |
 | --- | --- | --- |
-| Blocked Users | `user.blocked == true` | A condition that checks if the user is blocked |
-| Active Users | `user.blocked == false` | A condition that checks if the user is active |
+| Blocked Users | `user.blocked == true` | Users whose account is blocked |
+| Active Users | `user.blocked == false` | Users whose account is active |
 
-Here's an example of how to create a `Blocked Users` condition using the Permit Node.js SDK:
+The following code creates the `Blocked Users` user set:
 
 ```javascript
 await permit.api.conditionSets.create({
@@ -204,15 +210,15 @@ await permit.api.conditionSets.create({
 });
 ```
 
-#### Resource Sets
+#### Resource sets
 
-The second type of condition we can create is a resource set. A condition (or set of conditions) based on resource attributes. In a resource set, we can also match user attributes with resource attributes to test things like ownership. In our application, we'll create the following conditions:
+A resource set is a condition set based on resource attributes. A resource set condition can compare a resource attribute with a user attribute, which lets you check ownership. Pink Mobile creates one resource set:
 
-| Resource Set | Condition | Description |
+| Resource set | Condition | Description |
 | --- | --- | --- |
-| Owned Resources | `resource.owner == user.id` | A condition that checks if the user is the owner of the resource |
+| Owned Plans | `resource.owner == user.key` | Plans whose `owner` attribute matches the user's key |
 
-Here's an example of how to create a `Owned Resources` condition using the Permit Node.js SDK:
+The following code creates the `Owned Plans` resource set:
 
 ```javascript
 await permit.api.conditionSets.create({
@@ -228,12 +234,13 @@ await permit.api.conditionSets.create({
 });
 ```
 
-### Policy Rules
+### Policy rules
 
-At this point, we have all the building blocks required to create a fine-grained policy table for our application. Looking at the Permit dashboard, this is how our application policy table should look like:
-![Policy Editor](/img/modeling/pink-mobile/policy-editor.png)
+The policy rules connect roles and condition sets to the permissions they grant. After `setup.js` runs, the **Policy Editor** in the Permit dashboard shows this table:
 
-To set this policy up, we used the Permit API in the setup script. For example, here's where we assigned active users permissions to perform operations on their owned resources:
+![Pink Mobile policy table: Manager has permissions on Account, Plan, Representatives, and Users; Representative can list users; account#Owner can view and manage accounts; account#Editor and account#Member can view accounts; plan#editor can view and change plans; Active Users can view and change Owned Plans; Blocked Users can view Owned Plans](/img/modeling/pink-mobile/policy-editor.png)
+
+The following code from `setup.js` grants the `Active Users` user set the `view` and `change` permissions on the `Owned Plans` resource set:
 
 ```javascript
 await permit.api.conditionSetRules.create({
@@ -248,16 +255,15 @@ await permit.api.conditionSetRules.create({
 });
 ```
 
-## Data Plane
+## Sync the authorization data \{#data-plane}
 
-The data plane is where we set up the necessary data to enable our authorization service to make proper decisions. For example, we would want to let the policy engine know our user roles, attributes, etc.
-This application is designed to manage the following data plane entities:
+The PDP needs data about the app's users and objects to evaluate the policy model: users with their attributes, role assignments, and relationships between resource instances. Pink Mobile syncs this data in `setup.js`.
 
 ### Users
 
-The most basic entity in every authorization data plane is the user. Their basic information and unique ID will help us match them with the resources on which they are allowed to perform operations.
-In a standard application, Permit's `sync` user function would be connected to your authentication provider. In our application, we used the Setup.js script to configure 6 users and assign each of them different roles and attributes. 
-Here's an example of how we configured the `Sirius Black` user:
+Each user needs a unique key that the app uses in permission checks. In a production app, you sync users when they sign up or sign in through your authentication provider. See [Sync users](/how-to/sync-users). Pink Mobile creates six users in `setup.js` instead.
+
+The following code syncs the `Sirius Black` user:
 
 ```javascript
 permit.api.users.sync({
@@ -269,11 +275,11 @@ permit.api.users.sync({
 });
 ```
 
-### User Roles
+### User roles
 
-For each user in our application, we would like to assign one or more resource or environment roles. This will help us match the user with the proper permissions in the policy table.
+A role assignment gives a user an environment-level role or a resource-level role on one instance.
 
-Here's an example of how we assigned the `Representative` role to the `Sirius Black` user:
+The following code assigns the environment-level `representative` role to `sirius@pink.mobile` in the `default` tenant:
 
 ```javascript
 await permit.api.roleAssignments.assign({
@@ -283,7 +289,7 @@ await permit.api.roleAssignments.assign({
 });
 ```
 
-Here's another example of a resource-role assignment, where we assign `harry@potter.io` the `Account#Owner` role for his account instance:
+The following code assigns the resource-level `owner` role on the `account:harry` instance, which is `Account#Owner`, to the `harry@potter.io` user:
 
 ```javascript
 await permit.api.roleAssignments.assign({
@@ -294,10 +300,11 @@ await permit.api.roleAssignments.assign({
 });
 ```
 
-### Relationship Tuples
+### Relationship tuples
 
-In order to ensure the role derivation is correctly deriving roles from one resource to another, we need to create relationship tuples between the resources. In our application, we used the Setup.js script to configure the relationship tuples between the resources. 
-Here's an example of how we configured the relationship between Harry's account and Harry's plan:
+A relationship tuple links two resource instances with a relation. The `Plan#Editor` role derivation applies only to plans that have a `parent` relationship tuple with an account.
+
+The following code makes the `account:harry` instance the `parent` of the `plan:harry` instance:
 
 ```javascript
 await permit.api.relationshipTuples.create({
@@ -308,13 +315,13 @@ await permit.api.relationshipTuples.create({
 })
 ```
 
-## Enforcement Plane
+## Enforce decisions in the app \{#enforcement-plane}
 
-In the enforcement plane, we will enforce the policy decisions with the configuration from the control plane and the data from the data plane. In our application, we are using the Permit Node.js SDK to enforce the policy decisions.
+Pink Mobile enforces the policy in `lib/authorizer.js` in two ways: a permission check before each operation, and filtered queries that return only the data a user may see.
 
-### The Check Function
+### Check permissions with permit.check() \{#the-check-function}
 
-In the `authorizer.js` file, you'll find a function that is responsible for enforcing the policy decisions. Here's an example of how we enforce the policy decisions for the `Change Plan` operation:
+The `authorize` function in `lib/authorizer.js` passes the current user, the action, and the resource to `permit.check()`. The app calls `authorize` before operations such as changing a plan.
 
 ```javascript
 export const authorize = async (user, action, resource) => {
@@ -322,12 +329,11 @@ export const authorize = async (user, action, resource) => {
 };
 ```
 
-The `permit.check` function that we are using to enforce permissions will take the current user, operation, and resource and return a decision based on the policy table that is configured in the control plane, along with the data configured in the data plane.
+`permit.check()` sends the request to the PDP. The PDP evaluates the policy model with the synced data and returns `true` when the user may perform the action. See [Check permissions](/how-to/enforce-permissions/check).
 
-### Data Filtering
+### Filter data by role assignments \{#data-filtering}
 
-Another way to enforce permissions is to query the Permit APIs for particular roles and data to ensure we are not exposing data that the user is not allowed to see. In our application, we are filtering the allowed representatives and their allowed users by querying the relevant roles in Permit configuration.
-Here's an example of how we are filtering only the users who are owners of a plan:
+To list only the data a user may see, Pink Mobile queries role assignments through the Permit API. For example, the following code lists every assignment of the `owner` role in the `default` tenant. The `listUsers` function in `lib/authorizer.js` starts from this list:
 
 ```javascript
 const owners = await permit.api.roleAssignments.list({
@@ -336,5 +342,23 @@ const owners = await permit.api.roleAssignments.list({
   });
 ```
 
-## Get Started
-To learn more about the application itself and run it locally, you can visit the [Pink Mobile Demo Repository](https://github.com/permitio/pink-mobile-demo-app) on GitHub. If you need any help, feel free to reach out to us on our [Slack channel](https://io.permit.io/blog-slack).
+For other filtering approaches, see [Data filtering](/how-to/enforce-permissions/data-filtering).
+
+## Run Pink Mobile locally \{#get-started}
+
+The [Pink Mobile repository README](https://github.com/permitio/pink-mobile-demo-app) has the steps to run the app. In summary, you:
+
+1. Install the dependencies with `npm install`.
+2. Add your environment API key and the PDP URL to the `.env` file. See [Get your API key](/overview/get-api-key).
+3. Run `node setup` to create the policy model and data in your Permit environment.
+4. Start a local PDP container. See [Run the PDP](/overview/run-pdp).
+5. Run `npm run dev` and open `http://localhost:3000`.
+
+**Verify:** In the app, switch between the Customer, Representative, and Manager tabs. Each persona sees only the operations that the policy table allows.
+
+## Next steps
+
+- [Build ReBAC policies](/how-to/build-policies/rebac/building-rebac-policies) with resource roles, relations, and role derivations.
+- [Build ABAC policies](/how-to/build-policies/abac/building-abac-policy) with user sets and resource sets.
+- [Healthcare Demo Application](/modeling/rebac-GHC) for another app that combines RBAC, ABAC, and ReBAC.
+- Ask questions in the [Permit Slack community](https://io.permit.io/slack).
