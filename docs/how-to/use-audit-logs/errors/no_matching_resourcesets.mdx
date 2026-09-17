@@ -1,31 +1,56 @@
 ---
-title: No matching resource sets found for the given user and attributes
-description: "Fix the no matching resource sets found error by sending correct user attributes or creating a matching resource set."
+title: No matching resource sets (no_matching_resourcesets)
+description: "Fix a no_matching_resourcesets decision, where the resource's attributes don't meet the conditions of any ABAC resource set."
 ---
 
-This error surfaced because the user you are attempting to verify does not have any associated resource sets. Essentially, the user attributes
-you're submitting either in the check or within the Permit database do not align with any resource sets established in the Permit web
-application.
+A denied decision with the code `no_matching_resourcesets` means the user matched at least one user set, but the resource's attributes don't meet the conditions of any resource set. This page is for developers who find this code in a decision log and need to fix the resource's attributes, the check, or the resource set.
 
-You can view and manage the resource sets you have crafted in the [Policy Management Screen](https://app.permit.io/policy-editor),
-where you'll also have the option to modify a resource set and review its conditions.
+## What the no_matching_resourcesets reason means
 
-## A Solution to the issue
+The policy decision point (PDP) writes this code in the attribute-based access control (ABAC) part of the decision log's debug details (`debug.abac`). The debug details appear when [Debug Mode](/how-to/use-audit-logs/debug-mode) is on.
 
-To resolve this, you have two options: either send the correct user attributes or establish a resource set that aligns with the user
-attributes you are defining.
+| Field | Value |
+|---|---|
+| `code` | `no_matching_resourcesets` |
+| `reason` | `the given resource did not match any resourceset conditions. known resourcesets: <resource-set-keys>` |
+| `matching_usersets` | The user sets the user matched |
+| `support_link` | A link to `/errors/no_matching_resourcesets` on docs.permit.io |
 
-### Sending the correct user attributes
+A resource set (also called a dynamic resource) is a group of resources of one resource type whose attributes meet a set of conditions. The PDP checks resource sets after user sets. This code means the user set check passed, and no resource set matched the resource.
 
-Ensure that the necessary user attributes are stored in the Permit DB if you are utilizing it. You can verify this information through the
-[User Management Screen](https://app.permit.io/user-management) in the Permit web application or by utilizing the
-[Get User](https://api.permit.io/v2/redoc#tag/Users/operation/get_user) API Call.
+The decision log also has a `request.resource` object with the resource type and the resource attributes the PDP evaluated. Compare those attributes with the conditions of the resource sets listed in `known resourcesets`.
 
-If you're inputting the attributes via the `permit.check()`, double-check that you're sending the correct attributes.
+## Causes of no_matching_resourcesets
 
-### Creating a Resource Set that matches the user attributes
+| Cause | How to confirm | Fix |
+|---|---|---|
+| The check doesn't send the resource attributes that the resource set conditions test. | `request.resource.attributes` in the decision log is missing the attribute. | [Send the resource attributes in the check](#sending-the-correct-user-attributes). |
+| The attribute value has a different type or case than the condition, for example the string `"18"` instead of the number `18`. | The value in `request.resource.attributes` differs in type or case from the condition value. | Send the value with the type and case the condition uses. |
+| The resource set belongs to a different resource type than the resource in the check. | `request.resource.type` differs from the resource type of the resource set. | Check the resource type in `permit.check()`, or create a resource set for this resource type. |
+| No resource set has conditions that this resource should meet. | `known resourcesets` doesn't list a resource set for this resource. | [Create or edit a resource set](#creating-a-resource-set-that-matches-the-user-attributes). |
 
-You can create a Resource Set that matches the user attributes using [Policy management screen](https://app.permit.io/policy-editor) in
-the Permit web application.
+## Fix no_matching_resourcesets \{#a-solution-to-the-issue}
 
-You can also create a Resource Set with the [Create resource set](https://api.permit.io/v2/redoc#tag/Condition-Sets) API call.
+### Send the resource attributes in the check \{#sending-the-correct-user-attributes}
+
+Pass the attributes in the resource object of `permit.check()`. For examples in each SDK, see [Check an ABAC permission with attributes](/how-to/enforce-permissions/check#attributes). To define which resource attributes exist, see [Defining attributes](/how-to/build-policies/abac/defining-attributes).
+
+### Create or edit a resource set that matches the resource \{#creating-a-resource-set-that-matches-the-user-attributes}
+
+- In the dashboard: open the **Policy** screen, select the **ABAC Rules** tab, and create or edit a resource set. For the steps, see [Define a dynamic resource (resource set)](/how-to/build-policies/abac/building-abac-policy#step-5-defining-dynamic-resource-resource-set).
+- With the API: call [Create condition set](https://api.permit.io/v2/redoc#tag/Condition-Sets/operation/create_condition_set) with `"type": "resourceset"`. For a complete request, see [Create condition sets with the API](/api/working-with-abac/condition-sets).
+
+A new resource set grants nothing until a rule connects it to a user set. After you create the resource set, grant the action to a user set from `matching_usersets` in the **Policy Editor**.
+
+## Confirm the fix
+
+1. Run the same `permit.check()` call again with the same user, action, resource, and attributes. To run the check from a terminal, use [`permit pdp check`](/how-to/permit-cli/permit-cli-pdp#permit-pdp-check) with `--resource-attributes`.
+2. Open the [Audit Log](https://app.permit.io/audit-log) and select the new decision.
+
+The `debug.abac.code` is no longer `no_matching_resourcesets`. If the code is `no_matching_rules`, the resource matched a resource set, and no rule grants the action. See [No ABAC rule grants the permission (no_matching_rules)](/how-to/use-audit-logs/errors/no_matching_rules).
+
+## Related pages
+
+- [No matching user sets (no_matching_usersets)](/how-to/use-audit-logs/errors/no_matching_usersets)
+- [Building your first ABAC policy](/how-to/build-policies/abac/building-abac-policy)
+- [Audit log types and decision logs](/how-to/use-audit-logs/types-and-filtering#decision-logs)

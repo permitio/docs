@@ -1,47 +1,57 @@
 ---
 sidebar_position: 3
-title: Stress Test the PDP
-description: "Replay past permit.check() requests against a PDP with the Audit Log Replay API to load test or debug policy changes."
+title: Replay audit logs against a PDP
+sidebar_label: Audit Log Replay
+description: "Replay past permission checks from your audit logs against a test PDP with the Audit Log Replay API to load test the PDP or catch policy regressions."
 slug: /how-to/use-audit-logs/audit-log-replay
 ---
- 
-# Stress Test the PDP with Audit Log Replay
 
+Replay the permission checks recorded in your audit logs against a policy decision point (PDP) with the Audit Log Replay API. This page is for operators and developers who want to load test a PDP with real traffic patterns, or check that a policy change keeps past decisions.
 
-The Audit Log Replay API allows you to replay `permit.Check()` requests based on your existing audit logs. This powerful feature enables you to test your PDP configuration by simulating real traffic patterns without affecting your production environment.
+## When to use Audit Log Replay \{#use-cases}
 
-:::caution FYI
-**This feature is currently available to whitelisted organizations only!**
+| Goal | What to do |
+|---|---|
+| Load test a PDP | Replay a busy time range against a test PDP and watch its CPU, memory, and latency. |
+| Reproduce a problem | Replay the time range when the problem happened against a PDP you can inspect. |
+| Tune performance | Replay the same time range against PDPs with different configurations and compare their metrics. |
+| Compare decisions before and after a policy change | Use [`permit test run audit`](/how-to/permit-cli/permit-cli-test#permit-test-run-audit) in the Permit CLI. The CLI runs the logged checks against a PDP and lists every decision that differs from the audit log. |
 
-We're rolling it out carefully to ensure the best experience.
-Want to use this feature? Reach out to our friendly support team via [Slack](https://io.permit.io/slack) and we'll be happy to add you to our VIP whitelist! 
+The Audit Log Replay API sends the requests and returns right away. The API doesn't compare decisions. To see which decisions changed, use `permit test run audit`.
+
+## Prerequisites
+
+- An environment API key for the environment whose audit logs you replay. See [Get your API key](/overview/get-api-key).
+- A PDP that the Permit cloud can reach over the network, such as a test PDP with a public URL. See [Run the PDP](/overview/run-pdp).
+- Audit logs in the time range you replay. See [View and filter audit logs](/how-to/use-audit-logs/types-and-filtering).
+
+:::warning Don't replay against a production PDP
+A replay sends every logged check in the time range to the PDP in `pdp_url`. Against a PDP that serves production traffic, the extra load increases latency for your users.
 :::
-## Use Cases
 
-- **Load Testing**: Test your PDP's capacity by replaying high-volume traffic
-- **Regression Testing**: Verify that policy changes don't break existing permissions
-- **Debugging**: Reproduce issues by replaying the exact request patterns from a specific time period
-- **Performance Tuning**: Measure latency and throughput under different configurations
+## Start a replay \{#api-endpoint}
 
-## API Endpoint
-
-For complete API details and schema information, see the [Audit Log Replay API Reference](https://api.permit.io/scalar#tag/audit-log-replay/POST/v2/audit-log-replay).
+Send a `POST` request to the Audit Log Replay endpoint of the Permit API at `https://api.permit.io`. Pass your API key in the `Authorization: Bearer <YOUR_API_KEY>` header.
 
 ```
 POST /v2/audit-log-replay
 ```
 
-## Request Parameters
+For the full schema, see [Run the audit log replay](https://api.permit.io/v2/redoc#tag/Audit-Log-Replay/operation/run_audit_log_replay) in the API reference.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `pdp_url` | string | The URL of the target PDP instance to replay logs against |
-| `start_time` | string (UNIX Timestamp) | Beginning of time range to replay logs from |
-| `end_time` | string (UNIX Timestamp) | End of time range to replay logs from |
-| `concurrency_limit` | integer | Number of concurrent requests to simulate |
-| `graceful_shutdown_s` | object (optional) | Additional filters to apply to audit logs before replay |
+### Request body parameters \{#request-parameters}
 
-## Example Request
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `pdp_url` | string | Yes | The URL of the PDP to replay the checks against, for example `http://mydomain.com:7766`. |
+| `start_time` | integer (UNIX timestamp in seconds) | No | The start of the time range to replay. Defaults to 24 hours ago. |
+| `end_time` | integer (UNIX timestamp in seconds) | No | The end of the time range to replay. Defaults to the current time. |
+| `concurrency_limit` | integer | No | The number of checks the replay sends at the same time. |
+| `graceful_shutdown_s` | integer | No | The graceful shutdown time of the replay, in seconds. Defaults to `60`. |
+
+### Example request \{#example-request}
+
+This request body replays the checks between two timestamps against a test PDP, five at a time:
 
 ```json
 {
@@ -53,7 +63,9 @@ POST /v2/audit-log-replay
 }
 ```
 
-## Example Response
+### Example response \{#example-response}
+
+The API returns HTTP `202` when the replay starts. `document_count` is the number of audit log entries the replay sends to the PDP:
 
 ```json
 {
@@ -62,25 +74,21 @@ POST /v2/audit-log-replay
 }
 ```
 
+## Confirm that the replay runs
 
+1. Check that the response has a `document_count` above `0`. A count of `0` means the time range has no audit logs for the environment.
+2. Watch the logs or metrics of the PDP in `pdp_url`. The PDP receives permission checks while the replay runs.
 
-## Best Practices
+## Best practices for a replay \{#best-practices}
 
-1. **Start Small**: Begin with a short time range and low concurrency to understand the impact
-2. **Target Testing PDP**: Always point to a test PDP instance, not production
-4. **Consider Time Patterns**: Replay traffic from representative time periods (peak hours, etc.)
-5. **Monitor Performance**: Watch your PDP metrics during replay to identify bottlenecks
+1. Start with a short time range and a low `concurrency_limit`, then increase both.
+2. Point `pdp_url` at a test PDP, never at a PDP that serves production traffic.
+3. Replay a time range that represents the traffic you want to test, such as your peak hours.
+4. Watch the PDP's CPU, memory, and response times during the replay to find bottlenecks.
 
-## Limitations
+## Related pages \{#related-resources}
 
-- Maximum replay duration: 30 days
-- Maximum concurrency: 10 (contact support for higher limits)
-- Replay requests may be throttled based on your plan
-- Maximum timeout for a session is 60 seconds
-- Certain audit log types may not be replayable (Authorized-users, Bulk check, etc.)
-
-## Related Resources
-
-- [Audit Logs Overview](./types-and-filtering)
-- [Troubleshooting with Audit Logs](./troubleshooting)
-- [PDP Configuration](../../concepts/pdp/configuration)
+- [Test a PDP against audit logs with the Permit CLI](/how-to/permit-cli/permit-cli-test#permit-test-run-audit)
+- [View and filter audit logs](/how-to/use-audit-logs/types-and-filtering)
+- [Troubleshoot missing audit logs](/how-to/use-audit-logs/troubleshooting)
+- [PDP configuration reference](/concepts/pdp/configuration)

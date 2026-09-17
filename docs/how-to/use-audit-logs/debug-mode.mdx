@@ -1,44 +1,50 @@
 ---
 sidebar_position: 3
-title: Debug Mode
-description: "Enable Debug Mode on the PDP or via the API to add decision-making detail to your audit logs."
+title: Turn on Debug Mode for decision logs
+sidebar_label: Debug Mode
+description: "Turn Debug Mode on or off for one PDP with PDP_DEBUG, or for every PDP that shares a PDP configuration with the Permit API, to add the reason behind each decision to your decision logs."
 ---
 
+Turn on Debug Mode to add the reason behind each permission decision to your decision logs. This page is for developers who need to understand why a policy decision point (PDP) allowed or denied a request.
 
-Knowing why some decisions were made by your PDP can be a crucial part of building and understanding your policies, especially when you encounter unexpected results.
-That's what **Debug Mode** is here for.
+## What Debug Mode adds to decision logs \{#what-is-debug-mode}
 
-## What is Debug mode?
+With Debug Mode on, the [PDP](/concepts/pdp/overview) adds a `debug` object to each decision. The `debug` object shows:
 
-Permit's Debug Mode adds additional debug information to your decision logs, allowing for an in-depth analysis of the decisions made by your [PDP](/concepts/pdp/overview).
+- The request the PDP evaluated: the user and its attributes, whether the user is synced, the tenant, the action, and the resource.
+- For each policy model that took part in the decision, a `code` and a human-readable `reason`. For example, `debug.rbac.reason` names the role that granted access.
+- For a denied request, a `support_link` to the page that explains the code. See [Denial codes in decision logs](/how-to/use-audit-logs/types-and-filtering#denial-codes-in-decision-logs).
 
-## The advantages of Debug Mode
-
-On top of standard log information provided by our Audit Logs, Debug Mode allows us to understand -
-
-- Why a decision was made
-- Which policy was taken into consideration for the evaluation process
-- What are the policies currently configured in your environment
-
-This information gives you a more granular understanding of any decision made by the PDP.
-
-:::danger
-Turning on Debug Mode will impact policy evaluation latency. Thus, it is recommended to disable Debug Mode when running in production.
+:::danger Debug Mode adds latency
+Debug Mode increases policy evaluation latency. Turn off Debug Mode for PDPs that serve production traffic. For other production settings, see [Performance settings](/how-to/deploy/deploy-to-production#general-performance-tips).
 :::
 
-## Configuring Debug Mode
+## Choose where to set Debug Mode \{#configuring-debug-mode}
 
-There are few possible ways to configure Debug Mode:
+| Where you set it | Scope | Use it when |
+|---|---|---|
+| `PDP_DEBUG` environment variable | One PDP container | You debug a single PDP, for example a local container. |
+| Permit API | Every PDP that uses the same PDP configuration | You change the setting for an environment's PDPs without redeploying them, including the Cloud PDP. |
+| `use_debugger` in a PDP request body | One request | You debug a single check. |
 
-### Through the PDP environment variables:
+When more than one setting applies, the most specific one wins:
 
-When running your PDP, set the environment variable `PDP_DEBUG` as part of the PDP deployment. <br />
-There available configurations are:
-- `PDP_DEBUG=None` - The default behavior, will use the configuration set by Permit.io Cloud.
-- `PDP_DEBUG=True` - Will enable Debug Mode for this specific PDP.
-- `PDP_DEBUG=False` - Will disable Debug Mode for this specific PDP.
+1. `use_debugger` in the request body overrides every other setting.
+2. `PDP_DEBUG` on the PDP container overrides the Permit API setting.
+3. The Permit API setting applies when neither of the settings above is set.
+4. When nothing is set, Debug Mode is on.
 
-Here's an example of such a PDP deployment:
+## Set Debug Mode on one PDP container \{#through-the-pdp-environment-variables}
+
+Set the `PDP_DEBUG` environment variable when you start the PDP container:
+
+| Value | Behavior |
+|---|---|
+| Not set | The PDP uses the setting from the Permit API. This is the default. |
+| `True` | Debug Mode is on for this PDP. |
+| `False` | Debug Mode is off for this PDP. |
+
+In this `docker run` command, replace `<YOUR_API_KEY>` with your environment API key:
 
 ```
 docker run -it \
@@ -48,29 +54,30 @@ docker run -it \
   permitio/pdp-v2:latest
 ```
 
-:::note
-This configuration will only enable Debug Mode in the PDP itself and not across your environment.
-:::
+`PDP_DEBUG` changes only this PDP. Other PDPs in the environment keep their setting. For every PDP variable, see [PDP configuration](/concepts/pdp/configuration#debug-mode-and-logging).
 
-### Through the Permit API
+## Set Debug Mode for a PDP configuration with the Permit API \{#through-the-permit-api}
 
-Updating the Debug Mode configuration can also be done via the Permit API.
-To do se you can use the following guide:
+A PDP configuration belongs to an environment. Every PDP that runs with an API key of that PDP configuration uses its Debug Mode setting, including the Cloud PDP.
 
-1. Extract the relevant PDP Configuration from the Permit API:
+Before you start, get your project ID (`proj_id`), environment ID (`env_id`), and an API key for the environment. See [Get project and environment IDs](/api/examples/get-project-and-env) and [Get your API key](/overview/get-api-key).
+
+1. List the environment's PDP configurations, and copy the `id` of the PDP configuration to change:
+
     ```bash
     curl "https://api.permit.io/v2/pdps/{proj_id}/{env_id}/configs" \
     -H "Authorization: Bearer {api-key}"
     ```
-2. Update the setting for the relevant PDP Configuration using the id retrieved from the previous call:
-    - To enable use the following command
+
+2. Use that `id` as `{pdp_id}`, and send one of these requests.
+    - To turn Debug Mode on:
         ```bash
         curl "https://api.permit.io/v2/pdps/{proj_id}/{env_id}/configs/{pdp_id}/debug-audit-logs/enable" \
         -X PUT \
         -H "Authorization: Bearer {api-key}"
         -H 'Content-Type: application/json'
         ```
-    - To disable use the following command
+    - To turn Debug Mode off:
         ```bash
         curl "https://api.permit.io/v2/pdps/{proj_id}/{env_id}/configs/{pdp_id}/debug-audit-logs/disable" \
         -X PUT \
@@ -78,23 +85,19 @@ To do se you can use the following guide:
         -H 'Content-Type: application/json'
         ```
 
-:::note
-Updating the configuration via the API will affect all PDPs using the updated PDP Configuration in the environment.<br />
-The PDP Config the PDP is using is determined based on the API Key the PDP runs with.
-:::
+The change applies to every PDP that uses this PDP configuration. A PDP container that sets `PDP_DEBUG` keeps its own setting.
 
+For the request and response schemas, see [Enable debug audit logs](https://api.permit.io/v2/redoc#tag/Policy-Decision-Points/operation/enable_debug_audit_logs) in the API reference.
 
-:::note Default Behavior & Superseding Hierarchy
-The configuration hierarchy for Debug Mode is as follows:
-- If no configuration was set, the PDP will show debug information.
-- If the configuration was set on Permit.io Cloud, the PDP will use that configuration.
-- If the configuration was set on the PDP itself, it will override the Permit.io Cloud configuration.
-- If the API/SDK Call to the PDP was done with `use_debugger` in the body, it will override any other configuration set.
-:::
+## Confirm that Debug Mode is on
 
-:::danger Performance Impact
-Having debug mode activated has a performance penalty and is recommended to run
-with it disabled on production environments.<br />
-For more information about performance optimizations for production environments, please read the full documentation [here](/how-to/deploy/deploy-to-production#general-performance-tips)
-:::
+1. Run a `permit.check()` call against the PDP.
+2. Open the [Audit Log](https://app.permit.io/audit-log) screen in the Permit dashboard and select the new decision.
 
+The decision log has a `debug` object with a `reason`. When Debug Mode is off, the decision log has no `debug` object.
+
+## Next steps
+
+- [View and filter audit logs](/how-to/use-audit-logs/types-and-filtering)
+- [Fix a no_permission denial](/how-to/use-audit-logs/errors/no_permission)
+- [PDP configuration reference](/concepts/pdp/configuration)

@@ -1,134 +1,143 @@
 ---
-description: "Run a PDP container, check permissions, view PDP stats, and check URL-based permissions from the CLI."
+title: "PDP commands in the Permit CLI"
+sidebar_label: "PDP Commands"
+description: "Reference for the Permit CLI commands that run a PDP container, check permissions and URL permissions against a PDP, and show PDP statistics."
 ---
 
+Run a policy decision point (PDP) container and send permission checks to a PDP from your terminal with the `permit pdp` commands. This reference is for developers who test policies locally or debug a denied request.
 
-# Policy Decision Point (PDP) Commands
+Before you use these commands, install the Permit CLI and sign in with `permit login`. See [Install and use the Permit CLI](/how-to/permit-cli). Each command also accepts `--api-key` instead of the stored credentials.
 
-This collection of commands aims to improve the experience of working with the PDPs (Permit PDP or Open Policy Agent).
+## Default PDP URLs \{#default-pdp-urls}
 
-### `permit pdp run`
+The commands send requests to different PDPs when you don't pass a URL:
 
-Use this command to run a Permit PDP Docker container configured with your [Permit.io](https://www.permit.io/) account details. The command will start the container in detached mode and display the container ID and name.
+| Command | Flag for the PDP URL | Default |
+|---|---|---|
+| `permit pdp check` | `--pdpurl` | The Cloud PDP of your region: `https://cloudpdp.api.permit.io`, or `https://cloudpdp.api.eu-central-1.permit.io` for `eu` |
+| `permit pdp check-url` | `--pdp-url` | `http://localhost:7766` |
 
-**Arguments (Optional):**
+`permit pdp run` publishes the PDP on port `7766` of your machine. To check a permission against that container, pass `--pdpurl http://localhost:7766` to `permit pdp check`.
 
-- `--api-key <string>` - use a specific API key instead of the stored one
-- `--opa <number>` - expose the OPA instance running in the PDP
-- `--dry-run` - print the Docker command without executing it
+## `permit pdp run`
 
-**Examples:**
+`permit pdp run` starts a PDP Docker container for your environment. The CLI reads your environment's PDP configuration from the Permit API, then runs the `permitio/pdp-v2` image in detached mode with port `7766` published. Docker must be installed and on your `PATH`.
 
-Run the PDP container
+| Flag | Alias | Default | Description |
+|---|---|---|---|
+| `--api-key <string>` | `-k` | Stored credentials | The API key of the environment, project, or workspace. |
+| `--opa <number>` | | None | Publishes the Open Policy Agent (OPA) server inside the PDP on this port of your machine. |
+| `--tag <string>` | `-t` | `latest` | The tag of the `permitio/pdp-v2` image. |
+| `--dry-run` | `-d` | `false` | Prints the `docker run` command without running it. |
+
+Run the PDP container:
 
 ```bash
 $ permit pdp run
 ```
 
-Run the PDP container with OPA exposed on port 8181
+Run the PDP container and publish its OPA server on port `8181`:
 
 ```
 $ permit pdp run --opa 8181
 ```
 
-Print the Docker command without running the container:
+Print the `docker run` command without starting the container:
 
 ```
 $ permit pdp run --dry-run
 ```
 
-Run the PDP with a specific API key:
+Run the PDP with a specific API key. Replace `your_api_key` with your environment API key:
 
 ```
 $ permit pdp run --api-key your_api_key
 ```
 
----
+When the container starts, the CLI prints that the PDP is running on port `7766`. To confirm, run `docker ps` and look for a container from the `permitio/pdp-v2` image.
 
-### `permit pdp check`
+## `permit pdp check`
 
-Use this command to perform an authorization check against the PDP. The command will take the user, action, and resource (and some other enrichment arguments) as options and return the decision.
+`permit pdp check` sends a permission check to a PDP and prints `ALLOWED` or `DENIED`. By default, the check goes to the Cloud PDP.
 
-**Arguments (Required):**
+| Flag | Alias | Required | Default | Description |
+|---|---|---|---|---|
+| `--user <string>` | `-u` | Yes | | The user key to check. |
+| `--action <string>` | `-a` | Yes | | The action the user performs. |
+| `--resource <string>` | `-r` | Yes | | The resource type, or `type:key` for a resource instance, for example `document:readme`. |
+| `--tenant <string>` | `-t` | No | `default` | The tenant key of the resource. |
+| `--user-attributes <string>` | `-ua` | No | | User attributes in the `key1:value1,key2:value2` form. |
+| `--resource-attributes <string>` | `-ra` | No | | Resource attributes in the `key1:value1,key2:value2` form. |
+| `--pdpurl <string>` | | No | Cloud PDP | The URL of the PDP. For a local container, use `http://localhost:7766`. |
+| `--api-key <string>` | | No | Stored credentials | The API key of the environment, project, or workspace. |
 
-- `--user <string>` - the user ID to check the authorization for
-- `--action <string>` - the action to check the authorization for
-- `--resource <string>` - the resource to check the authorization for
-
-**Arguments (Optional):**
-
-- `--tenant <string>` - the tenant to check the authorization for (`default: default`)
-- `--pdpurl <string>` - the PDP URL to check the authorization against (`default: http://localhost:7676`)
-- `--user-attributes` - additional user attributes to enrich the authorization check in the format: `key1=value1,key2=value2`
-- `-resource-attributes` - additional resource attributes to enrich the authorization check in the format `key1=value1,key2=value2`
-
-**Example:**
+Check whether the user `eventHandler` can `update` the `Widget` resource with the key `dashboard-1-widget`:
 
 ```bash
 $ permit  pdp check --user eventHandler --action update --resource Widget:dashboard-1-widget
 ```
 
----
+To send attribute-based access control (ABAC) attributes, pass them as `key:value` pairs, for example `--user-attributes department:sales,level:3`.
 
-### `permit pdp stats`
+A `DENIED` result doesn't say why. To see the reason, open the decision in the [Audit Log](https://app.permit.io/audit-log) with [Debug Mode](/how-to/use-audit-logs/debug-mode) on, and look up the code in [Denial codes in decision logs](/how-to/use-audit-logs/types-and-filtering#denial-codes-in-decision-logs).
 
-Use this command to view statistics about your PDP's performance and usage. This is useful for monitoring and debugging your PDP instance.
+## `permit pdp check-url`
 
-**Arguments (Optional):**
+`permit pdp check-url` checks whether a user can call a URL with an HTTP method. The PDP matches the URL and method against the URL mappings of your environment, such as the mappings that [`permit env apply openapi`](/how-to/permit-cli/permit-cli-policy#policy-from-openapi) creates. By default, the check goes to a PDP at `http://localhost:7766`.
 
-- `--project-key <string>` - The project key
-- `--environment-key <string>` - the environment key
-- `--stats-url <string>` - the URL of the PDP service. Default to the cloud PDP
-- `--api-key <string>` - the API key for the Permit env, project, or Workspace
-- `--top` - run stats in top mode (`default: false`)
+| Flag | Alias | Required | Default | Description |
+|---|---|---|---|---|
+| `--user <string>` | `-u` | Yes | | The user key to check. |
+| `--url <string>` | | Yes | | The URL to check. |
+| `--method <string>` | `-m` | No | `GET` | The HTTP method. |
+| `--tenant <string>` | `-t` | No | `default` | The tenant key. |
+| `--user-attributes <string>` | `-ua` | No | | User attributes in the `key1:value1,key2:value2` form. Repeat the flag to add more. |
+| `--pdp-url <string>` | | No | `http://localhost:7766` | The URL of the PDP. |
+| `--api-key <string>` | `-k` | No | Stored credentials | The API key of the environment, project, or workspace. |
 
-**Example:**
-
-```bash
-$ permit pdp stats
-```
-
-
-
-### `permit pdp check-url`
-
-Check if a user has permission to access a specific URL. The command verifies URL-based permissions against the PDP using the Permit.io URL authorization API.
-
-**Arguments (Required):**
-
-- `--user <string>` - the user id to check permissions for (Required)
-- `--url <string>` - the URL to check permissions for (Required)
-
-**Arguments (Optional):**
-
-- `--method <string>` - the HTTP method to check permissions for (default: `GET`)
-- `--tenant <string>` - the tenant to check permissions for (default: `default`)
-- `--user-attributes <string>` - additional user attributes to enrich the authorization check in the format `key1:value1,key2:value2`. Can be specified multiple times.
-- `--pdp-url <string>` - the PDP URL to check authorization against (default: Cloud PDP)
-- `--api-key <string>` - the API key for the Permit env, project or Workspace
-
-**Examples:**
-
-#### Basic URL permission check:
+Check a `GET` request to a URL:
 
 ```bash
 $ permit pdp check-url --user john@example.com --url https://api.example.com/orders
 ```
 
-#### Check with specific HTTP method and tenant:
+Check a `POST` request in the `acme-corp` tenant:
 
 ```
 $ permit pdp check-url --user john@example.com --url https://api.example.com/orders --method POST --tenant acme-corp
 ```
 
-#### Check with user attributes:
+Check a request with two user attributes:
 
 ```
 $ permit pdp check-url --user john@example.com --url https://api.example.com/orders --user-attributes role:admin --user-attributes department:sales
 ```
 
-#### Check against local PDP:
+Check a request against a PDP container on your machine:
 
 ```
 $ permit pdp check-url --user john@example.com --url https://api.example.com/orders --pdp-url http://localhost:7766
 ```
+
+## `permit pdp stats`
+
+`permit pdp stats` reads statistics about the PDPs of a project and environment from the Permit API. With `--top`, the command refreshes the statistics every 3 seconds until you stop it.
+
+| Flag | Alias | Default | Description |
+|---|---|---|---|
+| `--project-key <string>` | `-p` | None | The project key. The CLI uses it only when your credentials don't set a project. |
+| `--environment-key <string>` | `-e` | None | The environment key. The CLI uses it only when your credentials don't set an environment. |
+| `--stats-url <string>` | | The Permit statistics API | The URL to read the statistics from. |
+| `--api-key <string>` | | Stored credentials | The API key of the environment, project, or workspace. |
+| `--top` | | `false` | Refreshes the statistics every 3 seconds. |
+
+```bash
+$ permit pdp stats
+```
+
+## Related pages
+
+- [Run the PDP](/overview/run-pdp)
+- [Check permissions with permit.check()](/how-to/enforce-permissions/check)
+- [Read the reason for a decision in audit logs](/how-to/use-audit-logs/types-and-filtering#decision-logs)
+- [Permit CLI command index](/how-to/permit-cli#full-command-list)

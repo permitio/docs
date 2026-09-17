@@ -1,33 +1,70 @@
 ---
 sidebar_position: 1
-title: Logs Forwarder
-description: "Forward PDP decision logs to Elasticsearch or stdout with the FluentBit-based Permit Logs Forwarder."
+title: Forward decision logs with the logs forwarder
+sidebar_label: Logs Forwarder
+description: "Forward decision logs from a PDP deployed with the Helm chart to Elasticsearch or to stdout with the Fluent Bit logs forwarder."
 ---
 
-import viewingAuditLogs from "/static/ui-videos/how-to/audit-logs/viewing-audit-logs.mp4";
-import filteringAuditLogs from "/static/ui-videos/how-to/audit-logs/filtering-audit-logs.mp4";
+Forward the decision logs of a policy decision point (PDP) to Elasticsearch, or print them to the stdout of a Fluent Bit container, with the Permit logs forwarder. This page is for operators who deploy the PDP to Kubernetes with the Permit Helm chart and want decision logs in their own logging platform.
 
-In order to forward logs to your preferred logging platform, you can use the Permit Logs Forwarder.
-Currently we support forwarding logs to ElasticSearch and stdout of the FluentBit container.
+The logs forwarder is part of the PDP Helm chart. For a PDP that you run with `docker run`, print decisions to the container output instead. See [Decision logs in the PDP configuration](/concepts/pdp/configuration#decision-logs).
 
-## What is FluentBit
+## Prerequisites
 
-Fluent Bit is a lightweight, and highly scalable logging and metrics processor and forwarder.
-Fluent Bit CNCF graduated project under the umbrella of Fluentd.
-For more information **[Fluent Bit](https://fluentbit.io/)**.
+- A PDP deployed with the Permit Helm chart. See [Deploy the PDP with Helm](/how-to/deploy/cloud-hosts/helm).
+- For Elasticsearch: the host, port, index, and a user name and password that can write to the index.
 
-## Enabling Logs Forwarder
+## How the logs forwarder works \{#how-it-works}
 
-Use the PDP's **[values.yaml](https://github.com/permitio/PDP/blob/v2/charts/pdp/values.yaml)**:
-1. Switch ```pdp.logs_forwarder.enabled``` to ```true```.
-2. Set the ```pdp.logs_forwarder.type``` to the desired log forwarder type, ```elasticsearch``` or ```stdout```.
-2.1 If you choose ElasticSearch, set the ```pdp.logs_forwarder.elasticsearch.host``` to the desired ElasticSearch host.
-2.2 If you choose ElasticSearch, set the ```pdp.logs_forwarder.elasticsearch.port``` to the desired ElasticSearch port.
-2.3 If you choose ElasticSearch, set the ```pdp.logs_forwarder.elasticsearch.index``` to the desired ElasticSearch index.
-2.4 If you choose ElasticSearch, set the ```pdp.logs_forwarder.elasticsearch.cloud_auth``` to the desired ElasticSearch username and password as the following ```{user}:{password}```.
-3. Optional - Set the ```pdp.logs_forwarder.debug_mode``` to ```true``` to enable debug logs of FluentBit container.
+When `pdp.logs_forwarder.enabled` is `true`, the Helm chart makes these changes to the PDP pod:
 
-## How it works
+1. The PDP container writes its logs to the `/tmp/pdp.log` file on a volume that both containers share.
+2. The chart adds a sidecar container that runs [Fluent Bit](https://fluentbit.io/), an open source log processor and forwarder.
+3. Fluent Bit reads `/tmp/pdp.log`, keeps only the decision log entries, and sends each decision as JSON to the output you choose: `stdout` or `elasticsearch`.
 
-Once pdp.logs_forwarder.enabled is set to true, the logs will be forwarded to the desired log forwarder type by FluentBit sidecar container.
-The PDP container will save the logs to ```/tmp/pdp.log``` file, and the FluentBit sidecar container will read the logs from this file, filtering the Decision Logs and forward them to the desired log forwarder type.
+The PDP rotates `/tmp/pdp.log` by size and deletes rotated files after a retention period. The `rotation` and `retention` values control both.
+
+## Turn on the logs forwarder \{#enabling-logs-forwarder}
+
+Set these values in your values file for the PDP chart, or pass them with `--set`. For all chart values, see the chart's [values.yaml](https://github.com/permitio/PDP/blob/main/charts/pdp/values.yaml).
+
+| Value | Default | Description |
+|---|---|---|
+| `pdp.logs_forwarder.enabled` | `false` | Set to `true` to add the Fluent Bit sidecar. |
+| `pdp.logs_forwarder.type` | `stdout` | The output: `stdout` or `elasticsearch`. |
+| `pdp.logs_forwarder.elasticsearch.host` | None | The Elasticsearch host. Required when `type` is `elasticsearch`. |
+| `pdp.logs_forwarder.elasticsearch.port` | `443` | The Elasticsearch port. Fluent Bit connects over TLS. |
+| `pdp.logs_forwarder.elasticsearch.index` | None | The Elasticsearch index to write decision logs to. |
+| `pdp.logs_forwarder.elasticsearch.cloud_auth` | None | The Elasticsearch credentials in the `{user}:{password}` form. |
+| `pdp.logs_forwarder.rotation` | `250 MB` | The file size at which the PDP rotates `/tmp/pdp.log`. |
+| `pdp.logs_forwarder.retention` | `3 days` | How long the PDP keeps rotated log files. |
+| `pdp.logs_forwarder.debug_mode` | `false` | Set to `true` to print Fluent Bit's own debug logs. |
+
+To send decision logs to Elasticsearch:
+
+1. Set `pdp.logs_forwarder.enabled` to `true`.
+2. Set `pdp.logs_forwarder.type` to `elasticsearch`.
+3. Set `host`, `port`, `index`, and `cloud_auth` under `pdp.logs_forwarder.elasticsearch`.
+4. Run `helm upgrade` for the PDP release with the new values.
+
+To print decision logs to stdout, set `pdp.logs_forwarder.enabled` to `true` and keep `type` as `stdout`, then run `helm upgrade`.
+
+:::warning Protect the Elasticsearch credentials
+`cloud_auth` holds the Elasticsearch password in plain text. Anyone who can run `helm get values` on the release can read it. Keep the values file out of source control.
+:::
+
+## Confirm that decision logs are forwarded
+
+1. Run a `permit.check()` call against the PDP.
+2. Check the output you chose:
+   - For `stdout`: read the logs of the `fluentbit` container in the PDP pod, for example with `kubectl logs <pdp-pod-name> -c fluentbit`. The output has a JSON record with a `decision_id` for the check.
+   - For `elasticsearch`: search the index you set. The index has a document with a `decision_id` for the check.
+
+If no decision appears, set `pdp.logs_forwarder.debug_mode` to `true`, upgrade the release, and read the `fluentbit` container logs for connection errors.
+
+## Next steps
+
+- [View and filter audit logs](/how-to/use-audit-logs/types-and-filtering)
+- [Add decision detail with Debug Mode](/how-to/use-audit-logs/debug-mode)
+- [Deploy the PDP with Helm](/how-to/deploy/cloud-hosts/helm)
+- [PDP configuration reference](/concepts/pdp/configuration)
