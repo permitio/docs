@@ -1,40 +1,41 @@
 ---
-title: "Deploying PDP"
-description: "How to deploy the Policy Decision Point (PDP) in your on-premise environment"
+title: "Deploy a PDP in an On-Premises Cluster"
+sidebar_label: "Deploying PDP"
+description: "Install a Permit policy decision point (PDP) with the PDP Helm chart and connect it to your self-hosted Permit Platform backend."
 sidebar_position: 6
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# Deploying PDP
+This page is for operators of a self-hosted Permit Platform. It shows how to install a policy decision point (PDP) in the same Kubernetes cluster with the PDP Helm chart, connect the PDP to your Permit backend, and check that the PDP answers authorization requests. Your applications send authorization checks to the PDP instead of to the Permit backend.
 
-After successfully deploying the Permit Platform on-premise, you can deploy additional Policy Decision Points (PDPs) to handle authorization decisions in your environment.
+## Prerequisites \{#prerequisites}
 
-## Prerequisites
+- A running self-hosted Permit Platform. See the [installation guide](/how-to/deploy/on-prem/installation).
+- The `permit-backend-v2` service running in the platform namespace. The commands on this page use the default namespace, `permit-platform`.
+- An environment API key from your self-hosted Permit frontend. The PDP uses the key to fetch the policies and data of that environment. See [Get your API key](/overview/get-api-key) for where the key is in the frontend.
+- Helm 3 and `kubectl` with access to the cluster.
 
-- Permit Platform on-premise installation completed
-- Access to the deployed `permit-backend-v2` service
-- PDP API key from your Permit workspace
-- Helm 3.x installed
+## Install the PDP \{#installation}
 
-## Installation
+The PDP Helm chart is published in the [permitio/PDP repository](https://github.com/permitio/PDP). The chart creates a `permitio-pdp` deployment and a `permitio-pdp` service.
 
-The PDP can be deployed using the official Helm chart from the Permit.io PDP repository.
-
-### Add the PDP Helm Repository
+### Add the PDP Helm repository \{#add-the-pdp-helm-repository}
 
 ```bash
 helm repo add pdp https://permitio.github.io/PDP/
 helm repo update
 ```
 
-### Deploy PDP
+### Install the chart \{#deploy-pdp}
+
+Replace `<YOUR_API_TOKEN>` with your environment API key. `PDP_CONTROL_PLANE` points the PDP at your self-hosted backend, `http://permit-backend-v2:8000`, instead of the Permit cloud.
 
 <Tabs>
 <TabItem value="openshift" label="OpenShift/ROSA">
 
-For OpenShift deployments, you need to enable OpenShift-specific configurations:
+On OpenShift, set `openshift.enabled=true`. The chart then creates the `permitio-pdp-sa` service account, binds it to the `restricted-v2` Security Context Constraint (SCC), and runs the container as non-root with writable temporary volumes.
 
 ```bash
 helm install pdp pdp/pdp \
@@ -48,7 +49,7 @@ helm install pdp pdp/pdp \
 </TabItem>
 <TabItem value="kubernetes" label="Standard Kubernetes">
 
-For standard Kubernetes deployments:
+On other Kubernetes distributions, leave `openshift.enabled` unset:
 
 ```bash
 helm install pdp pdp/pdp \
@@ -61,20 +62,89 @@ helm install pdp pdp/pdp \
 </TabItem>
 </Tabs>
 
-### Configuration Parameters
+### Chart parameters \{#configuration-parameters}
 
 | Parameter | Description | Required |
 |-----------|-------------|----------|
-| `pdp.ApiKey` | Your PDP API token from Permit.io | ✅ Yes |
-| `openshift.enabled` | Enable OpenShift-specific configurations | ✅ Yes (for OpenShift) |
-| `pdp.pdpEnvs[0].name` | Environment variable name for control plane | ✅ Yes |
-| `pdp.pdpEnvs[0].value` | URL of your on-premise backend service | ✅ Yes |
+| `pdp.ApiKey` | Environment API key. The chart stores it in a Kubernetes secret and passes it to the PDP as `PDP_API_KEY`. | Yes |
+| `pdp.existingApiKeySecret.name`, `pdp.existingApiKeySecret.key` | An existing secret and key that hold the API key. When set, the chart doesn't create a secret. | No |
+| `pdp.pdpEnvs[0].name` | Set to `PDP_CONTROL_PLANE`. | Yes |
+| `pdp.pdpEnvs[0].value` | URL of your self-hosted backend service, `http://permit-backend-v2:8000`. | Yes |
+| `openshift.enabled` | Turn on the OpenShift service account, SCC binding, and security context. | Yes, on OpenShift |
+| `pdp.replicas` | Number of PDP pods. Default: `1`. | No |
+| `resources.requests.cpu`, `resources.requests.memory`, `resources.limits.memory` | CPU and memory for the PDP container. Defaults: `256m`, `512Mi`, and `1Gi`. | No |
+| `pdp.debug_mode` | `true` sets `PDP_DEBUG=true` and turns on decision debug logging. | No |
+| `pdp.port` | Service port. Default: `7766`. The service forwards to container port `7000`. | No |
 
-## Advanced Configuration
+## Verify the PDP \{#verification}
 
-### Custom Resource Allocation
+### Check the pod status \{#check-pod-status}
 
-You can customize resource requests and limits:
+```bash
+kubectl get pods -n permit-platform | grep pdp
+```
+
+The PDP is running when the `permitio-pdp` pod shows `1/1` and `Running`:
+```
+permitio-pdp-7597689658-95ntd   1/1     Running   0          2m
+```
+
+### Check the health endpoint \{#check-pdp-health}
+
+Forward the service port to your machine:
+
+```bash
+kubectl port-forward svc/permitio-pdp 7766:7766 -n permit-platform
+```
+
+In a second terminal, request the health endpoint:
+```bash
+curl http://localhost:7766/health
+```
+
+A healthy PDP returns HTTP `200` with `"status": "ok"`. HTTP `503` with `"status": "error"` names the failing component. The health endpoint doesn't need an API key. The port-forward maps local port `7766` to the service, which forwards to container port `7000`. Inside the pod, use port `7000`. For the response format and the `/healthy` and `/ready` paths, see [PDP health check endpoints](/how-to/deploy/deploy-to-production#pdp-health-check-endpoints).
+
+### Check the PDP logs \{#check-logs}
+
+```bash
+kubectl logs -f deployment/permitio-pdp -n permit-platform
+```
+
+Look for errors that mention the control plane URL or the API key. Errors on these lines mean the PDP can't fetch its policies. See [PDP can't connect to the backend](#pdp-cannot-connect-to-backend).
+
+## Send authorization requests to the PDP \{#integration-with-applications}
+
+Applications in the cluster reach the PDP at this address:
+
+| Setting | Value |
+|---|---|
+| Service name | `permitio-pdp` |
+| Port | `7766` |
+| Namespace | `permit-platform` |
+| URL from the same namespace | `http://permitio-pdp:7766` |
+
+Point the Permit SDK in your application at the PDP URL. The `/allowed` endpoint answers one permission check: can a user perform an action on a resource.
+
+```bash
+# Example authorization request
+curl -X POST http://permitio-pdp:7766/allowed \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user": "user@example.com",
+    "action": "read",
+    "resource": "document:123"
+  }'
+```
+
+The PDP expects `user` as an object with a `key`, and `resource` as an object with a `type` and an optional `key` and `tenant`. Send the environment API key in an `Authorization: Bearer` header. Replace the string values in the example with objects before you run it, for example `"user": {"key": "user@example.com"}` and `"resource": {"type": "document", "key": "123"}`. The PDP returns a JSON object whose `allow` field is `true` or `false`.
+
+## Advanced configuration \{#advanced-configuration}
+
+The examples in this section include `openshift.enabled=true`. On other Kubernetes distributions, remove that line. To change an existing release, run `helm upgrade` with `--reuse-values` instead of `helm install`, so Helm keeps the API key and control plane settings you already set.
+
+### Set CPU and memory \{#custom-resource-allocation}
+
+The chart reads CPU and memory from the top-level `resources` keys: `resources.requests.cpu`, `resources.requests.memory`, and `resources.limits.memory`. The example below uses `pdp.resources` keys, which the chart ignores. Replace `pdp.resources` with `resources` in each line before you run it.
 
 ```bash
 helm install pdp pdp/pdp \
@@ -88,9 +158,11 @@ helm install pdp pdp/pdp \
   --namespace permit-platform
 ```
 
-### Multiple Replicas
+For sizing guidance, see [System requirements and performance](/how-to/deploy/deploy-to-production#system-requirements-and-performance-optimization).
 
-For high availability, deploy multiple PDP replicas:
+### Run multiple replicas \{#multiple-replicas}
+
+Run more than one PDP pod so authorization checks continue when a pod restarts. The chart reads the replica count from `pdp.replicas`. The example below sets `pdp.replicaCount`, which the chart ignores. Use `--set pdp.replicas=3` instead. When `pdp.replicas` is greater than `1`, the chart also creates a PodDisruptionBudget with `minAvailable: 1`.
 
 ```bash
 helm install pdp pdp/pdp \
@@ -102,9 +174,9 @@ helm install pdp pdp/pdp \
   --namespace permit-platform
 ```
 
-### Additional Environment Variables
+### Add environment variables \{#additional-environment-variables}
 
-You can add custom environment variables for logging or debugging:
+Each entry in `pdp.pdpEnvs` becomes an environment variable on the PDP container. Keep `PDP_CONTROL_PLANE` at index `0` and add more variables at the next indexes. The example adds a second variable at index `1`. For debug logging, set `pdp.debug_mode=true`, which sets `PDP_DEBUG=true`.
 
 ```bash
 helm install pdp pdp/pdp \
@@ -117,107 +189,58 @@ helm install pdp pdp/pdp \
   --namespace permit-platform
 ```
 
-## Verification
+## Troubleshooting \{#troubleshooting}
 
-After deployment, verify the PDP is running correctly:
+### PDP can't connect to the backend \{#pdp-cannot-connect-to-backend}
 
-### Check Pod Status
+**Symptom:** The PDP logs show connection errors to the control plane, or the health endpoint returns `503`.
 
-```bash
-kubectl get pods -n permit-platform | grep pdp
-```
-
-You should see output similar to:
-```
-permitio-pdp-7597689658-95ntd   1/1     Running   0          2m
-```
-
-### Check PDP Health
-
-```bash
-kubectl port-forward svc/permitio-pdp 7766:7766 -n permit-platform
-```
-
-Then test the health endpoint:
-```bash
-curl http://localhost:7766/health
-```
-
-### Check Logs
-
-```bash
-kubectl logs -f deployment/permitio-pdp -n permit-platform
-```
-
-Look for successful connection messages to the control plane.
-
-## Service Access
-
-The PDP service is available within the cluster at:
-- **Service Name**: `permitio-pdp`
-- **Port**: `7766`
-- **Namespace**: `permit-platform`
-
-## Integration with Applications
-
-Your applications can now make authorization requests to the PDP service:
-
-```bash
-# Example authorization request
-curl -X POST http://permitio-pdp:7766/allowed \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user": "user@example.com",
-    "action": "read",
-    "resource": "document:123"
-  }'
-```
-
-## Troubleshooting
-
-### PDP Cannot Connect to Backend
-
-If the PDP fails to connect to the control plane:
-
-1. **Verify backend service**: Ensure `permit-backend-v2` is running and accessible
+1. Check that the `permit-backend-v2` service exists in the namespace:
    ```bash
    kubectl get svc permit-backend-v2 -n permit-platform
    ```
 
-2. **Check network connectivity**: Test connection from PDP pod
+2. Test the connection from the PDP pod to the backend:
    ```bash
    kubectl exec -it deployment/permitio-pdp -n permit-platform -- curl http://permit-backend-v2:8000/health
    ```
+   If the PDP image has no `curl`, run the request from a temporary pod in the same namespace.
 
-3. **Verify API key**: Ensure the API key is valid and has the correct permissions
+3. Check the API key. The key must be an environment API key from your self-hosted Permit frontend. A key from another Permit instance doesn't work. To change the key, run `helm upgrade pdp pdp/pdp --reuse-values --set pdp.ApiKey="<YOUR_API_TOKEN>" --namespace permit-platform`.
 
-### OpenShift Security Context Issues
+### OpenShift security context errors \{#openshift-security-context-issues}
 
-If you encounter security context constraints issues on OpenShift:
+**Symptom:** On OpenShift, the PDP pod isn't created, and the replica set events mention a Security Context Constraint.
 
-1. **Check SCC**: Verify the Security Context Constraint is applied
+1. Check that the `restricted-v2` SCC exists:
    ```bash
    oc get scc restricted-v2
    ```
 
-2. **Check service account**: Ensure the service account has the correct permissions
+2. Check that the chart created the service account. The chart creates it only when `openshift.enabled=true`:
    ```bash
    kubectl get serviceaccount permitio-pdp-sa -n permit-platform
    ```
 
-### Resource Constraints
+### Pod pending or restarting for lack of resources \{#resource-constraints}
 
-If the PDP pod is pending or crashing due to resource constraints:
+**Symptom:** The PDP pod stays `Pending`, or restarts with `OOMKilled`.
 
-1. **Check resource requests**: Verify cluster has sufficient resources
+1. Check the free capacity of the nodes:
    ```bash
    kubectl describe nodes
    ```
 
-2. **Adjust resource limits**: Reduce resource requests if necessary
+2. Lower the memory request. The chart reads `resources.requests.memory`, not `pdp.resources.requests.memory`, and `helm upgrade` without `--reuse-values` resets the API key and control plane settings. Change the command below to `--reuse-values --set resources.requests.memory="512Mi"` before you run it. For a pod killed with `OOMKilled`, raise `resources.limits.memory` instead.
    ```bash
    helm upgrade pdp pdp/pdp \
      --set pdp.resources.requests.memory="512Mi" \
      --namespace permit-platform
    ```
 
+## Next steps
+
+- [Check PDP health endpoints and size the PDP for production](/how-to/deploy/deploy-to-production)
+- [Connect your application to a PDP with the Permit SDK](/overview/connecting-your-app)
+- [Run day-2 operations on the platform](/how-to/deploy/on-prem/management)
+- [Fix common on-premises errors](/how-to/deploy/on-prem/troubleshooting)

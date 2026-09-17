@@ -1,30 +1,36 @@
 ---
-title: "Management Guide" 
-description: "Configuration, operations, and maintenance"
+title: "Manage an On-Premises Deployment"
+sidebar_label: "Management Guide"
+description: "Run day-2 operations on a self-hosted Permit Platform: credentials, health checks, configuration changes, scaling, backups, upgrades, support bundles, and uninstalling."
 ---
 
 :::info Enterprise Only
 This section is only relevant to Enterprise customers who acquired an on-prem license.
 :::
 
-# Management Guide
+This page is for operators who run a self-hosted Permit Platform on Kubernetes. It covers day-2 operations: signing in, checking health, applying configuration changes, scaling, backing up, upgrading, rotating certificates, collecting a support bundle, and uninstalling. For every `values.yaml` key and installer flag, see the [on-premises reference](/how-to/deploy/on-prem/reference). For fixes to specific errors, see [on-premises troubleshooting](/how-to/deploy/on-prem/troubleshooting).
 
-Learn how to configure, manage, and maintain your Permit Platform deployment.
+## Before you begin
 
-## Post-Installation Access
+- Install Permit Platform with the [installation guide](/how-to/deploy/on-prem/installation).
+- Configure `kubectl` and `helm` with access to the cluster and the Permit Platform namespace.
+- Run the commands on this page from the root of the extracted installer package. The package contains the `charts/permit-platform/` and `scripts/` directories.
 
-After successful deployment, your Permit Platform provides access to multiple services and management interfaces.
+The commands use the default namespace, `permit-platform`. If you installed with `--namespace`, replace `permit-platform` with your namespace. The installer deploys three Helm releases into that namespace: `third-party-services`, `migrations`, and `permit-platform`.
 
-### Primary Application Access
+## Sign in and reach the platform \{#post-installation-access}
 
-**Frontend Application:**
+### Open the Permit frontend \{#primary-application-access}
+
+Open the domain you set in `global.frontendDomain` and sign in with the admin credentials:
+
 ```
 URL: https://your-configured-domain.com
 Login: Use the admin credentials shown at end of installation
        Or register a new account
 ```
 
-The admin password is auto-generated during installation and displayed in the installation output. You can also retrieve it from Kubernetes secrets:
+The installer generates the admin password and prints it at the end of the installation. The installer stores the password in the `global-infrastructure-secret` secret under the `KEYCLOAK_ADMIN_PASSWORD` key. To read it again:
 
 ```bash
 # Retrieve admin password
@@ -32,21 +38,20 @@ kubectl get secret global-infrastructure-secret -n permit-platform \
   -o jsonpath='{.data.KEYCLOAK_ADMIN_PASSWORD}' | base64 -d
 ```
 
-### Management Dashboards
+Older installations can keep the admin password in a `keycloak-admin-secret` secret under the `password` key. The installer reads that secret as a fallback when `global-infrastructure-secret` has no admin password.
 
-All management interfaces are accessible via your configured domain with path-based routing:
+### Management dashboards \{#management-dashboards}
+
+The ingress routes your domain to the Permit frontend. Keycloak, the identity provider that handles sign-in, is served under `/auth` on the same domain.
 
 | Service | URL | Credentials | Purpose |
 |---------|-----|-------------|---------|
-| **Permit Frontend** | `https://your-domain.com` | admin/[auto-generated] or register | Main policy management UI |
-| **Keycloak Admin** | `https://your-domain.com/auth` | admin/[auto-generated] | User authentication and identity management |
-| **RabbitMQ Dashboard** | `https://your-domain.com/rabbitmq/` | permit/[auto-generated] | Message queue monitoring |
-| **OpenSearch Dashboard** | `https://your-domain.com/opensearch/` | No auth required | Audit logs and analytics |
-| **SCIM Service** | `https://your-domain.com/scim` | API-based | Identity provider integration (Okta, etc.) |
+| Permit frontend | `https://your-domain.com` | Admin user and the generated password | Manage policies, users, and environments |
+| Keycloak admin console | `https://your-domain.com/auth` | Admin user and the generated password | Manage authentication and identities |
 
-### Retrieving Service Credentials
+### Retrieve service credentials \{#retrieving-service-credentials}
 
-All service passwords are stored in Kubernetes secrets and auto-generated during installation:
+The installer generates the passwords for Keycloak, RabbitMQ, and PostgreSQL and stores them in `global-infrastructure-secret`. When you run the installer again, it reuses the passwords already in that secret.
 
 ```bash
 # Keycloak admin password
@@ -62,9 +67,9 @@ kubectl get secret global-infrastructure-secret -n permit-platform \
   -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d
 ```
 
-### Local Development Access
+### Reach a local or OpenShift domain \{#local-development-access}
 
-For Kind clusters or `.local` domains, add an entry to your `/etc/hosts` file:
+When your domain has no DNS record, such as a Kind cluster or a `.local` domain, map the domain to `127.0.0.1` in your hosts file:
 
 ```bash
 # macOS/Linux
@@ -74,7 +79,7 @@ echo "127.0.0.1 your-configured-domain.local" | sudo tee -a /etc/hosts
 Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value "127.0.0.1 your-configured-domain.local"
 ```
 
-For OpenShift ROSA deployments, find your router IP:
+On OpenShift ROSA, find the router hostname, resolve it to an IP address, and map your domain to that IP address:
 
 ```bash
 # Get OpenShift router IP
@@ -84,9 +89,9 @@ oc get svc -n openshift-ingress router-default -o jsonpath='{.status.loadBalance
 echo "[router-ip] your-configured-domain.com" | sudo tee -a /etc/hosts
 ```
 
-### Service Health Checks
+### Check service health \{#service-health-checks}
 
-Verify all services are running correctly:
+List the pods and confirm that each one shows `Running` with all containers ready (for example, `1/1`). Migration job pods show `Completed`.
 
 ```bash
 # Check all pods status
@@ -98,13 +103,15 @@ curl -k https://your-domain.com/scim/health         # SCIM health
 curl -k https://your-domain.com/api/v2/health       # Backend health
 ```
 
-## Configuration Management
+## Change the platform configuration \{#configuration-management}
 
-### Primary Configuration File
+### Configuration file \{#primary-configuration-file}
 
-All platform configuration is managed through `charts/permit-platform/values.yaml`. The key sections you can customize:
+All platform settings live in `charts/permit-platform/values.yaml` in the installer package. The [values.yaml reference](/how-to/deploy/on-prem/reference#configuration-reference) lists every section. The examples below cover the most common changes.
 
-#### Required Configuration
+#### Required settings \{#required-configuration}
+
+Set the frontend domain and the policy sync repository before the first installation. The installer stops with an error when `frontendDomain` still contains `CHANGEME_FRONTEND_DOMAIN`. Write `sshPrivateKey` as a multi-line block with `|`. The chart fails to render when the key is on one line.
 
 ```yaml
 # Must be configured before installation
@@ -121,9 +128,10 @@ permitServices:
       -----END OPENSSH PRIVATE KEY-----
 ```
 
-#### Common Customizations
+#### Common customizations \{#common-customizations}
 
-**1. Custom Image Registry:**
+Pull images from a private registry. Set `global.imageRegistry` to the registry you pushed the images to:
+
 ```yaml
 global:
   imageRegistry: "myregistry.company.com"  # Your private registry
@@ -133,7 +141,8 @@ global:
   # imageRegistry: "gcr.io/project-id"  # GCP
 ```
 
-**2. Resource Scaling:**
+Scale a Permit service and set its CPU and memory. Each service under `permitServices` accepts `replicas` and `resources`:
+
 ```yaml
 permitServices:
   backend:
@@ -147,7 +156,8 @@ permitServices:
         cpu: "2000m"
 ```
 
-**3. Storage Configuration:**
+Increase storage for PostgreSQL and for OpenSearch, which stores audit logs. The chart reads `persistence.size`. The chart doesn't set a storage class, so the volumes use the cluster's default storage class and `storageClass` has no effect. Kubernetes can only expand an existing volume when the storage class allows volume expansion.
+
 ```yaml
 thirdPartyServices:
   postgres:
@@ -160,7 +170,8 @@ thirdPartyServices:
       size: "100Gi"  # For production audit logs
 ```
 
-**4. OpenSearch Tuning:**
+Tune OpenSearch shards, replicas, and index rollover for the audit log index. The example shows the keys without their parent. In `values.yaml`, nest the `opensearch` block under `thirdPartyServices`, because the chart reads `thirdPartyServices.opensearch.indexSettings` and `thirdPartyServices.opensearch.ism`:
+
 ```yaml
 opensearch:
   indexSettings:
@@ -173,9 +184,11 @@ opensearch:
       minAge: "30d"   # Retention period
 ```
 
-### Applying Configuration Changes
+### Apply configuration changes \{#applying-configuration-changes}
 
-The platform uses **3 separate Helm charts** that can be managed independently:
+The recommended way to apply a `values.yaml` change is to run the installer again with the same flags you installed with. The installer runs `helm upgrade --install` for all three releases, keeps the passwords already stored in the cluster, and saves a copy of `values.yaml` as `values.yaml.backup.<timestamp>` before it writes generated passwords into the file.
+
+To upgrade the releases one at a time, use Helm directly. The installer passes more `--set` flags to each release than the commands below. Compare them with `scripts/install-permit-platform.sh` in your package before you use them in production.
 
 ```bash
 # 1. Update third-party services (PostgreSQL, Redis, OpenSearch, RabbitMQ, Keycloak)
@@ -202,9 +215,48 @@ helm list -n permit-platform
 kubectl get pods -n permit-platform
 ```
 
-## Daily Operations
+The change is applied when `helm list` shows each release with status `deployed` and every pod is `Running`.
 
-### Platform Health Monitoring
+### Inspect the running configuration \{#configuration-management-1}
+
+#### Environment variables \{#environment-variables}
+
+View the environment variables of a running deployment. To change them, edit `values.yaml` and run the installer again.
+
+```bash
+# View current configuration in backend deployment
+kubectl describe deployment permit-backend-v2 -n permit-platform | grep -A 20 "Environment:"
+
+# Update environment variables via values.yaml
+vi charts/permit-platform/values.yaml
+./scripts/install-permit-platform.sh  # Re-apply configuration
+
+# Check if configuration was applied
+kubectl get deployment permit-backend-v2 -n permit-platform -o yaml | grep -A 10 env:
+```
+
+#### ConfigMaps and secrets \{#configuration-management-2}
+
+List the ConfigMaps and secrets in the namespace, or edit a deployment in place:
+
+```bash
+# View all configmaps
+kubectl get configmaps -n permit-platform
+
+# View all secrets (for environment variables)
+kubectl get secrets -n permit-platform
+
+# Edit configuration directly (advanced users only)
+kubectl edit deployment permit-backend-v2 -n permit-platform
+```
+
+:::warning Direct edits don't persist
+The next installer run or `helm upgrade` renders the deployments from `values.yaml` again. Changes you make with `kubectl edit`, `kubectl patch`, or `kubectl scale` are overwritten at that point. Put permanent changes in `values.yaml`.
+:::
+
+## Run daily operations \{#daily-operations}
+
+### Check platform health \{#platform-health-monitoring}
 
 ```bash
 # Check all pods status
@@ -220,7 +272,9 @@ kubectl get services -n permit-platform
 kubectl get events -n permit-platform --sort-by='.lastTimestamp'
 ```
 
-### Log Management
+### View service logs \{#log-management}
+
+`permit-backend-v2` is the Permit API service. Replace it with another deployment name to read that service's logs. Use `--previous` to read the logs of a container that crashed and restarted.
 
 ```bash
 # View backend logs
@@ -236,7 +290,7 @@ kubectl logs -n permit-platform <pod-name> --previous
 kubectl logs -n permit-platform --all-containers=true > platform-logs.txt
 ```
 
-### Service Management
+### Restart services \{#service-management}
 
 ```bash
 # Restart specific service
@@ -249,9 +303,44 @@ kubectl rollout restart deployment -n permit-platform
 kubectl rollout status deployment/permit-backend-v2 -n permit-platform
 ```
 
-## Scaling Operations
+The restart is complete when `kubectl rollout status` reports that the deployment is successfully rolled out.
 
-### Horizontal Scaling
+## Monitor resource usage \{#monitoring-and-alerting}
+
+`kubectl top` needs the Kubernetes Metrics Server in the cluster.
+
+### Pod and service health \{#health-monitoring}
+
+```bash
+# Monitor pod health and resource usage
+kubectl top pods -n permit-platform
+
+# Check all services health
+kubectl get pods,svc,ingress -n permit-platform
+
+# Check service endpoints and connectivity
+kubectl get endpoints -n permit-platform
+```
+
+### Resource consumption \{#performance-monitoring}
+
+```bash
+# Resource utilization across all services
+kubectl top pods -n permit-platform --sort-by=memory
+kubectl top nodes
+
+# Check resource limits vs usage
+kubectl describe nodes | grep -A 5 "Allocated resources"
+
+# Monitor specific service performance
+kubectl logs -n permit-platform deployment/permit-backend-v2 --tail=100 | grep -E "(ERROR|WARN|response_time)"
+```
+
+## Scale services \{#scaling-operations}
+
+For a permanent change, set `replicas` and `resources` for the service in `values.yaml` (see [Common customizations](#common-customizations)). Use the `kubectl` commands in this section for a temporary change. The next installer run resets them to the values in `values.yaml`.
+
+### Add replicas \{#horizontal-scaling}
 
 ```bash
 # Scale backend services
@@ -268,7 +357,7 @@ kubectl scale deployment permit-opal-relay-consumer-v2 -n permit-platform --repl
 kubectl get deployments -n permit-platform
 ```
 
-### Resource Adjustment
+### Change CPU and memory \{#resource-adjustment}
 
 ```bash
 # Update resource requests and limits
@@ -281,9 +370,11 @@ kubectl top pods -n permit-platform
 kubectl describe deployment permit-backend-v2 -n permit-platform | grep -A 10 "Limits\|Requests"
 ```
 
-## Git Repository Management
+## Manage the policy Git repository \{#git-repository-management}
 
-### Policy Synchronization
+Permit Platform syncs policies with the Git repository set in `permitServices.policySync.policyRepoUrl`. The `permit-policy-sync-v2` service handles the sync, and the Open Policy Administration Layer (OPAL) server, `opal-server`, distributes policy updates.
+
+### Check policy sync \{#policy-synchronization}
 
 ```bash
 # Check policy sync pod status
@@ -299,7 +390,9 @@ kubectl logs -n permit-platform deployment/opal-server
 kubectl rollout restart deployment/permit-policy-sync-v2 -n permit-platform
 ```
 
-### Repository Updates
+### Change the repository or SSH key \{#repository-updates}
+
+The chart reads the repository URL from `permitServices.policySync.policyRepoUrl` and the deploy key from `permitServices.policySync.sshPrivateKey` in `values.yaml`. The chart passes both values to the `permit-policy-sync-v2` deployment as environment variables. To change either one, edit `values.yaml` and run the installer again. The chart doesn't create or read a `policy-sync-ssh-key` secret, so the `kubectl create secret` command in the block below doesn't change the key that policy sync uses.
 
 ```bash
 # Update Git repository configuration in values.yaml
@@ -316,9 +409,11 @@ kubectl rollout restart deployment/permit-policy-sync-v2 -n permit-platform
 kubectl rollout restart deployment/opal-server -n permit-platform
 ```
 
-## Backup and Recovery
+## Back up and restore \{#backup-and-recovery}
 
-### Creating Backups
+### Create backups \{#creating-backups}
+
+Back up before every upgrade and before any manual database change. The commands below save the Permit database, `values.yaml`, all secrets, and the persistent volume claim (PVC) definitions.
 
 ```bash
 # Database backup using kubectl
@@ -334,7 +429,18 @@ kubectl get secrets -n permit-platform -o yaml > secrets-backup-$(date +%Y%m%d-%
 kubectl get pvc -n permit-platform -o yaml > pvc-backup-$(date +%Y%m%d-%H%M%S).yaml
 ```
 
-### Backup Management
+The backups have these limits:
+
+- **Keycloak data isn't in the Permit database dump.** Keycloak stores its data in a separate `keycloak-postgres` deployment. Dump it with `kubectl exec -n permit-platform deploy/keycloak-postgres -- pg_dump -U keycloak keycloak > keycloak-backup.sql`.
+- **The PVC export saves claim definitions, not the data on the volumes.** Use your storage provider's snapshots to back up volume data, such as OpenSearch audit logs.
+
+:::warning The secrets backup contains every platform password
+`kubectl get secrets -o yaml` writes the passwords base64-encoded, which anyone can decode. Anyone with the file can sign in to Keycloak and connect to the databases. Store the file encrypted, and restrict access to it.
+:::
+
+### Restore from a backup \{#backup-management}
+
+Replace the timestamps in the file names with the timestamp of your backup.
 
 ```bash
 # List available backups
@@ -348,9 +454,14 @@ cp values-backup-20241201-143022.yaml charts/permit-platform/values.yaml
 ./scripts/install-permit-platform.sh  # Re-apply configuration
 ```
 
-## Updates and Upgrades
+## Upgrade Permit Platform \{#updates-and-upgrades}
 
-### Platform Updates
+### Upgrade to a new installer version \{#platform-updates}
+
+1. [Back up the platform](#creating-backups).
+2. Extract the new installer package.
+3. Copy your settings from your current `values.yaml` into the new package's `charts/permit-platform/values.yaml`. Compare the two files instead of overwriting the new one, because the new file can contain new keys.
+4. Run the installer with the flags you used for the first installation. The installer upgrades the existing releases.
 
 ```bash
 # Extract new version package
@@ -371,7 +482,15 @@ kubectl get pods -n permit-platform
 helm list -n permit-platform
 ```
 
-### Rollback Procedures
+The upgrade succeeded when `helm list` shows `third-party-services`, `migrations`, and `permit-platform` with status `deployed` and every pod is `Running`.
+
+:::warning Keycloak version changes are one-way
+When the new package contains a different Keycloak version, Keycloak migrates its database schema on first start. The schema migration can't be rolled back, and sign-in is unavailable while it runs. Dump the `keycloak-postgres` database first (see [Create backups](#creating-backups)) and schedule a maintenance window. The installer asks you to confirm the migration. For a non-interactive run, pass `--yes`.
+:::
+
+### Roll back a release \{#rollback-procedures}
+
+`helm rollback` returns the `permit-platform` release to an earlier revision. It doesn't reverse database schema changes from the migrations release or from Keycloak. To return data to its state before an upgrade, [restore from a backup](#backup-management).
 
 ```bash
 # Rollback using Helm (most recent release)
@@ -386,9 +505,11 @@ helm status permit-platform -n permit-platform
 kubectl get pods -n permit-platform
 ```
 
-## Security Maintenance
+## Rotate certificates and passwords \{#security-maintenance}
 
-### Certificate Management
+### Replace the TLS certificate \{#certificate-management}
+
+The ingress reads its certificate from the secret named in `ingress.tls.secretName`. The installer names it `permit-frontend-tls`. The last command restarts the NGINX ingress controller. If you use another ingress controller, restart that controller instead.
 
 ```bash
 # Check current TLS certificate
@@ -407,7 +528,11 @@ kubectl create secret tls permit-frontend-tls -n permit-platform \
 kubectl rollout restart deployment/ingress-nginx-controller -n ingress-nginx
 ```
 
-### Password Rotation
+The certificate is replaced when the `openssl x509 -noout -dates` command prints the new expiration date.
+
+### Rotate passwords \{#password-rotation}
+
+The installer keeps service passwords in `global-infrastructure-secret` and builds the database connection string in `permit-backend-v2-secret` from `values.yaml`. Every installer run reuses the passwords already in `global-infrastructure-secret`. The chart doesn't create a `postgres-secret` secret, so the first command in the block below applies only to clusters where you created that secret yourself. Patching a secret doesn't change the password of the PostgreSQL user in the database. For help planning a rotation, contact [Permit support](#support).
 
 ```bash
 # Update database passwords in secrets
@@ -422,7 +547,7 @@ kubectl patch secret permit-backend-v2-secret -n permit-platform \
 kubectl rollout restart deployment -n permit-platform
 ```
 
-### Security Auditing
+### Audit pod security settings \{#security-auditing}
 
 ```bash
 # Check pod security context
@@ -439,38 +564,9 @@ kubectl port-forward -n permit-platform svc/opensearch 9200:9200 &
 curl "http://localhost:9200/audit_logs/_search?q=*&size=100"
 ```
 
-## Monitoring and Alerting
+## Check a multi-node cluster \{#multi-server-management}
 
-### Health Monitoring
-
-```bash
-# Monitor pod health and resource usage
-kubectl top pods -n permit-platform
-
-# Check all services health
-kubectl get pods,svc,ingress -n permit-platform
-
-# Check service endpoints and connectivity
-kubectl get endpoints -n permit-platform
-```
-
-### Performance Monitoring
-
-```bash
-# Resource utilization across all services
-kubectl top pods -n permit-platform --sort-by=memory
-kubectl top nodes
-
-# Check resource limits vs usage
-kubectl describe nodes | grep -A 5 "Allocated resources"
-
-# Monitor specific service performance
-kubectl logs -n permit-platform deployment/permit-backend-v2 --tail=100 | grep -E "(ERROR|WARN|response_time)"
-```
-
-## Multi-Server Management
-
-### Cluster Operations
+### Nodes and cluster events \{#cluster-operations}
 
 ```bash
 # View cluster status
@@ -487,7 +583,7 @@ kubectl get events --all-namespaces --sort-by='.lastTimestamp'
 kubectl get componentstatuses
 ```
 
-### Load Balancing
+### Ingress and service connectivity \{#load-balancing}
 
 ```bash
 # Check ingress controller status
@@ -501,9 +597,11 @@ kubectl get ingress -n permit-platform -o yaml
 kubectl run test-pod --image=busybox --rm -it --restart=Never -- wget -qO- http://permit-backend-v2.permit-platform.svc.cluster.local:8000/health
 ```
 
-## Troubleshooting Commands
+## Diagnose problems from the command line \{#troubleshooting-commands}
 
-### System Diagnostics
+### System diagnostics \{#system-diagnostics}
+
+These commands list every resource in the namespace, show resource usage, and test connections from the backend to PostgreSQL and Redis. For fixes to specific errors, see [on-premises troubleshooting](/how-to/deploy/on-prem/troubleshooting).
 
 ```bash
 # Comprehensive system check
@@ -520,7 +618,45 @@ kubectl get pv,pvc -n permit-platform
 kubectl describe pvc -n permit-platform
 ```
 
-### Log Collection for Support
+## Collect a support bundle \{#support-bundle}
+
+Attach a support bundle when you contact Permit support. The bundle contains cluster state, events, and logs. Review the logs before you send them, because application logs can contain user identifiers.
+
+### Cluster summary \{#diagnostic-collection}
+
+Write the cluster, pod, event, service, and storage state to one file:
+
+```bash
+{
+  echo "=== CLUSTER INFO ==="
+  kubectl cluster-info
+  echo "=== PERMIT PLATFORM PODS ==="
+  kubectl get pods -n permit-platform -o wide
+  echo "=== RECENT EVENTS ==="
+  kubectl get events -n permit-platform --sort-by='.lastTimestamp' | tail -20
+  echo "=== SERVICES ==="
+  kubectl get svc,ingress -n permit-platform
+  echo "=== STORAGE ==="
+  kubectl get pv,pvc -n permit-platform
+} > permit-support-bundle.txt
+```
+
+### Service logs \{#log-collection}
+
+Save the logs of all pods except PostgreSQL, and the logs of the backend and Keycloak separately:
+
+```bash
+# Collect all pod logs
+kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres > all-logs.txt
+
+# Collect specific service logs
+kubectl logs -n permit-platform deployment/permit-backend-v2 > backend-logs.txt
+kubectl logs -n permit-platform deployment/keycloak > auth-logs.txt
+```
+
+### Archive the bundle \{#log-collection-for-support}
+
+Collect system information and resource usage, then pack every `.txt` file in the current directory into one archive:
 
 ```bash
 # Collect all pod logs for support
@@ -542,9 +678,15 @@ tar -czf permit-platform-support-$(date +%Y%m%d-%H%M%S).tar.gz \
   *.txt
 ```
 
-## Maintenance Windows
+The bundle is ready when `permit-platform-support-<timestamp>.tar.gz` is in the current directory. Send the newest archive.
 
-### Planned Maintenance
+## Plan maintenance windows \{#maintenance-windows}
+
+### Stop and start services for planned maintenance \{#planned-maintenance}
+
+:::warning Scaling to zero stops the platform
+While the deployments have zero replicas, users can't sign in to the Permit frontend and the Permit API doesn't respond.
+:::
 
 ```bash
 # Scale down all services for maintenance
@@ -560,7 +702,11 @@ kubectl scale deployment celery-general -n permit-platform --replicas=1
 # ... continue for other services
 ```
 
-### Emergency Procedures
+To start every service with the replica counts from `values.yaml`, run the installer again instead of scaling each deployment by hand.
+
+### Emergency procedures \{#emergency-procedures}
+
+The emergency stop keeps the PostgreSQL and Redis deployments running and scales the other deployments to zero.
 
 ```bash
 # Emergency stop all platform services
@@ -574,42 +720,53 @@ kubectl scale deployment permit-backend-v2 -n permit-platform --replicas=1
 kubectl scale deployment permit-frontend -n permit-platform --replicas=1
 ```
 
-## Configuration Management
+## Uninstall Permit Platform \{#uninstallation}
 
-### Environment Variables
+:::warning Uninstalling deletes your data
+Deleting the namespace and the persistent volumes permanently deletes the Permit database, Keycloak users, and audit logs. [Create backups](#creating-backups) first if you might need the data.
+:::
 
-```bash
-# View current configuration in backend deployment
-kubectl describe deployment permit-backend-v2 -n permit-platform | grep -A 20 "Environment:"
+### Remove everything \{#complete-removal}
 
-# Update environment variables via values.yaml
-vi charts/permit-platform/values.yaml
-./scripts/install-permit-platform.sh  # Re-apply configuration
-
-# Check if configuration was applied
-kubectl get deployment permit-backend-v2 -n permit-platform -o yaml | grep -A 10 env:
-```
-
-### Configuration Management
+Uninstall the three Helm releases, delete the namespace, and delete the persistent volumes that belonged to the namespace. Run `kubectl get pv | grep permit-platform` first and check the list before you delete the volumes.
 
 ```bash
-# View all configmaps
-kubectl get configmaps -n permit-platform
+# Remove all 3 Helm releases (the platform uses 3 separate charts)
+helm uninstall permit-platform -n permit-platform 2>/dev/null || true        # 35 Permit services
+helm uninstall migrations -n permit-platform 2>/dev/null || true             # Database schema
+helm uninstall third-party-services -n permit-platform 2>/dev/null || true   # PostgreSQL, Redis, OpenSearch, etc.
 
-# View all secrets (for environment variables)
-kubectl get secrets -n permit-platform
+# Delete namespace (removes all resources)
+kubectl delete namespace permit-platform
 
-# Edit configuration directly (advanced users only)
-kubectl edit deployment permit-backend-v2 -n permit-platform
+# Clean up persistent volumes (careful!)
+kubectl get pv | grep permit-platform
+kubectl delete pv $(kubectl get pv -o jsonpath='{.items[?(@.spec.claimRef.namespace=="permit-platform")].metadata.name}')
 ```
 
----
+Uninstallation is complete when `helm list -n permit-platform` returns no releases and `kubectl get namespace permit-platform` returns `NotFound`.
 
-**Need help with troubleshooting?** Check the [Troubleshooting Guide](/how-to/deploy/on-prem/troubleshooting) →
+### Remove only the Permit services \{#selective-removal}
 
-## Support
+Uninstall the `permit-platform` release to remove the Permit application services. The `third-party-services` release, including the databases and their data, stays in place.
 
-Need help with platform management?
+```bash
+# Remove only platform services (keep data)
+helm uninstall permit-platform -n permit-platform
 
-- 📧 **Email**: support@permit.io
-- 💬 **Slack**: [Join our community](https://io.permit.io/slack)
+# Remove specific deployments
+kubectl delete deployment permit-backend-v2 -n permit-platform
+kubectl delete deployment permit-frontend -n permit-platform
+```
+
+## Get help \{#support}
+
+- Email [support@permit.io](mailto:support@permit.io) with your [support bundle](#support-bundle), the installer package file name, and your Kubernetes distribution.
+- Ask the community in the [Permit Slack community](https://io.permit.io/slack).
+
+## Next steps
+
+- [Look up installer flags and values.yaml keys](/how-to/deploy/on-prem/reference)
+- [Fix installation, image pull, sign-in, and policy sync errors](/how-to/deploy/on-prem/troubleshooting)
+- [Deploy a PDP in your on-premises cluster](/how-to/deploy/on-prem/pdp-deployment)
+- [Change an organization's tier from Trial to Enterprise](/how-to/deploy/on-prem/change-organization-tier)
