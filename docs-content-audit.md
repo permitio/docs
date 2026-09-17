@@ -16,265 +16,275 @@ Dimension keys: **Aud** audience fit, **Task** task success, **Type** content ty
 
 | Total | Before | Current |
 |---|---|---|
-| 18-20 (world-class) | 2 | 301 |
-| 16-17 (publishable) | 3 | 42 |
-| 12-15 | 47 | 0 |
-| 8-11 | 241 | 0 |
-| 0-7 | 50 | 0 |
-| **Publishable (>=16, no zeroes)** | 5 | 342 |
-| **Mean total** | 9.7 | 18.5 |
-| **Pages scored** | 343 | 343 |
+| 18-20 (world-class) | 2 | 175 |
+| 16-17 (publishable) | 3 | 117 |
+| 12-15 | 48 | 58 |
+| 8-11 | 246 | 0 |
+| 0-7 | 51 | 0 |
+| **Publishable (>=16, no zeroes)** | 5 | 291 |
+| **Mean total** | 9.7 | 17.1 |
+| **Pages scored** | 350 | 350 |
 
 ## Folder summary
 
 | Folder | Pages | Mean before | Mean current | Publishable now | Most common issues |
 |---|---|---|---|---|---|
-| `ai-security/access-request-mcp` | 3 | 7.3 | 19.0 | 3 | no zeroes |
-| `ai-security` | 1 | 10.0 | 19.0 | 1 | no zeroes |
-| `ai-security/integrations` | 5 | 6.4 | 17.6 | 5 | no zeroes |
-| `api` | 7 | 10.7 | 19.0 | 7 | no zeroes |
+| `ai-security/access-request-mcp` | 3 | 7.3 | 16.3 | 2 | no zeroes |
+| `ai-security` | 1 | 10.0 | 18.0 | 1 | no zeroes |
+| `ai-security/integrations` | 5 | 6.4 | 13.8 | 0 | acc (1 zeroes) |
+| `api` | 7 | 10.7 | 17.6 | 5 | no zeroes |
 | `api/elements` | 4 | 6.8 | 18.0 | 4 | no zeroes |
-| `api/examples` | 7 | 11.9 | 19.0 | 7 | no zeroes |
-| `api/rbac` | 2 | 8.0 | 19.0 | 2 | no zeroes |
-| `api/rebac` | 3 | 8.3 | 18.7 | 3 | no zeroes |
-| `api/working-with-abac` | 6 | 6.3 | 18.8 | 6 | no zeroes |
-| `authentication/auth0` | 3 | 8.3 | 19.0 | 3 | no zeroes |
-| `authentication/cognito` | 2 | 8.5 | 18.0 | 2 | no zeroes |
-| `authentication` | 6 | 6.8 | 18.5 | 6 | no zeroes |
-| `authentication/stytch` | 1 | 6.0 | 17.0 | 1 | no zeroes |
-| `concepts` | 5 | 12.0 | 18.0 | 5 | no zeroes |
-| `concepts/pdp` | 3 | 12.3 | 18.0 | 3 | no zeroes |
-| `embeddable-uis` | 8 | 9.2 | 18.5 | 8 | no zeroes |
-| `embeddable-uis/element` | 5 | 7.6 | 18.2 | 5 | no zeroes |
-| `(root)` | 4 | 12.0 | 17.5 | 4 | no zeroes |
-| `getting-started` | 2 | 14.5 | 18.0 | 2 | no zeroes |
-| `how-to/SDLC` | 3 | 8.0 | 18.3 | 3 | no zeroes |
-| `how-to/build-policies` | 13 | 9.5 | 18.5 | 13 | no zeroes |
-| `how-to` | 3 | 7.7 | 18.7 | 3 | no zeroes |
-| `how-to/deploy` | 18 | 9.8 | 18.3 | 18 | no zeroes |
-| `how-to/enforce-permissions` | 11 | 9.1 | 18.2 | 11 | no zeroes |
-| `how-to/manage-data` | 3 | 10.0 | 19.0 | 3 | no zeroes |
-| `how-to/monitoring-pdps` | 1 | 10.0 | 18.0 | 1 | no zeroes |
-| `how-to/permit-cli` | 7 | 10.3 | 18.1 | 7 | no zeroes |
-| `how-to/policy-guard` | 2 | 9.5 | 18.5 | 2 | no zeroes |
-| `how-to/use-audit-logs` | 16 | 9.2 | 18.7 | 16 | no zeroes |
-| `integrations/GraphQL` | 2 | 8.5 | 18.0 | 2 | no zeroes |
-| `integrations/SCIM` | 3 | 11.3 | 18.0 | 3 | no zeroes |
-| `integrations/database-access-control` | 1 | 13.0 | 18.0 | 1 | no zeroes |
-| `integrations/feature-flagging` | 1 | 8.0 | 19.0 | 1 | no zeroes |
-| `integrations/gateways` | 4 | 9.2 | 17.5 | 3 | task (1 zeroes) |
-| `integrations/gitops` | 3 | 9.0 | 19.0 | 3 | no zeroes |
+| `api/examples` | 7 | 11.9 | 18.3 | 7 | no zeroes |
+| `api/rbac` | 2 | 8.0 | 18.5 | 2 | no zeroes |
+| `api/rebac` | 3 | 8.3 | 17.0 | 3 | no zeroes |
+| `api/working-with-abac` | 6 | 6.3 | 16.3 | 4 | no zeroes |
+| `authentication/auth0` | 3 | 8.3 | 16.3 | 2 | no zeroes |
+| `authentication/cognito` | 2 | 8.5 | 16.0 | 1 | no zeroes |
+| `authentication` | 6 | 6.8 | 16.3 | 5 | no zeroes |
+| `authentication/stytch` | 1 | 6.0 | 15.0 | 0 | no zeroes |
+| `concepts` | 5 | 12.0 | 16.6 | 4 | no zeroes |
+| `concepts/pdp` | 10 | 10.5 | 16.7 | 8 | acc (1 zeroes), ex (1 zeroes) |
+| `embeddable-uis` | 8 | 9.2 | 16.4 | 6 | no zeroes |
+| `embeddable-uis/element` | 5 | 7.6 | 16.0 | 3 | no zeroes |
+| `(root)` | 4 | 12.0 | 16.5 | 3 | no zeroes |
+| `getting-started` | 2 | 14.5 | 17.0 | 2 | no zeroes |
+| `how-to/SDLC` | 3 | 8.0 | 16.7 | 3 | no zeroes |
+| `how-to/build-policies` | 13 | 9.5 | 16.0 | 5 | no zeroes |
+| `how-to` | 3 | 7.7 | 16.0 | 2 | no zeroes |
+| `how-to/deploy` | 18 | 9.8 | 16.7 | 16 | acc (1 zeroes) |
+| `how-to/enforce-permissions` | 11 | 9.1 | 16.9 | 10 | ex (1 zeroes) |
+| `how-to/manage-data` | 3 | 10.0 | 16.7 | 3 | no zeroes |
+| `how-to/monitoring-pdps` | 1 | 10.0 | 16.0 | 1 | no zeroes |
+| `how-to/permit-cli` | 7 | 10.3 | 18.0 | 7 | no zeroes |
+| `how-to/policy-guard` | 2 | 9.5 | 17.0 | 2 | no zeroes |
+| `how-to/use-audit-logs` | 16 | 9.2 | 18.5 | 15 | no zeroes |
+| `integrations/GraphQL` | 2 | 8.5 | 16.5 | 1 | no zeroes |
+| `integrations/SCIM` | 3 | 11.3 | 16.7 | 2 | no zeroes |
+| `integrations/database-access-control` | 1 | 13.0 | 16.0 | 1 | no zeroes |
+| `integrations/feature-flagging` | 1 | 8.0 | 16.0 | 1 | no zeroes |
+| `integrations/gateways` | 4 | 9.2 | 15.8 | 2 | task (2 zeroes) |
+| `integrations/gitops` | 3 | 9.0 | 16.3 | 2 | no zeroes |
 | `integrations/infra-as-code` | 1 | 12.0 | 17.0 | 1 | no zeroes |
-| `integrations/permit-mcp` | 1 | 10.0 | 17.0 | 1 | no zeroes |
+| `integrations/permit-mcp` | 1 | 10.0 | 12.0 | 0 | no zeroes |
 | `integrations/policy-engines` | 1 | 10.0 | 18.0 | 1 | no zeroes |
 | `integrations/workflow-automation` | 1 | 9.0 | 18.0 | 1 | no zeroes |
-| `manage-your-account` | 6 | 9.2 | 17.7 | 6 | no zeroes |
-| `modeling` | 7 | 9.3 | 18.3 | 7 | no zeroes |
-| `overview` | 20 | 11.1 | 18.3 | 20 | no zeroes |
-| `permit-mcp-gateway` | 16 | 11.1 | 18.0 | 16 | no zeroes |
-| `permit-mcp-gateway/demos` | 2 | 9.0 | 17.5 | 2 | no zeroes |
-| `permit-mcp-gateway/http-egress-proxy` | 8 | 11.2 | 18.2 | 8 | no zeroes |
-| `quick-start` | 10 | 9.9 | 18.6 | 10 | no zeroes |
+| `manage-your-account` | 6 | 9.2 | 15.7 | 4 | no zeroes |
+| `modeling` | 7 | 9.3 | 15.6 | 4 | no zeroes |
+| `overview` | 20 | 11.1 | 16.4 | 14 | ex (3 zeroes), acc (2 zeroes) |
+| `permit-mcp-gateway` | 16 | 11.1 | 17.4 | 16 | no zeroes |
+| `permit-mcp-gateway/demos` | 2 | 9.0 | 15.5 | 1 | no zeroes |
+| `permit-mcp-gateway/http-egress-proxy` | 8 | 11.2 | 16.4 | 6 | no zeroes |
+| `quick-start` | 10 | 9.9 | 17.9 | 10 | no zeroes |
 | `sdk/cpp` | 1 | 7.0 | 17.0 | 1 | no zeroes |
-| `sdk/dotnet` | 15 | 10.7 | 19.0 | 15 | no zeroes |
-| `sdk/erlang` | 1 | 7.0 | 16.0 | 1 | no zeroes |
-| `sdk/golang` | 21 | 9.9 | 19.0 | 21 | no zeroes |
-| `sdk/java` | 24 | 10.7 | 19.7 | 24 | no zeroes |
+| `sdk/dotnet` | 15 | 10.7 | 18.7 | 15 | no zeroes |
+| `sdk/erlang` | 1 | 7.0 | 18.0 | 1 | no zeroes |
+| `sdk/golang` | 21 | 9.9 | 18.4 | 21 | no zeroes |
+| `sdk/java` | 24 | 10.7 | 18.0 | 24 | no zeroes |
 | `sdk/kotlin` | 1 | 7.0 | 17.0 | 1 | no zeroes |
-| `sdk/nodejs` | 27 | 9.7 | 18.8 | 27 | no zeroes |
-| `sdk` | 2 | 10.0 | 18.0 | 2 | no zeroes |
-| `sdk/php` | 1 | 9.0 | 18.0 | 1 | no zeroes |
-| `sdk/python` | 4 | 9.8 | 18.2 | 4 | no zeroes |
-| `sdk/ruby` | 2 | 9.5 | 18.5 | 2 | no zeroes |
-| `updates-and-feedback` | 3 | 6.0 | 17.7 | 3 | no zeroes |
+| `sdk/nodejs` | 27 | 9.7 | 17.9 | 27 | no zeroes |
+| `sdk` | 2 | 10.0 | 17.0 | 2 | no zeroes |
+| `sdk/php` | 1 | 9.0 | 19.0 | 1 | no zeroes |
+| `sdk/python` | 4 | 9.8 | 15.5 | 2 | no zeroes |
+| `sdk/ruby` | 2 | 9.5 | 16.0 | 1 | no zeroes |
+| `updates-and-feedback` | 3 | 6.0 | 15.7 | 2 | maint (1 zeroes) |
 
 ## Lowest-scoring 40 pages (before)
 
 | # | Page | Before | Current | Top issues |
 |---|---|---|---|---|
-| 1 | `docs/api/working-with-abac/overview.mdx` | 3 | 19 | stub with duplicate 'Overview' H2 then H4, promised vocabulary never appears; says rules are 'part of' condition sets (wrong); 'now', 'Previously', 'new version' dated wording, no links to child pages |
-| 2 | `docs/api/rbac/rbac-example.mdx` | 4 | 19 | resource JSON has double commas and second user curl lacks 'curl', so steps fail; opening sentence is broken editing residue ('RBAC API" and delete it below.') duplicated as H4; no section headings or verify check, we/let's, comments say 'user role' for operator |
-| 3 | `docs/authentication/fusionauth.mdx` | 4 | 17 | 'coming soon' stub with only a personal GitHub repo (filipermit) and tracking link; no steps, embedded webinar only; emoji, 'play with', 'we did' |
-| 4 | `docs/authentication/supertokens.mdx` | 4 | 18 | no intro; npm install before any clone step, repo link only at end, no env or API key wiring; personal repo (filipermit), old permitio/pdp image, webinar and screenshots; emoji, 'Enjoy the demo!', 'the above example' |
-| 5 | `docs/ai-security/access-request-mcp/food-ordering-demo-example.mdx` | 5 | 18 | client.py Python blocks have collapsed whitespace (typing_extensionsimport, asyncdef) and wrong lang tags (shell/scss); interrupt resume code never shown, 'graph should not look like this', role child-can-order undefined; we/let's, em dashes, 'simple', many volatile screenshots |
-| 6 | `docs/ai-security/integrations/langflow.mdx` | 5 | 17 | never explains installing Permit components in Langflow or minting test JWTs; docker command contains pasted 'bash CopyEdit' artifact, booking flow reuses info-flow screenshot 10.png, condition uses undefined resource.class, fake URLs api.flightpolicies.com; LangFlow/Langflow casing, we/let's, em dashes |
-| 7 | `docs/api/rebac/groups/groups.mdx` | 5 | 19 | broken curl samples: curly quote in JSON, unquoted tenant key, blank lines inside continued commands, PUT path uses group_resource_type_key; inconsistent tenants (default vs business), 'team#member' vs teams, GET descriptions reference 'marketing' with placeholder paths; 'new and improved'/deprecated wording, redoc vs scalar links, 'Let's dive deeper', 'we', 'of course' |
-| 8 | `docs/how-to/build-policies/policy-basics.mdx` | 5 | 17 | link to http://localhost:3000/integrations/gitops/github, stray Hebrew character, 'Roles exist on an organization level' contradicts environment-level roles; repeated '(Top Level in the UI)' link spam and User Management vs Directory vs members confusion; marketing intro ('power of a powerful', 'champions', 'extremely simple, yet vastly powerful') and 8 UI videos |
-| 9 | `docs/how-to/build-policies/rebac/building-rebac-policies.mdx` | 5 | 19 | acronyms swapped: 'Relationship-Based Access Control (RBAC)' and 'Role-Based Access Control (ReBAC)', typo 'group.xe'; repeated H5 'UI Example' headings not self-contained, videos + YouTube; 'crux', 'robust', 'crucial', 'molding' |
-| 10 | `docs/ai-security/integrations/openai-prompt-filtering.mdx` | 6 | 19 | classify() never implemented and users never created, so code cannot run; roles placed under Directory > Roles, tip claims container PDP needed for role-based permissions, broken link www.app.permit.io; ungrammatical opening sentence, dangling 'demonstrate how the system:', we/let's, em dashes |
-| 11 | `docs/ai-security/integrations/pydantic-ai.mdx` | 6 | 16 | source link and clone path point to langchain-permit while resources link Permit-PydanticAI, PydanticAI links to a personal fork; attribute model inconsistent (test users use membership_tier/verified never defined, clearance high vs confidential, 'bookings' copied from flight demo), PERMIT_KEY vs PERMIT_API_KEY; 'powerful', 'full confidence', em dashes |
+| 1 | `docs/api/working-with-abac/overview.mdx` | 3 | 16 | stub with duplicate 'Overview' H2 then H4, promised vocabulary never appears; says rules are 'part of' condition sets (wrong); 'now', 'Previously', 'new version' dated wording, no links to child pages |
+| 2 | `docs/api/rbac/rbac-example.mdx` | 4 | 18 | resource JSON has double commas and second user curl lacks 'curl', so steps fail; opening sentence is broken editing residue ('RBAC API" and delete it below.') duplicated as H4; no section headings or verify check, we/let's, comments say 'user role' for operator |
+| 3 | `docs/authentication/fusionauth.mdx` | 4 | 16 | 'coming soon' stub with only a personal GitHub repo (filipermit) and tracking link; no steps, embedded webinar only; emoji, 'play with', 'we did' |
+| 4 | `docs/authentication/supertokens.mdx` | 4 | 15 | no intro; npm install before any clone step, repo link only at end, no env or API key wiring; personal repo (filipermit), old permitio/pdp image, webinar and screenshots; emoji, 'Enjoy the demo!', 'the above example' |
+| 5 | `docs/ai-security/access-request-mcp/food-ordering-demo-example.mdx` | 5 | 14 | client.py Python blocks have collapsed whitespace (typing_extensionsimport, asyncdef) and wrong lang tags (shell/scss); interrupt resume code never shown, 'graph should not look like this', role child-can-order undefined; we/let's, em dashes, 'simple', many volatile screenshots |
+| 6 | `docs/ai-security/integrations/langflow.mdx` | 5 | 13 | never explains installing Permit components in Langflow or minting test JWTs; docker command contains pasted 'bash CopyEdit' artifact, booking flow reuses info-flow screenshot 10.png, condition uses undefined resource.class, fake URLs api.flightpolicies.com; LangFlow/Langflow casing, we/let's, em dashes |
+| 7 | `docs/api/rebac/groups/groups.mdx` | 5 | 16 | broken curl samples: curly quote in JSON, unquoted tenant key, blank lines inside continued commands, PUT path uses group_resource_type_key; inconsistent tenants (default vs business), 'team#member' vs teams, GET descriptions reference 'marketing' with placeholder paths; 'new and improved'/deprecated wording, redoc vs scalar links, 'Let's dive deeper', 'we', 'of course' |
+| 8 | `docs/how-to/build-policies/policy-basics.mdx` | 5 | 14 | link to http://localhost:3000/integrations/gitops/github, stray Hebrew character, 'Roles exist on an organization level' contradicts environment-level roles; repeated '(Top Level in the UI)' link spam and User Management vs Directory vs members confusion; marketing intro ('power of a powerful', 'champions', 'extremely simple, yet vastly powerful') and 8 UI videos |
+| 9 | `docs/how-to/build-policies/rebac/building-rebac-policies.mdx` | 5 | 15 | acronyms swapped: 'Relationship-Based Access Control (RBAC)' and 'Role-Based Access Control (ReBAC)', typo 'group.xe'; repeated H5 'UI Example' headings not self-contained, videos + YouTube; 'crux', 'robust', 'crucial', 'molding' |
+| 10 | `docs/ai-security/integrations/openai-prompt-filtering.mdx` | 6 | 14 | classify() never implemented and users never created, so code cannot run; roles placed under Directory > Roles, tip claims container PDP needed for role-based permissions, broken link www.app.permit.io; ungrammatical opening sentence, dangling 'demonstrate how the system:', we/let's, em dashes |
+| 11 | `docs/ai-security/integrations/pydantic-ai.mdx` | 6 | 15 | source link and clone path point to langchain-permit while resources link Permit-PydanticAI, PydanticAI links to a personal fork; attribute model inconsistent (test users use membership_tier/verified never defined, clearance high vs confidential, 'bookings' copied from flight demo), PERMIT_KEY vs PERMIT_API_KEY; 'powerful', 'full confidence', em dashes |
 | 12 | `docs/api/elements/access-requests.mdx` | 6 | 18 | curl samples invalid (missing line continuations, trailing commas, missing braces) and filters passed as headers; tells reader to get API_SECRET_KEY but calls use login cookie; 'SDK Secret Key', 'Embeddable Elements', H3 before any H2, duplicates access-request-api.mdx |
 | 13 | `docs/api/elements/operation_approval.mdx` | 6 | 18 | curl samples invalid and create body omits resource_instance that responses include; Redoc link points to Access-Requests tag, header 'element_id: ELEMENTS_CONFIG_ID' unexplained; 'SDK Secret Key'/API_SECRET_KEY terms, real-looking name maya@permit.io, init/login block duplicated from access-requests |
-| 14 | `docs/api/working-with-abac/condition-set-rules.mdx` | 6 | 19 | stub: payload only, no endpoint, method, or verify; depends on sets defined on another page ('this particular example'); 'Let's remind ourselves', 'we will want' |
-| 15 | `docs/api/working-with-abac/examples.mdx` | 6 | 18 | page starts at H3/H4 with a sentence as heading; 'not': ['part-time'] contradicts operator syntax, Stanford never modeled, availability as string array; no endpoint or verify, 'lets', 'our' |
-| 16 | `docs/authentication/auth0/permit-integration.mdx` | 6 | 19 | link to http://localhost:3000 demo; role assignment code redeclares 'role', uses undefined permitUserObj/tenantKey, check without await; Auth0 Action steps duplicated verbatim from demo page, empty 'Getting Started' H2, 'easily', 'great blog post', 'Let's test it!' |
-| 17 | `docs/authentication/hankopermit.mdx` | 6 | 19 | 'leading authorization platform' claim; ABAC steps contradict (new user 'should not be able to delete' then 'should also be able to delete'), 'same user who created the role'; broken samples (git clone <git@github.com>, markdown link inside env value, untagged blocks), 14 screenshots with one reused, 'easily', 'great blog', 'we' |
-| 18 | `docs/authentication/stytch/permit-integration.mdx` | 6 | 17 | sync code uses undefined userEmailId/tenantId/currentTenant and calls React hook useStytchUser in backend; redirect page imports Node 'stytch' SDK in the browser, REDIRECT_URL 'SEE_STEP_5' but covered in step 4; 'leading', 'robust', 'easily', 'him/his', typos |
-| 19 | `docs/how-to/deploy/on-prem/installation.mdx` | 6 | 18 | 450 lines of internals before Step 1 and 'What happens' repeated twice; internal contradictions (help output lacks --gke, postgres 20GB vs 10Gi PVC, 'Infrastructure (10 services)' lists 11, '12 images' vs 35, Policy Sync required vs 'if configured'); 'As of January 2026', emojis, 'comprehensive', 'That's it!' |
-| 20 | `docs/how-to/deploy/on-prem/prerequisites.mdx` | 6 | 18 | mixes architecture marketing, TLS config and troubleshooting into prereqs; inconsistent figures (35 vs 26 services, 51GB storage, '50-500 users'), repo sync called required then 'If you want to enable'; hype + emojis + CRITICAL caps, hardcoded usage numbers will rot |
-| 21 | `docs/how-to/ownership.mdx` | 6 | 18 | ReBAC step says 'file is set as parent of folder' (reversed) and Bobs_Files#owner unexplained; typos (Upadte, Direcrory), let's/we, dash intro; 11 UI screenshots, concept + how-to muddled |
-| 22 | `docs/integrations/gateways/kong.mdx` | 6 | 17 | docker command contains invisible U+2060 characters (not copy-runnable); '1-5 ms' claim, 'recent update', stale 'Copy SDK secret key' UI; 'seamlessly', 'easily', 'powerful', 'within minutes' |
-| 23 | `docs/integrations/gitops/custom_policy.mdx` | 6 | 19 | final Rego invalid ('package package', import permit.rbac vs data.permit.rbac, else chain logic), untagged blocks; hardcoded 2023 dates and Cedar claim; let's/we, 'Were', emoji shortcode |
-| 24 | `docs/overview/setup-attribute-based-access-control.mdx` | 6 | 18 | user set conditions (department=Engineering, training_status=certified) contradict scenario (R&D, completed); no enforcement or verify step, videos only with no code; vague UI paths ('Navigate to Dynamic Resource'), 'Imagine', 'master of ABAC' emoji |
-| 25 | `docs/status.mdx` | 6 | 18 | page is only a scaled iframe with duplicate style prop (backgroundColor overwritten) and hardcoded 1080px width, poor on mobile; no text naming what is monitored (Cloud PDP, API, dashboard per description) or a direct status link for readers/agents; 'If you would like' wordy, ':::note info' misuse |
-| 26 | `docs/updates-and-feedback/changelog.mdx` | 6 | 17 | stub with only an external link; 'here' link text; hype intro 'Explore the evolving journey' and 'our' |
-| 27 | `docs/updates-and-feedback/feature-requests.mdx` | 6 | 18 | stub with only an external link; 'here' link text with random bold; marketing intro 'guiding the next wave of features we introduce' |
-| 28 | `docs/updates-and-feedback/roadmap.mdx` | 6 | 18 | stub with only external link, roadmap on productlane while changelog/feature requests on Canny (possibly stale host); 'here' link text; hype 'glimpse into the future', 'innovations' |
-| 29 | `docs/ai-security/access-request-mcp/implementation-guide.mdx` | 7 | 20 | mixes reference (env vars, tools) with a full FastAPI + CLI tutorial duplicated from food demo; CLI client code has broken indentation and undefined utils module; preview model gemini-2.5-flash-preview-04-17, 'powerful', 'easily', em dashes, vague verify step |
-| 30 | `docs/ai-security/integrations/mongodb-rag.mdx` | 7 | 18 | ReBAC expanded as 'Role-Based Access Control (ReBAC)'; setup duplicated (Quickstart, Atlas setup, clone and .env repeated 3x) and quickstart says compose syncs everything while later steps run scripts manually; user ids inconsistent (carol/user_marketing_1 vs alice/bob), host scripts use http://permit-pdp:7000 |
-| 31 | `docs/api/elements/access-request-api.mdx` | 7 | 17 | curl samples invalid (-data-raw single dash, no -X method, trailing commas, missing opening brace) and filters documented as headers not query params; near-verbatim duplicate of access-requests.mdx with the same response JSON repeated 6x; title 'Access Request API- API Only' and H1 'Use API KEY', unused imports |
-| 32 | `docs/api/working-with-abac/building-conditions.mdx` | 7 | 19 | 'not' example is incoherent and INVALID age example says 48 vs code 40 with unverified 'Unbound Error'; repeated VALID/INVALID H4 headings not self-contained; 'we', 'Let's', 'important to note', Python True in js blocks |
-| 33 | `docs/api/working-with-abac/condition-sets.mdx` | 7 | 19 | no endpoint or request to actually create a set; key mismatch private_repos vs private_repositories and parent example repeats parent condition, equals with arrays; relative .mdx link path likely broken, 'We will', 'Let's' |
-| 34 | `docs/embeddable-uis/element-login.mdx` | 7 | 18 | broken code: Node init tab contains a Python import line, C# samples have unbalanced braces and no while body, JS loginUrl missing closing quote; loginAs params inconsistent (tenant vs tenantId), private-browsing sample returns {url: element_bearer_token}, dangling sentence 'Add with an authenticated session'; emojis, 'simple', 'We have', hyphen dashes, 'now compatible' dated language |
-| 35 | `docs/embeddable-uis/element/audit-logs.mdx` | 7 | 18 | stub: no steps, config, or example beyond a screenshot and generic video; hype ('full control over your applications, enforcing security'); links to overview rather than embedding-elements |
-| 36 | `docs/embeddable-uis/element/user-management.mdx` | 7 | 19 | no configuration steps or example, only concepts plus links; 'Effortlessly', em dash in 'straightforward-assign', 'valuable feedback'; H3 headings with colons and Q&A bold labels |
-| 37 | `docs/embeddable-uis/webhooks.mdx` | 7 | 17 | 'Current flow' vs 'new approve invite flow' dated language, unclear which flow is live; no signature verification detail or handler example, schemas in pseudo-Python; skipped levels (H4-H6 then H3), 'leverage', 'array of functionalities', 'essentially' |
-| 38 | `docs/how-to/build-policies/abac/patterns.mdx` | 7 | 19 | stale: 'Once we add ReBAC and groups natively to Permit.io' (ReBAC exists); 'ownership via user profile' lacks example, local PDP command uses 7767:7000 and :latest; 'easy', 'enjoy', hyphen dashes, H3 headings inside bullets |
-| 39 | `docs/how-to/deploy/on-prem/quick-start.mdx` | 7 | 19 | description says 5-10 minutes, body says 10-15; nested 'Step 1/2/3' inside Step 2 makes headings ambiguous; uses --gke flag missing from installer help, no download source, emojis and 'just a few minutes' |
-| 40 | `docs/how-to/enforce-permissions/data-filtering.mdx` | 7 | 18 | 'Simplified Partial-evaluation ... upcoming feature in advanced stages of release' is stale; wordy/hype intro ('not only secure access but also optimized'); single Go sample with empty API key, no output, one H2 |
+| 14 | `docs/api/working-with-abac/condition-set-rules.mdx` | 6 | 18 | stub: payload only, no endpoint, method, or verify; depends on sets defined on another page ('this particular example'); 'Let's remind ourselves', 'we will want' |
+| 15 | `docs/api/working-with-abac/examples.mdx` | 6 | 15 | page starts at H3/H4 with a sentence as heading; 'not': ['part-time'] contradicts operator syntax, Stanford never modeled, availability as string array; no endpoint or verify, 'lets', 'our' |
+| 16 | `docs/authentication/auth0/permit-integration.mdx` | 6 | 16 | link to http://localhost:3000 demo; role assignment code redeclares 'role', uses undefined permitUserObj/tenantKey, check without await; Auth0 Action steps duplicated verbatim from demo page, empty 'Getting Started' H2, 'easily', 'great blog post', 'Let's test it!' |
+| 17 | `docs/authentication/hankopermit.mdx` | 6 | 16 | 'leading authorization platform' claim; ABAC steps contradict (new user 'should not be able to delete' then 'should also be able to delete'), 'same user who created the role'; broken samples (git clone <git@github.com>, markdown link inside env value, untagged blocks), 14 screenshots with one reused, 'easily', 'great blog', 'we' |
+| 18 | `docs/authentication/stytch/permit-integration.mdx` | 6 | 15 | sync code uses undefined userEmailId/tenantId/currentTenant and calls React hook useStytchUser in backend; redirect page imports Node 'stytch' SDK in the browser, REDIRECT_URL 'SEE_STEP_5' but covered in step 4; 'leading', 'robust', 'easily', 'him/his', typos |
+| 19 | `docs/concepts/pdp/overview.mdx` | 6 | 12 | AuthZen curls use wrong paths (/v1/access/..., /v1/subjects) and invalid JSON trailing commas, Go snippet does not compile; mixes landing, how-to, caching and AuthZen reference with 'we', emoji, calendly link; H1 in body and Title Case headings |
+| 20 | `docs/how-to/deploy/on-prem/installation.mdx` | 6 | 16 | 450 lines of internals before Step 1 and 'What happens' repeated twice; internal contradictions (help output lacks --gke, postgres 20GB vs 10Gi PVC, 'Infrastructure (10 services)' lists 11, '12 images' vs 35, Policy Sync required vs 'if configured'); 'As of January 2026', emojis, 'comprehensive', 'That's it!' |
+| 21 | `docs/how-to/deploy/on-prem/prerequisites.mdx` | 6 | 17 | mixes architecture marketing, TLS config and troubleshooting into prereqs; inconsistent figures (35 vs 26 services, 51GB storage, '50-500 users'), repo sync called required then 'If you want to enable'; hype + emojis + CRITICAL caps, hardcoded usage numbers will rot |
+| 22 | `docs/how-to/ownership.mdx` | 6 | 16 | ReBAC step says 'file is set as parent of folder' (reversed) and Bobs_Files#owner unexplained; typos (Upadte, Direcrory), let's/we, dash intro; 11 UI screenshots, concept + how-to muddled |
+| 23 | `docs/integrations/gateways/kong.mdx` | 6 | 15 | docker command contains invisible U+2060 characters (not copy-runnable); '1-5 ms' claim, 'recent update', stale 'Copy SDK secret key' UI; 'seamlessly', 'easily', 'powerful', 'within minutes' |
+| 24 | `docs/integrations/gitops/custom_policy.mdx` | 6 | 15 | final Rego invalid ('package package', import permit.rbac vs data.permit.rbac, else chain logic), untagged blocks; hardcoded 2023 dates and Cedar claim; let's/we, 'Were', emoji shortcode |
+| 25 | `docs/overview/setup-attribute-based-access-control.mdx` | 6 | 15 | user set conditions (department=Engineering, training_status=certified) contradict scenario (R&D, completed); no enforcement or verify step, videos only with no code; vague UI paths ('Navigate to Dynamic Resource'), 'Imagine', 'master of ABAC' emoji |
+| 26 | `docs/status.mdx` | 6 | 17 | page is only a scaled iframe with duplicate style prop (backgroundColor overwritten) and hardcoded 1080px width, poor on mobile; no text naming what is monitored (Cloud PDP, API, dashboard per description) or a direct status link for readers/agents; 'If you would like' wordy, ':::note info' misuse |
+| 27 | `docs/updates-and-feedback/changelog.mdx` | 6 | 15 | stub with only an external link; 'here' link text; hype intro 'Explore the evolving journey' and 'our' |
+| 28 | `docs/updates-and-feedback/feature-requests.mdx` | 6 | 16 | stub with only an external link; 'here' link text with random bold; marketing intro 'guiding the next wave of features we introduce' |
+| 29 | `docs/updates-and-feedback/roadmap.mdx` | 6 | 16 | stub with only external link, roadmap on productlane while changelog/feature requests on Canny (possibly stale host); 'here' link text; hype 'glimpse into the future', 'innovations' |
+| 30 | `docs/ai-security/access-request-mcp/implementation-guide.mdx` | 7 | 17 | mixes reference (env vars, tools) with a full FastAPI + CLI tutorial duplicated from food demo; CLI client code has broken indentation and undefined utils module; preview model gemini-2.5-flash-preview-04-17, 'powerful', 'easily', em dashes, vague verify step |
+| 31 | `docs/ai-security/integrations/mongodb-rag.mdx` | 7 | 14 | ReBAC expanded as 'Role-Based Access Control (ReBAC)'; setup duplicated (Quickstart, Atlas setup, clone and .env repeated 3x) and quickstart says compose syncs everything while later steps run scripts manually; user ids inconsistent (carol/user_marketing_1 vs alice/bob), host scripts use http://permit-pdp:7000 |
+| 32 | `docs/api/elements/access-request-api.mdx` | 7 | 18 | curl samples invalid (-data-raw single dash, no -X method, trailing commas, missing opening brace) and filters documented as headers not query params; near-verbatim duplicate of access-requests.mdx with the same response JSON repeated 6x; title 'Access Request API- API Only' and H1 'Use API KEY', unused imports |
+| 33 | `docs/api/working-with-abac/building-conditions.mdx` | 7 | 15 | 'not' example is incoherent and INVALID age example says 48 vs code 40 with unverified 'Unbound Error'; repeated VALID/INVALID H4 headings not self-contained; 'we', 'Let's', 'important to note', Python True in js blocks |
+| 34 | `docs/api/working-with-abac/condition-sets.mdx` | 7 | 16 | no endpoint or request to actually create a set; key mismatch private_repos vs private_repositories and parent example repeats parent condition, equals with arrays; relative .mdx link path likely broken, 'We will', 'Let's' |
+| 35 | `docs/embeddable-uis/element-login.mdx` | 7 | 15 | broken code: Node init tab contains a Python import line, C# samples have unbalanced braces and no while body, JS loginUrl missing closing quote; loginAs params inconsistent (tenant vs tenantId), private-browsing sample returns {url: element_bearer_token}, dangling sentence 'Add with an authenticated session'; emojis, 'simple', 'We have', hyphen dashes, 'now compatible' dated language |
+| 36 | `docs/embeddable-uis/element/audit-logs.mdx` | 7 | 16 | stub: no steps, config, or example beyond a screenshot and generic video; hype ('full control over your applications, enforcing security'); links to overview rather than embedding-elements |
+| 37 | `docs/embeddable-uis/element/user-management.mdx` | 7 | 15 | no configuration steps or example, only concepts plus links; 'Effortlessly', em dash in 'straightforward-assign', 'valuable feedback'; H3 headings with colons and Q&A bold labels |
+| 38 | `docs/embeddable-uis/webhooks.mdx` | 7 | 16 | 'Current flow' vs 'new approve invite flow' dated language, unclear which flow is live; no signature verification detail or handler example, schemas in pseudo-Python; skipped levels (H4-H6 then H3), 'leverage', 'array of functionalities', 'essentially' |
+| 39 | `docs/how-to/build-policies/abac/patterns.mdx` | 7 | 15 | stale: 'Once we add ReBAC and groups natively to Permit.io' (ReBAC exists); 'ownership via user profile' lacks example, local PDP command uses 7767:7000 and :latest; 'easy', 'enjoy', hyphen dashes, H3 headings inside bullets |
+| 40 | `docs/how-to/deploy/on-prem/quick-start.mdx` | 7 | 17 | description says 5-10 minutes, body says 10-15; nested 'Step 1/2/3' inside Step 2 makes headings ambiguous; uses --gke flag missing from installer help, no download source, emojis and 'just a few minutes' |
 
 ## Upgraded pages
 
 | Page | Before | After |
 |---|---|---|
-| `docs/ai-security/access-request-mcp/food-ordering-demo-example.mdx` | 5 | 18 |
-| `docs/ai-security/access-request-mcp/implementation-guide.mdx` | 7 | 20 |
-| `docs/ai-security/access-request-mcp/overview.mdx` | 10 | 19 |
-| `docs/ai-security/framework.mdx` | 10 | 19 |
-| `docs/ai-security/integrations/langchain.mdx` | 8 | 18 |
-| `docs/ai-security/integrations/langflow.mdx` | 5 | 17 |
-| `docs/ai-security/integrations/mongodb-rag.mdx` | 7 | 18 |
-| `docs/ai-security/integrations/openai-prompt-filtering.mdx` | 6 | 19 |
-| `docs/ai-security/integrations/pydantic-ai.mdx` | 6 | 16 |
-| `docs/api/api-reference.mdx` | 13 | 19 |
-| `docs/api/api-with-cli.mdx` | 10 | 19 |
-| `docs/api/background-tasks.mdx` | 11 | 20 |
-| `docs/api/elements/access-request-api.mdx` | 7 | 17 |
+| `docs/ai-security/access-request-mcp/food-ordering-demo-example.mdx` | 5 | 14 |
+| `docs/ai-security/access-request-mcp/implementation-guide.mdx` | 7 | 17 |
+| `docs/ai-security/access-request-mcp/overview.mdx` | 10 | 18 |
+| `docs/ai-security/framework.mdx` | 10 | 18 |
+| `docs/ai-security/integrations/langchain.mdx` | 8 | 13 |
+| `docs/ai-security/integrations/langflow.mdx` | 5 | 13 |
+| `docs/ai-security/integrations/mongodb-rag.mdx` | 7 | 14 |
+| `docs/ai-security/integrations/openai-prompt-filtering.mdx` | 6 | 14 |
+| `docs/ai-security/integrations/pydantic-ai.mdx` | 6 | 15 |
+| `docs/api/api-reference.mdx` | 13 | 18 |
+| `docs/api/api-with-cli.mdx` | 10 | 15 |
+| `docs/api/background-tasks.mdx` | 11 | 19 |
+| `docs/api/elements/access-request-api.mdx` | 7 | 18 |
 | `docs/api/elements/access-requests.mdx` | 6 | 18 |
 | `docs/api/elements/operation_approval.mdx` | 6 | 18 |
-| `docs/api/elements/overview.mdx` | 8 | 19 |
-| `docs/api/examples/autopopulate-actions.mdx` | 12 | 19 |
+| `docs/api/elements/overview.mdx` | 8 | 18 |
+| `docs/api/examples/autopopulate-actions.mdx` | 12 | 17 |
 | `docs/api/examples/create-tenant.mdx` | 12 | 19 |
 | `docs/api/examples/filter-relationship-tuple.mdx` | 12 | 19 |
 | `docs/api/examples/filter-role-associations.mdx` | 12 | 19 |
-| `docs/api/examples/filter-users.mdx` | 12 | 19 |
+| `docs/api/examples/filter-users.mdx` | 12 | 17 |
 | `docs/api/examples/get-project-and-env.mdx` | 12 | 19 |
-| `docs/api/examples/list-user-permissions.mdx` | 11 | 19 |
+| `docs/api/examples/list-user-permissions.mdx` | 11 | 18 |
 | `docs/api/pdp-api-reference.mdx` | 12 | 19 |
-| `docs/api/pdp-statistics.mdx` | 11 | 20 |
-| `docs/api/pdp-webhooks.mdx` | 10 | 19 |
+| `docs/api/pdp-statistics.mdx` | 11 | 19 |
+| `docs/api/pdp-webhooks.mdx` | 10 | 18 |
 | `docs/api/rbac/disable-rebac-to-increase-performance.mdx` | 12 | 19 |
-| `docs/api/rbac/rbac-example.mdx` | 4 | 19 |
-| `docs/api/rebac/groups/groups-ui.mdx` | 9 | 18 |
-| `docs/api/rebac/groups/groups.mdx` | 5 | 19 |
-| `docs/api/rebac/rebac-api-calls.mdx` | 11 | 19 |
-| `docs/api/v2-migration-guide.mdx` | 8 | 17 |
-| `docs/api/working-with-abac/building-conditions.mdx` | 7 | 19 |
-| `docs/api/working-with-abac/condition-set-rules.mdx` | 6 | 19 |
-| `docs/api/working-with-abac/condition-sets.mdx` | 7 | 19 |
-| `docs/api/working-with-abac/examples.mdx` | 6 | 18 |
-| `docs/api/working-with-abac/operators.mdx` | 9 | 19 |
-| `docs/api/working-with-abac/overview.mdx` | 3 | 19 |
-| `docs/authentication/auth0/auth0-demo-app.mdx` | 8 | 19 |
-| `docs/authentication/auth0/auth0-sync-script.mdx` | 11 | 19 |
-| `docs/authentication/auth0/permit-integration.mdx` | 6 | 19 |
-| `docs/authentication/cognito/cognito-demo-app.mdx` | 8 | 17 |
-| `docs/authentication/cognito/permit-integration.mdx` | 9 | 19 |
-| `docs/authentication/fusionauth.mdx` | 4 | 17 |
-| `docs/authentication/hankopermit.mdx` | 6 | 19 |
-| `docs/authentication/logto.mdx` | 11 | 19 |
+| `docs/api/rbac/rbac-example.mdx` | 4 | 18 |
+| `docs/api/rebac/groups/groups-ui.mdx` | 9 | 17 |
+| `docs/api/rebac/groups/groups.mdx` | 5 | 16 |
+| `docs/api/rebac/rebac-api-calls.mdx` | 11 | 18 |
+| `docs/api/v2-migration-guide.mdx` | 8 | 15 |
+| `docs/api/working-with-abac/building-conditions.mdx` | 7 | 15 |
+| `docs/api/working-with-abac/condition-set-rules.mdx` | 6 | 18 |
+| `docs/api/working-with-abac/condition-sets.mdx` | 7 | 16 |
+| `docs/api/working-with-abac/examples.mdx` | 6 | 15 |
+| `docs/api/working-with-abac/operators.mdx` | 9 | 18 |
+| `docs/api/working-with-abac/overview.mdx` | 3 | 16 |
+| `docs/authentication/auth0/auth0-demo-app.mdx` | 8 | 15 |
+| `docs/authentication/auth0/auth0-sync-script.mdx` | 11 | 18 |
+| `docs/authentication/auth0/permit-integration.mdx` | 6 | 16 |
+| `docs/authentication/cognito/cognito-demo-app.mdx` | 8 | 15 |
+| `docs/authentication/cognito/permit-integration.mdx` | 9 | 17 |
+| `docs/authentication/fusionauth.mdx` | 4 | 16 |
+| `docs/authentication/hankopermit.mdx` | 6 | 16 |
+| `docs/authentication/logto.mdx` | 11 | 16 |
 | `docs/authentication/permit-and-authentication.mdx` | 8 | 19 |
-| `docs/authentication/stytch/permit-integration.mdx` | 6 | 17 |
-| `docs/authentication/supertokens.mdx` | 4 | 18 |
-| `docs/authentication/your-authentication.mdx` | 8 | 19 |
+| `docs/authentication/stytch/permit-integration.mdx` | 6 | 15 |
+| `docs/authentication/supertokens.mdx` | 4 | 15 |
+| `docs/authentication/your-authentication.mdx` | 8 | 16 |
 | `docs/concepts/control-plane-and-data-plane.mdx` | 14 | 18 |
 | `docs/concepts/deployment-options.mdx` | 14 | 18 |
-| `docs/concepts/differentiator-checklist.mdx` | 13 | 18 |
-| `docs/concepts/multi-tenant-authorization.mdx` | 10 | 18 |
-| `docs/concepts/oss-fallback.mdx` | 9 | 18 |
+| `docs/concepts/differentiator-checklist.mdx` | 13 | 14 |
+| `docs/concepts/multi-tenant-authorization.mdx` | 10 | 17 |
+| `docs/concepts/oss-fallback.mdx` | 9 | 16 |
 | `docs/concepts/pdp/cloud-pdp-benchmarks.mdx` | 14 | 18 |
-| `docs/concepts/pdp/cloud-pdp-capabilities.mdx` | 11 | 18 |
-| `docs/concepts/pdp/configuration.mdx` | 12 | 18 |
-| `docs/embeddable-uis/element-login.mdx` | 7 | 18 |
-| `docs/embeddable-uis/element/access-request.mdx` | 8 | 19 |
-| `docs/embeddable-uis/element/approval-management.mdx` | 8 | 18 |
-| `docs/embeddable-uis/element/audit-logs.mdx` | 7 | 18 |
-| `docs/embeddable-uis/element/operation-approval.mdx` | 8 | 17 |
-| `docs/embeddable-uis/element/user-management.mdx` | 7 | 19 |
-| `docs/embeddable-uis/email-configuration-and-templates.mdx` | 9 | 19 |
-| `docs/embeddable-uis/embedding-elements.mdx` | 9 | 19 |
-| `docs/embeddable-uis/overview.mdx` | 11 | 19 |
-| `docs/embeddable-uis/permission-levels.mdx` | 10 | 19 |
-| `docs/embeddable-uis/troubleshooting.mdx` | 11 | 19 |
-| `docs/embeddable-uis/user-preview.mdx` | 10 | 18 |
-| `docs/embeddable-uis/webhooks.mdx` | 7 | 17 |
-| `docs/faq.mdx` | 10 | 18 |
-| `docs/getting-started/slack-support.mdx` | 11 | 18 |
-| `docs/how-to/SDLC/CI-CD.mdx` | 8 | 18 |
-| `docs/how-to/SDLC/authz-testing.mdx` | 8 | 19 |
-| `docs/how-to/SDLC/modeling-implementation-components.mdx` | 8 | 18 |
-| `docs/how-to/build-policies/abac/building-abac-policy.mdx` | 8 | 18 |
+| `docs/concepts/pdp/cloud-pdp-capabilities.mdx` | 11 | 17 |
+| `docs/concepts/pdp/configuration.mdx` | 12 | 17 |
+| `docs/concepts/pdp/nexus-pdp-architecture.mdx` | 12 | 18 |
+| `docs/concepts/pdp/nexus-pdp-configuration.mdx` | 11 | 18 |
+| `docs/concepts/pdp/nexus-pdp-deployment.mdx` | 9 | 15 |
+| `docs/concepts/pdp/nexus-pdp-feature-parity.mdx` | 11 | 18 |
+| `docs/concepts/pdp/nexus-pdp-how-it-works.mdx` | 10 | 17 |
+| `docs/concepts/pdp/nexus-pdp.mdx` | 9 | 17 |
+| `docs/concepts/pdp/overview.mdx` | 6 | 12 |
+| `docs/embeddable-uis/element-login.mdx` | 7 | 15 |
+| `docs/embeddable-uis/element/access-request.mdx` | 8 | 17 |
+| `docs/embeddable-uis/element/approval-management.mdx` | 8 | 17 |
+| `docs/embeddable-uis/element/audit-logs.mdx` | 7 | 16 |
+| `docs/embeddable-uis/element/operation-approval.mdx` | 8 | 15 |
+| `docs/embeddable-uis/element/user-management.mdx` | 7 | 15 |
+| `docs/embeddable-uis/email-configuration-and-templates.mdx` | 9 | 17 |
+| `docs/embeddable-uis/embedding-elements.mdx` | 9 | 17 |
+| `docs/embeddable-uis/overview.mdx` | 11 | 15 |
+| `docs/embeddable-uis/permission-levels.mdx` | 10 | 18 |
+| `docs/embeddable-uis/troubleshooting.mdx` | 11 | 17 |
+| `docs/embeddable-uis/user-preview.mdx` | 10 | 16 |
+| `docs/embeddable-uis/webhooks.mdx` | 7 | 16 |
+| `docs/faq.mdx` | 10 | 14 |
+| `docs/getting-started/ai-support.mdx` | 18 | 17 |
+| `docs/getting-started/slack-support.mdx` | 11 | 17 |
+| `docs/home.mdx` | 16 | 17 |
+| `docs/how-to/SDLC/CI-CD.mdx` | 8 | 16 |
+| `docs/how-to/SDLC/authz-testing.mdx` | 8 | 17 |
+| `docs/how-to/SDLC/modeling-implementation-components.mdx` | 8 | 17 |
+| `docs/how-to/build-policies/abac/building-abac-policy.mdx` | 8 | 15 |
 | `docs/how-to/build-policies/abac/components.mdx` | 12 | 19 |
-| `docs/how-to/build-policies/abac/defining-attributes.mdx` | 9 | 20 |
-| `docs/how-to/build-policies/abac/overview.mdx` | 11 | 19 |
-| `docs/how-to/build-policies/abac/patterns.mdx` | 7 | 19 |
-| `docs/how-to/build-policies/abac/time-based-role.mdx` | 11 | 17 |
-| `docs/how-to/build-policies/policy-basics.mdx` | 5 | 17 |
-| `docs/how-to/build-policies/rbac/building-rbac-policy.mdx` | 8 | 18 |
-| `docs/how-to/build-policies/rbac/components.mdx` | 9 | 19 |
-| `docs/how-to/build-policies/rbac/overview.mdx` | 10 | 19 |
-| `docs/how-to/build-policies/rebac/building-rebac-policies.mdx` | 5 | 19 |
-| `docs/how-to/build-policies/rebac/overview.mdx` | 10 | 19 |
-| `docs/how-to/bulk-operations.mdx` | 8 | 19 |
-| `docs/how-to/deploy/cloud-hosts/aws-ecs-fargate.mdx` | 8 | 17 |
-| `docs/how-to/deploy/cloud-hosts/gcp-cloud-run.mdx` | 12 | 19 |
+| `docs/how-to/build-policies/abac/defining-attributes.mdx` | 9 | 15 |
+| `docs/how-to/build-policies/abac/overview.mdx` | 11 | 18 |
+| `docs/how-to/build-policies/abac/patterns.mdx` | 7 | 15 |
+| `docs/how-to/build-policies/abac/time-based-role.mdx` | 11 | 14 |
+| `docs/how-to/build-policies/overview.mdx` | 18 | 17 |
+| `docs/how-to/build-policies/policy-basics.mdx` | 5 | 14 |
+| `docs/how-to/build-policies/rbac/building-rbac-policy.mdx` | 8 | 15 |
+| `docs/how-to/build-policies/rbac/components.mdx` | 9 | 18 |
+| `docs/how-to/build-policies/rbac/overview.mdx` | 10 | 18 |
+| `docs/how-to/build-policies/rebac/building-rebac-policies.mdx` | 5 | 15 |
+| `docs/how-to/build-policies/rebac/overview.mdx` | 10 | 15 |
+| `docs/how-to/bulk-operations.mdx` | 8 | 17 |
+| `docs/how-to/deploy/cloud-hosts/aws-ecs-fargate.mdx` | 8 | 18 |
+| `docs/how-to/deploy/cloud-hosts/gcp-cloud-run.mdx` | 12 | 18 |
 | `docs/how-to/deploy/cloud-hosts/helm.mdx` | 12 | 19 |
-| `docs/how-to/deploy/cloud-hosts/kubernetes-raw.mdx` | 10 | 19 |
-| `docs/how-to/deploy/cloud-hosts/pulumi.mdx` | 10 | 17 |
-| `docs/how-to/deploy/cloud-hosts/terraform.mdx` | 10 | 18 |
+| `docs/how-to/deploy/cloud-hosts/kubernetes-raw.mdx` | 10 | 18 |
+| `docs/how-to/deploy/cloud-hosts/pulumi.mdx` | 10 | 16 |
+| `docs/how-to/deploy/cloud-hosts/terraform.mdx` | 10 | 17 |
 | `docs/how-to/deploy/deploy-to-production.mdx` | 9 | 18 |
-| `docs/how-to/deploy/offline-mode.mdx` | 14 | 19 |
-| `docs/how-to/deploy/on-prem/change-organization-tier.mdx` | 12 | 18 |
-| `docs/how-to/deploy/on-prem/installation.mdx` | 6 | 18 |
-| `docs/how-to/deploy/on-prem/landing.mdx` | 9 | 19 |
-| `docs/how-to/deploy/on-prem/management.mdx` | 9 | 17 |
-| `docs/how-to/deploy/on-prem/pdp-deployment.mdx` | 13 | 18 |
-| `docs/how-to/deploy/on-prem/prerequisites.mdx` | 6 | 18 |
-| `docs/how-to/deploy/on-prem/quick-start.mdx` | 7 | 19 |
-| `docs/how-to/deploy/on-prem/reference.mdx` | 8 | 18 |
-| `docs/how-to/deploy/on-prem/troubleshooting.mdx` | 12 | 19 |
-| `docs/how-to/deploy/overview.mdx` | 9 | 19 |
-| `docs/how-to/enforce-permissions/all-tenants-check.mdx` | 11 | 18 |
-| `docs/how-to/enforce-permissions/authorized-users.mdx` | 8 | 19 |
-| `docs/how-to/enforce-permissions/bulk-check.mdx` | 11 | 19 |
-| `docs/how-to/enforce-permissions/check.mdx` | 10 | 19 |
-| `docs/how-to/enforce-permissions/data-filtering.mdx` | 7 | 18 |
-| `docs/how-to/enforce-permissions/list-role-assignments.mdx` | 9 | 19 |
-| `docs/how-to/enforce-permissions/url-mapping/configuring-jwks.mdx` | 10 | 17 |
-| `docs/how-to/enforce-permissions/url-mapping/fetching-jwks.mdx` | 8 | 17 |
-| `docs/how-to/enforce-permissions/url-mapping/regex-url-mapping-check.mdx` | 9 | 18 |
-| `docs/how-to/enforce-permissions/url-mapping/url-mapping-check.mdx` | 9 | 17 |
-| `docs/how-to/enforce-permissions/user-permissions.mdx` | 8 | 19 |
-| `docs/how-to/manage-data/loading-data.mdx` | 9 | 19 |
-| `docs/how-to/manage-data/local-facts-uploader.mdx` | 12 | 19 |
-| `docs/how-to/manage-data/use-external-data-source.mdx` | 9 | 19 |
-| `docs/how-to/monitoring-pdps/monitoring-pdps.mdx` | 10 | 18 |
-| `docs/how-to/ownership.mdx` | 6 | 18 |
+| `docs/how-to/deploy/offline-mode.mdx` | 14 | 17 |
+| `docs/how-to/deploy/on-prem/change-organization-tier.mdx` | 12 | 17 |
+| `docs/how-to/deploy/on-prem/installation.mdx` | 6 | 16 |
+| `docs/how-to/deploy/on-prem/landing.mdx` | 9 | 16 |
+| `docs/how-to/deploy/on-prem/management.mdx` | 9 | 13 |
+| `docs/how-to/deploy/on-prem/pdp-deployment.mdx` | 13 | 17 |
+| `docs/how-to/deploy/on-prem/prerequisites.mdx` | 6 | 17 |
+| `docs/how-to/deploy/on-prem/quick-start.mdx` | 7 | 17 |
+| `docs/how-to/deploy/on-prem/reference.mdx` | 8 | 12 |
+| `docs/how-to/deploy/on-prem/troubleshooting.mdx` | 12 | 16 |
+| `docs/how-to/deploy/overview.mdx` | 9 | 18 |
+| `docs/how-to/enforce-permissions/all-tenants-check.mdx` | 11 | 17 |
+| `docs/how-to/enforce-permissions/authorized-users.mdx` | 8 | 17 |
+| `docs/how-to/enforce-permissions/bulk-check.mdx` | 11 | 18 |
+| `docs/how-to/enforce-permissions/check.mdx` | 10 | 17 |
+| `docs/how-to/enforce-permissions/data-filtering.mdx` | 7 | 15 |
+| `docs/how-to/enforce-permissions/list-role-assignments.mdx` | 9 | 17 |
+| `docs/how-to/enforce-permissions/url-mapping/configuring-jwks.mdx` | 10 | 18 |
+| `docs/how-to/enforce-permissions/url-mapping/fetching-jwks.mdx` | 8 | 18 |
+| `docs/how-to/enforce-permissions/url-mapping/regex-url-mapping-check.mdx` | 9 | 16 |
+| `docs/how-to/enforce-permissions/url-mapping/url-mapping-check.mdx` | 9 | 16 |
+| `docs/how-to/enforce-permissions/user-permissions.mdx` | 8 | 17 |
+| `docs/how-to/manage-data/loading-data.mdx` | 9 | 17 |
+| `docs/how-to/manage-data/local-facts-uploader.mdx` | 12 | 17 |
+| `docs/how-to/manage-data/use-external-data-source.mdx` | 9 | 16 |
+| `docs/how-to/monitoring-pdps/monitoring-pdps.mdx` | 10 | 16 |
+| `docs/how-to/ownership.mdx` | 6 | 16 |
 | `docs/how-to/permit-cli/permit-cli-api.mdx` | 11 | 18 |
 | `docs/how-to/permit-cli/permit-cli-envs.mdx` | 12 | 18 |
 | `docs/how-to/permit-cli/permit-cli-gitops.mdx` | 7 | 17 |
 | `docs/how-to/permit-cli/permit-cli-pdp.mdx` | 12 | 19 |
-| `docs/how-to/permit-cli/permit-cli-policy.mdx` | 9 | 18 |
-| `docs/how-to/permit-cli/permit-cli-test.mdx` | 12 | 18 |
-| `docs/how-to/permit-cli/permit-cli.mdx` | 9 | 19 |
-| `docs/how-to/policy-guard/policy_guard.mdx` | 10 | 18 |
-| `docs/how-to/policy-guard/policy_guard_api.mdx` | 9 | 19 |
-| `docs/how-to/sync-users.mdx` | 9 | 19 |
-| `docs/how-to/use-audit-logs/audit-log-replay.mdx` | 8 | 17 |
-| `docs/how-to/use-audit-logs/debug-mode.mdx` | 9 | 19 |
+| `docs/how-to/permit-cli/permit-cli-policy.mdx` | 9 | 17 |
+| `docs/how-to/permit-cli/permit-cli-test.mdx` | 12 | 19 |
+| `docs/how-to/permit-cli/permit-cli.mdx` | 9 | 18 |
+| `docs/how-to/policy-guard/policy_guard.mdx` | 10 | 17 |
+| `docs/how-to/policy-guard/policy_guard_api.mdx` | 9 | 17 |
+| `docs/how-to/sync-users.mdx` | 9 | 15 |
+| `docs/how-to/use-audit-logs/audit-log-replay.mdx` | 8 | 18 |
+| `docs/how-to/use-audit-logs/debug-mode.mdx` | 9 | 18 |
 | `docs/how-to/use-audit-logs/errors/cloud_pdp_not_supporting_abac.mdx` | 7 | 19 |
 | `docs/how-to/use-audit-logs/errors/no_matching_resourcesets.mdx` | 9 | 19 |
-| `docs/how-to/use-audit-logs/errors/no_matching_rules.mdx` | 10 | 19 |
+| `docs/how-to/use-audit-logs/errors/no_matching_rules.mdx` | 10 | 18 |
 | `docs/how-to/use-audit-logs/errors/no_matching_usersets.mdx` | 10 | 19 |
 | `docs/how-to/use-audit-logs/errors/no_permission.mdx` | 9 | 19 |
 | `docs/how-to/use-audit-logs/errors/no_role_in_tenant.mdx` | 10 | 19 |
@@ -283,102 +293,102 @@ Dimension keys: **Aud** audience fit, **Task** task success, **Type** content ty
 | `docs/how-to/use-audit-logs/errors/no_such_tenant.mdx` | 10 | 19 |
 | `docs/how-to/use-audit-logs/errors/no_user_roles.mdx` | 10 | 19 |
 | `docs/how-to/use-audit-logs/errors/user_not_synced.mdx` | 10 | 19 |
-| `docs/how-to/use-audit-logs/logs-forwarder.mdx` | 9 | 18 |
-| `docs/how-to/use-audit-logs/troubleshooting.mdx` | 9 | 19 |
-| `docs/how-to/use-audit-logs/types-and-filtering.mdx` | 9 | 17 |
-| `docs/integrations/GraphQL/apollo_server.mdx` | 10 | 18 |
+| `docs/how-to/use-audit-logs/logs-forwarder.mdx` | 9 | 19 |
+| `docs/how-to/use-audit-logs/troubleshooting.mdx` | 9 | 18 |
+| `docs/how-to/use-audit-logs/types-and-filtering.mdx` | 9 | 15 |
+| `docs/integrations/GraphQL/apollo_server.mdx` | 10 | 15 |
 | `docs/integrations/GraphQL/overview.mdx` | 7 | 18 |
 | `docs/integrations/SCIM/EntraID.mdx` | 12 | 19 |
-| `docs/integrations/SCIM/OKTA.mdx` | 10 | 17 |
-| `docs/integrations/SCIM/SCIM_overview.mdx` | 12 | 18 |
-| `docs/integrations/database-access-control/trino-integration.mdx` | 13 | 18 |
-| `docs/integrations/feature-flagging/casl.mdx` | 8 | 19 |
-| `docs/integrations/gateways/aws-api-gateway.mdx` | 10 | 18 |
-| `docs/integrations/gateways/kong.mdx` | 6 | 17 |
-| `docs/integrations/gateways/nginx.mdx` | 11 | 17 |
-| `docs/integrations/gateways/overview.mdx` | 10 | 18 |
-| `docs/integrations/gitops/custom_policy.mdx` | 6 | 19 |
+| `docs/integrations/SCIM/OKTA.mdx` | 10 | 18 |
+| `docs/integrations/SCIM/SCIM_overview.mdx` | 12 | 13 |
+| `docs/integrations/database-access-control/trino-integration.mdx` | 13 | 16 |
+| `docs/integrations/feature-flagging/casl.mdx` | 8 | 16 |
+| `docs/integrations/gateways/aws-api-gateway.mdx` | 10 | 16 |
+| `docs/integrations/gateways/kong.mdx` | 6 | 15 |
+| `docs/integrations/gateways/nginx.mdx` | 11 | 16 |
+| `docs/integrations/gateways/overview.mdx` | 10 | 16 |
+| `docs/integrations/gitops/custom_policy.mdx` | 6 | 15 |
 | `docs/integrations/gitops/github.mdx` | 12 | 18 |
-| `docs/integrations/gitops/overview.mdx` | 9 | 20 |
+| `docs/integrations/gitops/overview.mdx` | 9 | 16 |
 | `docs/integrations/infra-as-code/terraform-provider.mdx` | 12 | 17 |
-| `docs/integrations/permit-mcp/overview.mdx` | 10 | 17 |
+| `docs/integrations/permit-mcp/overview.mdx` | 10 | 12 |
 | `docs/integrations/policy-engines/overview.mdx` | 10 | 18 |
 | `docs/integrations/workflow-automation/n8n.mdx` | 9 | 18 |
-| `docs/manage-your-account/creating-environments.mdx` | 10 | 18 |
+| `docs/manage-your-account/creating-environments.mdx` | 10 | 17 |
 | `docs/manage-your-account/permit-logs.mdx` | 9 | 17 |
-| `docs/manage-your-account/projects-and-env.mdx` | 7 | 17 |
-| `docs/manage-your-account/workspace-api.mdx` | 10 | 19 |
-| `docs/manage-your-account/workspace-settings.mdx` | 9 | 17 |
-| `docs/manage-your-account/workspace-usage.mdx` | 10 | 18 |
-| `docs/modeling/feature-flagging.mdx` | 9 | 19 |
-| `docs/modeling/food-delivery-system-example-using-nuxt.mdx` | 10 | 18 |
-| `docs/modeling/google-drive.mdx` | 11 | 19 |
-| `docs/modeling/mesa-verde.mdx` | 8 | 18 |
-| `docs/modeling/other-code-examples.mdx` | 8 | 19 |
-| `docs/modeling/pink-mobile.mdx` | 10 | 18 |
-| `docs/modeling/rebac-GHC.mdx` | 9 | 17 |
-| `docs/overview/access-requests-and-approvals.mdx` | 8 | 17 |
-| `docs/overview/advanced-authorization-queries.mdx` | 10 | 19 |
+| `docs/manage-your-account/projects-and-env.mdx` | 7 | 13 |
+| `docs/manage-your-account/workspace-api.mdx` | 10 | 17 |
+| `docs/manage-your-account/workspace-settings.mdx` | 9 | 14 |
+| `docs/manage-your-account/workspace-usage.mdx` | 10 | 16 |
+| `docs/modeling/feature-flagging.mdx` | 9 | 15 |
+| `docs/modeling/food-delivery-system-example-using-nuxt.mdx` | 10 | 15 |
+| `docs/modeling/google-drive.mdx` | 11 | 17 |
+| `docs/modeling/mesa-verde.mdx` | 8 | 17 |
+| `docs/modeling/other-code-examples.mdx` | 8 | 16 |
+| `docs/modeling/pink-mobile.mdx` | 10 | 17 |
+| `docs/modeling/rebac-GHC.mdx` | 9 | 12 |
+| `docs/overview/access-requests-and-approvals.mdx` | 8 | 16 |
+| `docs/overview/advanced-authorization-queries.mdx` | 10 | 14 |
 | `docs/overview/best-practices.mdx` | 15 | 18 |
 | `docs/overview/configure-your-first-rbac-policy.mdx` | 11 | 18 |
-| `docs/overview/connecting-your-app.mdx` | 14 | 19 |
-| `docs/overview/create-a-rebac-policy.mdx` | 8 | 18 |
-| `docs/overview/get-api-key.mdx` | 15 | 19 |
-| `docs/overview/glossary.mdx` | 12 | 19 |
-| `docs/overview/how-does-it-work.mdx` | 16 | 18 |
-| `docs/overview/local-authorization-microservice.mdx` | 10 | 18 |
-| `docs/overview/perform-a-local-policy-check.mdx` | 9 | 19 |
-| `docs/overview/perform-policy-check-with-cloud-pdp.mdx` | 10 | 19 |
-| `docs/overview/run-pdp.mdx` | 12 | 19 |
-| `docs/overview/setup-attribute-based-access-control.mdx` | 6 | 18 |
-| `docs/overview/sync-application-data-into-permit.mdx` | 9 | 19 |
-| `docs/overview/sync-applications-data.mdx` | 11 | 18 |
-| `docs/overview/sync-your-first-user-with-sdk.mdx` | 10 | 18 |
-| `docs/overview/use-the-permit-api-and-sdk.mdx` | 9 | 19 |
-| `docs/overview/walkthroughs-intro.mdx` | 15 | 16 |
-| `docs/overview/why-permit.mdx` | 11 | 18 |
-| `docs/permit-mcp-gateway/advanced-features.mdx` | 8 | 16 |
-| `docs/permit-mcp-gateway/architecture.mdx` | 10 | 18 |
-| `docs/permit-mcp-gateway/audit-logs.mdx` | 12 | 19 |
-| `docs/permit-mcp-gateway/authentication-methods.mdx` | 15 | 18 |
+| `docs/overview/connecting-your-app.mdx` | 14 | 18 |
+| `docs/overview/create-a-rebac-policy.mdx` | 8 | 15 |
+| `docs/overview/get-api-key.mdx` | 15 | 18 |
+| `docs/overview/glossary.mdx` | 12 | 16 |
+| `docs/overview/how-does-it-work.mdx` | 16 | 17 |
+| `docs/overview/local-authorization-microservice.mdx` | 10 | 17 |
+| `docs/overview/perform-a-local-policy-check.mdx` | 9 | 17 |
+| `docs/overview/perform-policy-check-with-cloud-pdp.mdx` | 10 | 15 |
+| `docs/overview/run-pdp.mdx` | 12 | 18 |
+| `docs/overview/setup-attribute-based-access-control.mdx` | 6 | 15 |
+| `docs/overview/sync-application-data-into-permit.mdx` | 9 | 16 |
+| `docs/overview/sync-applications-data.mdx` | 11 | 13 |
+| `docs/overview/sync-your-first-user-with-sdk.mdx` | 10 | 14 |
+| `docs/overview/use-the-permit-api-and-sdk.mdx` | 9 | 16 |
+| `docs/overview/walkthroughs-intro.mdx` | 15 | 18 |
+| `docs/overview/why-permit.mdx` | 11 | 19 |
+| `docs/permit-mcp-gateway/advanced-features.mdx` | 8 | 17 |
+| `docs/permit-mcp-gateway/architecture.mdx` | 10 | 17 |
+| `docs/permit-mcp-gateway/audit-logs.mdx` | 12 | 18 |
+| `docs/permit-mcp-gateway/authentication-methods.mdx` | 15 | 17 |
 | `docs/permit-mcp-gateway/consent-service.mdx` | 13 | 18 |
-| `docs/permit-mcp-gateway/demos/linear-mcp-gateway.mdx` | 10 | 18 |
-| `docs/permit-mcp-gateway/demos/n8n-linear-mcp-gateway.mdx` | 8 | 17 |
-| `docs/permit-mcp-gateway/enterprise-deployment.mdx` | 10 | 18 |
-| `docs/permit-mcp-gateway/guide.mdx` | 11 | 19 |
-| `docs/permit-mcp-gateway/host-setup.mdx` | 9 | 17 |
-| `docs/permit-mcp-gateway/http-egress-proxy/authorization.mdx` | 10 | 18 |
-| `docs/permit-mcp-gateway/http-egress-proxy/cli.mdx` | 12 | 19 |
-| `docs/permit-mcp-gateway/http-egress-proxy/connecting-agents.mdx` | 10 | 19 |
-| `docs/permit-mcp-gateway/http-egress-proxy/credentials.mdx` | 10 | 18 |
-| `docs/permit-mcp-gateway/http-egress-proxy/egress-rules.mdx` | 11 | 18 |
+| `docs/permit-mcp-gateway/demos/linear-mcp-gateway.mdx` | 10 | 16 |
+| `docs/permit-mcp-gateway/demos/n8n-linear-mcp-gateway.mdx` | 8 | 15 |
+| `docs/permit-mcp-gateway/enterprise-deployment.mdx` | 10 | 17 |
+| `docs/permit-mcp-gateway/guide.mdx` | 11 | 16 |
+| `docs/permit-mcp-gateway/host-setup.mdx` | 9 | 16 |
+| `docs/permit-mcp-gateway/http-egress-proxy/authorization.mdx` | 10 | 15 |
+| `docs/permit-mcp-gateway/http-egress-proxy/cli.mdx` | 12 | 16 |
+| `docs/permit-mcp-gateway/http-egress-proxy/connecting-agents.mdx` | 10 | 16 |
+| `docs/permit-mcp-gateway/http-egress-proxy/credentials.mdx` | 10 | 17 |
+| `docs/permit-mcp-gateway/http-egress-proxy/egress-rules.mdx` | 11 | 15 |
 | `docs/permit-mcp-gateway/http-egress-proxy/index.mdx` | 11 | 18 |
 | `docs/permit-mcp-gateway/http-egress-proxy/quickstart.mdx` | 13 | 18 |
-| `docs/permit-mcp-gateway/http-egress-proxy/security.mdx` | 13 | 18 |
-| `docs/permit-mcp-gateway/human-in-the-loop.mdx` | 9 | 17 |
-| `docs/permit-mcp-gateway/index.mdx` | 15 | 19 |
+| `docs/permit-mcp-gateway/http-egress-proxy/security.mdx` | 13 | 16 |
+| `docs/permit-mcp-gateway/human-in-the-loop.mdx` | 9 | 18 |
+| `docs/permit-mcp-gateway/index.mdx` | 15 | 18 |
 | `docs/permit-mcp-gateway/managing-humans-and-agents.mdx` | 11 | 18 |
-| `docs/permit-mcp-gateway/on-prem-installation.mdx` | 14 | 19 |
-| `docs/permit-mcp-gateway/overview.mdx` | 8 | 18 |
-| `docs/permit-mcp-gateway/permit-integration.mdx` | 12 | 18 |
-| `docs/permit-mcp-gateway/platform.mdx` | 10 | 17 |
+| `docs/permit-mcp-gateway/on-prem-installation.mdx` | 14 | 18 |
+| `docs/permit-mcp-gateway/overview.mdx` | 8 | 17 |
+| `docs/permit-mcp-gateway/permit-integration.mdx` | 12 | 17 |
+| `docs/permit-mcp-gateway/platform.mdx` | 10 | 18 |
 | `docs/permit-mcp-gateway/quickstart.mdx` | 10 | 19 |
 | `docs/quick-start/aspnet.mdx` | 8 | 18 |
-| `docs/quick-start/django.mdx` | 7 | 18 |
+| `docs/quick-start/django.mdx` | 7 | 16 |
 | `docs/quick-start/express.mdx` | 11 | 19 |
-| `docs/quick-start/fastapi.mdx` | 11 | 19 |
-| `docs/quick-start/flask.mdx` | 11 | 19 |
+| `docs/quick-start/fastapi.mdx` | 11 | 18 |
+| `docs/quick-start/flask.mdx` | 11 | 18 |
 | `docs/quick-start/gin.mdx` | 10 | 19 |
-| `docs/quick-start/nest.mdx` | 10 | 19 |
-| `docs/quick-start/nextjs.mdx` | 10 | 18 |
+| `docs/quick-start/nest.mdx` | 10 | 18 |
+| `docs/quick-start/nextjs.mdx` | 10 | 17 |
 | `docs/quick-start/rails.mdx` | 10 | 18 |
-| `docs/quick-start/spring-boot.mdx` | 11 | 19 |
+| `docs/quick-start/spring-boot.mdx` | 11 | 18 |
 | `docs/quickstart.mdx` | 16 | 18 |
 | `docs/sdk/cpp/quickstart-cpp.mdx` | 7 | 17 |
-| `docs/sdk/dotnet/quickstart-dotnet.mdx` | 10 | 19 |
+| `docs/sdk/dotnet/quickstart-dotnet.mdx` | 10 | 16 |
 | `docs/sdk/dotnet/role/AssignRole.mdx` | 11 | 19 |
 | `docs/sdk/dotnet/role/CreateRole.mdx` | 10 | 19 |
-| `docs/sdk/dotnet/role/GetRole.mdx` | 11 | 19 |
+| `docs/sdk/dotnet/role/GetRole.mdx` | 11 | 18 |
 | `docs/sdk/dotnet/role/ListAssignedRoles.mdx` | 10 | 19 |
 | `docs/sdk/dotnet/role/ListRoles.mdx` | 11 | 19 |
 | `docs/sdk/dotnet/role/UnassignRole.mdx` | 11 | 19 |
@@ -389,94 +399,94 @@ Dimension keys: **Aud** audience fit, **Task** task success, **Type** content ty
 | `docs/sdk/dotnet/user/CreateUser.mdx` | 11 | 19 |
 | `docs/sdk/dotnet/user/DeleteUser.mdx` | 11 | 19 |
 | `docs/sdk/dotnet/user/GetUser.mdx` | 11 | 19 |
-| `docs/sdk/dotnet/user/SyncUser.mdx` | 11 | 19 |
-| `docs/sdk/erlang/quickstart-erlang.mdx` | 7 | 16 |
-| `docs/sdk/golang/quickstart-golang.mdx` | 9 | 19 |
-| `docs/sdk/golang/resource/Create.mdx` | 10 | 19 |
+| `docs/sdk/dotnet/user/SyncUser.mdx` | 11 | 18 |
+| `docs/sdk/erlang/quickstart-erlang.mdx` | 7 | 18 |
+| `docs/sdk/golang/quickstart-golang.mdx` | 9 | 16 |
+| `docs/sdk/golang/resource/Create.mdx` | 10 | 18 |
 | `docs/sdk/golang/resource/Delete.mdx` | 10 | 19 |
-| `docs/sdk/golang/resource/Update.mdx` | 10 | 19 |
-| `docs/sdk/golang/role/Create.mdx` | 9 | 19 |
+| `docs/sdk/golang/resource/Update.mdx` | 10 | 18 |
+| `docs/sdk/golang/role/Create.mdx` | 9 | 18 |
 | `docs/sdk/golang/role/Delete.mdx` | 10 | 19 |
-| `docs/sdk/golang/role/Get.mdx` | 10 | 19 |
-| `docs/sdk/golang/role/Update.mdx` | 8 | 19 |
-| `docs/sdk/golang/tenant/Create.mdx` | 10 | 19 |
+| `docs/sdk/golang/role/Get.mdx` | 10 | 18 |
+| `docs/sdk/golang/role/Update.mdx` | 8 | 18 |
+| `docs/sdk/golang/tenant/Create.mdx` | 10 | 18 |
 | `docs/sdk/golang/tenant/Delete.mdx` | 11 | 19 |
-| `docs/sdk/golang/tenant/Get.mdx` | 10 | 19 |
+| `docs/sdk/golang/tenant/Get.mdx` | 10 | 18 |
 | `docs/sdk/golang/tenant/List.mdx` | 10 | 19 |
 | `docs/sdk/golang/tenant/Update.mdx` | 10 | 19 |
 | `docs/sdk/golang/user/AssignResourceRole.mdx` | 11 | 19 |
 | `docs/sdk/golang/user/AssignRole.mdx` | 11 | 19 |
-| `docs/sdk/golang/user/Create.mdx` | 10 | 19 |
+| `docs/sdk/golang/user/Create.mdx` | 10 | 18 |
 | `docs/sdk/golang/user/Delete.mdx` | 10 | 19 |
-| `docs/sdk/golang/user/Get.mdx` | 9 | 19 |
+| `docs/sdk/golang/user/Get.mdx` | 9 | 18 |
 | `docs/sdk/golang/user/GetAssignedRoles.mdx` | 9 | 19 |
-| `docs/sdk/golang/user/SyncUser.mdx` | 11 | 19 |
+| `docs/sdk/golang/user/SyncUser.mdx` | 11 | 18 |
 | `docs/sdk/golang/user/UnassignRole.mdx` | 9 | 19 |
-| `docs/sdk/java/quickstart-java.mdx` | 10 | 19 |
-| `docs/sdk/java/resource/create.mdx` | 10 | 19 |
-| `docs/sdk/java/resource/delete.mdx` | 11 | 20 |
-| `docs/sdk/java/resource/get.mdx` | 10 | 19 |
-| `docs/sdk/java/resource/list.mdx` | 11 | 20 |
-| `docs/sdk/java/resource/update.mdx` | 11 | 20 |
-| `docs/sdk/java/role/assign-role.mdx` | 11 | 20 |
-| `docs/sdk/java/role/create.mdx` | 11 | 20 |
-| `docs/sdk/java/role/delete.mdx` | 11 | 20 |
-| `docs/sdk/java/role/get-assigned-roles.mdx` | 11 | 20 |
-| `docs/sdk/java/role/get.mdx` | 10 | 19 |
-| `docs/sdk/java/role/list.mdx` | 11 | 20 |
-| `docs/sdk/java/role/unassign-role.mdx` | 11 | 20 |
-| `docs/sdk/java/role/update.mdx` | 11 | 20 |
-| `docs/sdk/java/tenant/create.mdx` | 11 | 19 |
-| `docs/sdk/java/tenant/delete.mdx` | 11 | 20 |
-| `docs/sdk/java/tenant/get.mdx` | 10 | 19 |
-| `docs/sdk/java/tenant/list.mdx` | 11 | 20 |
-| `docs/sdk/java/tenant/update.mdx` | 11 | 20 |
-| `docs/sdk/java/user/create.mdx` | 10 | 19 |
-| `docs/sdk/java/user/delete.mdx` | 11 | 20 |
-| `docs/sdk/java/user/get.mdx` | 10 | 19 |
-| `docs/sdk/java/user/list.mdx` | 11 | 20 |
-| `docs/sdk/java/user/sync.mdx` | 11 | 20 |
+| `docs/sdk/java/quickstart-java.mdx` | 10 | 18 |
+| `docs/sdk/java/resource/create.mdx` | 10 | 18 |
+| `docs/sdk/java/resource/delete.mdx` | 11 | 18 |
+| `docs/sdk/java/resource/get.mdx` | 10 | 17 |
+| `docs/sdk/java/resource/list.mdx` | 11 | 18 |
+| `docs/sdk/java/resource/update.mdx` | 11 | 18 |
+| `docs/sdk/java/role/assign-role.mdx` | 11 | 18 |
+| `docs/sdk/java/role/create.mdx` | 11 | 19 |
+| `docs/sdk/java/role/delete.mdx` | 11 | 18 |
+| `docs/sdk/java/role/get-assigned-roles.mdx` | 11 | 18 |
+| `docs/sdk/java/role/get.mdx` | 10 | 17 |
+| `docs/sdk/java/role/list.mdx` | 11 | 18 |
+| `docs/sdk/java/role/unassign-role.mdx` | 11 | 18 |
+| `docs/sdk/java/role/update.mdx` | 11 | 18 |
+| `docs/sdk/java/tenant/create.mdx` | 11 | 18 |
+| `docs/sdk/java/tenant/delete.mdx` | 11 | 18 |
+| `docs/sdk/java/tenant/get.mdx` | 10 | 17 |
+| `docs/sdk/java/tenant/list.mdx` | 11 | 18 |
+| `docs/sdk/java/tenant/update.mdx` | 11 | 18 |
+| `docs/sdk/java/user/create.mdx` | 10 | 18 |
+| `docs/sdk/java/user/delete.mdx` | 11 | 19 |
+| `docs/sdk/java/user/get.mdx` | 10 | 17 |
+| `docs/sdk/java/user/list.mdx` | 11 | 18 |
+| `docs/sdk/java/user/sync.mdx` | 11 | 19 |
 | `docs/sdk/kotlin/quickstart-kotlin.mdx` | 7 | 17 |
 | `docs/sdk/nodejs/all-tenants.mdx` | 7 | 17 |
-| `docs/sdk/nodejs/bulk-requests-examples.mdx` | 7 | 18 |
-| `docs/sdk/nodejs/quickstart-nodejs.mdx` | 8 | 18 |
+| `docs/sdk/nodejs/bulk-requests-examples.mdx` | 7 | 17 |
+| `docs/sdk/nodejs/quickstart-nodejs.mdx` | 8 | 17 |
 | `docs/sdk/nodejs/relationship-tuple/list-relationship-tuples.mdx` | 9 | 19 |
 | `docs/sdk/nodejs/resource-instance/list-resource-instances.mdx` | 10 | 19 |
-| `docs/sdk/nodejs/resource/create-resource.mdx` | 9 | 19 |
-| `docs/sdk/nodejs/resource/delete-resource.mdx` | 11 | 19 |
-| `docs/sdk/nodejs/resource/update-resource.mdx` | 9 | 19 |
-| `docs/sdk/nodejs/role/assign-role.mdx` | 9 | 19 |
-| `docs/sdk/nodejs/role/create-role.mdx` | 9 | 19 |
-| `docs/sdk/nodejs/role/delete-role.mdx` | 11 | 19 |
-| `docs/sdk/nodejs/role/get-assigned-roles.mdx` | 11 | 19 |
-| `docs/sdk/nodejs/role/get-role.mdx` | 11 | 19 |
-| `docs/sdk/nodejs/role/unassign-role.mdx` | 9 | 19 |
-| `docs/sdk/nodejs/role/update-role.mdx` | 9 | 19 |
-| `docs/sdk/nodejs/sync-policy-script/sync-policy.mdx` | 10 | 18 |
-| `docs/sdk/nodejs/tenant/create-tenant.mdx` | 9 | 19 |
-| `docs/sdk/nodejs/tenant/delete-tenant.mdx` | 11 | 19 |
-| `docs/sdk/nodejs/tenant/get-tenant.mdx` | 11 | 19 |
+| `docs/sdk/nodejs/resource/create-resource.mdx` | 9 | 18 |
+| `docs/sdk/nodejs/resource/delete-resource.mdx` | 11 | 18 |
+| `docs/sdk/nodejs/resource/update-resource.mdx` | 9 | 17 |
+| `docs/sdk/nodejs/role/assign-role.mdx` | 9 | 18 |
+| `docs/sdk/nodejs/role/create-role.mdx` | 9 | 18 |
+| `docs/sdk/nodejs/role/delete-role.mdx` | 11 | 18 |
+| `docs/sdk/nodejs/role/get-assigned-roles.mdx` | 11 | 18 |
+| `docs/sdk/nodejs/role/get-role.mdx` | 11 | 18 |
+| `docs/sdk/nodejs/role/unassign-role.mdx` | 9 | 18 |
+| `docs/sdk/nodejs/role/update-role.mdx` | 9 | 17 |
+| `docs/sdk/nodejs/sync-policy-script/sync-policy.mdx` | 10 | 16 |
+| `docs/sdk/nodejs/tenant/create-tenant.mdx` | 9 | 18 |
+| `docs/sdk/nodejs/tenant/delete-tenant.mdx` | 11 | 18 |
+| `docs/sdk/nodejs/tenant/get-tenant.mdx` | 11 | 18 |
 | `docs/sdk/nodejs/tenant/list-all-tenant-users.mdx` | 11 | 19 |
 | `docs/sdk/nodejs/tenant/list-tenants.mdx` | 10 | 19 |
-| `docs/sdk/nodejs/tenant/update-tenant.mdx` | 9 | 19 |
-| `docs/sdk/nodejs/user/create-user.mdx` | 11 | 19 |
-| `docs/sdk/nodejs/user/delete-user.mdx` | 11 | 19 |
-| `docs/sdk/nodejs/user/get-user.mdx` | 10 | 19 |
+| `docs/sdk/nodejs/tenant/update-tenant.mdx` | 9 | 18 |
+| `docs/sdk/nodejs/user/create-user.mdx` | 11 | 18 |
+| `docs/sdk/nodejs/user/delete-user.mdx` | 11 | 18 |
+| `docs/sdk/nodejs/user/get-user.mdx` | 10 | 18 |
 | `docs/sdk/nodejs/user/list-users.mdx` | 10 | 19 |
-| `docs/sdk/nodejs/user/sync-user.mdx` | 10 | 19 |
+| `docs/sdk/nodejs/user/sync-user.mdx` | 10 | 18 |
 | `docs/sdk/permit-prisma-extension.mdx` | 12 | 18 |
-| `docs/sdk/php/quickstart-php.mdx` | 9 | 18 |
-| `docs/sdk/python/quickstart-python.mdx` | 10 | 19 |
-| `docs/sdk/python/quickstart_python_sync.mdx` | 8 | 18 |
+| `docs/sdk/php/quickstart-php.mdx` | 9 | 19 |
+| `docs/sdk/python/quickstart-python.mdx` | 10 | 14 |
+| `docs/sdk/python/quickstart_python_sync.mdx` | 8 | 13 |
 | `docs/sdk/python/sync-policy-script/sync-policy.mdx` | 9 | 18 |
-| `docs/sdk/python/usage-example.mdx` | 12 | 18 |
-| `docs/sdk/ruby/quickstart-ruby.mdx` | 10 | 18 |
-| `docs/sdk/ruby/user/sync_user.mdx` | 9 | 19 |
-| `docs/sdk/sdks-overview.mdx` | 8 | 18 |
-| `docs/status.mdx` | 6 | 18 |
-| `docs/updates-and-feedback/changelog.mdx` | 6 | 17 |
-| `docs/updates-and-feedback/feature-requests.mdx` | 6 | 18 |
-| `docs/updates-and-feedback/roadmap.mdx` | 6 | 18 |
+| `docs/sdk/python/usage-example.mdx` | 12 | 17 |
+| `docs/sdk/ruby/quickstart-ruby.mdx` | 10 | 14 |
+| `docs/sdk/ruby/user/sync_user.mdx` | 9 | 18 |
+| `docs/sdk/sdks-overview.mdx` | 8 | 16 |
+| `docs/status.mdx` | 6 | 17 |
+| `docs/updates-and-feedback/changelog.mdx` | 6 | 15 |
+| `docs/updates-and-feedback/feature-requests.mdx` | 6 | 16 |
+| `docs/updates-and-feedback/roadmap.mdx` | 6 | 16 |
 
 ## Cross-page findings
 
@@ -536,6 +546,53 @@ These problems span several pages. Fix them in batches, not page by page.
 ## Full claims log
 
 Every claim that the rewrite removed, changed, or kept without verification, with the reason. Entries are grouped by rewrite batch.
+
+### Batch nexus (`runbooks/edge-pdp-staging-enablement.md` and related pages)
+
+Source used for Nexus PDP: permitio/cloud-pdp `edge-pdp/` (README, Dockerfile, src/config.rs, health.rs, servers/, supervisor/, dataplane/), `cloud-pdp-core/src/{config.rs,routes/}`, `surrealdb-wrapper/src/config.rs`, runbook `docs/runbooks/edge-pdp-staging-enablement.md`; permitio/next-website `app/nexus-pdp/page.tsx` (early access, 4 GiB, probes, grace period). Container PDP / AuthZen / cache: permitio/PDP `pdp-server/src/`. Note: the Nexus PDP source lives in permitio/cloud-pdp, not permitio/PDP.
+
+#### Removed or corrected
+
+- `docs/concepts/pdp/nexus-pdp-deployment.mdx`: "Credentials never reach the child processes." (reason: contradicts source. `edge-pdp/src/supervisor/opa.rs` `build_command` re-adds `PDP_API_KEY` to the OPA child's environment so OPA can authenticate to the query loopback; only the NATS leaf lacks it. Rewritten to say that.)
+- `docs/concepts/pdp/nexus-pdp-deployment.mdx`: "no ability to reach Permit's management API" for a compromised PDP (reason: could not verify what the `PDP_API_KEY` bundle can do against api.permit.io; the binary lacks a client, but a stolen key is not bound by the binary. Kept only "holds one environment's data and credentials".)
+- `docs/concepts/pdp/nexus-pdp-deployment.mdx`: "the container is killed mid-flush and the durable event store is corrupted, forcing a cold start on the next boot" (reason: source says only that SIGKILL can hit the leaf mid-flush (`config.rs` drain_timeout doc); corruption and forced cold start not verified. Softened to "killed before its event store finishes flushing".)
+- `docs/concepts/pdp/nexus-pdp-deployment.mdx`: "Cold start can take minutes" / "minutes of startup" (reason: no published figure; staging note in config.rs shows ~17 s for 306 MB. Replaced with "takes longer as your data grows".)
+- `docs/concepts/pdp/nexus-pdp-how-it-works.mdx`: "Bulk-loading pre-built database files is substantially faster than the container PDP's cold start" (reason: could not verify; no comparative measurement.)
+- `docs/concepts/pdp/nexus-pdp-how-it-works.mdx`: "Nothing is dropped, and nothing is trimmed before every PDP that needs it has confirmed it" (reason: contradicts the gap detector, which exists because the stream can drop changes a lagging PDP has not acknowledged. Rewritten: retained until acknowledged, and a PDP behind the oldest retained change rebuilds from a snapshot.)
+- `docs/concepts/pdp/nexus-pdp-how-it-works.mdx`: "Interest is held by the subscription's existence, not by an open connection; a PDP that is disconnected for minutes resumes exactly where it left off" (reason: "minutes" unverified retention bound; kept "resumes from its last acknowledged position".)
+- `docs/concepts/pdp/nexus-pdp-how-it-works.mdx`: "Permit currently sizes it at 4 GiB" reworded to "Start with 4 GiB" (source: next-website page "about 4 GiB of memory to start").
+- `docs/concepts/pdp/nexus-pdp-feature-parity.mdx`: "OpenTelemetry (OTLP traces, metrics, logs) | ❌ | 🚧 On the roadmap" row and legend (reason: roadmap claim; STYLE_GUIDE forbids planned features.)
+- `docs/concepts/pdp/nexus-pdp-feature-parity.mdx` and nexus-pdp.mdx: "We ship new capabilities to Nexus PDP continually, and this page is updated as they land" / "Feature parity ... is in progress and ships continually" (reason: roadmap/dated wording. Replaced with a dated "as of September 2026" note.)
+- `docs/concepts/pdp/nexus-pdp.mdx`: "ground-up rewrite of the PDP runtime" (reason: marketing framing; source shows Nexus composes cloud-pdp libraries, not a rewrite of pdp-v2.)
+- `docs/concepts/pdp/nexus-pdp.mdx`, overview.mdx, configuration, how-it-works: "Contact us / talk to us / tell us" mailto links for access and latency validation replaced with https://www.permit.io/demo (sales intent per STYLE_GUIDE). Configuration keeps support@permit.io for variable-dependency reports.
+- `docs/concepts/pdp/nexus-pdp-configuration.mdx`: "there is no `PDP_CONTROL_PLANE` value to configure" (reason: contradicts source. `edge-pdp/src/config.rs` reads `PDP_CONTROL_PLANE` as an override of the API key's NATS URL. Rewritten: leave it unset unless Permit support asks.)
+- `docs/concepts/pdp/nexus-pdp-configuration.mdx`: `PDP_DEBUG` default "`false`" and "Include debug detail in authorization responses" (reason: source `cloud-pdp-core/src/config.rs` is `Option<bool>` with no default, documented as "extra logging/debug information in OPA requests". Changed to "Unset (off)" and "adds debug information to policy evaluation requests".)
+- `docs/concepts/pdp/nexus-pdp-architecture.mdx`: "cannot reach `api.permit.io` for a decision even if it wanted to" (reason: tone; replaced with the verified fact that the binary has no Permit API client, per `edge-pdp/README.md`.)
+- `docs/concepts/pdp/overview.mdx`: "Custom cloud PDP deployments are available to enterprise tier customers" (reason: plan-tier claim not verifiable. Kept a contact path without the tier; also removed the personal-style calendly link.)
+- `docs/concepts/pdp/overview.mdx`: "All policy changes made through the Permit dashboard or API are immediately available through the AuthZen endpoints" (reason: "immediately" contradicts propagation delay; rewritten to "after the change reaches the PDP".)
+- `docs/concepts/pdp/overview.mdx`: OPAL "without having to be dependant on the availability of the Permit.io cloud, or sharing any data with it" (reason: "not sharing any data" contradicts decision logs and Permit-hosted policy data; removed.)
+- `docs/concepts/pdp/overview.mdx`: "caching significantly improves performance" (reason: unquantified; replaced with the mechanism.)
+- `docs/concepts/pdp/overview.mdx`: AuthZen response examples `{"subjects": ...}`, `{"resources": ...}`, `{"actions": ...}` (reason: contradicts permitio/PDP `search_*.rs`, which return `results` plus `page`. Prose corrected.)
+- `docs/concepts/pdp/nexus-pdp.mdx`: long verbatim blockquote from OPA's Policy Performance docs replaced with a paraphrase and link (copyright; claim itself kept).
+
+#### Kept, verified against source (for the reviewer)
+
+- Nine readiness-gating components (`edge-pdp/src/health.rs` `GATING`); `/health`, `/health/ready`, `/health/detail` on 7001 (`servers/management.rs`); `/health` and `/healthy` on 7000 (`cloud-pdp-core/src/routes/mod.rs`); public port opens only when ready (README).
+- Ports 7000-7003, 8181, 4222, 8222 and defaults of `EDGE_*`, `OPA_TIMEOUT_MS` (800), `EDGE_PARALLELISM` (4), `EDGE_DECISION_LOG_OPT_OUT` (off-only), drain 10 s + child termination 30 s (`config.rs`, `cloud-pdp-core/src/config.rs`); `RUST_LOG` default info (`lib.rs default_env_filter`).
+- `SURREAL_ROCKSDB_*` defaults 512 MiB / 256 MiB / 32 / 4 (`surrealdb-wrapper/src/config.rs`, mirroring surrealdb-core).
+- Constant-time bearer check against own key, no Permit API client compiled in, foreign-environment keys rejected (README, runbook).
+- env_clear for children, 0600 credential files with O_NOFOLLOW (`supervisor/mod.rs`); UID/GID 10001 (Dockerfile); image `permitio/pdp-v3` public (runbook).
+- Snapshot SHA-256 verification and fail-closed (`dataplane/snap_reader.rs`); rebuild in side directory with atomic swap and serve-stale (README); readiness does not gate on lag (README).
+- Four planes WAL / POLICY_FILES / POLICY_DATA (schema) / SNAP (`config.rs`).
+- Nexus PDP endpoints: `/allowed`, `/allowed/bulk`, `/authorized_users`, `/user-permissions`, AuthZen routes and discovery; no `/allowed/all-tenants`, `/allowed_url`, `/local/*`, `/metrics` (`cloud-pdp-core/src/routes/`).
+- Early access, enabled per account, 4 GiB to start, probes on 7001, grace period 40 s (permitio/next-website `app/nexus-pdp/page.tsx`).
+- Container PDP cache: in-memory or Redis, off by default (`PDP_CACHE_STORE` default `none`), cached handlers for allowed, bulk, user-permissions, authorized_users (permitio/PDP `pdp-server/src/config/cache.rs`, `opa_client/cached.rs`); `/healthy` on the container PDP (`api/health/handlers.rs`); AuthZen `tenant` read from `resource.properties` (`authzen/schema.rs`).
+
+#### Unverified, kept (low risk, flag to owner)
+
+- `docs/concepts/pdp/nexus-pdp-feature-parity.mdx`: "A check against a policy that uses condition sets, user sets, or resource sets returns a deny on Nexus PDP, not an error." Consistent with the ABAC design spec in permitio/cloud-pdp (stub `check/abac.rego` defaults to false) but not confirmed by a test.
+- `docs/concepts/pdp/nexus-pdp-how-it-works.mdx`: last-writer-wins by (timestamp, transaction ID) with per-transaction atomicity. Referenced as "the ordinary LWW guard" in the cloud-pdp ABAC spec; write-service source not read.
+- `docs/concepts/pdp/nexus-pdp-feature-parity.mdx`: "Kong and NGINX integrations" supported on the container PDP (pre-existing row, not re-verified).
 
 ### Batch u1 (`how-to/enforce-permissions` and related pages)
 
@@ -1500,356 +1557,356 @@ Sources checked: permitio/agent-security repo (consent-service, platform, gatewa
 
 | Page | Audience | Type | Aud | Task | Type | Acc | Str | Ex | Term | AI | Mnt | Sty | Total | Before | Top issues |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `docs/ai-security/access-request-mcp/food-ordering-demo-example.mdx` | AI agent builder | tutorial | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | 2 | **18** | 5 | pending code fix (collapsed Python whitespace, missing State and resume code, websocket function_response bug, retired Gemini models); long page; screenshots 1-2 show child-can-order; LangGraph and FastAPI parts use different test data |
-| `docs/ai-security/access-request-mcp/implementation-guide.mdx` | implementer | mixed | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 7 | pending code fix (env block tags, List import); Claude Desktop tool list wording not verified in UI |
-| `docs/ai-security/access-request-mcp/overview.mdx` | decision maker | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | no request/approve diagram (no new media allowed); examples are flow steps only |
-| `docs/ai-security/framework.mdx` | decision maker | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | explanation page with no code by design; alt text for 2.png and 4.png is generic |
-| `docs/ai-security/integrations/langchain.mdx` | AI agent builder | tutorial | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 8 | PermitEnsembleRetriever drops document key and attributes (library bug) so PublicDocs filtering cannot work; pyproject/.env/retriever kwargs pending code fix; JWT minting delegated to langchain-permit README |
-| `docs/ai-security/integrations/langflow.mdx` | AI agent builder | tutorial | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 5 | Permit components install delegated to repo and Langflow custom-components docs; Data Protection/Filter Data response behavior unverified; CopyEdit docker block, resource.class condition, launch commands pending code fix; permit-langflow pins langflow 1.1.4 |
-| `docs/ai-security/integrations/mongodb-rag.mdx` | AI agent builder | tutorial | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | 2 | **18** | 7 | manual dashboard and script sections are long and duplicate blocks that must stay byte-identical; script paths, PDP URL, requirements file, entity-escaped URI pending code fix |
-| `docs/ai-security/integrations/openai-prompt-filtering.mdx` | AI agent builder | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 6 | classify() outline gap, callable-constructor block and invalid output literal pending code fix; image alt text for 3-5.png not checked against images |
-| `docs/ai-security/integrations/pydantic-ai.mdx` | AI agent builder | tutorial | 2 | 1 | 2 | 2 | 1 | 2 | 1 | 2 | 1 | 2 | **16** | 6 | many code blocks disagree with example/config.py (attributes, conditions, users, clone path) and prose explains each mismatch pending code fix; pydantic-ai result_type API volatile |
-| `docs/api/api-reference.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 13 | no request example on page itself (links to Calling the API) |
-| `docs/api/api-with-cli.mdx` | implementer | mixed | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | **19** | 10 | rate-limit numbers removed pending owner confirmation; node code tag pending code fix |
-| `docs/api/background-tasks.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | wait curl backtick, missing Content-Type, status failed vs failure, truncated support_link: pending code fix |
-| `docs/api/elements/access-request-api.mdx` | implementer | reference | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **17** | 7 | short delta page with no runnable sample (proposed block in codefix); elements_config_id meaning unverified |
-| `docs/api/elements/access-requests.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 6 | pending code fix (curls, headers as filters, response field names/status values, loginAs tenantId); cookie auth vs spec bearer unverified; repeated response JSON |
-| `docs/api/elements/operation_approval.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 6 | pending code fix (curls, element_id header, maya@permit.io, loginAs tenantId); login section duplicates access-requests page |
-| `docs/api/elements/overview.mdx` | implementer | landing | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 8 | pending code fix (trailing backslash); origin header unexplained |
-| `docs/api/examples/autopopulate-actions.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 12 | curl keeps browser authority/origin headers and :param placeholders (optional code fix logged); PATCH merge behavior of settings not documented |
-| `docs/api/examples/create-tenant.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 12 | pending code fix: create curl missing continuation and Content-Type; fence of last JSON block fixed (codeguard DIFF expected) |
-| `docs/api/examples/filter-relationship-tuple.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 12 | sample IDs and dates in JSON responses |
-| `docs/api/examples/filter-role-associations.mdx` | implementer | reference | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **19** | 12 | role-attribute filtering of roles (schema API) kept on the page for linked anchor |
-| `docs/api/examples/filter-users.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 12 | role sample keeps a commented-out curl; test@gmail.com in sample (code fix logged) |
-| `docs/api/examples/get-project-and-env.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 12 | pending code fix: list responses shown as single objects with trailing commas |
-| `docs/api/examples/list-user-permissions.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | pending code fix: first request missing curl; manual method is top-level roles only (points to getUserPermissions) |
-| `docs/api/pdp-api-reference.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 12 | no example request; short reference by design |
-| `docs/api/pdp-statistics.mdx` | operator | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | untagged code blocks with tab indentation pending code fix |
-| `docs/api/pdp-webhooks.mdx` | operator | how-to | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | **19** | 10 | webhooks endpoint not in public OpenAPI spec (exists per 401 probe); curl /webooks + continuation + payload trailing comma pending code fix; min PDP version removed |
-| `docs/api/rbac/disable-rebac-to-increase-performance.mdx` | operator | how-to | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | **19** | 12 | PDP restart requirement unverified; rebac_disabled not in OpenAPI spec (confirmed in backend source) |
-| `docs/api/rbac/rbac-example.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 4 | pending code fix (double commas, missing curl, content type) |
-| `docs/api/rebac/groups/groups-ui.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 9 | 7 screenshots of volatile UI; UI labels not verifiable from source |
-| `docs/api/rebac/groups/groups.mdx` | implementer | mixed | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | **19** | 5 | several curl samples broken (curly quote, unquoted key, blank lines, wrong paths, env role vs resource role, tenants): pending code fix; relation names removed |
-| `docs/api/rebac/rebac-api-calls.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 11 | no response body examples; Python tab only for relations |
-| `docs/api/v2-migration-guide.mdx` | maintainer | mixed | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 8 | compat env/project names chosen from code sample (v1_global_project/v2_global_env) need owner confirmation; mixed explanation and how-to; v1 page ages |
-| `docs/api/working-with-abac/building-conditions.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | **19** | 7 | pending code fix (True, trailing commas, not as array); subject./environment. prefixes may fail policy generation (see claims) |
-| `docs/api/working-with-abac/condition-set-rules.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 6 | pending code fix (permissions array to permission string); endpoint shown in prose, no curl |
-| `docs/api/working-with-abac/condition-sets.mdx` | implementer | mixed | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 7 | pending code fix (private_repositories key, equals with arrays, resource_id); no full curl |
-| `docs/api/working-with-abac/examples.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | 2 | 2 | **18** | 6 | pending code fix (not with array, string operand, permissions field); key names mention Stanford while policy does not model the university |
-| `docs/api/working-with-abac/operators.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | pending code fix (untagged blocks, missing commas); long page |
-| `docs/api/working-with-abac/overview.mdx` | implementer | landing | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 3 | landing page has no request example; links to child pages carry the samples |
-| `docs/authentication/auth0/auth0-demo-app.mdx` | implementer | mixed | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 8 | pending code fix (env var name, cd before checkout); Auth0 dashboard steps volatile |
-| `docs/authentication/auth0/auth0-sync-script.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | pending code fix (family_name field, cd auth0); Auth0 dashboard labels volatile |
-| `docs/authentication/auth0/permit-integration.mdx` | implementer | mixed | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 6 | pending code fix (assignRole block, await, userObj); Auth0 Action UI steps volatile |
-| `docs/authentication/cognito/cognito-demo-app.mdx` | implementer | mixed | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 8 | demo repo sync route broken (workaround documented); pending code fix (env names, payload scope) |
-| `docs/authentication/cognito/permit-integration.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | pending code fix (placeholders, verifier, scope, await) |
-| `docs/authentication/fusionauth.mdx` | implementer | landing | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 4 | personal repo on 2022 SDK with committed secrets; not runnable as-is (owner review) |
-| `docs/authentication/hankopermit.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 6 | pending code fix (clone URL, PDP URL, Permit init); 14 screenshots to maintain |
-| `docs/authentication/logto.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | pending code fix (angle-bracket URLs, SSR snippet); Logto Console labels volatile |
-| `docs/authentication/permit-and-authentication.mdx` | decision maker | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 8 | no code examples by design (explanation page links to how-tos) |
-| `docs/authentication/stytch/permit-integration.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 6 | pending code fix (browser SDK, env prefix, undefined vars); userEmail source unconfirmed |
-| `docs/authentication/supertokens.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 4 | personal 2022 repo on SDK 0.0.5, verify steps not run; pending code fix (pdp-v2 image, lang tags) |
-| `docs/authentication/your-authentication.mdx` | implementer | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 8 | handoff steps link to SDK reference instead of inline code |
-| `docs/concepts/control-plane-and-data-plane.mdx` | new user | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 14 | no code or verify step (explanation page); relies on HybridDeploymentDiagram component added |
-| `docs/concepts/deployment-options.mdx` | decision maker | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 14 | no docs page for light on-prem setup (support email only); diagrams are SVG images, not coded components |
-| `docs/concepts/differentiator-checklist.mdx` | decision maker | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 13 | performance figures and compliance claims need owner upkeep; no examples (checklist) |
-| `docs/concepts/multi-tenant-authorization.mdx` | implementer | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 10 | check snippet is a fragment without client setup; UI tenant creation steps delegated to Sync users |
-| `docs/concepts/oss-fallback.mdx` | decision maker | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 9 | migration steps are high-level with no runnable examples; SDK adaptation path not documented |
-| `docs/concepts/pdp/cloud-pdp-benchmarks.mdx` | operator | reference | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 14 | no load-test harness or payload to reproduce; October 2025 snapshot will age |
-| `docs/concepts/pdp/cloud-pdp-capabilities.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 11 | rate limits and support matrix are volatile; no curl example; overview.mdx AuthZen samples still use /v1/access paths (not this file) |
-| `docs/concepts/pdp/configuration.mdx` | operator | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 12 | pending code fix (JSON sample with comments); 'Added in vX' notes and pre-0.9 settings not verifiable from source |
-| `docs/embeddable-uis/element-login.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 7 | pending code fix (Node/Python/.NET init, C# and Java loginAs samples, cookie quote, Python cookie GET, TS annotations in js blocks); element_bearer_token and permit-js 0.5.2 floor unverified |
-| `docs/embeddable-uis/element/access-request.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 8 | screenshot-heavy steps; tenant warning consequence vague |
-| `docs/embeddable-uis/element/approval-management.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 8 | whether iframe takes tenantKey unverified; role key case (_Reviewer_ vs _reviewer_) |
-| `docs/embeddable-uis/element/audit-logs.mdx` | admin | landing | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 7 | no iframe example; embed steps generalized from other element pages |
-| `docs/embeddable-uis/element/operation-approval.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 8 | no SDK/API example for assigning the reviewer resource role; role key case unconfirmed; two near-duplicate iframe blocks |
-| `docs/embeddable-uis/element/user-management.mdx` | admin | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 7 | explanation page with no code by design; embedding steps live on embedding-elements |
-| `docs/embeddable-uis/email-configuration-and-templates.mdx` | admin | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | pending code fix (Python sample indentation, top-level await); SMTP field names not listed |
-| `docs/embeddable-uis/embedding-elements.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | pending code fix (TS annotations in js block); dashboard click path volatile |
-| `docs/embeddable-uis/overview.mdx` | new user | landing | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 11 | no code by design (landing page); ElementTile descriptions kept from original |
-| `docs/embeddable-uis/permission-levels.mdx` | admin | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | which element types use fewer levels unverified; UI labels volatile |
-| `docs/embeddable-uis/troubleshooting.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | **19** | 11 | screenshot alt text written from headings; /login_elements request for frontendOnly unverified |
-| `docs/embeddable-uis/user-preview.mdx` | admin | how-to | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | tenant dropdown visibility note unverified; short page |
-| `docs/embeddable-uis/webhooks.mdx` | implementer | mixed | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 7 | which invite flow is default and how it is chosen unknown; Authorization header format inferred; schemas are pseudo-Python, no handler example |
-| `docs/faq.mdx` | new user | reference | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | community Q&A section is explanation inside a FAQ; AWS Marketplace URL carries tracking params; Slack link uses docs-to-slack (see claims) |
-| `docs/getting-started/ai-support.mdx` | new user | how-to | 1 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 18 | names vendor Inkeep and screenshots volatile UI; Slack link io.permit.io/slack while slack-support page uses docs-to-slack; intro does not name who the page is for |
-| `docs/getting-started/slack-support.mdx` | new user | how-to | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 11 | /permit-escalate plan gating and private-channel restriction only partly verifiable (pricing page lists dedicated Slack for Pro/Enterprise); AI agent handle volatile |
-| `docs/home.mdx` | new user | landing | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | **16** | 16 | all content lives in imported components (content.js), not visible or retrievable from the page source; card links not verifiable from MDX; no plain-text next steps outside components |
-| `docs/how-to/SDLC/CI-CD.mdx` | operator | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 8 | no runnable pipeline example; relies on linked copy-env and CLI pages for request bodies |
-| `docs/how-to/SDLC/authz-testing.mdx` | operator | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 8 | no inline test code (code-block rule); commands and generated tests live on linked CLI pages |
-| `docs/how-to/SDLC/modeling-implementation-components.mdx` | decision maker | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | **18** | 8 | 'data plane' name kept from diagram with disambiguation note; conceptual page without examples |
-| `docs/how-to/build-policies/abac/building-abac-policy.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 8 | user-set screenshot shows tenant.* conditions and set names differ slightly across screenshots; check shown as inline call |
-| `docs/how-to/build-policies/abac/components.mdx` | new user | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 12 | conceptual examples only |
-| `docs/how-to/build-policies/abac/defining-attributes.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 9 | curl uses API_SECRET_KEY placeholder (explained in prose) |
-| `docs/how-to/build-policies/abac/overview.mdx` | new user | landing | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 11 | none |
-| `docs/how-to/build-policies/abac/patterns.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 7 | resource_ownership screenshot names attribute owner while code uses owners; local PDP command pins :latest |
-| `docs/how-to/build-policies/abac/time-based-role.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 11 | pending code fix: check uses type _internal_api; tenant JSON lacks required name; tenant key attribute semantics unverified |
-| `docs/how-to/build-policies/overview.mdx` | decision maker | explanation | 1 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 18 | intro does not name the reader; Policy Editor screenshots will drift; Rego sample uses pre-v1 rule syntax without note |
-| `docs/how-to/build-policies/policy-basics.mdx` | new user | mixed | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 5 | concept page with UI videos; videos and screenshots add maintenance risk; no code example (links to check page) |
-| `docs/how-to/build-policies/rbac/building-rbac-policy.mdx` | new user | tutorial | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 8 | verify step uses inline permit.check call, no full code block; screenshot of nav shows old Users label |
-| `docs/how-to/build-policies/rbac/components.mdx` | new user | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | permission table example only, no code |
-| `docs/how-to/build-policies/rbac/overview.mdx` | new user | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | no code; relies on arcade embed for demo |
-| `docs/how-to/build-policies/rebac/building-rebac-policies.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 5 | videos and screenshots need upkeep; check examples use inline results rather than full SDK setup |
-| `docs/how-to/build-policies/rebac/overview.mdx` | new user | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | prose policies still wrapped in untagged code fences (kept byte-identical) |
-| `docs/how-to/bulk-operations.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 8 | curl samples broken (missing line continuations, stray -, extra brace, missing comma, trailing commas): pending code fix; per-call limits come from deployment config and can change |
-| `docs/how-to/deploy/cloud-hosts/aws-ecs-fargate.mdx` | operator | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 8 | no code sample for service networking, console steps depend on AWS UI screenshots; :latest image |
-| `docs/how-to/deploy/cloud-hosts/gcp-cloud-run.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 12 | console screenshots and :latest tag can drift |
-| `docs/how-to/deploy/cloud-hosts/helm.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 12 | chart defaults table can drift from values.yaml |
-| `docs/how-to/deploy/cloud-hosts/kubernetes-raw.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | **19** | 10 | apply and wait commands need -n and permitio-pdp name (pending code fix); prose works around them |
-| `docs/how-to/deploy/cloud-hosts/pulumi.mdx` | operator | how-to | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 10 | external example repo broken (pulumi new in non-empty dir, missing pulumi-kubernetes, dead sidecar helm repo); pending code fix in docs and example repo |
-| `docs/how-to/deploy/cloud-hosts/terraform.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | example repo uses dead sidecar helm repo and helm provider 2.x syntax; workaround in prose, pending code fix |
-| `docs/how-to/deploy/deploy-to-production.mdx` | operator | how-to | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 9 | memory sizing formula (6 KB per object) and starting CPU/memory kept but not verifiable from source; :latest image tag |
-| `docs/how-to/deploy/offline-mode.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 14 | version-gated feature (0.9.11) and backup filenames can drift |
-| `docs/how-to/deploy/on-prem/change-organization-tier.mdx` | admin | how-to | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 12 | manual edit of an internal DB schema will rot if the schema changes; reference sections (field and schema tables) appended to a how-to |
-| `docs/how-to/deploy/on-prem/installation.mdx` | operator | mixed | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 6 | pending code fixes (skip-images and flag-combination commands missing --gke, OpenShift --skip-images needs --skip-openshift-registry, push output, verify-image tag, TLS cert YAML must be base64, Policy Sync secret check, frontend curl); owner must choose between fixing the installer's no-flag path and the --gke doc change; service list needs updates as the chart changes |
-| `docs/how-to/deploy/on-prem/landing.mdx` | decision maker | landing | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | architecture diagram is ASCII art in a code block rather than a coded diagram component |
-| `docs/how-to/deploy/on-prem/management.mdx` | operator | reference | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 9 | pending code fixes (componentstatuses, OpenShift nesting of opensearch block, unread storageClass, policy-sync-ssh-key and postgres-secret commands, curl-based postgres/redis probe, duplicate tar in support bundle); still a long command catalog mixing how-to and reference; '35 services' comments in code |
-| `docs/how-to/deploy/on-prem/pdp-deployment.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 13 | pending code fixes (/allowed payload shape and missing Authorization header, pdp.resources vs resources, pdp.replicaCount vs pdp.replicas, helm upgrade without --reuse-values); chart defaults in the parameter table can change with chart versions |
-| `docs/how-to/deploy/on-prem/prerequisites.mdx` | operator | mixed | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 6 | cluster sizing figures and version minimums (Kubernetes 1.21, OpenShift 4.8, Helm 3.8) kept from the original without a source; storage IOPS recommendations unverified |
-| `docs/how-to/deploy/on-prem/quick-start.mdx` | operator | how-to | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | **19** | 7 | pending code fixes (install commands missing --gke, success output lines, uninstall only removes one of three Helm releases); same no-flag installer decision as installation.mdx |
-| `docs/how-to/deploy/on-prem/reference.mdx` | operator | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 8 | pending code fixes (example values.yaml blocks contain keys the chart doesn't read: backup/restore, autoscaling, pgBouncer, monitoring, policySync.branch/syncInterval, storageClass); hardcoded image tags and sizes in examples (prose defers to package values.yaml, which isn't in a public repo) |
-| `docs/how-to/deploy/on-prem/troubleshooting.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 12 | pending code fixes (frontend port-forward 3000:3000 vs service port 80, ingress name, keycloak-admin-secret/postgres-secret/policy-sync-ssh-key commands that the chart doesn't create) |
-| `docs/how-to/deploy/overview.mdx` | implementer | explanation | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | Cloud PDP hostname and layout guidance may drift |
-| `docs/how-to/enforce-permissions/all-tenants-check.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 11 | pending code fix (Go attribute map type, Java imports, read/create messages); no Node.js tab; tenant-ignored and ReBAC limitation not verified in policy source |
-| `docs/how-to/enforce-permissions/authorized-users.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 8 | pending code fix (invalid Python ABAC, curl context nesting, missing await); Python only, no client init |
-| `docs/how-to/enforce-permissions/bulk-check.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 11 | pending code fix in src/sdks/bulk-check (permit.bulk, Go alias p); use-case snippets lack client init |
-| `docs/how-to/enforce-permissions/check.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | pending code fix (curl -d header, nested context); examples Node.js only with no client init |
-| `docs/how-to/enforce-permissions/data-filtering.mdx` | implementer | explanation | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 7 | comparison section is explanation inside a how-to; single Go sample (empty API key pending code fix); no partial evaluation example |
-| `docs/how-to/enforce-permissions/list-role-assignments.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | pending code fix (import path, user= keyword, semicolon); Python only, no client init or REST example |
-| `docs/how-to/enforce-permissions/url-mapping/configuring-jwks.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 10 | pending code fix (JWKS JSON fragment); steps rely on four dashboard screenshots; dashboard labels not re-verified |
-| `docs/how-to/enforce-permissions/url-mapping/fetching-jwks.mdx` | implementer | explanation | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 8 | mixes JWK explanation with how-to; third-party provider URLs can drift; no copyable fetch example |
-| `docs/how-to/enforce-permissions/url-mapping/regex-url-mapping-check.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 2 | **18** | 9 | pending code fix (check URL does not match rule); long pattern catalog after the task; no SDK example except Java mention |
-| `docs/how-to/enforce-permissions/url-mapping/url-mapping-check.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 9 | rule creation relies on dashboard screenshots; UI field labels not verified; no API example for simple rules on this page |
-| `docs/how-to/enforce-permissions/user-permissions.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 8 | pending code fix (Node/Java filter commas, Java trailing comma, Node init ellipsis); no Python or Go filter example |
-| `docs/how-to/manage-data/loading-data.mdx` | implementer | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | check example uses john@smith.com; video has no text alternative |
-| `docs/how-to/manage-data/local-facts-uploader.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 12 | pending code fix: Node import, Go and Java samples use nonexistent methods, Python top-level await; version minimums volatile |
-| `docs/how-to/manage-data/use-external-data-source.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | pending code fix: scope curl blank lines, OPA auth placeholder, Rego in json block reading unfetched field; OPA auth header requirement unverified |
-| `docs/how-to/monitoring-pdps/monitoring-pdps.mdx` | operator | explanation | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | EAP UI; Data updates column meaning and log-error guidance not verifiable from source |
-| `docs/how-to/ownership.mdx` | implementer | mixed | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 6 | verify steps use inline checks; 11 screenshots mix old and new UI (Resource Instances tab under Policy) |
-| `docs/how-to/permit-cli/permit-cli-api.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 11 | sync user, users list, proxy examples have wrong flags and literal double backslashes (pending code fix) |
-| `docs/how-to/permit-cli/permit-cli-envs.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 12 | create/delete/member examples use camelCase flags and invalid role (pending code fix) |
-| `docs/how-to/permit-cli/permit-cli-gitops.mdx` | implementer | reference | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 7 | create github example lacks permit prefix and passes true (pending code fix); no clone example block |
-| `docs/how-to/permit-cli/permit-cli-pdp.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 12 | multi-letter aliases (-ua, -ra) depend on Commander parsing |
-| `docs/how-to/permit-cli/permit-cli-policy.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 9 | simple example misses continuation and unquoted pipes, openapi example uses --key and a personal repo URL (pending code fix) |
-| `docs/how-to/permit-cli/permit-cli-test.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 12 | run audit examples use angle brackets and camelCase flags (pending code fix); no code-sample example |
-| `docs/how-to/permit-cli/permit-cli.mdx` | new user | landing | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | command index must be updated when CLI commands change |
-| `docs/how-to/policy-guard/policy_guard.mdx` | admin | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | no concrete request example on the page (lives on API page); EAP API surface may change |
-| `docs/how-to/policy-guard/policy_guard_api.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | pending code fix (invalid scope JSON, org_id/proj_id fields, values vs value, trailing comma, missing Content-Type); EAP endpoints |
-| `docs/how-to/sync-users.mdx` | implementer | mixed | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | visible SDK sample is an untagged object with no call (pending code fix); API sample untagged |
-| `docs/how-to/use-audit-logs/audit-log-replay.mdx` | operator | reference | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 8 | example request uses concurrency and string timestamps (pending code fix); concurrency maximum not stated (API spec contradicts itself) |
-| `docs/how-to/use-audit-logs/debug-mode.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | curl enable/disable blocks miss a line continuation (pending code fix) |
-| `docs/how-to/use-audit-logs/errors/cloud_pdp_not_supporting_abac.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 7 | no inline SDK pdp option snippet |
-| `docs/how-to/use-audit-logs/errors/no_matching_resourcesets.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | examples by link only |
-| `docs/how-to/use-audit-logs/errors/no_matching_rules.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | examples by link only |
-| `docs/how-to/use-audit-logs/errors/no_matching_usersets.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | examples by link only |
-| `docs/how-to/use-audit-logs/errors/no_permission.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | examples by link only |
-| `docs/how-to/use-audit-logs/errors/no_role_in_tenant.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | examples by link only |
-| `docs/how-to/use-audit-logs/errors/no_such_action.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | examples by link only |
-| `docs/how-to/use-audit-logs/errors/no_such_resource.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | examples by link only |
-| `docs/how-to/use-audit-logs/errors/no_such_tenant.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | examples by link only |
-| `docs/how-to/use-audit-logs/errors/no_user_roles.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | examples by link only |
-| `docs/how-to/use-audit-logs/errors/user_not_synced.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | examples by link only |
-| `docs/how-to/use-audit-logs/logs-forwarder.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | **18** | 9 | no values-file code sample; verify step for Elasticsearch is generic |
-| `docs/how-to/use-audit-logs/troubleshooting.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | no inline check snippet; relies on linked pages |
-| `docs/how-to/use-audit-logs/types-and-filtering.mdx` | admin | mixed | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 9 | reason sample is a broken JavaScript string (pending code fix); retention period unstated |
-| `docs/integrations/GraphQL/apollo_server.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 10 | pending code fix (isMutation undeclared, null operationName); Apollo Server 3 error response shape not verified |
-| `docs/integrations/GraphQL/overview.mdx` | implementer | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 7 | pending code fix for data-source sample; duplicate plugin samples removed in favor of apollo_server |
-| `docs/integrations/SCIM/EntraID.mdx` | admin | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 12 | 10 Azure UI screenshots to maintain |
-| `docs/integrations/SCIM/OKTA.mdx` | admin | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 10 | integration screenshot shows old permit-scim-okta host; imgur-hosted screenshot; Okta UI labels not re-verified |
-| `docs/integrations/SCIM/SCIM_overview.mdx` | admin | mixed | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 12 | no sample SCIM request/response |
-| `docs/integrations/database-access-control/trino-integration.mdx` | implementer | mixed | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 13 | pending code fix (editor-artifact fence titles, properties tagged yaml, config example filter missing expression, unquoted mask literal); how-to plus long reference on one page; CLI creates trino_view_/trino_procedure_ keys the PDP never checks (not documented, logged) |
-| `docs/integrations/feature-flagging/casl.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 8 | missing comma in ABAC bulk sample, wrong permitState.check args, /api/dashboard vs /api/something (pending code fix) |
-| `docs/integrations/gateways/aws-api-gateway.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | pending code fix (authorizer returns bare bool, reads event action/resource); 6 AWS console screenshots |
-| `docs/integrations/gateways/kong.mdx` | implementer | how-to | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 6 | PDP /kong requires Bearer API key that the Kong OPA plugin cannot send (product issue, flagged in page); pending code fix for U+2060 chars |
-| `docs/integrations/gateways/nginx.mdx` | implementer | how-to | 2 | 0 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **17** | 11 | PDP /nginx_allowed returns 200 for denied checks, is POST-only and needs Bearer key, so auth_request cannot deny (product issue, flagged in page); pending code fix for config |
-| `docs/integrations/gateways/overview.mdx` | decision maker | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 10 | HCL sample has 'doucments' typo in a description string; no end-to-end example (explanation page) |
-| `docs/integrations/gitops/custom_policy.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 6 | final Rego 'package package' and 'import permit.rbac' snippet (pending code fix); untagged blocks; hardcoded 2023 window |
-| `docs/integrations/gitops/github.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 12 | untagged ssh-keygen block and 'step 4' placeholder in curl (pending code fix); whether Permit overwrites edits to top-level root.rego unverified |
-| `docs/integrations/gitops/overview.mdx` | decision maker | explanation | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 9 | none |
-| `docs/integrations/infra-as-code/terraform-provider.mdx` | implementer | mixed | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 12 | resource-role permission prefix, data-source role missing key/name, hardcoded api_key and pinned ~> 0.0.14 (pending code fix); long page mixes how-to and reference |
-| `docs/integrations/permit-mcp/overview.mdx` | AI agent builder | tutorial | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 10 | pending code fix (stray backtick, trailing-comma JSON, pinned preview Gemini model); de-indented server.py fragments explained in prose only; verify flow depends on LLM behavior; overlaps ai-security implementation guide |
-| `docs/integrations/policy-engines/overview.mdx` | decision maker | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 10 | whether the hosted Permit PDP image runs Cedar is unverified (claim avoided); no how-to for selecting an engine |
-| `docs/integrations/workflow-automation/n8n.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 9 | check/user-permissions/authorized-users response samples don't match PDP schemas (pending code fix; prose flags it) |
-| `docs/manage-your-account/creating-environments.mdx` | operator | how-to | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | copy JSON samples missing closing brace and env curls lack Content-Type: pending code fix; dashboard steps rely on video; copied-objects checklist not verified against source |
-| `docs/manage-your-account/permit-logs.mdx` | admin | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 9 | owner-only visibility not verified in source; no request sample for the log APIs; screenshots of volatile UI |
-| `docs/manage-your-account/projects-and-env.mdx` | admin | mixed | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 7 | concept plus dashboard how-to on one page; several steps are video-only; no API sample (links to owner pages) |
-| `docs/manage-your-account/workspace-api.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | endpoint map without request samples (links to API reference and creating-environments) |
-| `docs/manage-your-account/workspace-settings.mdx` | admin | how-to | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 9 | members, API keys, and DPA share one page; create/rotate key steps are video-only; owner-only role details from UI screenshots |
-| `docs/manage-your-account/workspace-usage.mdx` | admin | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | UI location of usage widget is volatile; no API equivalent documented |
-| `docs/modeling/feature-flagging.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | pending code fix (render checks pass user attributes as resource attributes; loader hardcodes attributes); screenshots of volatile UI |
-| `docs/modeling/food-delivery-system-example-using-nuxt.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | pending code fix (Vue if parens); composite AND semantics of RBAC/ReBAC/ABAC and negative tests unverified; UI GIFs volatile |
-| `docs/modeling/google-drive.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | pending code fixes: Node tabs fenced as python, invalid JSON in two curl bodies, Python/Node section 5 PATCH drops admin derivation, Jane SDK checks use read, '...' placeholders, region tabs, 8081 port; Java tab has no samples |
-| `docs/modeling/mesa-verde.mdx` | decision maker | mixed | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 8 | examples are app excerpts not standalone runnable; uses deprecated syncUser/assignRole aliases (pending code fix); depends on external demo repo and screenshots |
-| `docs/modeling/other-code-examples.mdx` | new user | landing | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 8 | list rendered client-side from GitHub API, no static repo text |
-| `docs/modeling/pink-mobile.mdx` | implementer | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 10 | run steps summarized from repo README; excerpts use ... placeholders; harry@potter.io sample data from repo |
-| `docs/modeling/rebac-GHC.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 9 | hosted demo with shared passwords pending owner review; Rego uses pre-OPA-1.0 syntax; code blocks lack language tags; ABAC date-range enforcement not verified end to end |
-| `docs/overview/access-requests-and-approvals.mdx` | implementer | tutorial | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 8 | steps summarize linked Elements pages; no code on page; YouTube videos volatile |
-| `docs/overview/advanced-authorization-queries.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | samples use other data than Alice/Bob scenario and curl bodies use id instead of key (pending code fix) |
-| `docs/overview/best-practices.mdx` | decision maker | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 15 | no end-to-end worked example |
-| `docs/overview/configure-your-first-rbac-policy.mdx` | new user | tutorial | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 11 | no code by design; steps depend on dashboard videos and labels |
-| `docs/overview/connecting-your-app.mdx` | new user | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 14 | pending code fixes in Go/Java/.NET/Ruby/sync-Python partials; UI screenshots and pinned SDK versions will need upkeep |
-| `docs/overview/create-a-rebac-policy.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 8 | test snippet uses member_group placeholder (pending code fix); Dashboard Viewer column in screenshot differs from table |
-| `docs/overview/get-api-key.mdx` | new user | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 15 | dashboard screenshots need upkeep |
-| `docs/overview/glossary.mdx` | new user | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 12 | no Permit MCP Gateway or Edge PDP entries |
-| `docs/overview/how-does-it-work.mdx` | new user | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 16 | PNG connectivity diagram alongside coded diagrams |
-| `docs/overview/local-authorization-microservice.mdx` | implementer | mixed | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | why-section plus how-to on one page; metrics URL shows 7766 but OPA metrics are on 8181 (pending code fix); performance figures need upkeep |
-| `docs/overview/perform-a-local-policy-check.mdx` | implementer | landing | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | check call itself lives on the linked check page |
-| `docs/overview/perform-policy-check-with-cloud-pdp.mdx` | new user | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | check-function-false/true samples missing await (pending code fix); dashboard screenshots need upkeep |
-| `docs/overview/run-pdp.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 12 | untagged docker code blocks (pending code fix); Cloud tab example is Node.js only |
-| `docs/overview/setup-attribute-based-access-control.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 6 | no runnable check sample, only a results table; video-based UI steps |
-| `docs/overview/sync-application-data-into-permit.mdx` | implementer | mixed | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | embedded sync-sdk-request JS uses permit.users.sync (pending code fix); page not in sidebar |
-| `docs/overview/sync-applications-data.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 11 | src/sdks samples: wrong Node names, broken curl, real-person data (pending code fix) |
-| `docs/overview/sync-your-first-user-with-sdk.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | JS tabs use wrong SDK methods and tenant curl URLs are invalid (pending code fix); default-tenant screenshot shows Employee role not assigned in walkthrough |
-| `docs/overview/use-the-permit-api-and-sdk.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | invalid log/throwOnError snippets, account:view vs read, broken curl first-call (pending code fix); Node.js only |
-| `docs/overview/walkthroughs-intro.mdx` | new user | landing | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 1 | 1 | 2 | **16** | 15 | guide list lives in src/components/home-page/content.js, not retrievable from MDX |
-| `docs/overview/why-permit.mdx` | decision maker | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 11 | no diagram or cost comparison; product claims beyond owner-confirmed ones deferred to permit.io |
-| `docs/permit-mcp-gateway/advanced-features.mdx` | decision maker | explanation | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 8 | most feature behavior (interrogation, receipts, monitoring) unverified and availability logged for owner |
-| `docs/permit-mcp-gateway/architecture.mdx` | maintainer | mixed | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | page mixes explanation with an upstream verification how-to; sequence diagrams (code blocks) still embed Redis key names, a 5-min refresh value and one em dash inside mermaid; customer-controlled admin dashboard location unverified |
-| `docs/permit-mcp-gateway/audit-logs.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 12 | dashboard tab labels and screenshots will drift |
-| `docs/permit-mcp-gateway/authentication-methods.mdx` | admin | reference | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 15 | pending code fix (OIDC callback block); how-to setup steps inside a reference; third-party console labels drift |
-| `docs/permit-mcp-gateway/consent-service.mdx` | implementer | explanation | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 13 | session expiry now contradicts guide/advanced-features/overview 30d/90d wording (owner to confirm); revocation effect on sessions unverified |
-| `docs/permit-mcp-gateway/demos/linear-mcp-gateway.mdx` | AI agent builder | tutorial | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | about 20 volatile UI screenshots; host creation click path differs slightly from host-setup (Hosts vs Dashboard) |
-| `docs/permit-mcp-gateway/demos/n8n-linear-mcp-gateway.mdx` | AI agent builder | tutorial | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 8 | per-tool trust screen vs consent slider conflict logged; webhook and fetcher nodes not shown |
-| `docs/permit-mcp-gateway/enterprise-deployment.mdx` | decision maker | explanation | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 10 | customer-controlled model details (configurable audit log location, migration between models) not verifiable in source; no concrete example of a model choice |
-| `docs/permit-mcp-gateway/guide.mdx` | admin | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | many UI screenshots and trust keyword list are maintenance risk; long page |
-| `docs/permit-mcp-gateway/host-setup.mdx` | admin | how-to | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 9 | rollout planning section still mixes planning with the how-to; client snippet style (mcp-remote vs url key) still differs from quickstart |
-| `docs/permit-mcp-gateway/http-egress-proxy/authorization.mdx` | operator | explanation | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 10 | where a person revokes access (account page) not verified; consent flow shows no sample output |
-| `docs/permit-mcp-gateway/http-egress-proxy/cli.mdx` | operator | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 12 | asg run adapter and env-var details track a fast-moving CLI (v0.5.0) |
-| `docs/permit-mcp-gateway/http-egress-proxy/connecting-agents.mdx` | AI agent builder | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | container-config output not shown; token-in-container example is prose only |
-| `docs/permit-mcp-gateway/http-egress-proxy/credentials.mdx` | operator | mixed | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 10 | how-to plus reference tables on one page; asg proxy connect success output not shown |
-| `docs/permit-mcp-gateway/http-egress-proxy/egress-rules.mdx` | operator | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 11 | method class membership (read = GET/HEAD/OPTIONS) not verified in source; dashboard labels unverified |
-| `docs/permit-mcp-gateway/http-egress-proxy/index.mdx` | decision maker | landing | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 11 | landing page with no hands-on example by design; dashboard section name CLIs / APIs not verified against UI source |
-| `docs/permit-mcp-gateway/http-egress-proxy/quickstart.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 13 | pre-existing code comment in curl block keeps an em dash (code byte-identical rule); intercept verify result described generically; dashboard labels unverified |
-| `docs/permit-mcp-gateway/http-egress-proxy/security.mdx` | operator | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 13 | explanation page with few config examples; vault env vars shown inline only |
-| `docs/permit-mcp-gateway/human-in-the-loop.mdx` | admin | mixed | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 9 | keyboard shortcuts and 10 screenshots are volatile UI; behaviors not verified against source |
-| `docs/permit-mcp-gateway/index.mdx` | decision maker | landing | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 15 | topic table mirrors the sidebar and needs updating when pages are added |
-| `docs/permit-mcp-gateway/managing-humans-and-agents.mdx` | admin | mixed | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | **18** | 11 | agent identity sharing across humans unresolved (logged); mixes explanation with how-to procedures |
-| `docs/permit-mcp-gateway/on-prem-installation.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 14 | pod counts and Kubernetes 1.25+ tied to current installer values; em dashes remain inside unchanged YAML/bash comments |
-| `docs/permit-mcp-gateway/overview.mdx` | decision maker | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 8 | explanation page with no example flow beyond prose; audit log event list (sign-in, session events) not source-verified |
-| `docs/permit-mcp-gateway/permit-integration.mdx` | maintainer | explanation | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 12 | min() table rows with relation above agent role not derivable from the 9 listed rules (owner to confirm); internal consent API route named |
-| `docs/permit-mcp-gateway/platform.mdx` | admin | reference | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 10 | UI labels and screenshots unverified against the gateway source (rate limited); revoke semantics logged for owner |
-| `docs/permit-mcp-gateway/quickstart.mdx` | new user | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | pending code fix for Claude Code --url and Claude Desktop url key; VS Code has prose pointer only, no snippet; client config formats are volatile |
-| `docs/quick-start/aspnet.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | **18** | 8 | pending code fix (PDP_URL ignored, CLI command); sidebar label still says ASP.NET for an HttpListener console app |
-| `docs/quick-start/django.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 7 | pending code fixes (views.sync_user, Posts undefined, urlpatterns overwrite, template command); CSRF handled by warning only |
-| `docs/quick-start/express.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | pending code fixes (assignRole JSON.stringify, missing app.listen, permit env template apply); dashboard UI steps and screenshots need upkeep |
-| `docs/quick-start/fastapi.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | pending code fix (permit env template apply); dashboard UI steps need upkeep; Python curl screenshots removed (showed Express output) |
-| `docs/quick-start/flask.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | pending code fixes (app.run placement, permit env template apply); asyncio.run per request kept, sync client linked |
-| `docs/quick-start/gin.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | pending code fix (godotenv import, package main, permit env template apply); dashboard labels may drift |
-| `docs/quick-start/nest.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | pending code fixes (assignRole JSON.stringify fails TS compile, template command); Next.js screenshots removed so verify is text-only |
-| `docs/quick-start/nextjs.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | pending code fix (middleware and route file paths, CLI template command); Edge runtime compatibility of permitio in middleware unverified |
-| `docs/quick-start/rails.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | pending code fix (sync_user, no Ruby SDK role assignment method, hash syntax error, CLI command); Ruby gem 0.0.4 is old; require conflict with Ruby quickstart partial |
-| `docs/quick-start/spring-boot.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | pending code fix (CLI template command); pinned SDK version 2.0.0 |
-| `docs/quickstart.mdx` | new user | tutorial | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 16 | UI steps rely on videos plus text click paths; dashboard labels are volatile |
-| `docs/sdk/cpp/quickstart-cpp.mdx` | implementer | landing | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | **17** | 7 | no install or usage steps beyond the repository; beta sidebar label unverified |
-| `docs/sdk/dotnet/quickstart-dotnet.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | pending code fixes (apiURL named arg, Dictionary type, fence languages); options table mirrors constructor defaults |
-| `docs/sdk/dotnet/role/AssignRole.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | errors table repeated on every page |
-| `docs/sdk/dotnet/role/CreateRole.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | payload is a JS object literal, not C# (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/dotnet/role/GetRole.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | errors table repeated on every page |
-| `docs/sdk/dotnet/role/ListAssignedRoles.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | example uses JS const and passes tenantId as roleId (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/dotnet/role/ListRoles.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | errors table repeated on every page |
-| `docs/sdk/dotnet/role/UnassignRole.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | example assigns result of a void Task (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/dotnet/tenant/CreateTenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | payload is a JS object literal, not C# (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/dotnet/tenant/DeleteTenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | example assigns result of a void Task (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/dotnet/tenant/GetTenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | errors table repeated on every page |
-| `docs/sdk/dotnet/tenant/UpdateTenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | payload is a JS object literal, not C# (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/dotnet/user/CreateUser.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | errors table repeated on every page |
-| `docs/sdk/dotnet/user/DeleteUser.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | example assigns result of a void Task (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/dotnet/user/GetUser.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | errors table repeated on every page |
-| `docs/sdk/dotnet/user/SyncUser.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | C# example tagged js (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/erlang/quickstart-erlang.mdx` | implementer | landing | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 1 | **16** | 7 | repository is a generated server stub with no usage path; beta sidebar label unverified |
-| `docs/sdk/golang/quickstart-golang.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | pending code fixes (permit.New, JS line in tenant block, map type); prose workarounds to delete after fix |
-| `docs/sdk/golang/resource/Create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | errors table repeated on every page |
-| `docs/sdk/golang/resource/Delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | errors table repeated on every page |
-| `docs/sdk/golang/resource/Update.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | errors table repeated on every page |
-| `docs/sdk/golang/role/Create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | errors table repeated on every page |
-| `docs/sdk/golang/role/Delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | errors table repeated on every page |
-| `docs/sdk/golang/role/Get.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | GetById example passes uuid.String() (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/golang/role/Update.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 8 | example calls Roles.Create (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/golang/tenant/Create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | errors table repeated on every page |
-| `docs/sdk/golang/tenant/Delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | errors table repeated on every page |
-| `docs/sdk/golang/tenant/Get.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | GetById example passes uuid.String() (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/golang/tenant/List.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | errors table repeated on every page |
-| `docs/sdk/golang/tenant/Update.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | example uses nonexistent NewUpdateTenant (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/golang/user/AssignResourceRole.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | errors table repeated on every page |
-| `docs/sdk/golang/user/AssignRole.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | errors table repeated on every page |
-| `docs/sdk/golang/user/Create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | errors table repeated on every page |
-| `docs/sdk/golang/user/Delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | errors table repeated on every page |
-| `docs/sdk/golang/user/Get.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | GetById example calls Users.Get with uuid.String() (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/golang/user/GetAssignedRoles.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | example passes role-key as the user key (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/golang/user/SyncUser.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | errors table repeated on every page |
-| `docs/sdk/golang/user/UnassignRole.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | example calls misspelled UnasignRole (pending code fix); prose works around the broken sample; errors table repeated on every page |
-| `docs/sdk/java/quickstart-java.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | pending code fixes (user.key before declare, undefined tenant/resourceAttributes, staging API URL); pinned version 2.0.0 |
-| `docs/sdk/java/resource/create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | pending code fix (undefined actions/attributes) |
-| `docs/sdk/java/resource/delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | none |
-| `docs/sdk/java/resource/get.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | pending code fix (new UUID(String)) |
-| `docs/sdk/java/resource/list.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | pending minor import fix |
-| `docs/sdk/java/resource/update.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | none |
-| `docs/sdk/java/role/assign-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | pending code fix (real person/company in sample) |
-| `docs/sdk/java/role/create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | pending minor import fix |
-| `docs/sdk/java/role/delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | delete warning wording inferred from API spec |
-| `docs/sdk/java/role/get-assigned-roles.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | pending minor import fix |
-| `docs/sdk/java/role/get.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | pending code fix (new UUID(String)) |
-| `docs/sdk/java/role/list.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | pending minor import fix |
-| `docs/sdk/java/role/unassign-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | pending code fix (real person/company in sample) |
-| `docs/sdk/java/role/update.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | none |
-| `docs/sdk/java/tenant/create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 11 | pending code fix (attributes unused, real company) |
-| `docs/sdk/java/tenant/delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | none |
-| `docs/sdk/java/tenant/get.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | pending code fix (new UUID(String)) |
-| `docs/sdk/java/tenant/list.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | pending minor import fix |
-| `docs/sdk/java/tenant/update.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | none |
-| `docs/sdk/java/user/create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | pending code fix (syntax error, missing UserRoleCreate ctor, real person) |
-| `docs/sdk/java/user/delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | none |
-| `docs/sdk/java/user/get.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | pending code fix (new UUID(String)) |
-| `docs/sdk/java/user/list.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | none |
-| `docs/sdk/java/user/sync.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 11 | pending code fix (real person, HashMap import) |
-| `docs/sdk/kotlin/quickstart-kotlin.mdx` | implementer | landing | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | **17** | 7 | no install or usage steps beyond the repository; beta sidebar label unverified |
-| `docs/sdk/nodejs/all-tenants.mdx` | implementer | mixed | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | **17** | 7 | no Node.js call sample; curl and response sample broken (pending code fix); disclaimer sentence about wrong sample |
-| `docs/sdk/nodejs/bulk-requests-examples.mdx` | implementer | mixed | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 7 | only curl samples on a Node.js page; curls broken (pending code fix) |
-| `docs/sdk/nodejs/quickstart-nodejs.mdx` | implementer | tutorial | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 8 | pending code fixes (resources.create, malformed role fence, deprecated syncUser, undefined user/role); API-management section is a digression from the check tutorial |
-| `docs/sdk/nodejs/relationship-tuple/list-relationship-tuples.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | include_total_count param and real company in samples (pending code fix) |
-| `docs/sdk/nodejs/resource-instance/list-resource-instances.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | example result not assigned to a variable |
-| `docs/sdk/nodejs/resource/create-resource.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | example uses deprecated flat alias and JSON.stringify (pending code fix) |
-| `docs/sdk/nodejs/resource/delete-resource.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | example uses deprecated flat alias (pending code fix) |
-| `docs/sdk/nodejs/resource/update-resource.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | example uses deprecated flat alias and JSON.stringify (pending code fix) |
-| `docs/sdk/nodejs/role/assign-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | example uses deprecated flat alias and JSON.stringify (pending code fix) |
-| `docs/sdk/nodejs/role/create-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | example uses deprecated flat alias and JSON.stringify (pending code fix) |
-| `docs/sdk/nodejs/role/delete-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | example uses deprecated flat alias (pending code fix) |
-| `docs/sdk/nodejs/role/get-assigned-roles.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | example uses deprecated flat alias (pending code fix) |
-| `docs/sdk/nodejs/role/get-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | example uses deprecated flat alias (pending code fix) |
-| `docs/sdk/nodejs/role/unassign-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | example uses deprecated flat alias and JSON.stringify (pending code fix) |
-| `docs/sdk/nodejs/role/update-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | example uses deprecated flat alias and JSON.stringify (pending code fix) |
-| `docs/sdk/nodejs/sync-policy-script/sync-policy.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | outline references undefined employee_doc resource (pending code fix); empty skeleton blocks |
-| `docs/sdk/nodejs/tenant/create-tenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | example uses deprecated flat alias and JSON.stringify (pending code fix) |
-| `docs/sdk/nodejs/tenant/delete-tenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | example uses deprecated flat alias (pending code fix) |
-| `docs/sdk/nodejs/tenant/get-tenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | example uses deprecated flat alias (pending code fix) |
-| `docs/sdk/nodejs/tenant/list-all-tenant-users.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 11 | example result not assigned to a variable |
-| `docs/sdk/nodejs/tenant/list-tenants.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | example result not assigned to a variable |
-| `docs/sdk/nodejs/tenant/update-tenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | example uses deprecated flat alias and JSON.stringify (pending code fix) |
-| `docs/sdk/nodejs/user/create-user.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | example uses deprecated flat alias (pending code fix) |
-| `docs/sdk/nodejs/user/delete-user.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | example uses deprecated flat alias (pending code fix) |
-| `docs/sdk/nodejs/user/get-user.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | example result not assigned to a variable |
-| `docs/sdk/nodejs/user/list-users.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | example result not assigned to a variable |
-| `docs/sdk/nodejs/user/sync-user.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | example redeclares user and uses deprecated syncUser (pending code fix) |
-| `docs/sdk/permit-prisma-extension.mdx` | implementer | mixed | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | 2 | **18** | 12 | PermitError import missing in sample (pending code fix); long page mixing how-to and reference |
-| `docs/sdk/php/quickstart-php.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 9 | sample has unused React imports and an employee name (optional fix logged); *@dev dependency on a generated client |
-| `docs/sdk/python/quickstart-python.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | pending code fix for firstName keys in FastAPI example; version-gated timeout options |
-| `docs/sdk/python/quickstart_python_sync.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 8 | pending code fixes (await in sync samples, 1.0.0rc1 full example with permit.write); warning admonition is a stopgap |
-| `docs/sdk/python/sync-policy-script/sync-policy.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 9 | script not idempotent, unused resource_obj, missing asyncio import in snippet (pending code fix) |
-| `docs/sdk/python/usage-example.mdx` | implementer | reference | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 12 | wrong role_assignments.list kwargs, missing List import, real people in samples (pending code fix); many methods on one page |
-| `docs/sdk/ruby/quickstart-ruby.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | pending code fixes (require 'permit-sdk' vs lib/permit.rb, PDP URL scheme, resource key vs type); require fix needs a run to confirm |
-| `docs/sdk/ruby/user/sync_user.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | Go := operator in sample (pending code fix) |
-| `docs/sdk/sdks-overview.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 8 | parity marks not fully re-audited (doubtful .NET Get User Permission, Ruby Get Authorized Users); table lags SDK releases |
-| `docs/status.mdx` | operator | landing | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | 2 | **18** | 6 | iframe keeps fixed 1080px width and scale, weak on mobile; service list mirrors live status page and can drift |
-| `docs/updates-and-feedback/changelog.mdx` | new user | landing | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 6 | Canny changelog last entry Feb 2025; Productlane changelog may be the current one (owner decision) |
-| `docs/updates-and-feedback/feature-requests.mdx` | new user | landing | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 6 | feature requests on Canny while roadmap page on Productlane also accepts requests |
-| `docs/updates-and-feedback/roadmap.mdx` | decision maker | landing | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 6 | roadmap URL redirects to Productlane /request; describes third-party page layout that can change |
+| `docs/ai-security/access-request-mcp/food-ordering-demo-example.mdx` | AI agent builder | tutorial | 2 | 1 | 2 | 1 | 1 | 2 | 2 | 1 | 1 | 1 | **14** | 5 | retake screenshots that show child-can-order instead of adding a note telling the reader to ignore them; split 60-120 line code blocks (websocket_chat, CLI client) into steps under 25 lines and add expected terminal output for the FastAPI run (steps 4-7); convert bold Timeline step labels to self-contained headings and drop emojis from code output strings |
+| `docs/ai-security/access-request-mcp/implementation-guide.mdx` | implementer | mixed | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 7 | move Tool reference and Best practices to their own pages or clearly separate them from the how-to; replace the `...` list_dishes stub and undefined `firstname` in sync_user with runnable snippets; remove the duplicated sync_user snippet |
+| `docs/ai-security/access-request-mcp/overview.mdx` | decision maker | explanation | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 10 | 'Permit stores the request in a User Management element' is imprecise (the element config scopes the request); add a sequence diagram of the access request and operation approval flows |
+| `docs/ai-security/framework.mdx` | decision maker | explanation | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | says LangFlow guide applies all four perimeters but the LangFlow page covers three (no RAG); blog-post links per section may rot |
+| `docs/ai-security/integrations/langchain.mdx` | AI agent builder | tutorial | 2 | 1 | 2 | 0 | 2 | 1 | 2 | 1 | 1 | 1 | **13** | 8 | self-contradiction: expected table says doc1 reaches the LLM but the warning says PermitEnsembleRetriever sends no attributes so PublicDocs allows no document; fix the sample (use filter with attributes or a role on doc instances) and correct the table; explain how to create the JWKS and signed test JWT; replace 'The parser above' and emoji comments, drop dated 2025-12-10 example |
+| `docs/ai-security/integrations/langflow.mdx` | AI agent builder | tutorial | 2 | 1 | 2 | 1 | 1 | 1 | 1 | 2 | 1 | 1 | **13** | 5 | screenshots contradict text (membership_tier condition, flight:info unchecked, Astra Assistant Agent vs Local Expert Agent): retake them; remove the non sequitur about a `class` attribute and the 'Or your cloud PDP' comment that contradicts the Edge PDP requirement; tag config blocks and remove JSON comments, and explain how to create the RS256 JWT and wire Data Protection to Filter Data |
+| `docs/ai-security/integrations/mongodb-rag.mdx` | AI agent builder | tutorial | 2 | 2 | 1 | 1 | 1 | 1 | 2 | 2 | 1 | 1 | **14** | 7 | delete the duplicated index JSON, env block, and clone/docker-compose steps in 'Run the pipeline step by step' (which conflicts with the Docker quickstart); manual dashboard model uses alice/bob and omits department view/member grant, align with user_engineering_1 etc.; add a sample JSON response for the curl |
+| `docs/ai-security/integrations/openai-prompt-filtering.mdx` | AI agent builder | tutorial | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 1 | **14** | 6 | class is an outline and no runnable entry script ties classifier, permit client, and checkAccess together: add one file with imports and expected console output; 'portfolio value' prompt classified by FinancialAdvice classifier while rule table maps it to FinancialData; curly quotes in code block, pinned gpt-4 model, emoji logs |
+| `docs/ai-security/integrations/pydantic-ai.mdx` | AI agent builder | tutorial | 2 | 1 | 2 | 1 | 2 | 1 | 1 | 2 | 1 | 2 | **15** | 6 | run step 2 executes the agent before step 3 sets env vars: reorder; premium_user already has financial_document:read so 'confidential docs only for high clearance' never restricts premium users, state or fix; replace `check_action_permissions(...)` pseudo-call and JSON with comments, and use one spelling (PydanticAI) |
+| `docs/api/api-reference.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 13 | add one minimal curl call with expected response; iframe embed with inline styles is fragile |
+| `docs/api/api-with-cli.mdx` | implementer | mixed | 2 | 2 | 1 | 1 | 2 | 1 | 1 | 2 | 1 | 2 | **15** | 10 | mixes how-to with key-level, rate-limit, and API-log explanation: move explanation out or link; unify placeholders (<API Key>, <YOUR_API_KEY>) and add the Permit import to the Node snippet; add sample JSON response and source for 'only environment API keys work with the PDP' |
+| `docs/api/background-tasks.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | **19** | 11 | HTTP 200 on failed task and wait=0 default are not stated in the OpenAPI spec; confirm or mark |
+| `docs/api/elements/access-request-api.mdx` | implementer | reference | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 7 | no example request for the API-key variant: add one curl (create + approve) with Authorization header and response |
+| `docs/api/elements/access-requests.mdx` | implementer | reference | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 6 | login setup section duplicated verbatim on the Operation Approval API page: move to a shared partial; identical 20-line response JSON repeated 6 times, show only changed fields |
+| `docs/api/elements/operation_approval.mdx` | implementer | reference | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 6 | duplicated login section (shared partial); origin header present on access request curls but absent here, make consistent |
+| `docs/api/elements/overview.mdx` | implementer | landing | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | 2 | 2 | **18** | 8 | add sample response JSON; placeholder style <API secret key> and origin app.permit.io differ from sibling pages |
+| `docs/api/examples/autopopulate-actions.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 1 | 2 | 2 | 2 | **17** | 12 | settings.default_resource_actions is not in the OpenAPI schema, cite source; add response excerpt; placeholder permit_env_api_key differs from API_SECRET_KEY used on sibling pages |
+| `docs/api/examples/create-tenant.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 12 | sample objects carry 2023 timestamps and xxxx IDs (minor) |
+| `docs/api/examples/filter-relationship-tuple.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 12 | include_total_count response shape not mentioned (API returns array or paginated object) |
+| `docs/api/examples/filter-role-associations.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | **19** | 12 | 'role association' synonym and {project}/{project_id} placeholder variants; closing claim that role attributes 'separate the roles that belong to each tenant' is vague |
+| `docs/api/examples/filter-users.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | 1 | 2 | **17** | 12 | commented-out curl inside the role example: split into two blocks; same user JSON repeated 4 times; tenant_id placeholder unbraced vs {project_id}; search_operator not documented |
+| `docs/api/examples/get-project-and-env.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | **19** | 12 | unverified that an environment API key can list all projects; state the key scope needed |
+| `docs/api/examples/list-user-permissions.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 11 | combine step has no code: add a short script that merges permissions incl. extends; user JSON repeated three times |
+| `docs/api/pdp-api-reference.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 12 | add one example PDP call (e.g. POST /allowed) with response |
+| `docs/api/pdp-statistics.mdx` | operator | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | sample responses pin 2024 dates and pdp 0.2.37; title Title Case not task; state table lists 'main values' only (spec has 8) |
+| `docs/api/pdp-webhooks.mdx` | operator | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 10 | webhooks endpoint absent from public OpenAPI and 'several retries' is vague: state retry count/timing; add run command and a local test for the receiver |
+| `docs/api/rbac/disable-rebac-to-increase-performance.mdx` | operator | how-to | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | **19** | 12 | rebac_disabled is not in the OpenAPI schema and the performance benefit is unquantified; cite source |
+| `docs/api/rbac/rbac-example.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 2 | **18** | 4 | 35-line block of five curls: split per step; no response samples; use example.com emails; verify step should show the check call |
+| `docs/api/rebac/groups/groups-ui.mdx` | implementer | how-to | 1 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 9 | audience 'developers and administrators' is mixed; 'child group must share the parent resource type' unverified; seven UI screenshots will rot |
+| `docs/api/rebac/groups/groups.mdx` | implementer | mixed | 2 | 1 | 1 | 2 | 2 | 1 | 1 | 2 | 2 | 2 | **16** | 5 | walkthrough creates social_media with no actions and editor with no permissions, yet the verify check expects an action editor grants; placeholders mix {project_id}/{proj_id} and verify calls leave {group_instance_key} unfilled; concept, procedure and endpoint reference mixed on one page |
+| `docs/api/rebac/rebac-api-calls.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 11 | SDK tabs inconsistent (Python only for relations, Node only elsewhere); curl shell variables never shown being set; derivation example leans on 'the relationship tuple from the previous section' |
+| `docs/api/v2-migration-guide.mdx` | maintainer | mixed | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **15** | 8 | no v1-to-v2 path mapping, so 'change each call' can't be done from the page; v1 compatibility claims (v2_global_env, SDK/PDP pairing) unverifiable; legacy page mixing explanation and procedure |
+| `docs/api/working-with-abac/building-conditions.mdx` | implementer | reference | 2 | 1 | 2 | 1 | 2 | 1 | 1 | 2 | 2 | 1 | **15** | 7 | replace the '...' placeholder snippets in allOf/anyOf/not with complete conditions; fix the attribute-first 'and' example (between 9-12 AND equals '13:00' can never be true) and explain why subject./environment. prefixes appear next to user./resource.; add how to test a condition (create the set and run a check) and reword 'A user set of users' |
+| `docs/api/working-with-abac/condition-set-rules.mdx` | implementer | reference | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 6 | show a complete curl for POST/GET/DELETE set_rules and say where proj_id/env_id come from; show the actual JSON response of the create and verify calls; tag JSON bodies as json not javascript |
+| `docs/api/working-with-abac/condition-sets.mdx` | implementer | mixed | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **16** | 7 | add a full curl request and sample response for create and verify; example user set tests user.role as an attribute and resource set re-tests resource.type despite resource_id (explain or remove); move the permission matrix to the rules page so this stays a how-to |
+| `docs/api/working-with-abac/examples.mdx` | implementer | how-to | 2 | 1 | 2 | 1 | 2 | 1 | 1 | 1 | 2 | 2 | **15** | 6 | uses 'user.role equals student' and models '5 PM' as a static resource attribute, both questionable for real ABAC; JSON bodies tagged javascript with no curl/headers; key says stanford while text never defines it, 'the same endpoint' needs prior context |
+| `docs/api/working-with-abac/operators.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 2 | **18** | 9 | operand-type column is inconsistent ('Array attribute' for array_contains; ref table lists Array for equals); ref comparison rows 'a < user.age' leave 'a' undefined; state which PDP types evaluate object_match/fk_resource_type (ABAC is Edge PDP only) |
+| `docs/api/working-with-abac/overview.mdx` | implementer | landing | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **16** | 3 | says an ABAC policy is 'three objects' then tables four; build steps give endpoints but no request bodies; mixes prereqs, concepts, steps, endpoint reference and reading order |
+| `docs/authentication/auth0/auth0-demo-app.mdx` | implementer | mixed | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 1 | 1 | 1 | **15** | 8 | move the Auth0 Action step before starting the app and first login (roles claim is missing otherwise); cut the How it works code that duplicates auth0/permit-integration and link instead; 'The block ends the same getServerSideProps function' depends on the prior snippet and code comments use 'we'/'our' |
+| `docs/authentication/auth0/auth0-sync-script.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 11 | step 2 says open the auth0 folder then step 3 runs cd admin-scripts/auth0 (pick one); untagged code block for the location response and mixed [bracket] placeholder styles; Auth0 dashboard click paths are volatile, link Auth0 docs |
+| `docs/authentication/auth0/permit-integration.mdx` | implementer | mixed | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 1 | **16** | 6 | snippets use deprecated top-level permit.api.assignRole/getUser, and getUser throws for a new user so the early-return sample fails on first login (use permit.api.users.get with try/catch); step 3 short snippet and step 5 use permit/auth0User without showing where they come from; long code duplicated from the demo page and comments say 'we will use it' |
+| `docs/authentication/cognito/cognito-demo-app.mdx` | implementer | mixed | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **15** | 8 | page warns the demo sync route throws ReferenceError (fix permitio/cognito-integration or show the fixed route); verify step relies on exact UI strings not shown anywhere; How it works section duplicates the integration guide |
+| `docs/authentication/cognito/permit-integration.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 1 | **17** | 9 | intro says examples come from the demo app but the sync route here differs (id_token, fixed payload scope), so say it is a corrected version; split the 60-line backend block and add the express app setup; remove casual code comments ('After we got the tokens') |
+| `docs/authentication/fusionauth.mdx` | implementer | landing | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 4 | no code at all: add the current-SDK handoff snippet (syncUser, assignRole, check) instead of only prose; example repo lives in a personal account (filipermit) on permitio 0.0.5, state support status; add a verify step for running the example |
+| `docs/authentication/hankopermit.mdx` | implementer | tutorial | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 6 | ABAC section needs a container PDP but gives no run command or URL to set; code blocks lack language and have broken indentation/ellipses; 14 dashboard screenshots |
+| `docs/authentication/logto.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 1 | **16** | 11 | npx create-next-app now defaults to App Router but the tutorial requires Pages Router (add the flag); libraries/permit.js mixes require() with export, and the check-permission block has no language tag; split 100+ line page components and retitle to the task |
+| `docs/authentication/permit-and-authentication.mdx` | decision maker | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 8 | no handoff-point code snippet (sync + check) to anchor the concept; title in Title Case |
+| `docs/authentication/stytch/permit-integration.mdx` | implementer | tutorial | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 1 | 1 | 2 | **15** | 6 | tenants.create fails on the second login for the same user (make it idempotent or catch the conflict); show one assembled getServerSideProps with the Permit calls instead of fragments ('place the calls after it inside the try block'); resource key 'Account' vs screenshot 'Current Account', and placeholder SEE_STEP_5 points to step 4 |
+| `docs/authentication/supertokens.mdx` | implementer | how-to | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **15** | 4 | example lives in a personal repo (filipermit) on permitio 0.0.5, so running it likely needs fixes; code blocks lack language tags; webinar + screenshot gallery sections dilute the tutorial |
+| `docs/authentication/your-authentication.mdx` | implementer | explanation | 2 | 1 | 1 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 8 | add a code sample for the handoff point (verify JWT, syncUser, assignRole, check) instead of only links; provider table plus generic how-to mixes landing and how-to; video and third-party provider list need a review marker |
+| `docs/concepts/control-plane-and-data-plane.mdx` | new user | explanation | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 2 | **18** | 14 | data plane section omits Nexus PDP and the Cloud PDP case where Permit runs the data plane; heading 'Local PDP' vs 'Edge PDP' naming used elsewhere |
+| `docs/concepts/deployment-options.mdx` | decision maker | explanation | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | **18** | 14 | light on-premise row is vague about what stays in your network vs Permit's cloud; no mention of Cloud PDP or Nexus PDP as options; the get-started path is only 'email support' |
+| `docs/concepts/differentiator-checklist.mdx` | decision maker | explanation | 2 | 2 | 1 | 1 | 2 | 1 | 1 | 2 | 1 | 1 | **14** | 13 | 'Authorization for authorization' has no mechanism or link; Cedar policy generation claim needs a source or removal; reads as a feature list, not a checklist (add a comparison table vs homegrown), and mixes PDP/Edge PDP terms |
+| `docs/concepts/multi-tenant-authorization.mdx` | implementer | explanation | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 1 | **17** | 10 | benefit 'Load balancing and scaling' is not provided by tenant authorization, remove; add an assignRole-in-tenant example and show the deny for a cross-tenant check; 'first-class object'/'silo' phrasing |
+| `docs/concepts/oss-fallback.mdx` | decision maker | explanation | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 1 | **16** | 9 | migration steps are high level with no pointer to the exported policy layout or an OPAL server config example; 'Permit is not an open-core company' and 'The choice to stay or leave stays with you' are filler; note that Nexus PDP (pdp-v3) is not in the open-source list |
+| `docs/concepts/pdp/cloud-pdp-benchmarks.mdx` | operator | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 14 | October 2025 run with no load tool, client location, or data set size described, so results are not reproducible; mark when figures will be refreshed |
+| `docs/concepts/pdp/cloud-pdp-capabilities.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 11 | 'Cloud PDP and Edge PDP evaluate the same policy model' contradicts the ABAC-not-supported table above it; rate-limit numbers need a 'subject to change' marker; Debug Mode for Cloud PDP needs the exact API call |
+| `docs/concepts/pdp/configuration.mdx` | operator | reference | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | 1 | 2 | **17** | 12 | PDP_OPA_BEARER_TOKEN_REQUIRED refers to undefined CLIENT_TOKEN; add a Kubernetes env example alongside the docker link; define 'PDP server' vs 'Horizon' vs Edge PDP once at the top |
+| `docs/embeddable-uis/element-login.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 1 | 1 | 2 | 2 | 1 | 1 | **15** | 7 | Node and Python samples use undefined user_key/USER/TENANT/port, and the Java cookie sample has broken indentation; Bearer and Other Headers tabs are identical 50-line blocks (show once); casual comments ('//optional handle success', 'this is the changed part') |
+| `docs/embeddable-uis/element/access-request.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 8 | iframe sample uses self-closing <iframe /> (invalid HTML, swallows following markup): use <iframe ...></iframe>; 'Level 1 (Workspace Owner) reviews requests' is unsourced, link the exact setting; 9 dashboard screenshots plus video, drop the redundant User Management form screenshots from Prerequisites |
+| `docs/embeddable-uis/element/approval-management.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 8 | self-closing <iframe /> in sample: close the tag; verify step 'assign a reviewer' gives no SDK/API call, add the role-assignment snippet; tenantKey guidance hedged ('if Generate Code includes it'), state when it is required |
+| `docs/embeddable-uis/element/audit-logs.mdx` | admin | landing | 2 | 1 | 2 | 1 | 1 | 1 | 2 | 2 | 2 | 2 | **16** | 7 | embed steps are a 4-line summary deferring to another page: add the iframe placeholders and login call inline; unclear whether Audit Logs uses all permission levels (permission-levels page says some elements don't); no example of an event row or filter behavior |
+| `docs/embeddable-uis/element/operation-approval.mdx` | implementer | how-to | 2 | 1 | 2 | 1 | 1 | 1 | 2 | 2 | 1 | 2 | **15** | 8 | step 1 code block is not indented so it breaks the numbered list, and duplicates the earlier iframe with reordered params: remove the second iframe; 'your application assigns a reviewer with the SDK or API' has no code: add permit.api.roleAssignments.assign for transfer:transfer-1#_Reviewer_; verify step expects a webhook but prerequisites never configure one: add webhook prerequisite |
+| `docs/embeddable-uis/element/user-management.mdx` | admin | explanation | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **15** | 7 | reader can't embed or configure from this page (all steps linked out); invite approval flow described vaguely; video, YouTube embed and screenshot carry most of the content |
+| `docs/embeddable-uis/email-configuration-and-templates.mdx` | admin | how-to | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | 2 | **17** | 9 | 'Fill in the required SMTP fields' never names them (host, port, user, sender): list the fields; 'Supported email providers' H2 is one sentence, fold into prerequisites; title is a noun phrase, not the task |
+| `docs/embeddable-uis/embedding-elements.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 9 | login sample omits the import line it tells you to add and uses 'any' types plus a 'handle in your BE' comment: add import and clean comment; permit_session cookie in verify step is unverified; 8 screenshots of volatile dashboard forms |
+| `docs/embeddable-uis/overview.mdx` | new user | landing | 2 | 2 | 2 | 1 | 2 | 1 | 1 | 2 | 1 | 1 | **15** | 11 | ElementTile says Audit Logs 'Monitor decisions made against each policy' but the table and Audit Logs page say user actions: align the tile text; tile names 'Approval Flows' and lowercase 'access-control' copy don't match the table names; ActionContainer copy ('Decide if you want to display the user Email') is not second-person imperative and title-cases fields |
+| `docs/embeddable-uis/permission-levels.mdx` | admin | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | 'Some element types don't use all five levels' without saying which: add a per-element table; INVALID_PERMISSION_LEVEL behavior for Hidden Roles unsourced |
+| `docs/embeddable-uis/troubleshooting.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 11 | Express sample puts four res.send/redirect calls in one handler (throws 'headers already sent') and logs undefined USER/TENANT: show two separate correct handlers; 11 screenshots of devtools; CORS comment 'domain you will make the request from' is future tense |
+| `docs/embeddable-uis/user-preview.mdx` | admin | how-to | 2 | 2 | 2 | 1 | 1 | 1 | 2 | 2 | 1 | 2 | **16** | 10 | 'Tenant dropdown shows a tenant only after the current user has logged in to that tenant' is unclear (which user, logged in where?): rewrite with the mechanism; single H2 page with no expected-result description per level; no Next steps beyond two links |
+| `docs/embeddable-uis/webhooks.mdx` | implementer | mixed | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **16** | 7 | no endpoint code: add a 15-line handler that checks the Authorization bearer secret and returns 200; reader can't tell how to choose the create_user vs invite_user flow: name the element setting that selects it; payload schemas are pseudo-Python with missing commas and tenant_key vs tenant_id inconsistency, use JSON examples |
+| `docs/faq.mdx` | new user | reference | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 1 | **14** | 10 | pricing facts (Community plan 1,000 MAUs, 'all features open to all plans') are volatile: link pricing only; NestJS community answer reads as a sales pitch ending in 'book time with a Permit engineer': trim to technical tradeoffs; two different Slack invite URLs (io.permit.io/slack vs docs-to-slack) across pages |
+| `docs/getting-started/ai-support.mdx` | new user | how-to | 1 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 18 | no sentence naming the reader: add who this is for; 'powered by Inkeep' and Ctrl+K tab behavior are volatile UI facts; two screenshots of the assistant |
+| `docs/getting-started/slack-support.mdx` | new user | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 11 | '@Permit.io AI Agent' handle and plan gating of /permit-escalate are unsourced: link pricing row or mark volatile; escalate example has no sample message or confirmation output; invite link differs from ai-support page |
+| `docs/home.mdx` | new user | landing | 1 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **17** | 16 | no intro sentence naming the reader outside the hero lead; all link text lives in content.js, so the MDX alone is not retrievable by AI tools: add a short plain-text summary; sidebar_label 'Welcome to Permit' is a greeting |
+| `docs/how-to/SDLC/CI-CD.mdx` | operator | explanation | 2 | 1 | 1 | 2 | 2 | 1 | 1 | 2 | 2 | 2 | **16** | 8 | no runnable pipeline example: add a GitHub Actions job that creates, copies, tests, and merges an env; mermaid labels say 'API Secret' and 'API-Key' vs 'API key': align terminology; page mixes how-to table with explanation of branches, split or label |
+| `docs/how-to/SDLC/authz-testing.mdx` | operator | explanation | 2 | 1 | 1 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **17** | 8 | no sample Rego unit test or opa test output: add a 5-line test and command; integration section lists tools but no concrete command sequence with expected output; CI section is bullets without a pipeline snippet |
+| `docs/how-to/SDLC/modeling-implementation-components.mdx` | decision maker | explanation | 2 | 2 | 2 | 1 | 2 | 1 | 1 | 2 | 2 | 2 | **17** | 8 | 'data plane' redefined against the rest of the docs (noted, still confusing): rename to 'authorization data plane'; no worked example mapping one app's objects to the four planes; claims like 'PDP returns authorized users to pre-filter queries' lack links |
+| `docs/how-to/build-policies/abac/building-abac-policy.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 1 | 1 | 1 | 2 | 1 | 2 | **15** | 8 | names change between steps ('Full-time Stanford Student' vs 'Students', 'Bicycle available after 5pm' vs 'Bicycles'): use one name; check is an inline one-liner with no SDK init: add a tagged js block with Permit init and expected output; 'Advanced' and 'Complex policy support' sections are image-only digressions, move to patterns page |
+| `docs/how-to/build-policies/abac/components.mdx` | new user | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 12 | Jessica examples are narrative only, no attribute/check sample; environment example (location, network) not shown in Permit terms; title in Title Case |
+| `docs/how-to/build-policies/abac/defining-attributes.mdx` | implementer | how-to | 2 | 1 | 2 | 1 | 2 | 1 | 1 | 2 | 1 | 2 | **15** | 9 | resource attributes have no section (only a link) though the title promises all four: add one; placeholder 'API_SECRET_KEY' vs style '<YOUR_API_KEY>': fix; no verify step (GET tenant/role showing attributes); 'Manage Tenants' under Directory Settings unverified |
+| `docs/how-to/build-policies/abac/overview.mdx` | new user | landing | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 11 | no code showing a check with attributes; screenshot with generated Rego will drift |
+| `docs/how-to/build-policies/abac/patterns.mdx` | implementer | how-to | 2 | 1 | 2 | 1 | 1 | 1 | 2 | 2 | 1 | 2 | **15** | 7 | 'Ownership via tenants: Permit implements this as an ABAC policy' is really tenant-scoped RBAC: correct the mechanism; 'Ownership via list on user profile' has no steps or check example: add them or remove the row; screenshot uses 'owner' while text uses 'owners', retake or rename |
+| `docs/how-to/build-policies/abac/time-based-role.mdx` | implementer | how-to | 2 | 1 | 2 | 1 | 2 | 1 | 1 | 1 | 1 | 2 | **14** | 11 | tenant attribute 'key' is created with 'don't assign a value yet' and never set, and current_time is never defined as a user attribute: add the steps or explain tenant.key is built in; tenant and user creation give JSON fragments with no API call or dashboard path: add curl/SDK calls; 'condition set' vs 'user set' used interchangeably and headings like 'Step 1: Configure schema & policy' |
+| `docs/how-to/build-policies/overview.mdx` | decision maker | explanation | 1 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 18 | no sentence naming the reader; root.rego sample uses pre-OPA-1.0 syntax without 'if'; policy-as-code example 'temporary admin within a date range' contradicts the ABAC time-based-role page |
+| `docs/how-to/build-policies/policy-basics.mdx` | new user | mixed | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 1 | 1 | 2 | **14** | 5 | eight H3 sections contain only a video with no text: add 2-4 numbered steps under each or drop them; default permissions table (admin/editor/viewer) unsourced and volatile; screenshots of volatile UI with 'Supervisior' typo, explanation and video how-to mixed on one page |
+| `docs/how-to/build-policies/rbac/building-rbac-policy.mdx` | new user | tutorial | 2 | 2 | 2 | 1 | 1 | 1 | 2 | 1 | 1 | 2 | **15** | 8 | H3s 'Create the Admin role', 'Roles with selected permissions' hold only a screenshot: fold into steps; step 3 says Customer gets read but screenshot shows all four actions for both roles; screenshot of old 'Users' nav acknowledged as outdated, retake; check is inline text, add a js block with expected output |
+| `docs/how-to/build-policies/rbac/components.mdx` | new user | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 9 | screenshot shows Admin/Customer on document, not the writer/reader article example; definitions duplicate policy-basics |
+| `docs/how-to/build-policies/rbac/overview.mdx` | new user | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | embedded Arcade demo is volatile UI; HR example has no Permit-specific check |
+| `docs/how-to/build-policies/rebac/building-rebac-policies.mdx` | implementer | tutorial | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **15** | 5 | enforcement example uses member_group/assign, unrelated to the Folder/File schema built above: use folder/file keys; verify step has no code or concrete instance names; video-only H4s and 5 mp4s plus YouTube, and the Zanzibar tip links a marketing blog |
+| `docs/how-to/build-policies/rebac/overview.mdx` | new user | explanation | 2 | 2 | 2 | 1 | 2 | 1 | 1 | 2 | 1 | 1 | **15** | 10 | code fences contain markdown backticks and bold that render literally: use prose or real tuple syntax (folder:bobs_files#owner); 'relationship tuple records a relationship between two resource instances' but healthcare example relates a doctor (user) to a record; mixed casing Folder:Bobs_Files#Owner vs folder, and 'will also be assigned' future tense |
+| `docs/how-to/bulk-operations.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 8 | per-endpoint limits (3,000 users etc.) differ from the backend default of 1000 and are deploy config: mark as current values or link a source; unassign example uses role 'owner:892...' which is not a role key; says bulk isn't for large migrations while intro recommends it for initial import |
+| `docs/how-to/deploy/cloud-hosts/aws-ecs-fargate.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 8 | verify step names no command: add curl -s http://<PDP_TASK_ADDRESS>:7000/health; intro mentions Lambda but no guidance; 5 AWS console screenshots |
+| `docs/how-to/deploy/cloud-hosts/gcp-cloud-run.mdx` | operator | how-to | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 12 | 50-line YAML exceeds 25-line guideline and keeps console-only annotations (client-name: cloud-console); SIGABRT cause unsourced; 'grep compute' may return several accounts |
+| `docs/how-to/deploy/cloud-hosts/helm.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | **19** | 12 | code blocks inside the numbered list are not indented, so the list restarts |
+| `docs/how-to/deploy/cloud-hosts/kubernetes-raw.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 2 | **18** | 10 | manifests only linked, not shown: inline secret.yaml at least; code blocks break numbered list |
+| `docs/how-to/deploy/cloud-hosts/pulumi.mdx` | operator | how-to | 2 | 1 | 2 | 2 | 1 | 1 | 2 | 2 | 1 | 2 | **16** | 10 | known-issue warning (dead sidecar Helm repo) appears after 'pulumi up', so readers hit the failure first: move the repo edit into a step before step 5; 'cp to /tmp + pulumi new --force' workaround is fragile, document a requirements.txt install instead; chart pinned to 0.0.2 in the example not mentioned |
+| `docs/how-to/deploy/cloud-hosts/terraform.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 1 | 1 | 2 | 2 | 1 | 2 | **17** | 10 | example requires manual edits to work (dead repo URL, plaintext key): link a fixed example or inline corrected main.tf with a sensitive variable; unindented code blocks break numbered list; old chart version 0.0.2 pinned, unmentioned |
+| `docs/how-to/deploy/deploy-to-production.mdx` | operator | how-to | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 9 | mixes how-to with sizing reference and offline explanation; PDP version 0.9.11 and :latest tags will drift |
+| `docs/how-to/deploy/offline-mode.mdx` | operator | how-to | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | **17** | 14 | config table rows keep rough copy ('via', '&', 'dir'); endpoint blocks unlabeled (no language tag); mixes how-to, explanation, and reference |
+| `docs/how-to/deploy/on-prem/change-organization-tier.mdx` | admin | how-to | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 12 | migration log messages and schema column list unverifiable from public source; 'json' block with // comments is invalid JSON; PRO tier section is undone by next installer run, move to a warning-only note |
+| `docs/how-to/deploy/on-prem/installation.mdx` | operator | mixed | 2 | 2 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 6 | YAML samples repeat frontendDomain/policyRepoUrl/sshPrivateKey keys in one block (invalid if copied): show only the final value; says a no-flag run executes Kind steps, but reference.mdx, management.mdx, and troubleshooting.mdx tell readers to run with no flag: reconcile against the installer source; move dashboards, what-it-deploys, and troubleshooting tables to the reference and troubleshooting pages |
+| `docs/how-to/deploy/on-prem/landing.mdx` | decision maker | landing | 2 | 2 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 9 | ASCII architecture art labels the OPAL server 'Policy Engine' and routes updates from Policy Sync to PDPs: replace with a coded diagram component with the correct flow; explanation (component table, security table) outweighs the hub role: move to a concepts page and link; license note repeated on every on-prem page |
+| `docs/how-to/deploy/on-prem/management.mdx` | operator | reference | 2 | 1 | 1 | 1 | 2 | 1 | 1 | 2 | 1 | 1 | **13** | 9 | upgrade, restore, and env-var samples run install-permit-platform.sh with no target flag, which installation.mdx says fails on existing clusters: add the install flags; 'all 35 Permit services' conflicts with the 24 services listed in installation.mdx; 'kubectl logs --all-containers=true' without a pod or selector errors, password rotation block admits it doesn't rotate the DB password, and '# ... continue for other services' is incomplete: fix or remove; replace the old 'Enterprise Only' admonition and hardcoded v2.0.0 package name |
+| `docs/how-to/deploy/on-prem/pdp-deployment.mdx` | operator | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 1 | 2 | 2 | 2 | **17** | 13 | show a literal /allowed response and /health response body; advanced examples use helm install though the text says use helm upgrade --reuse-values: switch the examples; placeholder <YOUR_API_TOKEN> vs 'API key' and Title Case title; PDP_CONTROL_PLANE=http://permit-backend-v2:8000 not verifiable |
+| `docs/how-to/deploy/on-prem/prerequisites.mdx` | operator | mixed | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 6 | Kubernetes 1.21, OpenShift 4.8, Helm 3.8 minimums and the sizing table are unsourced and 1.21 is long EOL: confirm against the installer; troubleshooting and TLS-decision sections digress: link to troubleshooting and installation instead; GitHub, GitLab, and Bitbucket click paths are volatile |
+| `docs/how-to/deploy/on-prem/quick-start.mdx` | operator | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 7 | 'Set the required values' is a bash block of only comments plus vi: turn into a list and keep the yaml block; tar name without version wildcard differs from installation.mdx; uses --gke for all Kubernetes while reference.mdx says --gke is GKE-only and no flag is production: reconcile |
+| `docs/how-to/deploy/on-prem/reference.mdx` | operator | reference | 2 | 1 | 1 | 0 | 2 | 1 | 1 | 2 | 1 | 1 | **12** | 8 | flag table says no flag = production Kubernetes and --gke = GKE only, contradicting installation.mdx (no flag runs Kind steps, --gke for every existing cluster): verify against the script and fix one page; 'kubectl logs --all-containers=true' with no selector fails, and a YAML comment points to a stale 'installation guide Step 3.5'; kubectl quick reference duplicates management.mdx, and large YAML blocks of keys the chart doesn't read add rot: drop them or collapse to a list |
+| `docs/how-to/deploy/on-prem/troubleshooting.mdx` | operator | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 1 | 2 | 1 | 2 | **16** | 12 | OpenShift private-registry fix omits --skip-openshift-registry, and 'other Kubernetes' reruns with no target flag, both contradicting installation.mdx; 'kubectl run test-pull --dry-run=client' never pulls an image but is labeled a pull test: replace with a real pull test; '35 services' and 'on-premise' comments, old 'Enterprise Only' admonition |
+| `docs/how-to/deploy/overview.mdx` | implementer | explanation | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | **18** | 9 | Kubernetes probe and wget health-check how-to digresses: link to deploy-to-production instead; sharding by 'OPAL topic' and chaining via http.send are stated without a linked procedure; intro names two readers (operators and architects) |
+| `docs/how-to/enforce-permissions/all-tenants-check.mdx` | implementer | how-to | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **17** | 11 | table lists Node.js and PDP API but only Java and Go examples exist: add a Node.js and a curl example; no expected output or verify step: show sample printed output or JSON; Java snippets are fragments with unused imports, and 'Cloud PDP doesn't support all-tenants' rests on a link only |
+| `docs/how-to/enforce-permissions/authorized-users.mdx` | implementer | how-to | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **17** | 8 | Python snippets lack client init and an async runner: add Permit(token, pdp) setup; add a basic curl for POST /authorized_users (only the ABAC curl exists) and tag the curl block bash; PDP 0.4.0 minimum and 'performance-intensive' unverified |
+| `docs/how-to/enforce-permissions/bulk-check.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | **18** | 11 | result explanation (Anna/John/Jane) depends on sample hidden inside CodeBlock; table lists Python bulk_check but the sample folder has no Python example; Java/Go signatures not shown in source here |
+| `docs/how-to/enforce-permissions/check.mdx` | implementer | reference | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | **17** | 10 | no SDK client setup on the page: add a short Node.js init with the pdp URL; JIT and ReBAC samples use undefined variables (location, userId, group); code comments say 'the type of the resource (the resource key)' and use 'just-in-time' filler: fix the comments |
+| `docs/how-to/enforce-permissions/data-filtering.mdx` | implementer | explanation | 2 | 1 | 1 | 1 | 2 | 0 | 2 | 2 | 2 | 2 | **15** | 7 | Go sample calls p.New(permitConfig) but permit-golang pkg/permit only exports NewPermit, so the page's only sample doesn't compile: use p.NewPermit; comment 'response indexes correspond to request indexes' is wrong for a filtered list; approach comparison (explanation) and FilterObjects how-to share one page, and Python filter_objects() is claimed without an example |
+| `docs/how-to/enforce-permissions/list-role-assignments.mdx` | implementer | reference | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **17** | 9 | Python snippets have no client init with the PDP URL: add setup; add a curl GET /local/role_assignments example since the REST table is documented; sample uses 'stripe-inc', a real company: use acme-corp |
+| `docs/how-to/enforce-permissions/url-mapping/configuring-jwks.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | API alternative has no request body example: add a PATCH curl with jwks.url and ttl; four UI screenshots of Settings are volatile |
+| `docs/how-to/enforce-permissions/url-mapping/fetching-jwks.mdx` | implementer | explanation | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 8 | no sample curl or JWKS JSON output to recognize success; third-party URLs rot (flagged in text) |
+| `docs/how-to/enforce-permissions/url-mapping/regex-url-mapping-check.mdx` | implementer | how-to | 2 | 2 | 1 | 2 | 1 | 1 | 1 | 2 | 2 | 2 | **16** | 9 | TimelineWrapper used for a non-sequential pattern cookbook, and json blocks contain // comments (invalid JSON): use plain H3 sections and a text block; priority is recommended but never shown in a rule: add the field to the example; API key placeholders vary (YOUR_PERMIT_KEY, permit_key_{your_key}, permit_key_{your_permit_env_key}) |
+| `docs/how-to/enforce-permissions/url-mapping/url-mapping-check.mdx` | implementer | how-to | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 9 | rule creation is two screenshots with no steps or field values: add numbered UI steps for one rule; check URL example (example.com/endpoint?param=value) doesn't match the template shown earlier: use a URL that matches a defined rule; segment-by-segment matching rules unsourced |
+| `docs/how-to/enforce-permissions/user-permissions.mdx` | implementer | how-to | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **17** | 8 | Go sample calls p.New, which permit-golang doesn't export (NewPermit): fix; no sample result JSON or verify step: add an example response; Java uses deprecated new Boolean(true), and the 5-arg GetUserPermissionsQuery constructor is unverified |
+| `docs/how-to/manage-data/loading-data.mdx` | implementer | explanation | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 9 | attribute precedence (check input > external > stored) stated without a source; dashboard section is only a UI video: add steps or link; 'Every action in the dashboard is also available in the API' is absolute and unverified |
+| `docs/how-to/manage-data/local-facts-uploader.mdx` | implementer | how-to | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **17** | 12 | Go samples call permit.New, which permit-golang doesn't export (NewPermit), and later snippets omit time and api imports: fix; Python and Node samples define functions but never run them: add the call; verify step only asserts true: show the printed output |
+| `docs/how-to/manage-data/use-external-data-source.mdx` | implementer | how-to | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 9 | docker run publishes no ports, so the OPA verify curl on localhost:8181 can't work: add -p 7766:7000 -p 8181:8181 and the OPA exposure setting; Rego uses pre-1.0 syntax (future.keywords, no 'if'): update; screenshot of the API reference and 3-space indented code blocks outside a list |
+| `docs/how-to/monitoring-pdps/monitoring-pdps.mdx` | operator | explanation | 2 | 2 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 10 | 'Data updates: the number of data updates shown' is circular: define the metric; log timeout section blames client-side timeouts, then tunes PDP_CONTROL_PLANE_TIMEOUT without connecting the two: show how to set the variable; EAP feature plus screenshot and dashboard label names are volatile |
+| `docs/how-to/ownership.mdx` | implementer | mixed | 2 | 2 | 2 | 1 | 2 | 1 | 1 | 2 | 1 | 2 | **16** | 6 | resource keys switch between File/Folder and file/folder, and the ABAC diagram uses User.id while the rule uses user.key: pick one casing and key; eleven UI screenshots are volatile; ReBAC relation step ('in the Folder resource add folder is parent of file') unverified against the current UI |
+| `docs/how-to/permit-cli/permit-cli-api.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 11 | '$ ' prompts in bash blocks break copy-paste; odd '-userId' alias and flag defaults unverified against CLI source |
+| `docs/how-to/permit-cli/permit-cli-envs.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 12 | member example passes keys (staging, my-project) where the table says IDs: align; bash blocks use $ prompts and show no command output; export is documented as 'env export terraform' (matches README) but CLI source defines only env/export/index.tsx: confirm the subcommand |
+| `docs/how-to/permit-cli/permit-cli-gitops.mdx` | implementer | reference | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | **17** | 7 | no command example for permit gitops env clone: add default, --project, and --dry-run examples with output; --inactive description is contradictory ('without activating after Permit validates'): rewrite; success signal is only 'prints a success message' |
+| `docs/how-to/permit-cli/permit-cli-pdp.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 12 | four code blocks lack a language tag; double space in 'permit  pdp check' sample; no sample output for pdp stats or check-url |
+| `docs/how-to/permit-cli/permit-cli-policy.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 9 | template name 'mesa-verde-banking-dem' looks truncated and is unverifiable; json blocks with // comments and tabs are not valid JSON, and the permit init block has no language tag; placeholder 'permit_key_..........' unexplained |
+| `docs/how-to/permit-cli/permit-cli-test.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 12 | bash blocks have leading spaces and two blocks lack a language tag; no sample output for generate e2e or code-sample; passive 'Saving the file is recommended' in flag table |
+| `docs/how-to/permit-cli/permit-cli.mdx` | new user | landing | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 9 | install how-to and command index reference share one page; npm install and pdp check blocks lack a language tag; no sample permit login output |
+| `docs/how-to/policy-guard/policy_guard.mdx` | admin | explanation | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 10 | EAP status only appears as an API tag name, not stated as early access that can change; diagram is a PNG image rather than a coded diagram and there is no example rule JSON; 'Workspace Owner' vs 'workspace admin permissions' wording |
+| `docs/how-to/policy-guard/policy_guard_api.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | 1 | 2 | **17** | 9 | no sample response bodies for create scope or the task object; placeholder API_SECRET_KEY and literal UUID not in angle-bracket form, and the name conflicts with the 'API key' glossary term; EAP API not flagged as subject to change |
+| `docs/how-to/sync-users.mdx` | implementer | mixed | 2 | 2 | 1 | 1 | 2 | 1 | 1 | 2 | 1 | 2 | **15** | 9 | move the Users vs Members explanation to a concept page; Node example lacks import/client init and output, JSON body shown without curl, sample uses jane@coolcompany.com; screenshot alt says 'Users item' while text says Directory, and five volatile UI screenshots |
+| `docs/how-to/use-audit-logs/audit-log-replay.mdx` | operator | reference | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 8 | add a full curl request (only a bare POST line in an untagged block); document concurrency_limit default 10 and max 5 from the API schema; example pdp_url uses a permit.io hostname |
+| `docs/how-to/use-audit-logs/debug-mode.mdx` | operator | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 9 | claim that Debug Mode is on when nothing is set is unverified and reads against the 'Not set = uses API setting' row; no example debug object output or use_debugger request body; docker run block lacks a language tag |
+| `docs/how-to/use-audit-logs/errors/cloud_pdp_not_supporting_abac.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 7 | no example decision log JSON showing debug.abac; no SDK init snippet for switching the pdp option; cause 2 how-to-confirm is vague |
+| `docs/how-to/use-audit-logs/errors/no_matching_resourcesets.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | no example permit.check() with resource attributes or sample decision log; fixes for API are link-only |
+| `docs/how-to/use-audit-logs/errors/no_matching_rules.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 10 | confirm step claims debug.abac code 'allow', unverified; no example decision log JSON or API request body; fixes are link-only |
+| `docs/how-to/use-audit-logs/errors/no_matching_usersets.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | no example check with user attributes or sample decision log; fixes rely on links |
+| `docs/how-to/use-audit-logs/errors/no_permission.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | no example decision log JSON; SDK fix is only links; order of RBAC checks stated without source |
+| `docs/how-to/use-audit-logs/errors/no_role_in_tenant.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | no example role assignment request or decision log JSON; API and SDK fixes are link-only |
+| `docs/how-to/use-audit-logs/errors/no_such_action.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | no example decision log JSON; API and SDK fixes are link-only |
+| `docs/how-to/use-audit-logs/errors/no_such_resource.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | no example decision log JSON; API and SDK fixes are link-only |
+| `docs/how-to/use-audit-logs/errors/no_such_tenant.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | no example decision log JSON; dashboard deep links (/user-management/tenants, /users) unverified |
+| `docs/how-to/use-audit-logs/errors/no_user_roles.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | no example decision log JSON or role_assignments sync snippet; fixes are link-only |
+| `docs/how-to/use-audit-logs/errors/user_not_synced.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | no example sync call or decision log JSON; fixes are link-only |
+| `docs/how-to/use-audit-logs/logs-forwarder.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | add a values.yaml snippet and the exact helm upgrade command; no sample forwarded JSON record |
+| `docs/how-to/use-audit-logs/troubleshooting.mdx` | implementer | how-to | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 9 | 'refresh the page to clear filters' and 'Set as active environment' button unverified; 'latest version of the SDK' vague; no SDK init snippet or curl for the /health check |
+| `docs/how-to/use-audit-logs/types-and-filtering.mdx` | admin | mixed | 1 | 2 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **15** | 9 | name one reader (currently developers and admins) and split the log-type explanation from the how-to; retention 'periodically' and '100 results per page' unverified, and the Audit log vs Decision log table is muddled; two UI videos and a screenshot are volatile, add a List audit logs API example |
+| `docs/integrations/GraphQL/apollo_server.mdx` | implementer | how-to | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 1 | **15** | 10 | samples call getUserIdFromJWT("") with an empty string and use ApolloServerPluginLandingPageLocalDefault without an import, with a hardcoded key and var; built on Apollo Server 3 (end of life) and tutorial operation names not confirmed to match PermissionMap; code comment 'you might need to change this url' and install/import steps as inline code instead of blocks |
+| `docs/integrations/GraphQL/overview.mdx` | implementer | explanation | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 7 | data source example passes the product id as an ABAC attribute instead of a resource instance key, which the Cloud PDP won't evaluate; directive example has no implementation or link to one |
+| `docs/integrations/SCIM/EntraID.mdx` | admin | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 12 | ten screenshots of Azure UI will drift; title is not task-shaped |
+| `docs/integrations/SCIM/OKTA.mdx` | admin | how-to | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | one screenshot hosted on i.imgur.com; SWA sign-on and group-push-to-role claims unverified; no expected result shown for Push Groups |
+| `docs/integrations/SCIM/SCIM_overview.mdx` | admin | mixed | 1 | 2 | 1 | 1 | 2 | 1 | 1 | 2 | 1 | 1 | **13** | 12 | name one reader and split base-URL reference from the explanation; 'Legacy' label and 'existing integrations keep working unchanged' are dated, and tenant_id is really a tenant key; remove bold/italic emphasis ('not', 'within that tenant'), source the normalization rules, add a sample SCIM request/response |
+| `docs/integrations/database-access-control/trino-integration.mdx` | implementer | mixed | 2 | 2 | 1 | 2 | 1 | 1 | 2 | 2 | 1 | 2 | **16** | 13 | move reference, FAQ, and operations sections to their own page or trim; access-control.properties and YAML config are duplicated (drift risk); step 3 has no docker run command and step 2 pastes CLI --help output with '(default: false) (default: false)' |
+| `docs/integrations/feature-flagging/casl.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 1 | 2 | 2 | 1 | 1 | 2 | **16** | 8 | getAbility code is repeated as an 'excerpt' after the full component (drift risk) and 'The next sections explain each part' depends on context; 'once per page load' and inverted:true claims unverified; backend route named /api/something |
+| `docs/integrations/gateways/aws-api-gateway.mdx` | implementer | how-to | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 10 | authorizer identity source is the Authorization header but the code reads x-user-key, so the console Test step returns Deny; pip install on a local machine can pull wrong-platform wheels for Lambda (add --platform manylinux2014_x86_64 --only-binary or build in a Lambda image); six AWS console screenshots |
+| `docs/integrations/gateways/kong.mdx` | implementer | how-to | 2 | 0 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **15** | 6 | page warns the Kong OPA plugin can't send the API key the PDP requires (PDP source confirms 401), so the documented setup fails; document a working path (for example a proxy that injects the header) or unpublish; plugin screenshot hosted on S3 and route mapping deferred to a blog post |
+| `docs/integrations/gateways/nginx.mdx` | implementer | how-to | 2 | 0 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **16** | 11 | page warns /nginx_allowed returns 200 for denied checks (PDP source confirms), so the config forwards denied requests and the 401/403 error_page section never triggers; verify step only checks the audit log, not that a denied request is blocked; unused auth_request_set line |
+| `docs/integrations/gateways/overview.mdx` | decision maker | explanation | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 1 | **16** | 10 | Terraform sample has 'doucments' typo and keys actions by HTTP method with names read/write, unlike the stated convention; says Kong's OPA plugin can call the PDP while the Kong page says it can't send the required API key; 'With the second method' and 'natural unit' wording |
+| `docs/integrations/gitops/custom_policy.mdx` | implementer | tutorial | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 1 | 1 | 2 | **15** | 6 | example window 2023 is expired and Rego uses pre-1.0 syntax (no 'if'), which fails on OPA 1.x; replace the 'false - true if' pseudo block with a plain list; tells readers to edit generated root.rego while the GitHub page warns generated files get overwritten, and 'Chain an else branch to the previous rule' depends on the prior step |
+| `docs/integrations/gitops/github.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | **18** | 12 | heading 'Get your project key' but steps create an API key; ssh-keygen comment uses help@permit.io; GitHub UI screenshots will drift |
+| `docs/integrations/gitops/overview.mdx` | decision maker | explanation | 1 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 1 | **16** | 9 | name one reader (developers vs deciders); 'same policy code runs in every environment so environments don't drift' conflicts with per-environment branches; 'low-code tools' and 'controls of a software project' read as marketing, add a sample branch layout |
+| `docs/integrations/infra-as-code/terraform-provider.mdx` | implementer | mixed | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | **17** | 12 | hardcoded provider version ~> 0.0.25 in two blocks; how-to mixed with reference, best practices, and OpenTofu install; typo 'created in the dashboard.:' and 'Terraform will automatically' comment |
+| `docs/integrations/permit-mcp/overview.mdx` | AI agent builder | tutorial | 2 | 1 | 1 | 1 | 2 | 1 | 1 | 1 | 1 | 1 | **12** | 10 | 'Permit Elements have four types' is wrong (Audit Logs element exists), say 'uses four elements'; server.py and client.py shown as unindented fragments ('The code is split into parts below'), show full files or link and add expected CLI output per test step; mixes 'Permit MCP server' and 'access request MCP server', 961 lines with emojis and 'it's' typo in code |
+| `docs/integrations/policy-engines/overview.mdx` | decision maker | explanation | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | **18** | 10 | no pointer on how to actually run a Cedar-based PDP, so a Cedar reader can't act; Cedar support status in Permit today left vague; diagram alt says Memcache while text says cache |
+| `docs/integrations/workflow-automation/n8n.mdx` | implementer | how-to | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 9 | three MP4 videos and screenshot of volatile n8n UI; reference section and example workflow extend the how-to; ABAC JSON 'attributes' object shows a shape the node does not send (node sends webhook body) |
+| `docs/manage-your-account/creating-environments.mdx` | operator | how-to | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 10 | placeholders inconsistent (<project-id>, {project_id}, API_SECRET_KEY, {API_SECRET_KEY}), pick one and explain; dashboard step 'Fill in the environment details' is vague and video-only, list the fields; no sample response for create or copy |
+| `docs/manage-your-account/permit-logs.mdx` | admin | how-to | 2 | 2 | 2 | 2 | 1 | 1 | 2 | 2 | 1 | 2 | **17** | 9 | heading case inconsistent ('Activity logs', 'API Logs', gerund 'Searching and filtering'); API sections have no curl sample or sample event; five screenshots and a video of volatile settings UI |
+| `docs/manage-your-account/projects-and-env.mdx` | admin | mixed | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 1 | 1 | 1 | **13** | 7 | create/edit/access sections are one sentence plus a video, add numbered steps and a success signal; 'Get the project ID' says the menu shows the project key (ID vs key conflated), and links 'Project' screen at /project-management vs 'Projects'; opens with 'Learn how', explanation mixed with how-to |
+| `docs/manage-your-account/workspace-api.mdx` | implementer | reference | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | **17** | 10 | no sample request, add a curl for POST /v2/members with a permissions array and its response; heading 'Workspace (aka organization)'; 'Every action in the dashboard is also available through the API' is unverified, scope it |
+| `docs/manage-your-account/workspace-settings.mdx` | admin | how-to | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 1 | 1 | 2 | **14** | 9 | create key, change role, add member sections are a sentence plus video, add numbered steps and a success signal; DPA plan and fee claims (Pro for an additional fee) are unverifiable pricing facts, link to pricing only; gerund Title Case headings ('Adding new members', 'Organization vs Project vs Environment keys') |
+| `docs/manage-your-account/workspace-usage.mdx` | admin | reference | 2 | 2 | 1 | 1 | 1 | 2 | 2 | 2 | 1 | 2 | **16** | 10 | Title Case headings ('Workspace Level Usage', 'MAUs & Tenants Usage'); MAU definition not sourced, link to the billing definition; UI location 'top right corner' plus autoplay video will rot |
+| `docs/modeling/feature-flagging.mdx` | implementer | tutorial | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 1 | **15** | 9 | page claims ABAC but only builds an RBAC policy, and step 5 adds country/channel as resource attributes although they are user attributes, fix the model or drop ABAC; route served at '/api/something' and hardcoded token, use a real path and env var; verify step has no expected permittedList output, title is not a task |
+| `docs/modeling/food-delivery-system-example-using-nuxt.mdx` | implementer | tutorial | 2 | 1 | 2 | 1 | 2 | 1 | 1 | 2 | 1 | 2 | **15** | 10 | info says reading meals/orders works without a check but endpoint table lists GET /meals and /orders as RBAC, reconcile; 'Create resources with the actions the app uses' never lists the action keys (fulfill, assign-rider, deliver), add them; Vue SFC tagged ts with '// ...' elisions, 'instance role' vs 'resource role' and 'Multitenant' |
+| `docs/modeling/google-drive.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 1 | **17** | 11 | prose inside code blocks tagged js (Test objects, relations list), use lists; casing drifts between Folder#editor and folder#editor; 2049 lines tripled per language and Java tab pins 2.0.0 with no samples |
+| `docs/modeling/mesa-verde.mdx` | decision maker | mixed | 2 | 1 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 8 | run steps delegated to repo README with no local success signal beyond sign-up; explanation mixed with how-to and file map reference; many screenshots and diagrams of UI and external services (Stytch, JSONBin, ngrok) |
+| `docs/modeling/other-code-examples.mdx` | new user | landing | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | **16** | 8 | repository list renders client-side from GitHub API, so readers and AI retrieval may see nothing, add a static fallback list; 'Typical topics' table (Langflow, PydanticAI, banking demo) not tied to actual repos, verify or drop |
+| `docs/modeling/pink-mobile.mdx` | implementer | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 10 | excerpts use bare '...' making JS invalid and indentation uneven, use comments; users.sync sample missing await; run steps delegated to README, arcade iframe and screenshots will rot |
+| `docs/modeling/rebac-GHC.mdx` | implementer | tutorial | 2 | 1 | 1 | 1 | 1 | 1 | 1 | 2 | 1 | 1 | **12** | 9 | code blocks untagged and unindented so numbered lists restart, tag bash/json/rego and indent under steps; endpoint table uses roles (Profile:Caregiver) the resource table never defines and pilot role name differs ('Pilot group member' vs 'Feature testing pilot group'), caretaker vs caregiver; hosted app with public shared passwords and 2024 dates |
+| `docs/overview/access-requests-and-approvals.mdx` | implementer | tutorial | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 8 | no code for iframe embed or permit.elements.login(), add both snippets; UI labels unverified and inconsistent with other pages ('Generate Code' here vs 'Get Code' in Permit MCP page); six YouTube videos carry the steps |
+| `docs/overview/advanced-authorization-queries.mdx` | implementer | how-to | 2 | 1 | 1 | 1 | 2 | 0 | 2 | 2 | 1 | 2 | **14** | 10 | samples do not match the stated results (bulk sample checks anna/john on contracts yet text says Alice gets true,true,true), write samples for the blog scenario; shared Go bulk sample calls undefined p.New and Java sample uses undefined tenant.key, fix; filter section names Python filter_objects but shows only a Go fragment |
+| `docs/overview/best-practices.mdx` | decision maker | explanation | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 15 | few concrete artifacts, add a sample project/environment/tenant mapping table; guidance only with no checklist to confirm a rollout plan |
+| `docs/overview/configure-your-first-rbac-policy.mdx` | new user | tutorial | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 11 | 'labeled Top Level Access in some dashboard versions' hedges UI labels; four videos of volatile UI; title casing 'RBAC Policy' |
+| `docs/overview/connecting-your-app.mdx` | new user | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 14 | numbered H2s split across partial (1, 2) and page (3, 4) and code comments say 'the previous step'; seven language partials plus screenshots to maintain; docker commands in intro partial untagged |
+| `docs/overview/create-a-rebac-policy.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 1 | 1 | 2 | 1 | 1 | 2 | **15** | 8 | test check (John is direct Owner of the widget) never exercises the Dashboard-to-Widget derivation: add a check for a user with Dashboard#Owner on data expecting true on data_consumption; check snippet is shape-only with someKey/someTenant: give the literal call with johnsmith/edit/Widget:data_consumption and its output; mixed 'Part 1/Step 1-5' headings and ~15 videos/screenshots of volatile UI |
+| `docs/overview/get-api-key.mdx` | new user | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 15 | expected scope result renders as a JS const, not the JSON response body: show raw JSON; two UI screenshots of menu labels will drift |
+| `docs/overview/glossary.mdx` | new user | reference | 1 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 1 | **16** | 12 | no stated reader; 'Concepts / Glossary' title and inconsistent entry naming (Projects plural, PDP as 'network node'); tip admonitions used for plain examples ('John who is an Administrator') |
+| `docs/overview/how-does-it-work.mdx` | new user | explanation | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 1 | **17** | 16 | OPAL Server 'tracks a Git repository' describes self-hosted OPAL, not how Permit's control plane feeds OPAL: rewrite for Permit (policy from the dashboard/API, Git only with GitOps); connectivity.png is a static image diagram, replace with a coded component; benefit bullets repeat each other (no round trip / don't depend on cloud) |
+| `docs/overview/local-authorization-microservice.mdx` | implementer | mixed | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | **17** | 10 | 'Why run the PDP locally' explanation block (perf/security/reliability) precedes the how-to: move to a concept page and link; PDP_ALLOW_METRICS_UNAUTHENTICATED is a horizon setting, confirm it governs OPA :8181/metrics; 'Each docker run command below' depends on page position |
+| `docs/overview/perform-a-local-policy-check.mdx` | implementer | landing | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **17** | 9 | step 3 has no permit.check() code or output: add a 5-line check with a known user/action/resource and the expected true/false; 'the container listens on localhost:7766' conflates host mapping with container port 7000; overlaps run-pdp and local-authorization-microservice |
+| `docs/overview/perform-policy-check-with-cloud-pdp.mdx` | new user | tutorial | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **15** | 10 | check-function-false/true samples omit await and never log, so 'permitted' is a Promise and nothing prints: add await + console.log(permitted); tutorial depends on a specific policy (Admin role without update, user key user/987654321) that the prereq page does not create: add setup or link; 'How permit.check() works' reference table interrupts the tutorial |
+| `docs/overview/run-pdp.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 12 | Cloud PDP snippet lacks the import and has filler comments ('your API Key'): reuse the initialize sample with import; health/verify text duplicated across run-pdp, local-authorization-microservice, perform-a-local-policy-check |
+| `docs/overview/setup-attribute-based-access-control.mdx` | implementer | tutorial | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 1 | **15** | 6 | scenario says only certified Engineering employees read classified docs, but step 5 grants Employee read on all Document, so the built policy does not meet the goal (the warning admits it): drop Employee's Document grant or add a non-classified resource set; Verify has no check code: add a permit.check() with user/resource attributes and output; 'The video checks read under Document only' narrates a video instead of instructing |
+| `docs/overview/sync-application-data-into-permit.mdx` | implementer | mixed | 2 | 2 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 9 | embedded sync sample calls permit.users.sync, which does not exist in the Node SDK (it is permit.api.users.sync): fix the sample; how-to code and Directory screenshot belong on /how-to/sync-users, link instead; handoff video is volatile |
+| `docs/overview/sync-applications-data.mdx` | implementer | how-to | 2 | 1 | 2 | 0 | 2 | 0 | 2 | 1 | 1 | 2 | **13** | 11 | samples broken: Node uses permit.api.resource_instances/relationship_tuples (SDK is resourceInstances/relationshipTuples, as the page's own table says), 'top-level' role sample passes resource_instance with undefined dashboard, role-assignment curl has no auth header, create-user curl missing closing quote, tuples curl ends with a backtick; resource-instance-role-assignment is pseudo-code ('Visualization of above explanation'): replace with a real assign call; samples use Elon Musk/Tesla and Stripe Inc: use john@permit.io/acme-corp |
+| `docs/overview/sync-your-first-user-with-sdk.mdx` | implementer | tutorial | 2 | 1 | 2 | 0 | 2 | 0 | 2 | 2 | 1 | 2 | **14** | 10 | JS samples call permit.users.sync, permit.roles.assign, permit.tenants.create, permit.tenants.assignUser, none of which exist on the Node Permit object (use permit.api.users.sync / users.assignRole / tenants.create): fix; create-tenant curl omits {proj_id}/{env_id} and has invalid JSON (trailing comma), add-user-to-tenant curl URL is 'tenants//users': fix URLs; default-tenant screenshot shows John as Employee though step 3 assigns admin |
+| `docs/overview/use-the-permit-api-and-sdk.mdx` | implementer | tutorial | 2 | 1 | 2 | 1 | 2 | 1 | 1 | 2 | 2 | 2 | **16** | 9 | first-call curl posts to /v2/schema/roles with no {proj_id}/{env_id} and no body: use /v2/schema/{proj_id}/{env_id}/roles with the JSON body; JS creates account:view but text and verify expect read: align on read; next-steps link text says 'with the SDK' for a page titled 'with the API' |
+| `docs/overview/walkthroughs-intro.mdx` | new user | landing | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | **18** | 15 | card 'Sync your first user: from your identity provider' but the page syncs via REST API: fix card text in content.js; walkthrough list lives in content.js, so the MDX body has no retrievable text beyond the lead |
+| `docs/overview/why-permit.mdx` | decision maker | explanation | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **19** | 11 | description promises a comparison with building it yourself, but the page has no build-vs-buy section: add a short table of what you would build (engine, sync, UI, audit) or drop the claim from the description |
+| `docs/permit-mcp-gateway/advanced-features.mdx` | decision maker | explanation | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 8 | session expiry 'after 30 days without tool calls, or 90 days after it starts' is wrong: gateway enforces a 90-day inactivity TTL reset on each call (MCP_SESSION_HARD_TTL); 30-day soft TTL is not enforced; match consent-service; no concrete example of the identify_self exchange or a permission receipt: add one; 'Contact Permit' availability statuses will drift, date or link them |
+| `docs/permit-mcp-gateway/architecture.mdx` | maintainer | mixed | 1 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 10 | intro names three readers (operators, security architects, decision makers): pick one and link others; mixes explanation with a how-to (JWT verification, 429 handling) and a glossary: move verification to its own how-to; consent sequence shows CS->>GW for code exchange while consent-service shows CS->>Up: reconcile; trust keyword list duplicated from guide |
+| `docs/permit-mcp-gateway/audit-logs.mdx` | operator | how-to | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 12 | unverifiable specifics (50-registration cap, reason shortening); code block at line 75 has no language tag; three screenshots of volatile gateway UI |
+| `docs/permit-mcp-gateway/authentication-methods.mdx` | admin | reference | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 15 | reference page carries full third-party IdP how-to procedures: split Okta/Entra/Google setup into how-tos or mark as vendor-dependent per step; guide.mdx calls the settings 'Authentication settings' while this page says 'Settings': align; vendor console labels unverifiable and will drift |
+| `docs/permit-mcp-gateway/consent-service.mdx` | implementer | explanation | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 13 | session expiry (90 days after last tool call) conflicts with guide.mdx and advanced-features.mdx (30/90 days); this page matches source, fix the others; sequence diagram 'CS->>Up: Exchange code' contradicts architecture 'CS->>GW'; many screenshots of consent UI |
+| `docs/permit-mcp-gateway/demos/linear-mcp-gateway.mdx` | AI agent builder | tutorial | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 1 | 1 | 2 | **16** | 10 | trust level the PM and Developer select at consent is never stated (results assume they pick the max): add it to each connect step; 'Linear MCP server has no setting that limits tools' is unverified; ~17 screenshots incl. third-party Linear tool names, and 'follows the same steps' section is not self-contained |
+| `docs/permit-mcp-gateway/demos/n8n-linear-mcp-gateway.mdx` | AI agent builder | tutorial | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 1 | 1 | 2 | **15** | 8 | trust level to pick in step 1 consent is not stated (step 3 relies on 'High in the Linear demo'): state it; webhook and fetcher nodes are unexplained custom labels ('API Webhook Listener', 'HTTP Fetcher') that don't match n8n node names: name the real nodes or give the workflow JSON; sections lean on the Linear demo for context |
+| `docs/permit-mcp-gateway/enterprise-deployment.mdx` | decision maker | explanation | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 1 | **17** | 10 | architecture.mdx lists the customer-controlled admin dashboard as 'Contact Permit' but this page says 'the same admin dashboard' in all models: reconcile; air-gapped claims (installer includes images, no outbound connections) not linked to install docs; 'When to choose' industry lists read as marketing |
+| `docs/permit-mcp-gateway/guide.mdx` | admin | tutorial | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 1 | 1 | 2 | **16** | 11 | session expiry '30 days without tool calls or 90 days after created' contradicts source (90-day inactivity TTL) and consent-service.mdx: fix; troubleshooting table, auth-method section, and trust-keyword reference inflate the tutorial and duplicate host-setup/architecture: link instead; steps refer to 'step 4'/'step 6' for context |
+| `docs/permit-mcp-gateway/host-setup.mdx` | admin | how-to | 2 | 2 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 9 | tells users to add the mcpServers snippet to 'your VS Code MCP settings', but VS Code uses a top-level servers key (guide.mdx says so): fix; mcp.hubspot.app/mcp URL looks invented: verify or use a placeholder; create-host/import/client-snippet steps duplicate guide.mdx, and rollout planning is explanation inside a how-to |
+| `docs/permit-mcp-gateway/http-egress-proxy/authorization.mdx` | operator | explanation | 2 | 2 | 1 | 1 | 2 | 1 | 1 | 1 | 2 | 2 | **15** | 10 | 'Max Trust Level setting described in Host setup' points to the per-MCP-server ceiling, not a per-workflow one: link to where workflow ceilings are set; asg proxy authorize options table is CLI reference duplicated from cli.mdx; 'gateway' and 'proxy' used interchangeably and 'such an agent'/'This is' lack antecedents |
+| `docs/permit-mcp-gateway/http-egress-proxy/cli.mdx` | operator | reference | 2 | 2 | 2 | 1 | 2 | 1 | 1 | 2 | 1 | 2 | **16** | 12 | 'asg init --host acme-corp.example.com' takes a full host name while 'asg run --host <subdomain>' takes a subdomain: clarify; 'intent guardian', 'drift block', 'tenant developer' undefined: define on first use; no sample output for whoami/doctor --json |
+| `docs/permit-mcp-gateway/http-egress-proxy/connecting-agents.mdx` | AI agent builder | how-to | 2 | 1 | 2 | 1 | 2 | 1 | 1 | 2 | 2 | 2 | **16** | 10 | shell path requires the agent to send Proxy-Authorization from the token file but gives no code: add a Python/Node snippet; Docker/K8s section shows no generated output or mount example: add a sample Compose/Secret mount; 'tunnel rule' and 'method class all' used without definition |
+| `docs/permit-mcp-gateway/http-egress-proxy/credentials.mdx` | operator | mixed | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 10 | 'the asg CLI creates only static credentials' contradicts the table and OAuth section that use asg proxy connect (say the CLI cannot create AWS STS credentials); page mixes how-to and reference (credential types, write-only explanation) with no verify step for OAuth or AWS STS (add a check such as asg proxy credentials list after connect); dashboard nav paths ('CLIs / APIs → Credentials') are volatile UI |
+| `docs/permit-mcp-gateway/http-egress-proxy/egress-rules.mdx` | operator | reference | 2 | 2 | 1 | 1 | 2 | 1 | 1 | 2 | 1 | 2 | **15** | 11 | 'intent guardian' used without definition and gateway/proxy/trust vs trust level drift; no concrete dashboard or request/response example beyond the tree; HITL opt-in and CLI error codes unverifiable, how-to steps mixed into reference |
+| `docs/permit-mcp-gateway/http-egress-proxy/index.mdx` | decision maker | landing | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | **18** | 11 | 'intent guardian' and 'step-up verdict' used without definition (define on first use or link); availability note and dashboard section names are volatile |
+| `docs/permit-mcp-gateway/http-egress-proxy/quickstart.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 13 | sections lean on earlier steps ('the token file from step 4', 'in the next step', 'This time'); name the file/workflow explicitly; step 7 expected result 'a success status' is vague (give the status code, e.g. 200 with a customer list); 'asg CLI has no workflow command' and dashboard labels are likely to rot |
+| `docs/permit-mcp-gateway/http-egress-proxy/security.mdx` | operator | explanation | 2 | 2 | 2 | 1 | 2 | 1 | 1 | 2 | 1 | 2 | **16** | 13 | many unverifiable specifics (600/1200 defaults, AES-256-GCM, twelve-word intent); proxy vs gateway and 'CLIs / APIs → Activity' naming drift; no config example for vault or rate-limit settings |
+| `docs/permit-mcp-gateway/human-in-the-loop.mdx` | admin | mixed | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 9 | mixes how-to, explanation (How it works) and UI reference; 8 screenshots plus keyboard shortcuts of volatile UI |
+| `docs/permit-mcp-gateway/index.mdx` | decision maker | landing | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | **18** | 15 | benefit lists ('What the gateway gives developers/security teams') read as marketing and duplicate the overview page; overview linked twice |
+| `docs/permit-mcp-gateway/managing-humans-and-agents.mdx` | admin | mixed | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 11 | concept explanation and how-to procedures in one page; trust calculation and revocation tables duplicated in permit-integration.mdx; screenshots of volatile UI |
+| `docs/permit-mcp-gateway/on-prem-installation.mdx` | operator | how-to | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | **18** | 14 | 'Platform'/'Platform UI' (yaml comments, headings, pod names) alternates with 'admin dashboard'; step 6 template shows plaintext Option B while step 3 recommends Option A; several code blocks over 25 lines, Kubernetes 1.25+ version pin |
+| `docs/permit-mcp-gateway/overview.mdx` | decision maker | explanation | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 8 | unverifiable specifics (30/90-day session expiry, logged event list, filters); competitor comparison table reads as positioning; very long page mixing explanation, use cases, buying guidance, deployment |
+| `docs/permit-mcp-gateway/permit-integration.mdx` | maintainer | explanation | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **17** | 12 | derived role rules table lists no rule for {server}-low with a medium/high relation, yet the min() table says those combos yield low; reconcile or explain via role hierarchy; explanation, reference and debugging how-to mixed; intro sentence repeats the description; internal detail (9 rules) likely to rot |
+| `docs/permit-mcp-gateway/platform.mdx` | admin | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | gateway URL format '<prefix>-<suffix>.agent.security' differs from quickstart '<your-subdomain>.agent.security'; keyword classification list and default auth method unverified and volatile; screenshots of volatile UI |
+| `docs/permit-mcp-gateway/quickstart.mdx` | new user | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | client config formats (mcp-remote, VS Code servers key) are third-party and likely to change |
+| `docs/quick-start/aspnet.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 8 | Program.cs is assembled from fragments (first block already closes class and namespace, later blocks say 'add inside the class'); show the full file or mark insertion points; boilerplate policy/PDP sections duplicated across 10 framework pages; code blocks exceed 25 lines |
+| `docs/quick-start/django.mdx` | implementer | tutorial | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 7 | settings.py replaces INSTALLED_APPS with contenttypes+staticfiles but keeps default MIDDLEWARE, whose AuthenticationMiddleware imports django.contrib.auth.models and fails at startup; add django.contrib.auth/sessions or set MIDDLEWARE explicitly; boilerplate duplicated across 10 pages |
+| `docs/quick-start/express.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | policy/PDP/test sections duplicated across 10 framework pages and terminal screenshots will rot |
+| `docs/quick-start/fastapi.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | **18** | 11 | '# Replace with your PDP URL' comment contradicts the env-var approach; UserIn model and Permit client interleaved without blank line; boilerplate duplicated across 10 pages |
+| `docs/quick-start/flask.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | **18** | 11 | wraps each async SDK call in asyncio.run() instead of using the sync client it links to; comment typo 'logic..'; boilerplate duplicated across 10 pages |
+| `docs/quick-start/gin.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | boilerplate policy/PDP/test sections duplicated across 10 framework pages |
+| `docs/quick-start/nest.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 10 | GET /posts is guarded by a 'create' Post check (use POST or check 'read'); replacing app.controller.ts drops getHello and breaks the generated app.controller.spec.ts; boilerplate duplicated across 10 pages |
+| `docs/quick-start/nextjs.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 10 | TypeScript blocks tagged js; register uses deprecated permit.api.assignRole (use permit.api.users.assignRole like other pages) and middleware creates a second client instead of importing @/lib/permit; middleware runs in the Edge runtime by default and Node SDK compatibility is unstated (add runtime note), and Next 16 renames middleware to proxy |
+| `docs/quick-start/rails.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | **18** | 10 | assign_role helper hardcodes https://api.permit.io (breaks for other regions/self-hosted); code comment style uneven; boilerplate duplicated across 10 pages |
+| `docs/quick-start/spring-boot.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | **18** | 11 | pins permit-sdk-java 2.0.0 while current release is 2.2.x; unused imports (TenantCreate, TenantRead) and trailing whitespace in sample; boilerplate duplicated across 10 pages |
+| `docs/quickstart.mdx` | new user | tutorial | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 16 | four UI videos and screenshots of volatile dashboard UI (add captions and a last-verified note); Next steps lists 9 links (trim to 5); video walkthrough admonition duplicates the page and will drift |
+| `docs/sdk/cpp/quickstart-cpp.mdx` | implementer | landing | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 7 | no build or minimal call snippet, so the reader must leave the page to do anything (add a CMake build command and one API call); requirements copied from the README will rot (link the README section instead); stub page with thin retrievable content |
+| `docs/sdk/dotnet/quickstart-dotnet.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 1 | **16** | 10 | full example app in the partial has a stale comment 'permit.write(permit.api.syncUser(user))' and creates a Permit client per request (fix the comment, hoist the client); typo 'and false otherwise.:' in the partial; 70-line example block and '1. Pull' step headings nested inside tabs |
+| `docs/sdk/dotnet/role/AssignRole.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 11 | one-line example with undefined userId/roleId/tenantId and no resource-instance call despite documenting those params (add one); dotnet code fence is non-standard (use csharp); no sample RoleAssignmentRead output |
+| `docs/sdk/dotnet/role/CreateRole.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | sample has no using PermitSDK.OpenAPI.Models; dotnet code fence non-standard (use csharp); no sample response |
+| `docs/sdk/dotnet/role/GetRole.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | **18** | 11 | sample names the RoleRead variable 'roles' and the prose apologizes for it (rename to role and drop the sentence); one-line example with no output; dotnet code fence |
+| `docs/sdk/dotnet/role/ListAssignedRoles.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | recommends GetAssignedRoles but gives it no reference page or link (add one); one-line example with no output; dotnet code fence |
+| `docs/sdk/dotnet/role/ListRoles.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 11 | no paging example (show a page loop using Page_count); one-line example; dotnet code fence |
+| `docs/sdk/dotnet/role/UnassignRole.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 11 | one-line example with undefined variables; no resource-instance unassign example; dotnet code fence |
+| `docs/sdk/dotnet/tenant/CreateTenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | placeholder values key/name/description are not realistic (use acme-corp); no using directive; dotnet code fence |
+| `docs/sdk/dotnet/tenant/DeleteTenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 11 | warning says 'all its related data' without naming it (role assignments, resource instances); one-line example; untitled warning admonition |
+| `docs/sdk/dotnet/tenant/GetTenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 11 | one-line example with no sample output; dotnet code fence non-standard |
+| `docs/sdk/dotnet/tenant/UpdateTenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | placeholder values name/description not realistic; no attribute-update example despite the replace-all warning; dotnet code fence |
+| `docs/sdk/dotnet/user/CreateUser.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 11 | UserCreate table omits the Role_assignments property the model has; 'Attributes = {}' is a no-op initializer on object (use new Dictionary<string, object>()); dotnet code fence |
+| `docs/sdk/dotnet/user/DeleteUser.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 11 | warning doesn't name the related data removed; one-line example; dotnet code fence |
+| `docs/sdk/dotnet/user/GetUser.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 11 | one-line example with no sample output; dotnet code fence non-standard |
+| `docs/sdk/dotnet/user/SyncUser.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 11 | property table duplicated from CreateUser (link instead); 'Attributes = {}' no-op initializer; dotnet code fence |
+| `docs/sdk/erlang/quickstart-erlang.mdx` | implementer | landing | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 7 | titled 'Erlang SDK' but the repo is a Cowboy server stub, not a client (retitle to say so); no setup snippet (add the erlang.mk commands or link the README section); stub page |
+| `docs/sdk/golang/quickstart-golang.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 2 | 1 | 1 | 2 | 1 | 2 | **16** | 9 | client variable is permitClient in some snippets and Permit in others (pick one); full app has stale comment 'permitClient.syncUser(user)', typo 'jown@doe.com', and comment 'Let the user read' on a create check; full app block is 60+ lines |
+| `docs/sdk/golang/resource/Create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | sample uses key resource-key then overrides the name with SetName('document') (use key document, name Document, drop the override); tab-indented fragments without the models import; error-code table repeated verbatim on every Go page (link a shared errors section) |
+| `docs/sdk/golang/resource/Delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | error-code table repeated verbatim on every Go page (link a shared errors section); warning doesn't name the related data removed |
+| `docs/sdk/golang/resource/Update.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | error-code table repeated verbatim on every Go page (link a shared errors section); no models import in sample |
+| `docs/sdk/golang/role/Create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 9 | error-code table repeated verbatim on every Go page (link a shared errors section); placeholder keys role-key/resource-key instead of realistic names |
+| `docs/sdk/golang/role/Delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | example is a one-line fragment with no import or err handling |
+| `docs/sdk/golang/role/Get.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | error-code table repeated verbatim on every Go page (link a shared errors section); GetById sample should show the github.com/google/uuid import |
+| `docs/sdk/golang/role/Update.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 8 | error-code table repeated verbatim on every Go page (link a shared errors section); no sample for reading current permissions before replacing them |
+| `docs/sdk/golang/tenant/Create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | sample sets name tenant-name then overrides it with SetName('tenant-name-new'), a pointless step (drop the override); tab-indented call fragment; error-code table repeated verbatim on every Go page (link a shared errors section) |
+| `docs/sdk/golang/tenant/Delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | error-code table repeated verbatim on every Go page (link a shared errors section); warning doesn't name the related data removed |
+| `docs/sdk/golang/tenant/Get.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | error-code table repeated verbatim on every Go page (link a shared errors section); GetById sample should show the uuid import |
+| `docs/sdk/golang/tenant/List.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 10 | pagination loop described in prose only (add the loop code); because the SDK swallows API errors, the fewer-than-perPage stop rule should also stop on an empty page (say so) |
+| `docs/sdk/golang/tenant/Update.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | error-code table repeated verbatim on every Go page (link a shared errors section); placeholder tenant-key |
+| `docs/sdk/golang/user/AssignResourceRole.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | error-code table repeated verbatim on every Go page (link a shared errors section); leading tab indentation in sample |
+| `docs/sdk/golang/user/AssignRole.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 11 | error-code table repeated verbatim on every Go page (link a shared errors section); leading tab indentation in sample |
+| `docs/sdk/golang/user/Create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | error-code table repeated verbatim on every Go page (link a shared errors section); no models import in sample |
+| `docs/sdk/golang/user/Delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 10 | error-code table repeated verbatim on every Go page (link a shared errors section); warning doesn't name the related data removed |
+| `docs/sdk/golang/user/Get.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 9 | error-code table repeated verbatim on every Go page (link a shared errors section); GetById sample should show the uuid import |
+| `docs/sdk/golang/user/GetAssignedRoles.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | error-code table repeated verbatim on every Go page (link a shared errors section); no multi-page loop example |
+| `docs/sdk/golang/user/SyncUser.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 11 | error-code table repeated verbatim on every Go page (link a shared errors section); UserCreate field table duplicated from Users.Create (link instead) |
+| `docs/sdk/golang/user/UnassignRole.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **19** | 9 | example is a one-line fragment with leading tab, no import or err handling |
+| `docs/sdk/java/quickstart-java.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 10 | pins permit-sdk-java 2.0.0 in three places (state it once); sync snippet uses User.Builder but the full app uses UserCreate without explaining the two overloads; ABAC snippet has no imports and comments 'Creating a UserSet' that misname what the code does |
+| `docs/sdk/java/resource/create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 10 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages |
+| `docs/sdk/java/resource/delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 11 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages; warning placed after Return value instead of before the example |
+| `docs/sdk/java/resource/get.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | 1 | 2 | **17** | 10 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages; 'If no resource matches... the API returns an error status code' is vague (state 404) |
+| `docs/sdk/java/resource/list.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 11 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages; no loop example for reading every page |
+| `docs/sdk/java/resource/update.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 11 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages; doesn't say whether setting actions replaces the whole map |
+| `docs/sdk/java/role/assign-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 11 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages |
+| `docs/sdk/java/role/create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | **19** | 11 | generic headings (Signature, Parameters, Example) don't name the method |
+| `docs/sdk/java/role/delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 11 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages |
+| `docs/sdk/java/role/get-assigned-roles.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 11 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages |
+| `docs/sdk/java/role/get.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | 1 | 2 | **17** | 10 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages; vague 'returns an error status code' when the role is missing (state 404) |
+| `docs/sdk/java/role/list.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 11 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages |
+| `docs/sdk/java/role/unassign-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 11 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages |
+| `docs/sdk/java/role/update.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 11 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages; implies but doesn't state that permissions replaces the full list |
+| `docs/sdk/java/tenant/create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 11 | generic headings don't name the method; tenant attributes example reuses user-style 'age'/'fav_color' |
+| `docs/sdk/java/tenant/delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 11 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages |
+| `docs/sdk/java/tenant/get.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | 1 | 2 | **17** | 10 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages; vague 'returns an error status code' when the tenant is missing |
+| `docs/sdk/java/tenant/list.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 11 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages |
+| `docs/sdk/java/tenant/update.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 11 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages |
+| `docs/sdk/java/user/create.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 10 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages; role-assignments example repeats the whole first example (show only the added lines) |
+| `docs/sdk/java/user/delete.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | **19** | 11 | generic headings don't name the method |
+| `docs/sdk/java/user/get.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | 1 | 2 | **17** | 10 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages; vague 'returns an error status code' when the user is missing |
+| `docs/sdk/java/user/list.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | 2 | **18** | 11 | generic headings 'Signature', 'Example', 'Return value' don't name the method (e.g. 'resources.create() example'); exceptions table duplicated verbatim across all Java pages; page loop described in prose only |
+| `docs/sdk/java/user/sync.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | **19** | 11 | generic headings (Signature, Parameters, Example) don't name the method; filler code comments ('this is how you sync the user') |
+| `docs/sdk/kotlin/quickstart-kotlin.mdx` | implementer | landing | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 7 | no build or call snippet (add the gradle build command and one API call); hardcoded Kotlin 1.6.10 / Gradle 7.5 copied from the README will rot (link the README); stub page |
+| `docs/sdk/nodejs/all-tenants.mdx` | implementer | mixed | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **17** | 7 | no permit.checkAllTenants() JavaScript example on a Node.js SDK page, only curl (add an await permit.checkAllTenants(...) call and its output); curl uses API_SECRET_KEY without saying to replace it; generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/bulk-requests-examples.mdx` | implementer | mixed | 2 | 1 | 1 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **17** | 7 | titled for the Node.js SDK but every sample is curl (add a JS call per method, e.g. await permit.api.users.bulkUserCreate([...])); no response examples or verify step; per-call limits live only on another page |
+| `docs/sdk/nodejs/quickstart-nodejs.mdx` | implementer | tutorial | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 2 | 1 | 1 | **17** | 8 | page mixes the check quickstart with a policy-management tour (split or retitle); typo 'view actions.:'; code comment 'the PDP container you've set up in the previous step' points to a step not on this page, and the sync example uses key 'key' while assign/check use john@permit.io |
+| `docs/sdk/nodejs/relationship-tuple/list-relationship-tuples.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | **19** | 9 | generic headings 'Example', 'Return value', 'Parameters' don't name the method; sample return data doesn't match the filter in the example call; large duplicated JSON block for the raw API shape |
+| `docs/sdk/nodejs/resource-instance/list-resource-instances.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | **19** | 10 | generic headings 'Example', 'Return value', 'Parameters' don't name the method; no pagination loop code; no sample output |
+| `docs/sdk/nodejs/resource/create-resource.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 9 | example call uses a variable the unnamed object block never binds (write const x = {...}; before the call) (resource); placeholder object with empty actions creates a resource with no actions; generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/resource/delete-resource.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 11 | no warning about related data (actions, role permissions) deleted with the resource; one-line example with unbound resourceKey; generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/resource/update-resource.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | **17** | 9 | example call uses a variable the unnamed object block never binds (write const x = {...}; before the call) (resource); doesn't state whether actions replaces the whole map (Go/.NET pages say it does); generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/role/assign-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 9 | example call uses a variable the unnamed object block never binds (write const x = {...}; before the call) (assignedRole); generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/role/create-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 9 | example call uses a variable the unnamed object block never binds (write const x = {...}; before the call) (role); generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/role/delete-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 11 | one-line example with unbound roleKey; no note on what happens to role assignments; generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/role/get-assigned-roles.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 11 | parameter object block and call use different values (userId vs userKey); no includeTotalCount output example; generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/role/get-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 11 | one-line example with unbound roleKey and no sample output; generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/role/unassign-role.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 9 | example call uses a variable the unnamed object block never binds (write const x = {...}; before the call) (unassignedRole); generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/role/update-role.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | **17** | 9 | example call uses a variable the unnamed object block never binds (write const x = {...}; before the call) (role); doesn't say permissions replaces the full list; generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/sync-policy-script/sync-policy.mdx` | implementer | how-to | 2 | 2 | 1 | 2 | 2 | 1 | 2 | 2 | 1 | 1 | **16** | 10 | outline section repeats placeholder code ('// Implementation here', key 'User') that adds nothing before the full script (remove the outline); full script is 130 lines with triplicated action blocks and a Cloud PDP URL it never uses; placeholder 'permit_key_' is not marked as a placeholder |
+| `docs/sdk/nodejs/tenant/create-tenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 9 | example call uses a variable the unnamed object block never binds (write const x = {...}; before the call) (tenant); placeholder values key/name; generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/tenant/delete-tenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 11 | no warning about related data deleted with the tenant; unbound tenantKey; generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/tenant/get-tenant.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 11 | unbound tenantKey and no sample output; last_action_at definition unsourced; generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/tenant/list-all-tenant-users.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | **19** | 11 | generic headings 'Example', 'Return value', 'Parameters' don't name the method; result discarded in the example (assign it to a variable); no pagination loop |
+| `docs/sdk/nodejs/tenant/list-tenants.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | **19** | 10 | generic headings 'Example', 'Return value', 'Parameters' don't name the method; result discarded in the example; no pagination loop code |
+| `docs/sdk/nodejs/tenant/update-tenant.mdx` | implementer | reference | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 9 | example uses undefined tenantKey and tenant variables; no output sample |
+| `docs/sdk/nodejs/user/create-user.mdx` | implementer | reference | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 11 | example calls create(user) with 'user' never tied to the UserCreate object; placeholder values ('key') unexplained; no import or output shown |
+| `docs/sdk/nodejs/user/delete-user.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 11 | unbound userKey; no warning for the irreversible delete; generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/user/get-user.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 10 | example discards the result and uses unbound userKey (const user = await permit.api.users.get('john@permit.io')); no sample output; generic headings 'Example', 'Return value', 'Parameters' don't name the method |
+| `docs/sdk/nodejs/user/list-users.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | **19** | 10 | generic headings 'Example', 'Return value', 'Parameters' don't name the method; result discarded in the example; no pagination loop |
+| `docs/sdk/nodejs/user/sync-user.mdx` | implementer | reference | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | **18** | 10 | example call uses a variable the unnamed object block never binds (write const x = {...}; before the call) (user); generic headings 'Example', 'Return value', 'Parameters' don't name the method; role_assignments field has no example |
+| `docs/sdk/permit-prisma-extension.mdx` | implementer | mixed | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | **18** | 12 | 'Edge PDP' used where other SDK pages say 'container PDP' (pick one term); inline code comments like 'This will be checked...' and 'Will succeed if...' are future tense; API key placeholder differs between blocks (<YOUR_PERMIT_API_KEY> vs YOUR_API_KEY) |
+| `docs/sdk/php/quickstart-php.mdx` | implementer | tutorial | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 2 | **19** | 9 | '*@dev' constraint tracks an unversioned branch (note the risk or pin a commit); script is 70 lines in one block (split into scope, create user, check); code comments use 'we' |
+| `docs/sdk/python/quickstart-python.mdx` | implementer | tutorial | 2 | 2 | 1 | 1 | 2 | 1 | 1 | 1 | 1 | 2 | **14** | 10 | Cloud PDP tab shows a Node.js snippet on a Python page: replace with a Python Permit(pdp='https://cloudpdp.api.permit.io') snippet; code comments are stale ('This user was defined by you in the previous step' when no step creates the user, 'your secret API KEY'), unused 'import asyncio' in the FastAPI app, and mixed placeholders [YOUR_API_KEY]/<your-api-key>: fix comments and use one placeholder; ABAC and example-repo sections digress from the first-check path and the check snippets use bare await with no async wrapper: move ABAC to the check page and wrap one snippet in async def main() + asyncio.run |
+| `docs/sdk/python/quickstart_python_sync.mdx` | implementer | tutorial | 2 | 1 | 1 | 1 | 2 | 1 | 1 | 1 | 1 | 2 | **13** | 8 | Flask example calls permit.api.tenants.create on every start, so the second run raises PermitAlreadyExistsError (409) and the app crashes: use a get-or-create or catch PermitAlreadyExistsError; ABAC snippet labels a user dict 'User Set' and a resource dict 'Resource Set' (wrong terms) and the Cloud PDP tab shows Node.js code: fix labels and show Python; partial still carries a large commented-out permit.write() legacy block and code comments reference 'the previous step': delete the block and rewrite comments |
+| `docs/sdk/python/sync-policy-script/sync-policy.mdx` | implementer | how-to | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 1 | 2 | **18** | 9 | code is duplicated in parts plus full script with diverging behavior (parts crash on rerun, full script skips existing): keep only the full script with annotated sections; inconsistent placeholders (your_permit_key vs permit_key_) and a hardcoded key with an unneeded Cloud PDP pdp arg for API-only calls: read the key from an env var and drop pdp; 'delete it first' has no warning that deleting a role removes its assignments |
+| `docs/sdk/python/usage-example.mdx` | implementer | reference | 2 | 1 | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 2 | **17** | 12 | snippets use top-level await and Permit(...) so none run as-is and none show output: add one runnable async main() wrapper and show a sample returned object; uneven headings (Manage roles and Manage tenants each hold a single create example, no delete/list for roles/tenants): add list/delete or flatten to H2 per call; update example says 'sets its actions' without saying whether PATCH replaces the actions dict |
+| `docs/sdk/ruby/quickstart-ruby.mdx` | implementer | tutorial | 2 | 2 | 2 | 1 | 1 | 1 | 2 | 1 | 1 | 1 | **14** | 10 | WEBrick app uses to_json without require 'json' and placeholders mix TOKEN/<YOUR_API_KEY>/user@mail.com; included parts break numbered lists and nest '### 1.' under tabs, Node.js Cloud PDP snippet on a Ruby page; copied comments ('# Allow to close document') and 'the hash example above' references |
+| `docs/sdk/ruby/user/sync_user.mdx` | implementer | reference | 2 | 1 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 9 | example is a one-liner with no client init and no output: add Permit.new(...) plus sync_user call and print the returned UserRead key; no verify step (e.g. user appears in Directory or permit.api.users.get); email-unique-in-environment claim not shown in source |
+| `docs/sdk/sdks-overview.mdx` | implementer | reference | 2 | 2 | 2 | 1 | 2 | 1 | 1 | 2 | 1 | 2 | **16** | 8 | Ruby 'Get Authorized Users' marked full support but permit-ruby lib has only check, sync_user, users/tenants/resources get and elements login_as: mark Ruby red and re-audit the Ruby column against source; feature names do not map to SDK method names (e.g. Get Authorized Users vs authorized_users): add method name per feature or link to reference; hand-maintained emoji matrix with no last-verified date and inconsistent names ('Get Authorized Users(ABAC)'): add a verified-as-of SDK version row |
+| `docs/status.mdx` | operator | landing | 2 | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 1 | 2 | **17** | 6 | title 'Permit Uptime Status' is Title Case and not task-based: rename to 'Check Permit.io service status'; iframe hardcodes width 1080px with scale transform and negative margin, fragile on mobile; notification channel list (email, Slack, Teams, Google Chat, webhook, RSS, Atom) is volatile and unmarked, and community link uses io.permit.io/docs-to-slack instead of the style guide's io.permit.io/slack |
+| `docs/updates-and-feedback/changelog.mdx` | new user | landing | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 0 | 2 | **15** | 6 | the Canny changelog's newest entry is May 16 2024, yet the page tells readers to use it to find when an API became available: state that it is not updated past 2024 and point to SDK GitHub releases or a current changelog; past-entry examples are unverifiable without dates; page is only a link with no success signal |
+| `docs/updates-and-feedback/feature-requests.mdx` | new user | landing | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 6 | conflicts with the roadmap page, which says ideas are submitted on Productlane while this page sends requests to Canny: pick one channel and say which the team monitors; no success signal after submitting (what status a new request gets, how you hear back); volatile Canny UI details (sort and status filters) unmarked |
+| `docs/updates-and-feedback/roadmap.mdx` | decision maker | landing | 2 | 1 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **16** | 6 | 'The team reviews each submitted request and links it to an idea' is an unverifiable process promise: remove or source it; duplicates the submit-ideas task of the Canny feature-requests page with a different tool: reconcile; stub page with only a link, no example of an idea status or what 'In Progress' means |
+| `docs/concepts/pdp/nexus-pdp-architecture.mdx` | operator | explanation | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 12 | internal port/process list is early-access detail with no version marker on this page; inline-styled 'Click the diagram to enlarge it' caption |
+| `docs/concepts/pdp/nexus-pdp-configuration.mdx` | operator | reference | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 | 2 | **18** | 11 | add a docker run or Kubernetes env example with PDP_API_KEY, volume, and memory-tuned SURREAL_ROCKSDB values; child-log warning duplicates nexus-pdp-deployment |
+| `docs/concepts/pdp/nexus-pdp-deployment.mdx` | operator | reference | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **15** | 9 | no deployable example: add a docker run and a Kubernetes manifest with volume, fsGroup 10001, probes, and terminationGracePeriodSeconds; debug-log warning duplicated verbatim from the configuration page; split the security model explanation from the deploy how-to |
+| `docs/concepts/pdp/nexus-pdp-feature-parity.mdx` | decision maker | reference | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 2 | 1 | 2 | **18** | 11 | state the Nexus PDP image tag the table reflects, not only 'September 2026' |
+| `docs/concepts/pdp/nexus-pdp-how-it-works.mdx` | operator | explanation | 2 | 2 | 2 | 1 | 2 | 1 | 1 | 2 | 2 | 2 | **17** | 10 | plane names (change stream, policy files, policy schema, snapshot) don't map to readiness component names on the deployment page (kv_source, policy_data_source); add a sync-path diagram; 'the managed Cloud PDP's evaluation core' bullet is a claim without mechanism |
+| `docs/concepts/pdp/nexus-pdp.mdx` | decision maker | explanation | 2 | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 1 | 2 | **17** | 9 | the OPA 20x memory claim and container-PDP limits are repeated on overview and how-it-works (keep one source); add a diagram contrasting container PDP and Nexus PDP data paths |
+| `docs/concepts/pdp/overview.mdx` | implementer | mixed | 2 | 1 | 1 | 0 | 1 | 0 | 2 | 2 | 1 | 2 | **12** | 6 | AuthZen curl examples call /v1/access/evaluation, /v1/subjects, /v1/resources, /v1/actions but the table and PDP source use /access/v1/evaluation and /access/v1/search/*, and the JSON bodies have trailing commas; Node.js import is from 'permit' (package is permitio), Go builder lines start with '.' (invalid Go), .NET uses 'using Permit' (namespace is PermitSDK); split the AuthZen reference to its own page and pin a pdp-v2 tag instead of :latest |
 
 ### Deferred pages
 
-- `docs/concepts/pdp/new-edge-pdp-architecture.mdx` (renamed by PR #652)
-- `docs/concepts/pdp/new-edge-pdp-configuration.mdx` (renamed by PR #652)
-- `docs/concepts/pdp/new-edge-pdp-deployment.mdx` (renamed by PR #652)
-- `docs/concepts/pdp/new-edge-pdp-feature-parity.mdx` (renamed by PR #652)
-- `docs/concepts/pdp/new-edge-pdp-how-it-works.mdx` (renamed by PR #652)
-- `docs/concepts/pdp/new-edge-pdp.mdx` (renamed by PR #652)
-- `docs/concepts/pdp/overview.mdx` (renamed by PR #652)

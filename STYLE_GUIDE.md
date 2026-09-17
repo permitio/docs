@@ -170,6 +170,7 @@ A warning states the condition and the consequence.
 ### Links
 
 - **Link text names the destination.** "See [Sync users](/how-to/sync-users)", never "click [here]" or "this [guide]".
+- **Never link to a sibling page without a file extension.** Netlify serves every page with a trailing slash, so `[Feature parity](./nexus-pdp-feature-parity)` on `/concepts/pdp/nexus-pdp/` resolves to `/concepts/pdp/nexus-pdp/nexus-pdp-feature-parity` and 404s. Use the root-relative route (`/concepts/pdp/nexus-pdp-feature-parity`) or the file (`./nexus-pdp-feature-parity.mdx`), which Docusaurus turns into an absolute URL. `npm run build` runs `links:relative` and fails on the extensionless form.
 - **Link to the page that owns a topic** instead of repeating its steps. Copies drift: two pages with the same steps end up with two different sets of steps.
 
 ### Examples
