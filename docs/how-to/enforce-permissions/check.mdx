@@ -1,40 +1,38 @@
 ---
 sidebar_position: 1
-title: Permit.check()
-description: "Call permit.check() to enforce RBAC, ABAC, or ReBAC permissions with tenants, attributes, and context objects."
+title: Check permissions with permit.check()
+sidebar_label: permit.check()
+description: "Call permit.check() from your backend to decide whether a user can perform an action on a resource, with tenants, attributes, relationships, and context."
 ---
 
-`permit.check()` is the main `Authorize` function to enforce permissions in your application.
+Call `permit.check()` from your backend to decide whether a user can perform an action on a resource. This page is for developers adding enforcement to an application. It covers the arguments, then shows checks for role-based access control (RBAC), tenants, attribute-based access control (ABAC), relationship-based access control (ReBAC), custom policy context, and the policy decision point (PDP) HTTP API.
 
----
+## Prerequisites
 
-The `permit.check()` function expects the following arguments in its basic form:
-* **User** - a user ID `string` or a user `object` representing the user attempting to perform an action.
-* **Action** - a `string` representing the action a user is attempting to perform.
-* **Resource** - a `string` or `object` representing the target resource. This could refer to a resource type, a specific resource instance (e.g., `document:123`), or an object where `type` specifies the resource type and `key` specifies the resource instance.
-* **Context** *(optional)* - a context object that can be used to pass additional data to [custom policy](/integrations/gitops/custom_policy/).
+- A Permit.io policy with at least one resource, action, and role ([Configure your first RBAC policy](/overview/configure-your-first-rbac-policy))
+- Your environment API key ([Get your API key](/overview/get-api-key))
+- A Permit SDK client connected to a PDP ([Run the PDP](/overview/run-pdp))
 
-The `permit.check()` function returns a `boolean` value, indicating whether the user is permitted to perform the action on the resource.
+The examples on this page use the Node.js SDK. The other Permit SDKs take the same arguments: `permit.check()` in Python and Java, and `permit.Check()` in Go.
 
-:::tip
-To maintain the least code changes in your application, you should carefully choose the most granular `permit.check()` function implementation that fits your use case.
+## permit.check() arguments and result
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `user` | `string` or object | Yes | The user key (for example, the `sub` claim of the user's JWT), or an object with `key` and optional `attributes`. |
+| `action` | `string` | Yes | The action the user attempts, for example `create`. |
+| `resource` | `string` or object | Yes | A resource type (`document`), a resource instance (`document:123`), or an object with `type`, optional `key`, optional `tenant`, and optional `attributes`. |
+| `context` | object | No | Extra data for the policy evaluation, used by [custom policy code](/integrations/gitops/custom_policy/). |
+
+`permit.check()` returns a boolean: `true` when the policy allows the action, `false` when it doesn't.
+
+:::tip Pick the narrowest check that fits
+Pass only the data your policy needs. A check on a resource type is enough for RBAC. Add a tenant, attributes, or an instance key only when the policy depends on them.
 :::
 
-The following examples demonstrate common `permit.check()` usage with a varied level of granularity:
+## Check an RBAC permission \{#basic-rbac-check}
 
-## Basic RBAC Check
-
-The simplest enforcement point you can create using the `permit.check()` function is a Role-based Access Control (RBAC) policy.
-
-To enforce RBAC, `permit.check()` requires three parameters to be passed:
-
-- A unique `userId` (e.g. the identity from your authentication - `jwt._subId`)
-- An `action` this user will attempt to perform
-- The `resource` for which we want to manage access to.
-
-:::info
-While all examples on this page are written in JavaScript (Node.js SDK), the permit.check() function exists in all Permit SDKs.
-:::
+An RBAC check needs three arguments: the user key, the action, and the resource type. The PDP returns `true` when one of the user's roles grants the action on the resource type.
 
 ```js
 const permitted = await permit.check("john@permit.io", "create", "document");
@@ -46,10 +44,13 @@ if (permitted) {
 }
 ```
 
-## Tenants
+When John has a role that grants `create` on `document`, the example prints `John is PERMITTED to create a document`.
 
-[Tenants](/overview/glossary#tenant) are silos of resources and users.
-Tenants can be passed as part of the `resource` object inside the `permit.check()` function.
+## Check a permission in a tenant \{#tenants}
+
+A [tenant](/overview/glossary#tenant) is an isolated group of users and resources. The same user can hold a different role in each tenant, for example `admin` in `companyA` and `editor` in `companyB`.
+
+To check a permission in one tenant, pass the tenant key in the `resource` object:
 
 ```js
 const permitted = await permit.check("john@permit.io", "create", {
@@ -58,22 +59,13 @@ const permitted = await permit.check("john@permit.io", "create", {
 });
 ```
 
-:::tip Simple example
-Say you have two tenants - `Tenant A` and `Tenant B`. The same user can be part of both tenants, with a different role in each one.
-I.e., The user can be `admin` in `Tenant A` and `editor` in `Tenant B`.
-:::
+The PDP evaluates only John's role assignments in `companyA`.
 
-## Attributes
+## Check an ABAC permission with attributes \{#attributes}
 
-Sometimes, you might require more granular policies than simple RBAC. That's when Attribute Based Access Control (ABAC) comes into play.
-Specific user or resource attributes might be required to determine the conditions of when your authorization check should pass.
-Each attribute is compared against a pre-defined value. If all of these comparisons pass, the authorization check will be approved. 
+ABAC policies decide access by comparing user, resource, or tenant attributes to the conditions in your user sets and resource sets. The check passes when the attributes meet the conditions of a rule that grants the action.
 
-Attributes can be declared as part of the `user`, `resource`, or `tenant`. 
-
-:::tip
-You can learn more about passing data into Permit [here](/how-to/manage-data/loading-data/)
-:::
+Pass attributes in the `user` object and the `resource` object:
 
 ```js
 const permitted = await permit.check(
@@ -103,18 +95,24 @@ const permitted = await permit.check(
 );
 ```
 
-## Just-In-Time (JIT) Attributes
+:::note ABAC needs a container PDP
+The Cloud PDP doesn't evaluate ABAC policies. Run a container PDP for attribute-based checks. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+:::
 
-JIT attributes are a way of passing dynamic values to pre-declared attributes as part of the `permit.check()` function.
-Passing JIT attributes is useful when an attribute can match more than a single value. 
-There are multiple ways of defining attributes within Permit. You can find a complete guide for them [here](/how-to/manage-data/loading-data). 
+To store attributes in Permit instead of passing them on every check, see [Load custom data](/how-to/manage-data/loading-data).
 
-:::tip Example
-A policy such as:
+## Pass just-in-time (JIT) attributes \{#just-in-time-jit-attributes}
+
+Just-in-time (JIT) attributes are attribute values you pass in `permit.check()` at request time. Use JIT attributes when a value changes per request, such as the location the user signs in from. The attribute must already be defined in your policy.
+
+For a policy such as the following:
+
 ```
 A document can only be accessed by users from EU and UK
 ```
-Would be represented using JIT attributes in the following manner:  
+
+Pass the user's current location as a JIT attribute:
+
 ```js
 const permitted = await permit.check(
     {
@@ -127,34 +125,30 @@ const permitted = await permit.check(
     "document"
 );
 ```
-:::
 
-## Relationships
+For other ways to load attributes, see [Load custom data](/how-to/manage-data/loading-data).
 
-In cases where you want to manage access based on the relationships between identities and resources. That's where Relationship Based Access Control (ReBAC) comes in.
+## Check a ReBAC permission on a resource instance \{#relationships}
 
-The structure of relationships between identities and resources can be defined via the **[UI](/how-to/build-policies/rebac/building-rebac-policies)** or **[API](/api/rebac/rebac-api-calls)**.
+ReBAC policies grant access through relationships between users and resource instances, such as a user's role on a specific group or folder. Define the resource roles and relations in the [ReBAC policy editor](/how-to/build-policies/rebac/building-rebac-policies) or through the [ReBAC API](/api/rebac/rebac-api-calls).
 
-:::tip
-In the code example below, we check if `John` has the `assign` permissions on a member group resource (Defined in Permit beforehand).
-:::
+To check a ReBAC permission, pass a resource instance in the `type:key` format. This check asks whether the user can perform `assign` on one `member_group` instance:
 
 ```javascript
 await permit.check(userId, "assign", `member_group:${group}`);
 ```
 
-- Another example, access a document with id `doc1.txt`: 
+This check asks whether the user can perform `assign` on the `document` instance `doc1.txt`:
 
 ```javascript
 await permit.check(userId, "assign", `document:doc1.txt`);
 ```
 
+The PDP returns `true` when the user has a role on the instance, or a role derived through a relation, that grants the action.
 
-import { info } from "autoprefixer"
+## Pass a context object \{#using-the-context-object}
 
-## Using the Context Object
-
-If you are using custom policy code and need to pass additional data to the policy evaluation, you can use the `context` object.
+The `context` argument passes extra data to [custom policy code](/integrations/gitops/custom_policy/). The PDP includes the context in the policy input, so your Rego rules can read the values.
 
 ```js
 await permit.check(user, "create", "document", {
@@ -165,10 +159,11 @@ await permit.check(user, "create", "document", {
 });
 ```
 
-## Using the API
+In the Node.js SDK, the fourth argument of `permit.check()` is the context object itself.
 
-While the easiest way to call the `permit.check()` function is to use one of our SDKs, you can also call the Permit PDP directly.
-The API endpoint for the `permit.check()` function is `/allowed`.
+## Call the PDP API directly \{#using-the-api}
+
+Without an SDK, send the check to the PDP's `POST /allowed` endpoint. Pass your environment API key in the `Authorization: Bearer` header and the check in the JSON body.
 
 ```bash
 curl -X POST https://<your-permit-pdp-url>/allowed \
@@ -185,7 +180,17 @@ curl -X POST https://<your-permit-pdp-url>/allowed \
   }'
 ```
 
+Replace `<your-permit-pdp-url>` with the address of your container PDP (for example, `http://localhost:7766`) or the Cloud PDP (`https://cloudpdp.api.permit.io`).
 
-:::info
-When calling the `permit.check()` API, ensure that you are calling either your deployed Permit PDP or the Permit cloud PDP. The `api.permit.io` is not supported for the `permit.check()` API.
+The response body contains an `allow` field. `"allow": true` means the user is permitted.
+
+:::warning Send checks to a PDP, not to api.permit.io
+The `/allowed` endpoint exists only on a PDP. A request to `https://api.permit.io/allowed` doesn't return a decision.
 :::
+
+## Next steps
+
+- [Check many permissions in one call with bulk check](/how-to/enforce-permissions/bulk-check)
+- [Check a permission across all tenants](/how-to/enforce-permissions/all-tenants-check)
+- [Get all permissions of a user](/how-to/enforce-permissions/user-permissions)
+- [Filter data by permission](/how-to/enforce-permissions/data-filtering)

@@ -1,7 +1,8 @@
 ---
 sidebar_position: 1
-title: Regex URL Mapping Check
-description: "Map API endpoints to resources and actions using regex URL patterns, then check permissions with the PDP's allowed_url endpoint."
+title: Check permissions by URL with regex URL mapping
+sidebar_label: Regex URL mapping check
+description: "Map HTTP methods and regular expression URL patterns to resources and actions, pass named capture groups as attributes, and check URLs with the PDP's /allowed_url endpoint."
 ---
 
 <style>
@@ -15,30 +16,32 @@ description: "Map API endpoints to resources and actions using regex URL pattern
 import TimelineWrapper from "@site/src/components/timeline/TimelineWrapper";
 import TimelineStep from "@site/src/components/timeline/TimelineStep";
 
+Check whether a user can call an HTTP URL by matching the URL against a regular expression (regex) mapping rule. This page is for developers who enforce permissions at the API layer and have URLs that a [simple URL template](/how-to/enforce-permissions/url-mapping/url-mapping-check) can't describe, such as optional segments, varying subdomains, or query parameters in any order.
 
-The Regex URL Mapping Permissions Check is a powerful feature that allows you to control access to your application's endpoints based on regular expressions for complex URL patterns. This feature supports two approaches:
+## How regex URL mapping works \{#overview}
 
-## Overview
-Regex URL Mapping in Permit.io enables you to:
-- Define complex URL patterns using regular expressions to match dynamic and flexible URL structures
-- Extract multiple parameters from both URL paths and query strings using named capture groups
-- Match URLs with optional components, varying subdomains, or complex validation rules
-- Apply the same permission rules to multiple URL patterns that follow similar structures
-- Handle dynamic routing patterns that can't be easily expressed with simple path parameters
-- Support both HTTP and HTTPS protocols, and match across different domains or environments
-- Create flexible and maintainable access control rules that adapt to your API's URL structure
+A regex mapping rule links an HTTP method and a regex URL pattern to a Permit resource and action. When the policy decision point (PDP) receives a URL check:
 
-:::info
-This feature is currently only available through the Permit.io API & PDP API. 
-:::
+1. The PDP finds the rules with the same HTTP method (case-insensitive) whose pattern matches the request URL, starting from the first character.
+2. When several rules match, the PDP uses the rule with the highest priority.
+3. The PDP passes the values of the pattern's named capture groups to the check as resource attributes.
+4. The PDP checks whether the user can perform the rule's action on the rule's resource in the given tenant, and returns the decision.
 
-### Regex Pattern Basics
+Use regex rules to extract several values from paths and query strings, to match optional components, subdomains, or both `http` and `https`, and to cover many URL shapes with one rule.
 
-Regex URL mapping uses named capture groups (e.g., `(?P<param_name>pattern)`) to extract values from the URL. These captured values are automatically passed as attributes to your policy, making them available for ABAC (Attribute-Based Access Control) rules.
+## Named capture groups pass URL values to your policy \{#regex-pattern-basics}
 
-### Setting Up Regex URL Mapping
+The PDP evaluates patterns with Python regex syntax. A named capture group, `(?P<param_name>pattern)`, captures part of the URL. The PDP passes each captured value as a resource attribute named `param_name`, so attribute-based access control (ABAC) rules in your policy can use the value.
 
-Here's an example of creating a proxy configuration with a regex URL mapping rule:
+## Prerequisites
+
+- A Permit.io policy with the resources and actions your URLs map to
+- Your environment API key, and your project and environment IDs or keys ([Get your API key](/overview/get-api-key))
+- Docker, to run a container PDP version 0.8.0 or later
+
+## 1. Create a regex mapping rule with the API \{#setting-up-regex-url-mapping}
+
+Create regex mapping rules with the proxy configs endpoint of the Permit API. Replace `{project_id}` and `{env_id}` with your project and environment, and `YOUR_PERMIT_KEY` with your API key. This request creates a rule that maps `POST` requests for a user profile URL to the `update` action on the `users` resource:
 
 ```bash
 curl --location 'https://api.permit.io/v2/facts/{project_id}/{env_id}/proxy_configs' \
@@ -61,25 +64,19 @@ curl --location 'https://api.permit.io/v2/facts/{project_id}/{env_id}/proxy_conf
 }'
 ```
 
-:::danger
+In this rule:
 
-Notice in the API call, the regex pattern is being sent as a JSON string. In JSON, backslashes need to be escaped themselves, so `\.` becomes `\\.` in the JSON payload.
+- `url_type` is `"regex"`. Without `url_type`, the PDP treats `url` as a simple URL template.
+- `(?P<user_id>[0-9]+)` captures a numeric user ID from the path. The PDP passes the value as the `user_id` resource attribute.
+- `secret` is required by the proxy configs API. The PDP's URL check doesn't use the `secret` value.
 
+:::warning Escape backslashes in the JSON body
+The pattern is a JSON string, so every regex backslash needs a second backslash: `\.` becomes `\\.`. A single backslash before `.` is an invalid JSON escape, and the API rejects the request body.
 :::
 
-Key points about this configuration:
-- The `url_type` must be set to `"regex"` to enable regex pattern matching
-- The regex pattern uses named capture groups (`?P<name>pattern`) to extract values
-- The pattern matches URLs that contain a numeric user ID in the path
-- The extracted user_id value will be available as an attribute in your policy
+## 2. Run the PDP \{#checking-permissions}
 
-:::note 
-The `secret` value is still required for now, even though it isn't used. This will be fixed in a future release of the proxy_configs API.
-:::
-
-### Checking Permissions
-
-To use the URL Mapping Permissions Check, you must first start your PDP. 
+URL checks run on a container PDP. Start one with your environment API key:
 
 ```bash
 docker run -it \
@@ -89,13 +86,11 @@ docker run -it \
   permitio/pdp-v2:latest
 ```
 
-:::info
-Simple URL mapping is supported in PDP version 0.8.0 or higher
-:::
+Regex URL mapping requires PDP version 0.8.0 or later.
 
-Currently, checking permissions using URL Mapping is available through the endpoint `/allowed_url` on the PDP. The SDKs will be updated to support this feature soon.
+## 3. Check a URL
 
-Here's an example of a payload to `localhost:7766/allowed_url` (assuming you're running the PDP locally):
+Send the user, the HTTP method, the full request URL, and the tenant to the PDP's `POST /allowed_url` endpoint. This example assumes the PDP runs locally on port `7766`. The `url` must match the rule's pattern. For the rule in step 1, a matching URL is `https://api.example.com/api/v1/users/123/profile`.
 
 ```bash
 curl --location 'http://localhost:7766/allowed_url' \
@@ -112,19 +107,32 @@ curl --location 'http://localhost:7766/allowed_url' \
 }'
 ```
 
-### Common Regex Patterns
+In Java, call `permit.checkUrl(user, httpMethod, url, tenant)` instead. The other SDKs don't have a URL check function, so call the `/allowed_url` endpoint over HTTP.
+
+## Verify the URL check result
+
+The response contains an `allow` field:
+
+- `"allow": true` means a rule matched and the user can perform the mapped action on the mapped resource.
+- `"allow": false` with a `debug.reason` of `Matched mapping rule not found for the requested URL and HTTP method` means no pattern matches the URL and method. Test the pattern against the full URL, including scheme and host, and compare the HTTP method.
+- `"allow": false` without that reason means a rule matched, and the policy denies the action.
+
+## Common regex patterns \{#common-regex-patterns}
+
+Each of the following patterns is JSON-escaped, ready for the `url` field of a mapping rule. The tables explain the unescaped pattern.
 
 <TimelineWrapper>
 <TimelineStep>
 
 
-#### Basic Path Parameter
+### Match a numeric path parameter \{#basic-path-parameter}
+
 ```json
 //JSON Escaped Regex URL
 "url": "^https://api\\.example\\.com/users/(?P<user_id>[0-9]+)/profile$"
 ```
 :::tip Matches
-This pattern will match URLs with a numeric user ID in the path. It will match:
+This pattern matches URLs with a numeric user ID in the path:
 
 `https://api.example.com/users/123/profile`
 
@@ -141,20 +149,21 @@ This pattern will match URLs with a numeric user ID in the path. It will match:
 | `/profile` | Matches the literal path segment |
 | `$` | Matches the end of the string |
 
-This pattern is perfect for RESTful APIs where you need to extract a numeric ID from a fixed URL structure.
+Use this pattern for REST endpoints with a numeric ID in a fixed path.
 
 </TimelineStep>
 
 <TimelineStep>
 
 
-#### Optional Path Component
+### Match an optional path segment \{#optional-path-component}
+
 ```json
 //JSON Escaped Regex URL
 "url": "^https://api\\.example\\.com/api/users(?:/(?P<user_id>[0-9]+))?$"
 ```
 :::tip Matches
-This pattern will match URLs with an optional user ID. It will match:
+This pattern matches URLs with or without a user ID:
 
 `https://api.example.com/api/users`
 
@@ -172,20 +181,21 @@ This pattern will match URLs with an optional user ID. It will match:
 | `?` | Makes the entire group optional |
 | `$` | Matches the end of the string |
 
-This pattern is useful when you have endpoints that can work both with and without an ID, like a list endpoint vs. a detail endpoint.
+Use this pattern when one rule covers a list endpoint and its detail endpoint.
 
 </TimelineStep>
 
 <TimelineStep>
 
 
-#### Multiple Query Parameters
+### Match query parameters in any order \{#multiple-query-parameters}
+
 ```json
 //JSON Escaped Regex URL
 "url": "^https://api\\.example\\.com/search\\?(?=.*q=(?P<query>[^&]+))(?=.*page=(?P<page>[0-9]+)).*$"
 ```
 :::tip Matches
-This pattern will match URLs with specific query parameters in any order. It will match:
+This pattern matches URLs with both query parameters, in any order:
 
 `https://api.example.com/search?q=test&page=1`
 
@@ -204,20 +214,21 @@ This pattern will match URLs with specific query parameters in any order. It wil
 | `[^&]+` | Matches one or more characters that aren't ampersands (for query values) |
 | `$` | Matches the end of the string |
 
-This pattern is ideal for search endpoints where parameters can appear in any order.
+Use this pattern for search endpoints where clients send parameters in any order. Each lookahead captures one parameter as an attribute: `query` and `page`.
 
 </TimelineStep>
 
 <TimelineStep>
 
 
-#### Subdomain Matching
+### Match any subdomain \{#subdomain-matching}
+
 ```json
 //JSON Escaped Regex URL
 "url": "^https://[\\w-]+\\.example\\.com/api/v1/users/(?P<user_id>[0-9]+)$"
 ```
 :::tip Matches
-This pattern will match URLs with any subdomain. It will match:
+This pattern matches URLs on any subdomain:
 
 `https://api.example.com/api/v1/users/123`
 
@@ -236,20 +247,21 @@ This pattern will match URLs with any subdomain. It will match:
 | `(?P<user_id>[0-9]+)` | Named capture group:<br/>- `?P<user_id>`: Names the captured value "user_id"<br/>- `[0-9]+`: Matches one or more digits |
 | `$` | Matches the end of the string |
 
-This pattern is perfect for environments like staging, dev, or production APIs.
+Use this pattern when the same API runs on several subdomains, such as `staging` and `dev`.
 
 </TimelineStep>
 
 <TimelineStep>
 
 
-#### Flexible User Path Matching
+### Match a user ID anywhere in the path \{#flexible-user-path-matching}
+
 ```json
 //JSON Escaped Regex URL
 "url": "^https?:\\/\\/[^\\/]+(?:.*?\\/users(?:\\/(?P<user_id>[^\\/]+))?(?:\\/.*)?)?$"
 ```
 :::tip Matches
-This pattern is useful for matching any URL that contains a user ID, regardless of the exact path structure. It will match URLs like:
+This pattern matches any URL with a `users` segment, and captures the segment after `users` as `user_id` when present. It matches:
 
 `https://api.example.com/users/123`
 
@@ -270,20 +282,21 @@ This pattern is useful for matching any URL that contains a user ID, regardless 
 | `(?:\/.*)?` | Optional trailing path segments |
 | `$` | Matches the end of the string |
 
-This pattern is extremely flexible, matching any URL structure that contains a user ID, making it useful for complex API structures.
+A broad pattern like this one can match URLs you didn't intend. Give narrower rules a higher `priority` so the PDP picks them first.
 
 </TimelineStep>
 
 <TimelineStep>
 
 
-#### Protocol-Agnostic Matching
+### Match HTTP and HTTPS \{#protocol-agnostic-matching}
+
 ```json
 //JSON Escaped Regex URL
 "url": "^https?:\\/\\/api\\.example\\.com\\/users\\/(?P<user_id>[0-9]+)\\/profile$"
 ```
 :::tip Matches
-This pattern will match both HTTP and HTTPS URLs. It will match:
+This pattern matches both HTTP and HTTPS URLs:
 
 `http://api.example.com/users/123/profile`
 
@@ -301,20 +314,21 @@ This pattern will match both HTTP and HTTPS URLs. It will match:
 | `/profile` | Matches the literal path segment |
 | `$` | Matches the end of the string |
 
-This pattern is useful when your API needs to support both secure and non-secure connections, or during development when testing with different protocols.
+Use this pattern when your API accepts both `http` and `https`, for example in development.
 
 </TimelineStep>
 
 <TimelineStep>
 
 
-#### Domain-Agnostic Matching
+### Match any domain \{#domain-agnostic-matching}
+
 ```json
 //JSON Escaped Regex URL
 "url": "^https:\\/\\/[^\\/]+\\/api\\/v1\\/users\\/(?P<user_id>[0-9]+)\\/profile$"
 ```
 :::tip Matches
-This pattern will match any domain name. It will match:
+This pattern matches any domain name:
 
 `https://api.example.com/api/v1/users/123/profile`
 
@@ -334,16 +348,21 @@ This pattern will match any domain name. It will match:
 | `/profile` | Matches the literal path segment |
 | `$` | Matches the end of the string |
 
-This pattern is ideal for microservices architectures where the same API might be deployed across different domains or environments, allowing you to reuse the same permission rules regardless of the domain.
+Use this pattern when the same API runs on several domains, so one rule applies on every domain.
 
 </TimelineStep>
 </TimelineWrapper>
 
-### Best Practices
+## Best practices for regex patterns \{#best-practices}
 
-1. **Escape Special Characters**: Always escape special characters in your regex patterns (e.g., `\.` for dots in domains).
-2. **Use Anchors**: Start patterns with `^` and end with `$` to ensure complete URL matching.
-3. **Named Groups**: Always use named capture groups for parameters you want to extract.
-4. **Test Patterns**: Test your regex patterns thoroughly before deploying to production.
-5. **Keep Patterns Simple**: While regex is powerful, try to keep patterns as simple as possible for better maintainability.
+1. **Escape special characters.** Escape dots in domains (`\.`), and escape each backslash again in the JSON body.
+2. **Anchor patterns.** Start with `^` and end with `$`. The PDP matches from the start of the URL, and without `$` a pattern also matches longer URLs.
+3. **Use named groups.** Only named capture groups become resource attributes.
+4. **Test patterns before production.** Test each pattern against real request URLs, including URLs that must not match.
+5. **Keep patterns narrow.** Narrow patterns are easier to read and less likely to match unintended URLs.
 
+## Next steps
+
+- [Check permissions by URL with simple URL mapping](/how-to/enforce-permissions/url-mapping/url-mapping-check)
+- [Build an ABAC policy that uses the captured attributes](/how-to/build-policies/abac/building-abac-policy)
+- [Deploy the PDP to production](/how-to/deploy/deploy-to-production)
