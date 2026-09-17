@@ -40,25 +40,26 @@ The code is in the [Galactic-Health-Corporation repository](https://github.com/p
 
 ### Set up the application \{#setting-up-the-application}
 
-1. Clone the repository:
+1. Clone the repository and change into it:
 
-```
-git clone https://github.com/permitio/Galactic-Health-Corporation.git
-```
+   ```bash
+   git clone https://github.com/permitio/Galactic-Health-Corporation.git
+   cd Galactic-Health-Corporation
+   ```
 
 2. In the root folder, create a file named `.env.local` and copy the content of `.env.example` into it:
 
-```
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
-NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/
+   ```bash
+   NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+   NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+   NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
+   NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/
 
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="<your clerk publishable key>"
-CLERK_SECRET_KEY="<your clerk secret key>"
-PERMIT_SDK_KEY="<your permit sdk key>"
-PERMIT_PDP_URL=http://localhost:7766
-```
+   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="<your clerk publishable key>"
+   CLERK_SECRET_KEY="<your clerk secret key>"
+   PERMIT_SDK_KEY="<your permit sdk key>"
+   PERMIT_PDP_URL=http://localhost:7766
+   ```
 
 3. In the Clerk dashboard, open **API Keys**, choose the Next.js example, and copy the `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` values into `.env.local`.
 4. Copy your Permit environment API key into the `PERMIT_SDK_KEY` value in `.env.local`. `PERMIT_SDK_KEY` is the variable name the app reads; the value is the environment API key.
@@ -74,13 +75,13 @@ From the repository root, run `npm run config`. The command runs `scripts/setupP
 
 1. Start the PDP container. Replace `<YOUR_PERMIT_API_KEY>` with your environment API key. The command maps the PDP's port 7000 to port 7766 on your machine, which matches `PERMIT_PDP_URL`.
 
-```
-docker run -it \
- -e PDP_API_KEY=<YOUR_PERMIT_API_KEY> \
- -p 7766:7000 \
- -p 8081:8081 \
- permitio/pdp-v2:latest
-```
+   ```bash
+   docker run -it \
+     -e PDP_API_KEY=<YOUR_PERMIT_API_KEY> \
+     -p 7766:7000 \
+     -p 8081:8081 \
+     permitio/pdp-v2:latest
+   ```
 
 2. In a new terminal, from the repository root, run `npm run dev`.
 3. Open `http://localhost:3000`. The GHC sign-in page appears.
@@ -166,26 +167,36 @@ A delegation must be limited to a date range. For example, Rick can give Morty a
 
 Morty's instance-level role comes from the relationship between Rick and Morty. The relationship alone can't expire, so GHC adds date attributes that bound each role assignment. For example, if Morty has the `Member:Caregiver` role with `start_date` set to `2024-01-01` and `end_date` set to `2024-01-31`, Morty can view Rick's health plan and medical records only between those dates.
 
-The data for that assignment has this shape:
+GHC stores the bounds in a `caregiver_bounds` user attribute on the caregiver. Each key in `caregiver_bounds` is the resource instance the caregiver was granted access to, and each value holds an RFC 3339 `start_date` and `end_date`. The `POST /api/account/caregiver` handler writes this attribute with `permit.api.users.update()` before it assigns the `caregiver` role:
 
 ```json
 {
-    "{user}": {
-        "Member:Caregiver:${instance}": {
-            "start_date": "2024-01-01",
-            "end_date": "2024-01-31"
-        }
+  "key": "user_morty_smith",
+  "attributes": {
+    "caregiver_bounds": {
+      "health_plan:health_plan_user_rick_sanchez": {
+        "start_date": "2030-05-01T09:00:00.000Z",
+        "end_date": "2030-05-08T09:00:00.000Z"
+      },
+      "medical_records:medical_records_user_rick_sanchez": {
+        "start_date": "2030-05-01T09:00:00.000Z",
+        "end_date": "2030-05-08T09:00:00.000Z"
+      }
     }
+  }
 }
 ```
 
-The policy allows access when today's date is inside the range, as in this pseudocode:
+The custom Rego rule in `scripts/custom.rego` allows the derived caregiver role only while the current time falls inside those bounds:
 
-```js
-if (user[permission].start_date <= today && user[permission].end_date >= today) {
-    return true;
+```rego
+enforce_boundries(resource) {
+	time.now_ns() >= time.parse_rfc3339_ns(abac.attributes.user.caregiver_bounds[resource].start_date)
+	time.now_ns() <= time.parse_rfc3339_ns(abac.attributes.user.caregiver_bounds[resource].end_date)
 }
 ```
+
+`time.parse_rfc3339_ns` rejects any value that is not an RFC 3339 timestamp, so write the dates in the format shown above. The **Delegate Permissions Wizard** in GHC produces them with `Date.prototype.toISOString()`.
 
 ### Implementation options \{#implementation}
 
@@ -207,14 +218,14 @@ To write custom policy code, connect Permit to a Git repository with GitOps. Per
 In the branch of your policy repository that Permit syncs for your environment:
 
 1. Replace the content of `custom/root.rego` with the content of `scripts/custom.rego` from the GHC repository.
-2. Edit the top-level `root.rego` file. By default, `root.rego` has two `allow` rules: one for the generated policy and one for the custom policy, and access is allowed if either rule allows it. Remove the second `allow` rule, and put both conditions in one `allow` rule so that both must pass:
+2. Edit the top-level `root.rego` file. By default, `root.rego` has two `allow` rules, one for `policies.allow` (the generated policy) and one for `custom.allow`, so access is allowed if either rule allows it. Remove the second `allow` rule, and put both conditions in one `allow` rule so that both must pass:
 
-```
-allow {
-    policies.allow
-    custom.allow
-}
-```
+   ```rego
+   allow {
+   	policies.allow
+   	custom.allow
+   }
+   ```
 
 To learn more about custom Rego in Permit, see [Write custom policies](/integrations/gitops/custom_policy).
 

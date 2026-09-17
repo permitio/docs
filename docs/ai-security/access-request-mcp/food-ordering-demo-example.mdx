@@ -56,7 +56,7 @@ Clone the Access Request MCP server repository, and install the server into a Py
   <TimelineStep stepNumber={1}>
     **Clone the Access Request MCP server repository** <br/>
     Clone the repository and change to the project directory:
-    ```bash
+```bash
 git clone https://github.com/permitio/permit-mcp
 cd permit-mcp
 ```
@@ -67,7 +67,7 @@ cd permit-mcp
   <TimelineStep stepNumber={2}>
     **Create and activate a virtual environment** <br/>
     Create the environment with [uv](https://github.com/astral-sh/uv). If the `uv` command isn't found, install uv with the [uv installation instructions](https://github.com/astral-sh/uv#installation).
-    ```bash
+```bash
 uv venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
@@ -75,7 +75,7 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
   <TimelineStep stepNumber={3}>
     **Install the project dependencies** <br/>
     Install the project in editable mode:
-    ```bash
+```bash
 uv pip install -e .
 ```
     :::info Installed packages
@@ -210,7 +210,7 @@ The tools read a SQLite database and call `permit.check()` to enforce the ReBAC 
   <TimelineStep stepNumber={1}>
     **Create the custom server file** <br/>
     - In the repository root, create `food_ordering_mcp.py`:
-    ```bash
+```bash
 touch food_ordering_mcp.py
 ```
 
@@ -225,7 +225,7 @@ touch food_ordering_mcp.py
 
 
     - Add the imports, the environment variables, and the MCP server setup:
-    ```python
+```python
 from typing import List, Tuple
 import aiosqlite
 import sqlite3
@@ -260,9 +260,17 @@ permit_server = PermitServer(mcp)  # Register default tools
   <TimelineStep stepNumber={2}>
     **Add the `list_dishes` tool** <br/>
     `list_dishes` returns the dishes and prices at a restaurant if the user has the `read` permission on the restaurant instance. Otherwise, the tool returns an access denied error, and the agent can offer an access request.
-    ```python
+```python
 @mcp.tool()
 async def list_dishes(user_id: str, restaurant_id: str) -> List[Tuple[str, float]]:
+    """
+    Lists the dishes available at a restaurant, with their prices in dollars.
+    Dishes are listed only when the user has access to the restaurant.
+
+    Args:
+        user_id: The ID of the user.
+        restaurant_id: The key of the restaurant.
+    """
     permitted = await permit.check(user_id, 'read', f"restaurants:{restaurant_id}")
     if not permitted:
         raise ToolError("Access denied. You are not permitted to view dishes.")
@@ -286,9 +294,17 @@ async def list_dishes(user_id: str, restaurant_id: str) -> List[Tuple[str, float
 - After an approved order, the tool unassigns the `_Approved_` role, so the approval covers one order.
 :::
 
-    ```python
+```python
 @mcp.tool()
 async def order_dish(user_id: str, restaurant_id: str, dish_name: str) -> str:
+    """
+    Places an order for a dish.
+
+    Args:
+        user_id: The ID of the person ordering.
+        restaurant_id: The key of the restaurant.
+        dish_name: The name of the dish to order.
+    """
     MAX_ALLOWED_DISH_PRICE = 10  # dollars
 
     async with aiosqlite.connect(DB_NAME) as db:
@@ -327,11 +343,11 @@ async def order_dish(user_id: str, restaurant_id: str, dish_name: str) -> str:
             "tenant": TENANT
         })
 
-    return f"✅ Order successfully placed for {dish_name}!"
+    return f"Order successfully placed for {dish_name}!"
 ```
 
     End the file with an entry point that starts the server over stdio:
-    ```python
+```python
 if __name__ == "__main__":
     mcp.run(transport="stdio")
 ```
@@ -339,7 +355,7 @@ if __name__ == "__main__":
   <TimelineStep stepNumber={4}>
     **Run the custom server** <br/>
     Start the server with a database file name:
-    ```bash
+```bash
 uv run food_ordering_mcp.py food_ordering.db
 ```
     The server exposes the Access Request MCP server tools and the `list_dishes` and `order_dish` tools over standard input and output (stdio). The server waits for an MCP client and prints nothing. The FastAPI backend creates the `users`, `restaurants`, and `dishes` tables in the database when the backend first starts.
@@ -361,7 +377,7 @@ The client starts the base server, `src/permit_mcp/server.py`, and works with th
   <TimelineStep stepNumber={1}>
     **Install the LangGraph dependencies** <br/>
     In the project directory, add the packages:
-    ```bash
+```bash
 uv add langchain-mcp-adapters langgraph langchain-google-genai
 ```
     The packages are:
@@ -372,7 +388,7 @@ uv add langchain-mcp-adapters langgraph langchain-google-genai
   <TimelineStep stepNumber={2}>
     **Add a Google API key** <br/>
     Create an API key in [Google AI Studio](https://aistudio.google.com/app/apikey) and add the key to your `.env` file:
-    ```bash
+```bash
 GOOGLE_API_KEY=your-key-here
 ```
   </TimelineStep>
@@ -381,137 +397,137 @@ GOOGLE_API_KEY=your-key-here
     Create `client.py` in the project root, and add the code blocks in order:
     - **Imports**: <br/>
     Import the dependencies:
-        ```python
-        import os
-        from typing_extensions import TypedDict, Literal, Annotated
-        from dotenv import load_dotenv
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        from langgraph.graph import StateGraph, START, END
-        from langgraph.types import Command, interrupt
-        from langgraph.checkpoint.memory import MemorySaver
-        from langgraph.prebuilt import ToolNode
-        from mcp import ClientSession, StdioServerParameters
-        from mcp.client.stdio import stdio_client
-        from langchain_mcp_adapters.tools import load_mcp_tools
-        import asyncio
-        from langgraph.graph.message import add_messages
-        ```
+```python
+import os
+from typing_extensions import TypedDict, Literal, Annotated
+from dotenv import load_dotenv
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Command, interrupt
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.prebuilt import ToolNode
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from langchain_mcp_adapters.tools import load_mcp_tools
+import asyncio
+from langgraph.graph.message import add_messages
+```
         Load the environment and create the Gemini LLM client. The client pins the `gemini-2.5-flash` model. Google retires model versions, so check the [Gemini models list](https://ai.google.dev/gemini-api/docs/models) and use a current model name.
-        ```python
-        load_dotenv()
+```python
+load_dotenv()
 
-        global_llm_with_tools = None
+global_llm_with_tools = None
 
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=os.getenv('GOOGLE_API_KEY')
-        )
-        ```
+llm = ChatGoogleGenerativeAI(
+    model="gemini-2.5-flash",
+    google_api_key=os.getenv('GOOGLE_API_KEY')
+)
+```
     - **MCP server parameters**: <br/>
     Tell the client how to start the MCP server as a subprocess:
-        ```python
-        server_params = StdioServerParameters(
-            command="python",
-            args=["src/permit_mcp/server.py"],
-        )
+```python
+server_params = StdioServerParameters(
+    command="python",
+    args=["src/permit_mcp/server.py"],
+)
 
-        class State(TypedDict):
-            messages: Annotated[list, add_messages]
-        ```
+class State(TypedDict):
+    messages: Annotated[list, add_messages]
+```
     - **Graph nodes and graph builder**: <br/>
     Route between the LLM and the tools:
-        ```python
-        async def call_llm(state):
-            response = await global_llm_with_tools.ainvoke(state["messages"])
-            return {"messages": [response]}
+```python
+async def call_llm(state):
+    response = await global_llm_with_tools.ainvoke(state["messages"])
+    return {"messages": [response]}
 
-        def route_after_llm(state) -> Literal[END, "run_tool"]:
-            return END if len(state["messages"][-1].tool_calls) == 0 else "run_tool"
+def route_after_llm(state) -> Literal[END, "run_tool"]:
+    return END if len(state["messages"][-1].tool_calls) == 0 else "run_tool"
 
-        async def setup_graph(tools):
-            builder = StateGraph(State)
-            run_tool = ToolNode(tools)
-            builder.add_node(call_llm)
-            builder.add_node('run_tool', run_tool)
+async def setup_graph(tools):
+    builder = StateGraph(State)
+    run_tool = ToolNode(tools)
+    builder.add_node(call_llm)
+    builder.add_node('run_tool', run_tool)
 
-            builder.add_edge(START, "call_llm")
-            builder.add_conditional_edges("call_llm", route_after_llm)
-            builder.add_edge("run_tool", "call_llm")
+    builder.add_edge(START, "call_llm")
+    builder.add_conditional_edges("call_llm", route_after_llm)
+    builder.add_edge("run_tool", "call_llm")
 
-            memory = MemorySaver()
-            return builder.compile(checkpointer=memory)
-        ```
+    memory = MemorySaver()
+    return builder.compile(checkpointer=memory)
+```
     `call_llm` sends the conversation to Gemini. `route_after_llm` routes to the `run_tool` node when Gemini's last message has a tool call, and ends the graph otherwise. `setup_graph` builds the graph and compiles the graph with an in-memory checkpointer, which keeps the conversation between turns.
 
     - **Response streaming and chat loop**: <br/>
     `stream_responses` prints each LLM reply as the graph runs. `chat_loop` reads queries until you type `quit`, `exit`, or `q`, and adds instructions that tell Gemini to look up resource instance keys first:
-        ```python
-        async def stream_responses(graph, config, invokeWith):
-            async for event in graph.astream(invokeWith, config, stream_mode='updates'):
-                for key, value in event.items():
-                    if key == 'call_llm':
-                        content = value["messages"][-1].content
-                        if content:
-                            print('\n' + ", ".join(content)
-                                  if isinstance(content, list) else content)
+```python
+async def stream_responses(graph, config, invokeWith):
+    async for event in graph.astream(invokeWith, config, stream_mode='updates'):
+        for key, value in event.items():
+            if key == 'call_llm':
+                content = value["messages"][-1].content
+                if content:
+                    print('\n' + ", ".join(content)
+                          if isinstance(content, list) else content)
 
-        async def chat_loop(graph):
-            while True:
-                try:
-                    user_input = input("\nQuery: ").strip()
-                    if user_input in ["quit", "exit", "q"]:
-                        print("Goodbye!")
-                        break
+async def chat_loop(graph):
+    while True:
+        try:
+            user_input = input("\nQuery: ").strip()
+            if user_input in ["quit", "exit", "q"]:
+                print("Goodbye!")
+                break
 
-                    sys_m = """
-                    Always provide the resource instance key during tool calls, as the ReBAC authorization model is being used. To obtain the resource instance key, use the list_resource_instances tool to view available resource instances.
+            sys_m = """
+            Always provide the resource instance key during tool calls, as the ReBAC authorization model is being used. To obtain the resource instance key, use the list_resource_instances tool to view available resource instances.
 
-                    Always parse the provided data before displaying it.
-                    If the user has initially provided their ID, use that for subsequent tool calls without asking them again.
-                    """
+            Always parse the provided data before displaying it.
+            If the user has initially provided their ID, use that for subsequent tool calls without asking them again.
+            """
 
-                    invokeWith = {"messages": [
-                        {"role": "user", "content": sys_m + '\n\n' + user_input}]}
-                    config = {"configurable": {"thread_id": "1"}}
+            invokeWith = {"messages": [
+                {"role": "user", "content": sys_m + '\n\n' + user_input}]}
+            config = {"configurable": {"thread_id": "1"}}
 
-                    await stream_responses(graph, config, invokeWith)
+            await stream_responses(graph, config, invokeWith)
 
-                except Exception as e:
-                    print(f"Error: {e}")
-        ```
+        except Exception as e:
+            print(f"Error: {e}")
+```
     - **Entry point**: <br/>
     `main` starts the MCP server, converts its tools to LangGraph tools, binds the tools to the LLM, builds the graph, saves a diagram of the graph, and starts the chat loop:
-        ```python
-        async def main():
-            async with stdio_client(server_params) as (read, write):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    tools = await load_mcp_tools(session)
-                    llm_with_tools = llm.bind_tools(tools)
-                    graph = await setup_graph(tools)
+```python
+async def main():
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            tools = await load_mcp_tools(session)
+            llm_with_tools = llm.bind_tools(tools)
+            graph = await setup_graph(tools)
 
-                    global global_llm_with_tools
-                    global_llm_with_tools = llm_with_tools
+            global global_llm_with_tools
+            global_llm_with_tools = llm_with_tools
 
-                    with open("workflow_graph.png", "wb") as f:
-                        f.write(graph.get_graph().draw_mermaid_png())
+            with open("workflow_graph.png", "wb") as f:
+                f.write(graph.get_graph().draw_mermaid_png())
 
-                    await chat_loop(graph)
+            await chat_loop(graph)
 
-        if __name__ == "__main__":
-            asyncio.run(main())
-        ```
+if __name__ == "__main__":
+    asyncio.run(main())
+```
     - **Run the client**: <br/>
-        ```bash
-        uv run client.py
-        ```
+```bash
+uv run client.py
+```
         The client writes a diagram of the graph to `workflow_graph.png`. The diagram shows the `call_llm` node, which either ends the run or calls `run_tool` and returns to `call_llm`. <br/>
         ![LangGraph diagram with start, call_llm, run_tool, and end nodes, where call_llm routes to run_tool or to end](/img/ai-security/MCP/food-demo/7.png) <br/>
         Send a request as `henry`, then list the requests as `joe`:
-        ```text
-        Query: My user id is henry, request access to pizza palace with the reason: I am now 18, and the role child-can-view
-        Query: My user id is joe, list all access requests
-        ```       
+```text
+Query: My user id is henry, request access to pizza palace with the reason: I am now 18, and the role child-can-view
+Query: My user id is joe, list all access requests
+```
         After the first query, the agent calls `create_access_request` and reports that the request was sent. After the second query, the agent lists the pending request from `henry`.
   </TimelineStep>
 </TimelineWrapper>
@@ -653,12 +669,12 @@ Build the backend and the CLI client in the repository root, next to `food_order
   <TimelineStep stepNumber={1}>
     **Create the backend file** <br/>
      Create `server.py` in the repository root: <br/>
-    ```bash
+```bash
 touch server.py
 ```
     Import the dependencies and read the settings:
-    ```python
-from fastapi import FastAPI, WebSocket, HTTPException, Depends, status
+```python
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -683,9 +699,17 @@ from utils import (
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 DB_NAME = os.getenv("DB_NAME")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+genai_client = genai.Client(api_key=GEMINI_API_KEY)
+
+server_params = StdioServerParameters(
+    command="python",
+    args=["food_ordering_mcp.py", DB_NAME],
+    env=None,
+)
 ```
     Create the FastAPI app. The `lifespan` handler runs `init_db()` at startup, which creates and fills the database, creates the restaurant instances in Permit, syncs the users, and assigns their roles:
-    ```python
+```python
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
@@ -698,7 +722,7 @@ app = FastAPI(lifespan=lifespan)
     **Add the WebSocket connection manager** <br/>
     `ConnectionManager` tracks the open WebSocket connection of each user.
 
-    ```python
+```python
 class ConnectionManager:
     def __init__(self):
         self.active_connections = {}
@@ -721,7 +745,7 @@ manager = ConnectionManager()
     **Add the sign-in endpoint** <br/>
     The `/token` endpoint checks the username and password against the database and returns a JWT access token that expires after 30 minutes.
 
-    ```python
+```python
 @app.post("/token")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = get_user(form_data.username)
@@ -749,12 +773,16 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
     The endpoint pins the `gemini-2.5-flash` model. Google retires models, so check the [Gemini models list](https://ai.google.dev/gemini-api/docs/models) and use a current model name.
 
-    ```python
+```python
 @app.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket):
     current_user = await get_current_websocket_user(websocket)
     if not current_user:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Not authenticated")
+        return
+
+    if not current_user.get("role"):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Insufficient permissions")
         return
 
     client_id = current_user.get("id")
@@ -762,10 +790,6 @@ async def websocket_chat(websocket: WebSocket):
 
     try:
         exit_stack = AsyncExitStack()
-        server_params = StdioServerParameters(
-            command="python",
-            args=["food_ordering_mcp.py", DB_NAME],
-        )
         stdio_transport = await exit_stack.enter_async_context(stdio_client(server_params))
         stdio, write = stdio_transport
         session = await exit_stack.enter_async_context(ClientSession(stdio, write))
@@ -790,7 +814,7 @@ async def websocket_chat(websocket: WebSocket):
             contents = history + [{"role": "user", "parts": [{"text": message}]}]
 
             while True:
-                response = genai.Client(api_key=GEMINI_API_KEY).models.generate_content(
+                response = genai_client.models.generate_content(
                     model="gemini-2.5-flash",
                     contents=contents,
                     config=types.GenerateContentConfig(
@@ -839,6 +863,8 @@ async def websocket_chat(websocket: WebSocket):
                 "type": "history_update", "content": contents
             }), client_id)
 
+    except WebSocketDisconnect:
+        manager.disconnect(client_id)
     except Exception as err:
         await manager.send_message(json.dumps({
             "type": "error", "content": str(err)
@@ -859,7 +885,7 @@ The CLI client signs the user in to the FastAPI backend, then opens the WebSocke
     **Create the client file** <br/>
     Create `client.py` in the repository root. Import the libraries and set the backend URLs:
 
-    ```python
+```python
 import asyncio
 import json
 import httpx
@@ -875,7 +901,7 @@ WS_URL = "ws://localhost:8000"     # WebSocket URL
     **Add the sign-in function** <br/>
     `login` posts the username and password to the `/token` endpoint and returns the access token, or `None` if sign-in fails.
 
-    ```python
+```python
 async def login(username: str, password: str) -> str | None:
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -889,10 +915,10 @@ async def login(username: str, password: str) -> str | None:
 
     if response.status_code == 200:
         token = response.json().get("access_token")
-        print("✅ Login successful!\n")
+        print("Login successful!\n")
         return token
     else:
-        print(f"❌ Login failed: {response.json().get('detail')}")
+        print(f"Login failed: {response.json().get('detail')}")
         return None
 ```
   </TimelineStep>
@@ -900,7 +926,7 @@ async def login(username: str, password: str) -> str | None:
     **Start the chat session** <br/>
     `chat` holds the message history and two flags: `is_processing` is true while the backend handles a message, and `is_displayed_processing` is true after the client prints the waiting message.
 
-    ```python
+```python
 async def chat(token: str):
     history: List[Dict] = []
     is_processing = False  # Simple flag to track message processing state
@@ -915,43 +941,43 @@ async def chat(token: str):
     **Open the WebSocket connection** <br/>
     Connect to the chat endpoint with the token. The nested `receive_messages` function runs in the background, reads each message from the backend, prints the message by type, and updates the history and flags. `nonlocal` lets `receive_messages` change the variables of `chat`.
 
-    ```python
-    try:
-        headers = {"Authorization": f"Bearer {token}"}
+```python
+try:
+    headers = {"Authorization": f"Bearer {token}"}
 
-        async with websockets.connect(
-            f"{WS_URL}/ws/chat",
-            additional_headers=headers
-        ) as websocket:
-            # Start a background task for receiving messages
-            async def receive_messages():
-                nonlocal is_processing, history, is_displayed_processing
+    async with websockets.connect(
+        f"{WS_URL}/ws/chat",
+        additional_headers=headers
+    ) as websocket:
+        # Start a background task for receiving messages
+        async def receive_messages():
+            nonlocal is_processing, history, is_displayed_processing
 
-                while True:
-                    try:
-                        message = await websocket.recv()
-                        data = json.loads(message)
+            while True:
+                try:
+                    message = await websocket.recv()
+                    data = json.loads(message)
 
-                        message_type = data.get("type")
-                        content = data.get("content")
+                    message_type = data.get("type")
+                    content = data.get("content")
 
-                        if message_type == "text":
-                            print(f"Assistant: {content}")
-                        elif message_type == "status":
-                            print(f"[Status] {content}")
-                        elif message_type == "error":
-                            print(f"⚠️ Error: {content}")
-                            is_processing = False  # Unlock on error
-                            is_displayed_processing = False
-                        elif message_type == "history_update":
-                            history = content
-                            is_processing = False  # Unlock when complete
-                            is_displayed_processing = False
-                    except Exception as e:
-                        print(f"\n⚠️ Error receiving message: {str(e)}")
-                        is_processing = False
+                    if message_type == "text":
+                        print(f"Assistant: {content}")
+                    elif message_type == "status":
+                        print(f"[Status] {content}")
+                    elif message_type == "error":
+                        print(f"Error: {content}")
+                        is_processing = False  # Unlock on error
                         is_displayed_processing = False
-                        break
+                    elif message_type == "history_update":
+                        history = content
+                        is_processing = False  # Unlock when complete
+                        is_displayed_processing = False
+                except Exception as e:
+                    print(f"\nError receiving message: {str(e)}")
+                    is_processing = False
+                    is_displayed_processing = False
+                    break
 ```
     Start `receive_messages` as a background task with `asyncio.create_task()`, so the client receives messages while the main loop reads input.
 
@@ -959,9 +985,9 @@ async def chat(token: str):
   <TimelineStep stepNumber={5}>
   **Add the main chat loop** <br/>
 
-      ```python
-            # Start the receiver task
-            receiver_task = asyncio.create_task(receive_messages())
+```python
+      # Start the receiver task
+      receiver_task = asyncio.create_task(receive_messages())
 ```
 The main loop waits while the backend processes a message, and prints the waiting message once.
 
@@ -972,7 +998,7 @@ When the backend is ready, the loop reads input with `input()` in a thread execu
             while True:
                 if is_processing:
                     if not is_displayed_processing:
-                        print("⏳ Processing previous message. Please wait...")
+                        print("Processing previous message. Please wait...")
                         is_displayed_processing = True
 
                     await asyncio.sleep(1)
@@ -983,7 +1009,7 @@ When the backend is ready, the loop reads input with `input()` in a thread execu
                 )
 
                 if user_input.lower() == "exit":
-                    print("👋 Ending chat session.")
+                    print("Ending chat session.")
                     break
 
                 # Set the processing flag before sending
@@ -998,7 +1024,7 @@ When the backend is ready, the loop reads input with `input()` in a thread execu
                 try:
                     await websocket.send(json.dumps(payload))
                 except Exception as e:
-                    print(f"⚠️ Error sending message: {str(e)}")
+                    print(f"Error sending message: {str(e)}")
                     is_processing = False
                     is_displayed_processing = False
                     break
@@ -1017,17 +1043,17 @@ Then handle WebSocket errors and other exceptions, and print a warning:
 
 ```python
     except websockets.exceptions.WebSocketException as e:
-        print(f"⚠️ WebSocket connection error: {str(e)}")
+        print(f"WebSocket connection error: {str(e)}")
     except Exception as e:
-        print(f"⚠️ Unexpected error: {str(e)}")
+        print(f"Unexpected error: {str(e)}")
 ```
   </TimelineStep>
   <TimelineStep stepNumber={7}>
   **Add the entry point** <br/>
     `main` asks for a username and password, calls `login`, and starts `chat` when sign-in succeeds. The `if __name__ == "__main__":` block runs `main` and exits cleanly on `Ctrl+C`.
-    ```python
+```python
 async def main():
-    print("👋 Welcome Food Ordering CLI tool!")
+    print("Welcome to the Food Ordering CLI tool!")
 
     username = input("Username: ").strip()
     password = input("Password: ").strip()
@@ -1042,9 +1068,9 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n👋 Program terminated by user.")
+        print("\nProgram terminated by user.")
     except Exception as e:
-        print(f"⚠️ Unexpected error: {str(e)}")
+        print(f"Unexpected error: {str(e)}")
         sys.exit(1)
 ```
   </TimelineStep>

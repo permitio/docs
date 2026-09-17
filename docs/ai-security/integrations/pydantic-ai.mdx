@@ -34,7 +34,8 @@ The example reads the Permit settings from these variables. It uses `PERMIT_KEY`
 
 ```bash
 PERMIT_KEY=<your-permit-api-key>
-PDP_URL=http://localhost:7766  # Your Edge PDP
+PDP_URL=http://localhost:7766
+ANTHROPIC_API_KEY=<your-anthropic-api-key>
 ```
 
 | Variable | Value |
@@ -156,60 +157,11 @@ The script reads `PERMIT_KEY` from the environment.
 
 ### Create the policy in the dashboard
 
-1. Open **Policy > Resources** and create the resources. These JSON blocks list the values to enter in the form:
-
-   `financial_advice`
-
-   ```json
-   {
-   "actions": ["receive"],
-   "attributes": {
-       "is_ai_generated": "boolean"
-   }
-   }
-   ```
-
-   `financial_document`
-
-   ```json
-   {
-   "actions": ["read"],
-   "attributes": {
-       "classification": "string", // e.g. public, restricted, confidential
-       "doc_type": "string"
-   }
-   }
-   ```
-
-   `portfolio`
-
-   ```json
-   {
-     "actions": ["update", "read", "analyze"]
-   }
-   ```
-
-   `financial_response`
-
-   ```json
-   {
-   "actions": ["requires_disclaimer"],
-   "attributes": {
-       "contains_advice": "boolean"
-   }
-   }
-   ```
+1. Open **Policy > Resources** and create the four resources with the actions and attributes listed in [Resources](#defining-resources).
 
    ![Resources tab with the financial_advice, financial_document, portfolio, and financial_response resources](/img/ai-security/integrations/pydantic/1.png)
 
-2. Open **Directory > Users > Settings** and add the user attributes:
-
-   ```json
-   {
-     "ai_advice_opted_in": "boolean",
-     "clearance_level": "string"
-   }
-   ```
+2. Open **Directory > Users > Settings** and add the two user attributes listed in [User attributes](#defining-user-attributes).
 
    ![User attribute settings in the Directory screen](/img/ai-security/integrations/pydantic/2.png)
 
@@ -257,37 +209,35 @@ Prompt filtering rejects a request before the agent acts on it. The `validate_fi
 async def validate_financial_query(
     ctx: RunContext[PermitDeps],
     query: FinancialQuery,
-) -> Union[bool, str]:
-    """SECURITY PERIMETER 1: Prompt Filtering
+) -> bool | str:
+    """SECURITY PERIMETER 1: Prompt Filtering.
+
     Validates whether users have explicitly consented to receive AI-generated financial advice.
     """
     try:
-        # Classify the user's intent
+        # Classify the user's intent.
         is_seeking_advice = classify_prompt_for_advice(query.question)
 
-        # Perform the permission check with Permit.io
+        # Ask the PDP whether this user may receive this kind of advice.
         permitted = await ctx.deps.permit.check(
-            {"key": ctx.deps.user_id},
-            "receive",
-            {
-                "type": "financial_advice",
-                "attributes": {
-                    "is_ai_generated": is_seeking_advice,
-                },
+            user=ctx.deps.user_id,
+            action='receive',
+            resource={
+                'type': 'financial_advice',
+                'attributes': {'is_ai_generated': is_seeking_advice},
             },
         )
 
         if not permitted:
-            return (
-                "User has not opted in to receive AI-generated financial advice."
-                if is_seeking_advice
-                else "User is not authorized for this type of query."
-            )
+            if is_seeking_advice:
+                return 'User has not opted in to receive AI-generated financial advice'
+            else:
+                return 'User does not have permission to access this information'
 
         return True
 
     except PermitApiError as e:
-        raise SecurityError(f"Prompt permission check failed: {str(e)}")
+        raise SecurityError(f'Permission check failed: {str(e)}')
 ```
 
 ### Classify financial prompts \{#classifying-financial-prompts}
@@ -297,8 +247,14 @@ The example classifies prompts with a keyword list:
 ```python
 def classify_prompt_for_advice(question: str) -> bool:
     advice_keywords = [
-        "should i", "recommend", "advice", "suggest",
-        "what's the best", "help me choose", "better option"
+        'should i',
+        'recommend',
+        'advice',
+        'suggest',
+        'help me',
+        "what's best",
+        'what is best',
+        'better option',
     ]
     question_lower = question.lower()
     return any(keyword in question_lower for keyword in advice_keywords)
@@ -325,37 +281,40 @@ RAG data protection limits the documents the agent can use to the ones the user 
 @financial_agent.tool
 async def access_financial_knowledge(
     ctx: RunContext[PermitDeps],
-    query: FinancialQuery
-) -> List[str]:
-    """SECURITY PERIMETER 2: Data Protection
+    usr: UserContext,
+    documents: list[FinancialDocument],
+) -> list[FinancialDocument]:
+    """SECURITY PERIMETER 2: Data Protection.
+
     Filters knowledge base access based on document classification and user clearance.
     """
     try:
+        # One resource dictionary per candidate document.
         resources = [
             {
-                "id": doc.id,
-                "type": "financial_document",
-                "attributes": {
-                    "doc_type": doc.type,
-                    "classification": doc.classification,
+                'key': doc.id,
+                'type': 'financial_document',
+                'attributes': {
+                    'doc_type': doc.type,
+                    'classification': doc.classification,
                 },
             }
-            for doc in query.documents
+            for doc in documents
         ]
 
-        # Use Permit to filter accessible documents
+        # filter_objects runs one check per resource and returns the allowed ones.
         allowed_docs = await ctx.deps.permit.filter_objects(
-            ctx.deps.user_id,
-            "read",
-            {},
-            resources
+            user=ctx.deps.user_id,
+            action='read',
+            context={},
+            resources=resources,
         )
 
-        allowed_ids = {doc["id"] for doc in allowed_docs}
-        return [doc.content for doc in query.documents if doc.id in allowed_ids]
+        allowed_ids = {doc['key'] for doc in allowed_docs}
+        return [doc for doc in documents if doc.id in allowed_ids]
 
     except PermitApiError as e:
-        raise SecurityError(f"Failed to filter documents: {str(e)}")
+        raise SecurityError(f'Failed to filter documents: {str(e)}')
 ```
 
 ### Document model and classifications \{#document-model--classifications}
@@ -364,10 +323,15 @@ Each document has a classification:
 
 ```python
 class FinancialDocument(BaseModel):
+    """Model for financial documents with classification levels."""
+
     id: str
-    type: str  # e.g., "report", "chart", "transcript"
-    classification: str  # "public", "restricted", "confidential"
+    type: str = Field(..., description="Document type (e.g., 'investment', 'tax', 'retirement')")
     content: str
+    classification: str = Field(
+        ...,
+        description='Document classification level (public, restricted, confidential)',
+    )
 ```
 
 The PDP evaluates the `classification` attribute against the `confidential_docs` resource set and the user's `clearance_level`.
@@ -388,19 +352,21 @@ Secure external access checks permission before the agent changes data in anothe
 async def check_action_permissions(
     ctx: RunContext[PermitDeps],
     action: str,
-    context: UserContext
+    context: UserContext,
+    portfolio_id: str,
 ) -> bool:
-    """SECURITY PERIMETER 3: Secure External Access
+    """SECURITY PERIMETER 3: Secure External Access.
+
     Controls permissions for sensitive financial operations, such as modifying a portfolio.
     """
     try:
         return await ctx.deps.permit.check(
-            ctx.deps.user_id,
-            action,
-            {"type": "portfolio"}
+            user=ctx.deps.user_id,
+            action=action,
+            resource={'type': 'portfolio', 'key': portfolio_id},
         )
     except PermitApiError as e:
-        raise SecurityError(f"Failed to check portfolio update permission: {str(e)}")
+        raise SecurityError(f'Failed to check portfolio permission: {str(e)}')
 ```
 
 The check runs before the agent calls the external system. In `example/main.py`, the tool always checks the `update` action.
@@ -417,11 +383,30 @@ The check runs before the agent calls the external system. In `example/main.py`,
 Call the external API only when the check returns `True`:
 
 ```python
-if await check_action_permissions(...):
-    # Proceed to call API
-    result = await client.put("/portfolios/123", json=payload)
-else:
-    raise SecurityError("Unauthorized portfolio update attempt.")
+import httpx
+from permit import Permit
+
+
+async def update_portfolio(
+    permit: Permit,
+    user_id: str,
+    portfolio_id: str,
+    payload: dict[str, str],
+) -> dict[str, str]:
+    """Update a portfolio through an external API, but only if Permit allows it."""
+    permitted = await permit.check(
+        user=user_id,
+        action='update',
+        resource={'type': 'portfolio', 'key': portfolio_id},
+    )
+
+    if not permitted:
+        raise SecurityError(f'{user_id} is not allowed to update portfolio {portfolio_id}')
+
+    async with httpx.AsyncClient(base_url='https://api.example.com') as client:
+        response = await client.put(f'/portfolios/{portfolio_id}', json=payload)
+        response.raise_for_status()
+        return response.json()
 ```
 
 ## Perimeter 4: Enforce the response \{#response-enforcement}
@@ -432,9 +417,10 @@ Response enforcement checks the final answer before the user sees it. The `valid
 @financial_agent.tool
 async def validate_financial_response(
     ctx: RunContext[PermitDeps],
-    response: FinancialResponse
+    response: FinancialResponse,
 ) -> FinancialResponse:
-    """SECURITY PERIMETER 4: Response Enforcement
+    """SECURITY PERIMETER 4: Response Enforcement.
+
     Ensures all financial advice responses meet regulatory requirements
     and include necessary disclaimers.
     """
@@ -442,19 +428,20 @@ async def validate_financial_response(
         contains_advice = classify_response_for_advice(response.answer)
 
         permitted = await ctx.deps.permit.check(
-            ctx.deps.user_id,
-            "requires_disclaimer",
-            {
-                "type": "financial_response",
-                "attributes": {"contains_advice": contains_advice},
+            user=ctx.deps.user_id,
+            action='requires_disclaimer',
+            resource={
+                'type': 'financial_response',
+                'attributes': {'contains_advice': contains_advice},
             },
         )
 
         if contains_advice and permitted:
             disclaimer = (
-                "\n\nIMPORTANT DISCLAIMER: This is AI-generated financial advice. "
-                "This information is for educational purposes only and should not be "
-                "considered professional financial advice. Always consult a qualified advisor."
+                '\n\nIMPORTANT DISCLAIMER: This is AI-generated financial advice. '
+                'This information is for educational purposes only and should not be '
+                'considered as professional financial advice. Always consult with a '
+                'qualified financial advisor before making investment decisions.'
             )
             response.answer += disclaimer
             response.disclaimer_added = True
@@ -463,7 +450,7 @@ async def validate_financial_response(
         return response
 
     except PermitApiError as e:
-        raise SecurityError(f"Failed to check response content: {str(e)}")
+        raise SecurityError(f'Failed to check response content: {str(e)}')
 ```
 
 ### Classify responses \{#response-classification}
@@ -473,10 +460,19 @@ The example detects advice in a response with a keyword list:
 ```python
 def classify_response_for_advice(response_text: str) -> bool:
     advice_indicators = [
-        "recommend", "should", "consider", "advise",
-        "suggest", "best option", "strategy", "allocation"
+        'recommend',
+        'should',
+        'consider',
+        'advise',
+        'suggest',
+        'better to',
+        'optimal',
+        'best option',
+        'strategy',
+        'allocation',
     ]
-    return any(keyword in response_text.lower() for keyword in advice_indicators)
+    response_lower = response_text.lower()
+    return any(indicator in response_lower for indicator in advice_indicators)
 ```
 
 In production, replace the keyword list with an intent classifier or a moderation API.
@@ -494,7 +490,15 @@ In production, replace the keyword list with an intent classifier or a moderatio
    permitio/pdp-v2:latest
    ```
 
-2. Clone the example and install its dependencies:
+2. Verify the PDP answers its health check:
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' http://localhost:7766/healthy
+   ```
+
+   A healthy PDP prints `200`. See [Verify the PDP is healthy](/how-to/deploy/deploy-to-production#pdp-health-check-endpoints).
+
+3. Clone the example and install its dependencies:
 
    ```bash
    git clone https://github.com/permitio/Permit-PydanticAI.git
@@ -502,15 +506,7 @@ In production, replace the keyword list with an intent classifier or a moderatio
    uv sync --all-extras
    ```
 
-   Run the agent from the repository root:
-
-   ```bash
-   uv run python example/main.py
-   ```
-
-   The script runs two queries as `user@example.com` and prints each result.
-
-3. Set the environment variables in a `.env` file in the repository root, or export them:
+4. Set the environment variables before you run the agent. Put them in a `.env` file in the repository root, which `example/main.py` loads with `python-dotenv`, or export them in the shell:
 
    ```bash
    PERMIT_KEY=your-permit-api-key
@@ -518,46 +514,30 @@ In production, replace the keyword list with an intent classifier or a moderatio
    ANTHROPIC_API_KEY=your-anthropic-api-key
    ```
 
-4. Test with both users. The PDP reads the attributes stored on each user in Permit. These JSON blocks describe a fully authorized user and a limited user.
+   `example/main.py` raises `ValueError: PERMIT_KEY environment variable not set` and exits if `PERMIT_KEY` is missing.
 
-   **Fully authorized premium user:**
+5. Run the agent from the repository root:
 
-   ```json
-   {
-     "key": "user@example.com",
-     "role": "premium_user",
-     "attributes": {
-       "clearance_level": "high",
-       "ai_advice_opted_in": true
-     }
-   }
+   ```bash
+   uv run python example/main.py
    ```
 
-   Use `user@example.com` from [Create the test users](#create-the-test-users) for this profile. The user can get advice with a disclaimer, read confidential documents, and update portfolios.
+   The script runs two queries as `user@example.com` and prints the `FinancialResponse` for each one:
 
-   **Limited basic user:**
-
-   ```json
-   {
-     "key": "restricted@example.com",
-     "role": "restricted_user",
-     "attributes": {
-       "clearance_level": "low",
-       "ai_advice_opted_in": false
-     }
-   }
+   ```text
+   Secure response: answer='...' includes_advice=True disclaimer_added=True metadata=None
+   Protected document access: answer='...' includes_advice=False disclaimer_added=False metadata=None
    ```
 
-   Use `restricted@example.com` for this profile. The user is denied advice, confidential documents, and portfolio actions.
+   The `answer` text comes from the model, so it differs between runs. The `includes_advice` and `disclaimer_added` flags come from the permission checks: `disclaimer_added=True` on the first response means `validate_financial_response` classified the answer as advice and the PDP allowed `requires_disclaimer` on `financial_response`.
 
-   To run the agent as `restricted@example.com`, change `user_id` in the `PermitDeps(...)` call in `example/main.py`.
+6. Run the agent as the restricted user. Change `user_id` in the `PermitDeps(...)` call in `example/main.py` from `user@example.com` to `restricted@example.com`, then run `uv run python example/main.py` again. The first response now carries the denial string from `validate_financial_query` instead of advice, and `disclaimer_added` stays `False`.
 
-5. Send test prompts, for example:
+7. Open [audit logs](/how-to/use-audit-logs/types-and-filtering) in the Permit dashboard. Each run adds one entry per check, so you can see which tool ran which check and whether the PDP allowed it. Try these prompts and compare the entries between the two users:
+
    - "What's the best investment strategy in a recession?"
    - "Can I get a breakdown of my current portfolio?"
    - "What documents do I need to file taxes as a freelancer?"
-
-   For each prompt, open [audit logs](/how-to/use-audit-logs/types-and-filtering) in the Permit dashboard to see which tools ran checks and whether the PDP allowed them.
 
 ### Expected results \{#behavior-summary-table}
 

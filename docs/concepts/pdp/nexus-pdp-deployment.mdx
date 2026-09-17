@@ -30,6 +30,55 @@ Nexus PDP has operational requirements that the container PDP (the Edge PDP imag
 | Readiness probe | `GET /health/ready` on port `7001` | Traffic reaches a Nexus PDP that cannot answer yet. |
 | Startup probe | Enough time for a cold start of your data set | A cold start takes longer as your data grows. A short startup probe restarts a first boot that is still loading data. |
 
+## Run Nexus PDP with Docker
+
+Replace `<tag>` with a specific `permitio/pdp-v3` release tag, and set `PERMIT_API_KEY` in your shell to the API key of the environment this container serves. The command maps the authorization API to host port `7766`, keeps the health port on `7001`, and stores the embedded database in the named volume `nexus-data`:
+
+```bash
+docker run -d --name nexus-pdp \
+  -p 7766:7000 -p 7001:7001 \
+  -e PDP_API_KEY="$PERMIT_API_KEY" \
+  -v nexus-data:/var/lib/edge-pdp \
+  --memory 4g \
+  permitio/pdp-v3:<tag>
+```
+
+## Kubernetes pod settings for Nexus PDP
+
+This pod-spec excerpt sets the ports, probes, memory request, volume, and shutdown budget from the requirements table. `fsGroup: 10001` makes the mounted volume writable by the non-root user that Nexus PDP runs as. Create the `permit-env-api-key` secret with the environment API key, size the `nexus-pdp-data` claim for your data set, and add a startup probe with enough time for a cold start:
+
+```yaml
+terminationGracePeriodSeconds: 40
+securityContext:
+  fsGroup: 10001
+containers:
+  - name: nexus-pdp
+    image: permitio/pdp-v3:<tag>
+    ports:
+      - containerPort: 7000 # authorization API
+      - containerPort: 7001 # health
+    resources:
+      requests:
+        memory: 4Gi
+    env:
+      - name: PDP_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: permit-env-api-key
+            key: PDP_API_KEY
+    livenessProbe:
+      httpGet: { path: /health, port: 7001 }
+    readinessProbe:
+      httpGet: { path: /health/ready, port: 7001 }
+    volumeMounts:
+      - name: nexus-data
+        mountPath: /var/lib/edge-pdp
+volumes:
+  - name: nexus-data
+    persistentVolumeClaim:
+      claimName: nexus-pdp-data
+```
+
 :::tip Run Nexus PDP locally on macOS
 The macOS AirPlay Receiver uses port `7000`. Map the Nexus PDP authorization API to another host port, for example `-p 7766:7000`, and set your SDK's PDP URL to `http://localhost:7766`.
 :::

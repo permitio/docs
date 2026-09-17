@@ -8,7 +8,6 @@ import addUserAttributes from "/img/updated/walkthroughs/abac-guide/adding-user-
 import addResourceAttributes from "/img/updated/walkthroughs/abac-guide/adding-resource-attributes.mp4";
 import userSet from "/img/updated/walkthroughs/abac-guide/user-set.mp4";
 import resourceSet from "/img/updated/walkthroughs/abac-guide/resource-set.mp4";
-import settingPolicy from "/img/updated/walkthroughs/abac-guide/setting-policy.mp4";
 import WhatsNext from "../../src/components/whats-next/WhatsNext";
 import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
@@ -20,23 +19,25 @@ ABAC decides access from attributes of the user, the resource, and the environme
 
 ## Prerequisites
 
-- A `Document` resource with a `read` action, and an `Employee` role that can read documents ([Configure your first RBAC policy](/overview/configure-your-first-rbac-policy))
+- A `Document` resource with a `read` action, and an `Employee` role ([Configure your first RBAC policy](/overview/configure-your-first-rbac-policy)). Step 5 sets the role's `read` permission, so the role can start with no permissions on `Document`.
 - To test the policy from code: a container policy decision point (PDP). The Cloud PDP doesn't evaluate ABAC policies. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
 
 ## The scenario \{#understanding-the-scenario}
 
-A company stores project documents. Only employees in the Engineering department who completed cybersecurity training can read high-priority classified documents.
+A company stores project documents. Only employees in the Engineering department who completed cybersecurity training can read high-priority classified documents. Every other employee can read public documents only.
 
-| Who | Standard documents | High-priority classified documents |
+| Who | Public documents | High-priority classified documents |
 |---|---|---|
-| Employee (role) | `read` | `read`, because a permission on `Document` covers every document |
+| Employee (role, granted `read` on the Public Document resource set) | `read` | No access |
 | R&D Certified Employee (user set: `department` is `Engineering` and `training_status` is `certified`) | `read` | `read` |
 | A user with no roles who doesn't match the user set | No access | No access |
 
 A role can't tell certified Engineering employees apart from other employees. ABAC conditions on user and resource attributes can.
 
-:::warning Permissions on a resource cover its resource sets
-Permit allows an action when any of the user's roles or user sets grants it. A role with `read` on `Document` can read every document, including documents in the High Priority Classified Document resource set. To keep a role away from classified documents, don't grant it the action on `Document`. Grant it on a resource set that excludes classified documents instead.
+To build this policy you create two resource sets, Public Document and High Priority Classified Document, and grant the `Employee` role `read` on the Public Document set only.
+
+:::warning Granting an action on a resource also grants it on every resource set of that resource
+Permit allows an action when any of the user's roles or user sets grants it. A role with `read` on `Document` can read every document, including the documents in the High Priority Classified Document resource set, which defeats the goal of this scenario. Grant the `Employee` role `read` on the Public Document resource set instead of on `Document`. If [Configure your first RBAC policy](/overview/configure-your-first-rbac-policy) already gave the `Employee` role `read` on `Document`, clear that checkbox in step 5.
 :::
 
 <TimelineWrapper>
@@ -98,9 +99,11 @@ The R&D Certified Employee user set appears as a row in the Policy Editor.
 </TimelineStep>
 <TimelineStep>
 
-## 4. Create a resource set \{#define-a-dynamic-resource-resource-set}
+## 4. Create two resource sets \{#define-a-dynamic-resource-resource-set}
 
-A resource set, also called a dynamic resource, groups resources by their attributes.
+A resource set, also called a dynamic resource, groups resources by their attributes. This scenario needs two sets of documents: the classified ones that only certified Engineering employees read, and the public ones that every employee reads.
+
+Create the first resource set:
 
 1. In **Policy Editor**, click **Create** and select **Resource Set**.
 2. In the name field, enter `High Priority Classified Document`. Permit fills in the key `High_Priority_Classified_Document`.
@@ -110,40 +113,79 @@ A resource set, also called a dynamic resource, groups resources by their attrib
    - `resource.priority_level` **equals** `high`
 5. Click **Save**.
 
-The High Priority Classified Document resource set appears as a column next to Document in the Policy Editor.
+Repeat the same steps for the second resource set, with the name `Public Document` (key `Public_Document`), the resource type **Document**, and one condition:
+
+- `resource.document_type` **equals** `public`
+
+Both resource sets appear as columns next to Document in the Policy Editor.
 
 <Video src={resourceSet} />
 
 </TimelineStep>
 <TimelineStep>
 
-## 5. Grant permissions on the user set and resource set \{#create-your-policy-rules}
+## 5. Grant permissions on the user set and resource sets \{#create-your-policy-rules}
 
 Policy rules connect roles and user sets to resources and resource sets through actions.
 
-1. In **Policy Editor**, find the **Employee** role. The video checks `read` under **Document** only.
-2. Find the **R&D Certified Employee** user set. Check `read` under **Document** and `read` under **High Priority Classified Document**.
+1. In **Policy Editor**, find the **Employee** role. Check `read` under **Public Document**. Leave `read` under **Document** and under **High Priority Classified Document** cleared, so the role can't reach classified documents.
+2. Find the **R&D Certified Employee** user set. Check `read` under **Public Document** and `read` under **High Priority Classified Document**.
 3. Click **Save Changes**.
-
-<Video src={settingPolicy} />
 
 </TimelineStep>
 </TimelineWrapper>
 
 ## Verify the policy
 
-Run permission checks against a container PDP. Pass the user and resource attributes in the check, as shown in [Check permissions with attributes](/how-to/enforce-permissions/check#attributes):
+Run permission checks against a container PDP. The Cloud PDP doesn't evaluate ABAC policies. Pass the user and resource attributes in the check, as shown in [Check permissions with attributes](/how-to/enforce-permissions/check#attributes).
 
-| User attributes | Resource attributes | Expected result of `permit.check(user, "read", resource)` |
-|---|---|---|
-| `department: "Engineering"`, `training_status: "certified"` | `priority_level: "high"`, `document_type: "classified"` | `true` |
-| `department: "Engineering"`, `training_status: "pending"` | `priority_level: "high"`, `document_type: "classified"` | `false` |
+The following checks use a test user, `alice@permit.io`, who matches the user set and holds no role. Run them against your container PDP:
 
-Run the checks for a test user who has no role assignments, so that only the user set can grant access. Use `Document` as the resource `type`. Each decision also appears on the **Audit Log** screen of the Permit dashboard.
+```js
+const classifiedDocument = {
+  type: "document",
+  attributes: { priority_level: "high", document_type: "classified" },
+};
+
+// Certified Engineering employee, classified document: allowed by the user set
+const certified = await permit.check(
+  { key: "alice@permit.io", attributes: { department: "Engineering", training_status: "certified" } },
+  "read",
+  classifiedDocument,
+);
+console.log("certified engineer reads classified:", certified);
+
+// Same user, training not completed: no rule grants read
+const pending = await permit.check(
+  { key: "alice@permit.io", attributes: { department: "Engineering", training_status: "pending" } },
+  "read",
+  classifiedDocument,
+);
+console.log("pending engineer reads classified:", pending);
+```
+
+The example prints:
+
+```text
+certified engineer reads classified: true
+pending engineer reads classified: false
+```
+
+The expected decisions for the whole scenario:
+
+| User | User attributes | Resource attributes | `permit.check(user, "read", resource)` |
+|---|---|---|---|
+| Matches the user set | `department: "Engineering"`, `training_status: "certified"` | `priority_level: "high"`, `document_type: "classified"` | `true` |
+| Matches the user set | `department: "Engineering"`, `training_status: "certified"` | `document_type: "public"` | `true` |
+| Holds the `Employee` role only | none | `document_type: "public"` | `true` |
+| Holds the `Employee` role only | none | `priority_level: "high"`, `document_type: "classified"` | `false` |
+| No role, doesn't match the user set | `department: "Sales"`, `training_status: "pending"` | `document_type: "public"` | `false` |
+
+If the fourth row returns `true`, the `Employee` role still has `read` on `Document` or on the High Priority Classified Document resource set. Clear those checkboxes in the Policy Editor and run the check again. Each decision also appears on the **Audit Log** screen of the Permit dashboard.
 
 ## What you built \{#what-did-you-learn}
 
-You created an ABAC policy from attributes, a user set, a resource set, and the permissions that connect them. When a user's or a document's attributes change, access changes with them, without new role assignments.
+You created an ABAC policy from attributes, a user set, two resource sets, and the permissions that connect them. Certified Engineering employees read high-priority classified documents, and every other employee reads public documents only. When a user's or a document's attributes change, access changes with them, without new role assignments.
 
 <WhatsNext progress={60} customText="Next: model access through relationships between resources.">
   <h2>What's next?</h2>

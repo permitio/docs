@@ -39,9 +39,9 @@ Collect these values. You enter them in the component settings in Langflow:
 
 ```bash
 PERMIT_API_KEY=your_api_key
-PERMIT_PDP_URL=http://localhost:7766  # Or your cloud PDP
-JWKS_URL=https://your-domain/.well-known/jwks.json  # For JWT validation
-OPENAI_API_KEY=sk-...  # From OpenAI
+PERMIT_PDP_URL=http://localhost:7766
+JWKS_URL=https://your-domain/.well-known/jwks.json
+OPENAI_API_KEY=sk-...
 ```
 
 | Variable | Used in |
@@ -74,9 +74,9 @@ The assistant searches flights, answers questions about flight policies, and boo
 
 | User set | Condition |
 | --- | --- |
-| Membership Tier Access | `user.verified == true`, combined with a membership tier condition |
+| Membership Tier Access | `user.verified == true` |
 | Regional Restrictions | `user.region == "domestic"` |
-| Sensitive Data Access | `user.membership_tier` includes `"premium"` |
+| Sensitive Data Access | `user.membership_tier` equals `premium` |
 
 ## Configure the policy in Permit \{#permit-schema-setup}
 
@@ -88,15 +88,10 @@ Open **Policy > Resources** and create a `flight` resource for flight informatio
 
 ```json
 {
-  "actions": [
-    "search",       // Search for available flights
-    "info",         // Get flight details
-    "viewprice",    // Access pricing information
-    "viewavailability" // Check seat availability
-  ],
+  "actions": ["search", "info", "viewprice", "viewavailability"],
   "attributes": {
-    "type": "String",        // Controls the type of operation ("info", "search", "booking")
-    "sensitivity": "String"  // Defines data sensitivity ("public", "protected", "private")
+    "type": "String",
+    "sensitivity": "String"
   }
 }
 ```
@@ -107,22 +102,17 @@ Create a `booking` resource for flight bookings:
 
 ```json
 {
-  "actions": [
-    "create", // Create new bookings
-    "modify", // Change existing bookings
-    "cancel", // Cancel bookings
-    "view"    // View booking details
-  ],
+  "actions": ["create", "modify", "cancel", "view"],
   "attributes": {
-    "type": "String",        // Defines booking operation types
-    "sensitivity": "String"  // Controls booking data sensitivity
+    "type": "String",
+    "sensitivity": "String"
   }
 }
 ```
 
 ![Create Resource form for the booking resource with its actions and attributes](/img/ai-security/integrations/langflow/3.jpg)
 
-The JSON blocks list the values to enter in the form. The dashboard form doesn't accept JSON with comments.
+The JSON blocks list the values to enter in the form.
 
 ### 2. Define user attributes \{#define-user-attributes}
 
@@ -148,10 +138,6 @@ Open **Policy > ABAC Rules**, click **ABAC User Sets**, and create three user se
 user.verified == true
 ```
 
-![User set form for membership tier access with a membership_tier condition and a verified condition](/img/ai-security/integrations/langflow/5.jpg)
-
-The screenshot also shows a `membership_tier` condition. Leave it out: `flight` and `booking` don't define a `class` attribute.
-
 **Regional Restrictions:**
 
 ```text
@@ -163,18 +149,14 @@ user.region == "domestic"
 **Sensitive Data Access:**
 
 ```text
-user.membership_tier includes "premium"
+user.membership_tier equals premium
 ```
 
-![User set form for sensitive data access with the membership_tier includes premium condition](/img/ai-security/integrations/langflow/7.jpg)
+![User set form for sensitive data access with the membership_tier equals premium condition](/img/ai-security/integrations/langflow/7.jpg)
 
 ### 4. Grant permissions in the Policy Editor \{#grant-permissions-in-the-policy-editor}
 
 Open the **Policy Editor**. The columns are your user sets and the rows are resource actions. Each checked box grants that action to users in that user set.
-
-![Policy Editor matrix with the booking and flight actions checked for the three user sets](/img/ai-security/integrations/langflow/8.jpg)
-
-The screenshot grants these permissions:
 
 | Action | Membership Tier Access | Regional Restrictions | Sensitive Data Access |
 | --- | --- | --- | --- |
@@ -182,11 +164,9 @@ The screenshot grants these permissions:
 | `booking:modify` | Yes | No | Yes |
 | `booking:cancel`, `booking:view` | Yes | No | No |
 | `flight:search` | No | Yes | No |
+| `flight:info` | No | Yes | No |
 | `flight:viewavailability` | Yes | No | No |
 | `flight:viewprice` | Yes | No | Yes |
-| `flight:info` | No | No | No |
-
-No user set has `flight:info` in the screenshot, so the PDP denies every user in the Flight Information flow. Check `info` for **Regional Restrictions** to match the expected results in this tutorial.
 
 ### 5. Add test users \{#add-test-users}
 
@@ -220,6 +200,61 @@ The JWT Validator component reads only the `sub` claim from the token. The Permi
 
 The JWT for each user needs only a `sub` claim that matches the user key.
 
+## Create the test JWTs and the JWKS endpoint \{#create-the-test-jwts-and-the-jwks-endpoint}
+
+1. Install the signing libraries:
+
+   ```bash
+   pip install "pyjwt[crypto]"
+   ```
+
+2. Save this script as `make_test_jwt.py`:
+
+   ```python
+   import json
+
+   import jwt
+   from cryptography.hazmat.primitives.asymmetric import rsa
+   from jwt.algorithms import RSAAlgorithm
+
+   KEY_ID = "flight-demo-key"
+   USER_KEYS = ["user-001", "user-002"]
+
+   private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+   jwk = json.loads(RSAAlgorithm.to_jwk(private_key.public_key()))
+   jwk.update({"kid": KEY_ID, "alg": "RS256", "use": "sig"})
+   with open("jwks.json", "w", encoding="utf-8") as handle:
+       json.dump({"keys": [jwk]}, handle, indent=2)
+
+   for user_key in USER_KEYS:
+       token = jwt.encode(
+           {"sub": user_key},
+           private_key,
+           algorithm="RS256",
+           headers={"kid": KEY_ID},
+       )
+       print(f"{user_key}: {token}")
+   ```
+
+3. Run the script. It writes `jwks.json` next to itself and prints one token per user:
+
+   ```bash
+   python make_test_jwt.py
+   ```
+
+4. Serve `jwks.json` over HTTP from the folder that holds it:
+
+   ```bash
+   python -m http.server 8080
+   ```
+
+5. Verify that the JWKS endpoint answers:
+
+   ```bash
+   curl -s http://localhost:8080/jwks.json
+   ```
+
 ## Run the Edge PDP locally \{#running-the-permit-pdp-locally}
 
 The Permissions Check and Data Protection components send checks to the PDP. Run an Edge PDP in Docker:
@@ -239,7 +274,11 @@ The Permissions Check and Data Protection components send checks to the PDP. Run
      permitio/pdp-v2:latest
    ```
 
-3. The PDP listens on `http://localhost:7766`. Enter this URL in the **PDP URL** field of every Permissions Check and Data Protection component.
+3. Verify that the PDP is up:
+
+   ```bash
+   curl -s http://localhost:7766/healthy
+   ```
 
 For more deployment options, see the [PDP overview](/concepts/pdp/overview).
 
@@ -262,28 +301,28 @@ Add these components to the canvas:
 | JWT Validator | Verifies the JWT and outputs the user key |
 | Permissions Check | Checks `search` on `flight` for the user |
 | If-Else | Routes the query based on the permission result |
-| City Selection Agent | Extracts and validates the departure and arrival cities |
+| Astra Assistant Agent | Extracts and validates the departure and arrival cities |
 | Astra DB | Retrieves flight data |
-| Parse Data | Formats the results |
+| Parse DataFrame | Formats the results |
 | Two Chat Outputs | Show the allowed response or the denial |
 
 ### Flight Search component configuration \{#component-configuration}
 
 **JWT Validator**
 - **JWT Token**: connected from Text Input
-- **JWKS URL**: your JWKS endpoint, for example `https://your-domain/.well-known/jwks.json`
+- **JWKS URL**: your JWKS endpoint
 
 **Permissions Check**
-```
-PDP URL: `http://localhost:7766`
-API Key: Your Permit API Key
-Resource: `flight`
-Action: `search`
+
+```text
+PDP URL: http://localhost:7766
+API Key: your Permit environment API key
+Resource: flight
+Action: search
 ```
 
-**City Selection Agent**
-- **Model:** `gpt-4o-mini`
-- **Instructions:**
+**Astra Assistant Agent**
+- **Agent Instructions:**
 
 ```text
 You are a flight search assistant. Your job is to:
@@ -294,10 +333,10 @@ You are a flight search assistant. Your job is to:
 ```
 
 **Astra DB**
-- **Collection Name**: `flights`
+- **Collection**: `flights`
 - **Database**: your Astra DB database, for example `flight_db`
 
-**Parse Data** template:
+**Parse DataFrame** template:
 
 ```text
 Flight {row_number}: {departure_city} to {arrival_city}
@@ -315,9 +354,9 @@ Available Seats: {seats}
 1. Connect **Text Input** to **JWT Validator**.
 2. Connect **JWT Validator** to **Permissions Check**.
 3. Connect **Permissions Check** to **If-Else**.
-   - True path: City Selection Agent, Astra DB, Parse Data, then the allowed Chat Output.
+   - True path: Astra Assistant Agent, Astra DB, Parse DataFrame, then the allowed Chat Output.
    - False path: the denied Chat Output.
-4. Connect **Chat Input** to both **If-Else** and **City Selection Agent**.
+4. Connect **Chat Input** to **If-Else**.
 
 With these connections, a query reaches the agent and Astra DB only when the JWT is valid and the PDP allows `search` on `flight`.
 
@@ -341,27 +380,28 @@ The Flight Information flow answers questions about travel policies, baggage all
 | JWT Validator | Verifies the JWT and outputs the user key |
 | Permissions Check | Checks `info` on `flight` for the user |
 | If-Else | Routes the question based on the permission result |
-| Local Expert Agent | Answers the policy question |
+| Astra Assistant Agent | Answers the policy question |
 | URL | Loads policy content from your policy pages |
-| Parse Data | Formats the policy content |
+| Parse DataFrame | Formats the policy content |
 | Two Chat Outputs | Show the allowed response or the denial |
 
 ### Flight Information component configuration \{#component-configuration-1}
 
 **JWT Validator**
-- **JWKS URL**: `https://your-domain/.well-known/jwks.json`
+- **JWKS URL**: your JWKS endpoint
 
 **Permissions Check**
-```
-PDP URL: `http://localhost:7766`
-API Key: Your Permit API key
-Resource: `flight`
-Action: `info`
+
+```text
+PDP URL: http://localhost:7766
+API Key: your Permit environment API key
+Resource: flight
+Action: info
 ```
 
-**Local Expert Agent**
+**Astra Assistant Agent**
 - **Model:** `gpt-4o-mini`
-- **Instructions:**
+- **Agent Instructions:**
 
 ```text
 You are a knowledgeable Local Expert that provides accurate flight policy and service information. You should:
@@ -375,7 +415,7 @@ You are a knowledgeable Local Expert that provides accurate flight policy and se
 - **URLs**: the pages that hold your baggage and service policies, for example `https://<your-policy-site>/baggage` and `https://<your-policy-site>/services`
 - **Output Format**: `Text`
 
-**Parse Data** template:
+**Parse DataFrame** template:
 
 ```text
 Policy Information:
@@ -398,7 +438,7 @@ Additional Information:
 2. Connect **JWT Validator** to **Permissions Check**.
 3. Connect **Chat Input** to **If-Else**.
 4. Route on the Permissions Check result:
-   - Allowed: Local Expert Agent, URL, Parse Data, then the allowed Chat Output.
+   - Allowed: Astra Assistant Agent, URL, Parse DataFrame, then the allowed Chat Output.
    - Denied: the denied Chat Output.
 
 ### Flight Information results \{#example-behavior-1}
@@ -432,8 +472,7 @@ The Flight Booking flow completes a booking, which changes data in an external s
 | If-Else | Routes the request based on the permission result |
 | API Request | Calls your booking API |
 | Astra Assistant Agent | Processes the booking request |
-| OpenAI | Generates the response |
-| Data to Message, Filter Data | Shape the final output |
+| Filter Data | Shapes the final output |
 | Chat Output | Shows the booking result |
 
 ### Flight Booking component configuration \{#component-configuration-2}
@@ -442,11 +481,12 @@ The Flight Booking flow completes a booking, which changes data in an external s
 - **JWKS URL**: your JWKS endpoint
 
 **Permissions Check**
-```
-PDP URL: `http://localhost:7766`
-API Key: Your Permit API key
-Resource: `booking`
-Action: `create`
+
+```text
+PDP URL: http://localhost:7766
+API Key: your Permit environment API key
+Resource: booking
+Action: create
 ```
 
 **Data Protection**
@@ -460,10 +500,10 @@ Action: `create`
 
 **Astra Assistant Agent**
 - **Model:** `gpt-4o-mini`
-- **Instructions:**
+- **Agent Instructions:**
 
 ```text
-You are a booking assistant that helps process flight booking requests. 
+You are a booking assistant that helps process flight booking requests.
 Always ensure the user is authorized before confirming anything.
 ```
 
@@ -507,10 +547,10 @@ Request: "Book me a flight from NYC to LA for next Monday."
 
 3. Check that the Permit component settings use these values:
 
-   ```
+   ```text
    PERMIT_API_KEY=...
    PERMIT_PDP_URL=http://localhost:7766
-   JWKS_URL=https://your-domain/.well-known/jwks.json
+   JWKS_URL=http://localhost:8080/jwks.json
    ```
 
 4. Paste the JWT for `user-001` or `user-002` into the Text Input of each flow.
@@ -527,13 +567,13 @@ In the Langflow Playground, send these messages:
 
 ### Expected results \{#expected-behavior-matrix}
 
-These results assume the policy from [Grant permissions in the Policy Editor](#grant-permissions-in-the-policy-editor), with `info` checked for Regional Restrictions:
+These results assume the policy from [Grant permissions in the Policy Editor](#grant-permissions-in-the-policy-editor):
 
 | Flow | `user-001` (premium, domestic, verified) | `user-002` (basic, international, unverified) |
 | --- | --- | --- |
 | Flight Search | Allowed through Regional Restrictions | Denied |
 | Flight Information | Allowed through Regional Restrictions | Denied |
-| Flight Booking | Allowed through Regional Restrictions and Sensitive Data Access | Denied |
+| Flight Booking | Allowed through Regional Restrictions | Denied |
 
 ### View decisions in the audit logs \{#where-to-view-permissions--logs}
 

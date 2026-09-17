@@ -5,7 +5,6 @@ timeline: true
 description: "Call permit.check() against the managed Cloud PDP, see the check denied, change the policy, and see the same check allowed without a code change."
 ---
 
-import CodeBlock from "../../src/components/code-block/CodeBlock";
 import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
 
@@ -19,31 +18,21 @@ The Cloud PDP does not support attribute-based access control (ABAC) policies. I
 
 ## Prerequisites
 
-- An RBAC policy with a role, a resource, and a user assigned to the role. See [Configure your first RBAC policy](/overview/configure-your-first-rbac-policy).
+- An RBAC policy with an `Admin` role and a `Document` resource, and a user with the `Admin` role in the `default` tenant. See [Configure your first RBAC policy](/overview/configure-your-first-rbac-policy).
 - The Node.js SDK (`permitio`) installed, imported, and initialized with your environment API key and the Cloud PDP URL. See [Use the Permit API and SDK](/overview/use-the-permit-api-and-sdk).
 
-## How permit.check() works \{#before-we-start-understanding-the-check-function}
+## Set up the starting state
 
-`permit.check()` asks the PDP whether a user can perform an action on a resource, and returns `true` or `false`. Your code proceeds only when the result is `true`. Place the check at each point in your application that enforces the policy.
+The tutorial starts from a policy that denies the check, so you can watch the decision change. In **Policy** > **Policy Editor**, make sure the `Admin` role's row for `Document` has the `update` action cleared. The other `Document` actions can stay as [Configure your first RBAC policy](/overview/configure-your-first-rbac-policy) left them.
 
-| Argument | Type | Description |
-|---|---|---|
-| `user` | string or object | The key of the user performing the action, or an object with the key and user attributes. |
-| `action` | string | The action the user performs, such as `read` or `update`. |
-| `resource` | string or object | The resource type key, such as `document`, or an object with the resource type, instance key, tenant, and attributes. |
-
-This example checks whether the user `john@permit.io` can `read` a `document`:
-
-<CodeBlock folderPath="/walkthroughs/first-policy-check/check-function" />
-
-For tenants, attributes, relationships, and the `context` argument, see [Check permissions with permit.check()](/how-to/enforce-permissions/check).
+Then open **Directory** and copy the key of the user who has the `Admin` role in the `default` tenant. The samples below use `<USER_KEY>` for that key. The screenshots come from an environment where that user is Macy Smith, with the key `user|987654321`, and where the `Admin` role also has `read` on `Document`. Your own user key and action list differ, and the decisions the tutorial describes still hold as long as `update` starts out cleared.
 
 <TimelineWrapper>
 <TimelineStep>
 
 ## Review the policy in the Policy Editor \{#understanding-your-policy-configuration}
 
-In the Permit dashboard, open **Policy** > **Policy Editor**. In this example, the `Admin` role can `create`, `delete`, `publish`, and `read` a `Document`. The `Admin` role cannot `update` a `Document`.
+In the Permit dashboard, open **Policy** > **Policy Editor**. In the example environment, the `Admin` role can `create`, `delete`, `publish`, and `read` a `Document`. The `Admin` role cannot `update` a `Document`.
 
 <img
   src="/img/updated/walkthroughs/first-policy-check/permissions-false.png"
@@ -56,7 +45,7 @@ In the Permit dashboard, open **Policy** > **Policy Editor**. In this example, t
 
 ## Review the user role assignments \{#reviewing-user-assignments}
 
-Open **Directory**. In this example there are two users. Macy Smith, with the user key `user|987654321`, has the `Admin` role in the `default` tenant. John Smith has no role. The checks in this tutorial use Macy Smith's user key.
+Open **Directory**. In the example environment there are two users. Macy Smith, with the user key `user|987654321`, has the `Admin` role in the `default` tenant. John Smith has no role. The checks in this tutorial use the key of the user who has the `Admin` role.
 
 <img
   src="/img/updated/walkthroughs/first-policy-check/users-and-roles.png"
@@ -69,15 +58,20 @@ Open **Directory**. In this example there are two users. Macy Smith, with the us
 
 ## Add the permission check to your code \{#setting-up-the-enforcement-point}
 
-Add a check that asks whether Macy Smith can `update` a `document`:
+Add a check that asks whether the Admin user can `update` a `document`. Replace `<USER_KEY>` with the user key you copied from **Directory**:
 
-<CodeBlock folderPath="/walkthroughs/first-policy-check/check-function-false" />
+```js
+const permitted = await permit.check("<USER_KEY>", "update", "document");
+console.log("update allowed:", permitted);
+```
 
 The check passes three values to the Cloud PDP:
 
-- The user key, `user|987654321`
+- The user key, for example `user|987654321`
 - The action, `update`
 - The resource type, `document`
+
+`permit.check()` returns a promise, so `await` it. Without `await`, `permitted` holds the promise itself, and the promise is always truthy.
 
 The PDP returns `true` if the policy allows the action and `false` if it does not.
 
@@ -86,9 +80,9 @@ The PDP returns `true` if the policy allows the action and `false` if it does no
 
 ## Run the check and see it denied \{#testing-initial-permissions}
 
-Run your code. The check returns `false`, because the `Admin` role doesn't have the `update` permission on `Document`.
+Run your code. It prints `update allowed: false`, because the `Admin` role doesn't have the `update` permission on `Document`.
 
-Open **Audit Log** in the Permit dashboard. The entry for `user|987654321`, action `update`, and resource `Document` shows the decision **DENIED**.
+Open **Audit Log** in the Permit dashboard. The entry for your user key, action `update`, and resource `Document` shows the decision **DENIED**.
 
 <img
   src="/img/updated/walkthroughs/first-policy-check/audit-log-fail.png"
@@ -101,7 +95,7 @@ Open **Audit Log** in the Permit dashboard. The entry for `user|987654321`, acti
 
 ## Allow the update action in the Policy Editor \{#updating-permissions}
 
-In the **Policy Editor**, select the `update` checkbox for `Document` in the `Admin` row, and save the change. Every user with the `Admin` role, including Macy Smith, can update a `Document`.
+In the **Policy Editor**, select the `update` checkbox for `Document` in the `Admin` row, and save the change. Every user with the `Admin` role can update a `Document`.
 
 <img
   src="/img/updated/walkthroughs/first-policy-check/permissions-true.png"
@@ -116,9 +110,12 @@ In the **Policy Editor**, select the `update` checkbox for `Document` in the `Ad
 
 Run the same check again, without changing your code:
 
-<CodeBlock folderPath="/walkthroughs/first-policy-check/check-function-true" />
+```js
+const permitted = await permit.check("<USER_KEY>", "update", "document");
+console.log("update allowed:", permitted);
+```
 
-The check returns `true`. In **Audit Log**, the latest entry for the same user, action, and resource shows the decision **PERMITTED**.
+It prints `update allowed: true`. In **Audit Log**, the latest entry for the same user, action, and resource shows the decision **PERMITTED**.
 
 <img
   src="/img/updated/walkthroughs/first-policy-check/audit-log-pass.png"
@@ -128,8 +125,34 @@ The check returns `true`. In **Audit Log**, the latest entry for the same user, 
 
 The decision changed because the policy changed. Your application code stayed the same.
 
+If the second run still prints `false`, confirm that the `update` checkbox is saved in the Policy Editor, and that the user key in your check matches the user who holds the `Admin` role.
+
 </TimelineStep>
 </TimelineWrapper>
+
+## permit.check() arguments \{#before-we-start-understanding-the-check-function}
+
+`permit.check()` asks the PDP whether a user can perform an action on a resource, and returns a promise that resolves to `true` or `false`. Your code proceeds only when the result is `true`. Place the check at each point in your application that enforces the policy.
+
+| Argument | Type | Description |
+|---|---|---|
+| `user` | string or object | The key of the user performing the action, or an object with the key and user attributes. |
+| `action` | string | The action the user performs, such as `read` or `update`. |
+| `resource` | string or object | The resource type key, such as `document`, or an object with the resource type, instance key, tenant, and attributes. |
+
+This example checks whether the user `john@permit.io` can `read` a `document`:
+
+```js
+const permitted = await permit.check("john@permit.io", "read", "document");
+
+if (permitted) {
+  console.log("John is PERMITTED to read a document");
+} else {
+  console.log("John is NOT PERMITTED to read a document");
+}
+```
+
+For tenants, attributes, relationships, and the `context` argument, see [Check permissions with permit.check()](/how-to/enforce-permissions/check).
 
 ## Next steps \{#what-did-you-learn}
 

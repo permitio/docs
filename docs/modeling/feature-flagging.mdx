@@ -81,12 +81,12 @@ To make a tile depend on `country` or `channel` instead of the role alone, creat
 
 The following route handles that request. The example serves it at `/api/something`; use any path, and pass the same path as `backendUrl` in the `AbilityLoader`.
 
-```js
+```js title="pages/api/permit-check.js"
 import { Permit } from "permitio";
 
 const permit = new Permit({
-  token: "YOUR_PERMIT_API_KEY",
-  pdp: "http://localhost:7766",
+  token: process.env.PERMIT_API_KEY,
+  pdp: process.env.PERMIT_PDP_URL,
 });
 
 export default async function handler(req, res) {
@@ -98,28 +98,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "No userId provided." });
     }
 
-    const checkPermissions = async (resourceAndAction) => {
-      const { resource, action, userAttributes, resourceAttributes } = resourceAndAction;
-
-      const allowed = permit.check(
-        {
-          key: userId,
-          attributes: userAttributes,
-        },
+    const checkPermissions = async ({ resource, action, userAttributes, resourceAttributes }) =>
+      permit.check(
+        { key: userId, attributes: userAttributes },
         action,
-        {
-          type: resource,
-          attributes: resourceAttributes,
-          tenant: "default",
-        }
+        { type: resource, attributes: resourceAttributes, tenant: "default" }
       );
-
-      return allowed;
-    };
 
     const permittedList = await Promise.all(resourcesAndActions.map(checkPermissions));
 
-    console.log(permittedList); // Printing the result of the checks
+    console.log("permittedList:", permittedList);
 
     return res.status(200).json({ permittedList });
   } catch (error) {
@@ -137,13 +125,14 @@ The `AbilityLoader` component runs after the user signs in. It reads the user ID
 
 The user ID must match the user key synced to Permit. Any authentication provider works if it gives you that ID.
 
-```js
+```jsx title="components/AbilityLoader.jsx"
 import React, { createContext, useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { Ability } from "@casl/ability";
 import { Permit, permitState } from "permit-fe-sdk";
 
-// Create Context
+const TILE_RESOURCES = ["Products", "Product_Configurators", "Project_Builder", "Topics_for_you"];
+
 export const AbilityContext = createContext();
 
 export const AbilityLoader = ({ children }) => {
@@ -154,43 +143,17 @@ export const AbilityLoader = ({ children }) => {
     const getAbility = async (loggedInUser) => {
       const permit = Permit({
         loggedInUser: loggedInUser,
-        backendUrl: "/api/something",
+        backendUrl: "/api/permit-check",
       });
 
-      await permit.loadLocalStateBulk([
-        {
-          action: "view",
-          resource: "Products",
-          userAttributes: {
-            country: user.publicMetadata.country,
-            channel: user.publicMetadata.channel,
-          },
-        },
-        {
-          action: "view",
-          resource: "Product_Configurators",
-          userAttributes: {
-            country: user.publicMetadata.country,
-            channel: user.publicMetadata.channel,
-          },
-        },
-        {
-          action: "view",
-          resource: "Project_Builder",
-          userAttributes: {
-            country: user.publicMetadata.country,
-            channel: user.publicMetadata.channel,
-          },
-        },
-        {
-          action: "view",
-          resource: "Topics_for_you",
-          userAttributes: {
-            country: user.publicMetadata.country,
-            channel: user.publicMetadata.channel,
-          },
-        },
-      ]);
+      const userAttributes = {
+        country: user.publicMetadata.country,
+        channel: user.publicMetadata.channel,
+      };
+
+      await permit.loadLocalStateBulk(
+        TILE_RESOURCES.map((resource) => ({ action: "view", resource, userAttributes }))
+      );
 
       const caslConfig = permitState.getCaslJson();
 
@@ -222,7 +185,7 @@ import { permitState } from "permit-fe-sdk";
 
 Call `permitState.check()` for each tile. `permitState.check()` reads the result stored by `loadLocalStateBulk()` and doesn't call the backend. When no stored result matches, `permitState.check()` returns `false` by default, and the tile stays hidden.
 
-```js
+```jsx
 <div className="flex h-full">
   <div className="flex flex-col flex-grow">
     {permitState?.check("view", "Products") && <div className="bg-white m-4 p-4 h-[250px]">Products</div>}

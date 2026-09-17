@@ -51,18 +51,6 @@ Use a Permit environment that doesn't already have `document` or `department` re
    ```json
    {
      "fields": [
-       {"numDimensions": 1536, "path": "vector_embedding", "similarity": "cosine", "type": "vector"},
-       {"path": "metadata.department", "type": "filter"},
-       {"path": "document_id", "type": "filter"}
-     ]
-   }
-   ```
-
-   The same index definition, one property per line:
-
-   ```json
-   {
-     "fields": [
        {
          "type": "vector",
          "path": "vector_embedding",
@@ -90,7 +78,7 @@ Use a Permit environment that doesn't already have `document` or `department` re
 5. Click **Save**. Wait until the index status is **READY**.
 6. Open the **Indexes** tab of `secure_rag.documents` and click **Create Index** (not **Create Search Index**). Create a unique index on `document_id`, which the watcher uses to find and update each document:
 
-   ```
+   ```text
    Field: document_id
    Type: 1 (asc)
    Options:
@@ -147,6 +135,16 @@ Docker Compose starts these services in order:
 | `permit-sync` | Runs `scripts/setup_all.py` once, after `file-watcher` finishes its first sync. See [What permit-sync creates in Permit](#permitio-policy-setup). |
 | `langchain-app` | Starts the RAG API on `http://localhost:8000` after `permit-sync` completes successfully |
 
+Verify that the API and its dependencies are up:
+
+```bash
+curl -s http://localhost:8000/health
+```
+
+```json
+{ "status": "ok", "mongodb": true, "permit": true }
+```
+
 :::warning
 If `permit-sync` fails, for example because the resources already exist in your Permit environment, the container exits with an error and `langchain-app` doesn't start. Check the `permit-sync` logs, and use a Permit environment without `document` and `department` resources.
 :::
@@ -158,12 +156,43 @@ Send a query as the marketing user `user_marketing_1`:
 ```bash
 curl -X POST http://localhost:8000/query \
  -H "Content-Type: application/json" \
- -d '{"query": "Tell me about 2026 budget", "user_id": "user_marketing_1"}'
+ -d '{"query": "Tell me about the 2024 budget forecast", "user_id": "user_marketing_1"}'
 ```
 
-The response is a JSON object with `answer` and `sources`. The budget document is in `docs/finance/`, and `user_marketing_1` is a member of the marketing department, so the answer doesn't use finance documents. When no allowed document is relevant, `answer` says that no documents match because of permission restrictions and lists the document IDs the user can access.
+```json
+{
+  "answer": "No documents match your query due to permission restrictions. You only have access to documents: ['marketing_plan_f5230544', 'product_roadmap_98e953e2'].",
+  "sources": []
+}
+```
 
-Run the same query as `user_finance_1` to see an answer that uses the finance budget document. The sync job creates these users:
+The response is a JSON object with `answer` and `sources`. The budget document is `docs/finance/budget_2024.md`, and `user_marketing_1` is a member of the marketing department, so the answer doesn't use finance documents.
+
+Run the same query as `user_finance_1` to see an answer that uses the finance budget document:
+
+```bash
+curl -X POST http://localhost:8000/query \
+ -H "Content-Type: application/json" \
+ -d '{"query": "Tell me about the 2024 budget forecast", "user_id": "user_finance_1"}'
+```
+
+```json
+{
+  "answer": "The 2024 budget forecasts total revenue of $11,750K against total expenses of $9,450K, with revenue growing 22% and expenses growing 18%.",
+  "sources": [
+    {
+      "document_id": "budget_2024_986f89f7",
+      "filename": "budget_2024.md",
+      "department": "finance",
+      "author": "emma",
+      "confidential": true,
+      "snippet": "# Budget Forecast 2024\n\n## Executive Summary\n\nThe 2024 budget focuses on sustainable growth while maintaining profitability...."
+    }
+  ]
+}
+```
+
+The sync job creates these users:
 
 | User key | Name | Department membership |
 | --- | --- | --- |
@@ -191,12 +220,12 @@ For a walkthrough of the same model in the dashboard, see the [ReBAC overview](/
 
 To create the same model by hand in a Permit environment you don't use with `permit-sync`:
 
-1. In the **Policy** screen, create a `department` resource and a `document` resource with the `read` action.
+1. In the **Policy** screen, create a `department` resource with the `view` action and a `document` resource with the `read` action.
 2. On `document`, add a relation named `parent` with `department` as the subject resource.
-3. Create the resource roles `member` on `department` and `reader` on `document`. Grant `reader` the `read` action.
+3. Create the resource role `member` on `department` and grant it the `view` action. Create the resource role `reader` on `document` and grant it the `read` action.
 4. On `document#reader`, add a role derivation from `member` on the `department` linked by `parent`.
 5. Create resource instances for the departments, for example `department:engineering` in the `default` tenant.
-6. Create users, for example `alice` (`alice@example.com`) and `bob` (`bob@example.com`). Assign `alice` the `member` role on `department:engineering`, and `bob` the `member` role on `department:marketing`.
+6. Create the four users from [Query the RAG API](#test-the-rag-query-api) and assign each one the `member` role on their department instance.
 7. Create a `document` instance for each file and a `parent` relationship tuple from its department. `scripts/sync_documents.py` shows the exact values.
 
 ## Run the setup scripts outside Docker \{#automating-your-permitio-setup-with-scripts}
@@ -238,58 +267,49 @@ Run the scripts yourself when you change the model, or when you run the services
 
 6. Check the dashboard: `department` and `document` instances under **Directory**, the users and their role assignments, and the role derivation on `document` in the **Policy** screen.
 
-### Environment variables for the services \{#environment-variables}
-
-The services read the same variables as in [step 2](#quickstart):
-
-```
-MONGODB_URI=<your-mongodb-atlas-uri>
-OPENAI_API_KEY=<your-openai-api-key>
-PERMIT_API_KEY=<your-permit-api-key>
-PERMIT_PDP_URL=http://permit-pdp:7000
-
-```
-
 ### Run the pipeline step by step
 
-1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/permitio/permit-mongodb-secure-rag.git
-   cd permit-mongodb-secure-rag
-   ```
-
-2. Install the script dependencies. Docker builds install the service dependencies for you.
+1. Install the script dependencies. Docker builds install the service dependencies for you.
 
    ```bash
    pip install -r requirements.txt
    pip install -r requirements.watcher.txt
    ```
 
-3. Start the services:
-
-   ```bash
-   docker-compose up --build
-   ```
-
-4. Sync documents to Permit. `sync_documents.py` syncs every Markdown file under `./docs` when you run it directly:
+2. Sync documents to Permit. `sync_documents.py` syncs every Markdown file under `./docs` when you run it directly:
 
    ```bash
    python scripts/sync_documents.py
    ```
 
-5. Generate embeddings for all documents in MongoDB. The script stores each embedding in the `vector_embedding` field:
+3. Generate embeddings for all documents in MongoDB. The script stores each embedding in the `vector_embedding` field:
 
    ```bash
    python scripts/generate_embeddings.py --all
    ```
 
-6. Query the API as `user_engineering_1`, a member of engineering:
+4. Query the API as `user_engineering_1`, a member of engineering:
 
    ```bash
    curl -X POST http://localhost:8000/query \
      -H "Content-Type: application/json" \
      -d '{"query": "What is API design?", "user_id": "user_engineering_1"}'
+   ```
+
+   ```json
+   {
+     "answer": "The API design guidelines require REST-based design with appropriate HTTP methods, versioning in the URL path, and JWT or OAuth 2.0 authentication.",
+     "sources": [
+       {
+         "document_id": "api_design_546b025f",
+         "filename": "api_design.md",
+         "department": "engineering",
+         "author": "dave",
+         "confidential": false,
+         "snippet": "# API Design Guidelines\n\n## Core Principles\n\n1. **REST-based Design**...."
+       }
+     ]
+   }
    ```
 
    `user_engineering_1` gets an answer from `docs/engineering/api_design.md`. `user_marketing_1`, a member of marketing, doesn't get content from that document.

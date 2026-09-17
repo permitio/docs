@@ -28,13 +28,16 @@ Build a relationship-based access control (ReBAC) policy in the Permit.io dashbo
 - A map of your resources and the relationships between them. Draw each resource type as a node and each relationship as an edge, for example: a `Folder` is the parent of a `File`. Mark which relationships are hierarchies (parent and child) and which are groupings (members of a team).
 - A list of the permissions each relationship grants, for example: the owner of a folder can edit every file in it.
 
-:::tip Google Zanzibar and Permit
-Permit's implementation of relationship-based access control (ReBAC) follows the tuple convention in the [Google Zanzibar paper](https://www.permit.io/blog/what-is-google-zanzibar).
-Tuples describe resources, instances, and roles with notation such as `resource:instance`, `resource#role`, and `resource:instance#role`.
+:::tip Tuple notation
+Permit's implementation of relationship-based access control (ReBAC) follows the tuple convention of Google's Zanzibar system. Tuples describe resources, instances, and roles with the keys of the objects:
 
-For example, the moderator role on the `general` chat room is written as:
+| Form | Means |
+|---|---|
+| `resource:instance` | One instance of a resource type, such as `room:general` |
+| `resource#role` | A role on a resource type, such as `room#moderator` |
+| `resource:instance#role` | A role on one instance, such as `room:general#moderator` |
 
-`room:general#moderator`
+The Zanzibar system is described in the paper "Zanzibar: Google's Consistent, Global Authorization System". Read the [paper on USENIX's site](https://www.usenix.org/conference/atc19/presentation/pang).
 :::
 
 ## Build the policy in the Policy Editor \{#using-the-policy-editor-to-create-rebac-enforcements}
@@ -46,8 +49,6 @@ Create the schema on the **Policy** screen in this order: resources, relations, 
 A resource is a type of object users act on, such as a folder, a module, or a project. On the **Resources** tab of the Policy screen, create a resource for each type in your map, with the actions users can perform on it.
 
 ![Resources tab with resources created for a ReBAC policy](/ui-videos/rebac/create-resource.png)
-
-#### Video: create resources \{#ui-example}
 
 <video controls>
   <source src={createResources} />
@@ -63,8 +64,6 @@ A relation defines how two resource types connect, such as `Folder` is parent of
 A resource can't be the parent of itself. To relate a resource to itself, use another relation type, such as `owner` or `container`.
 :::
 
-#### Video: create resource relations \{#ui-example-1}
-
 <video controls>
   <source src={resourceRelationships} />
 </video>
@@ -75,8 +74,6 @@ A resource role, such as `Folder#Admin`, grants permissions on the instances of 
 
 ![Adding resource roles to resources in the ReBAC Options of a resource](/ui-videos/rebac/adding-roles-to-resources.png)
 
-#### Video: add roles to resources \{#ui-example-2}
-
 <video controls>
   <source src={roleToResource} />
 </video>
@@ -86,8 +83,6 @@ A resource role, such as `Folder#Admin`, grants permissions on the instances of 
 A role derivation grants a user a role on an instance because of a role they hold on a related instance. For example, a user with `Folder#Admin` gets `File#Editor` on every file whose parent is that folder.
 
 ![Role derivation diagram where Folder#Admin derives File#Editor when a Folder is the parent of a File](/ui-videos/rebac/define-role-derivation.png)
-
-#### Video: define role derivations \{#ui-example-3}
 
 <video controls>
   <source src={roleDerivation} />
@@ -115,8 +110,6 @@ Assign a user a role on a specific resource instance. Role derivations then gran
 
 ![Diagram where Jane Doe is assigned Docs#Admin, which derives readme.md#Editor because docs is the parent of readme.md, above the Assigned Instances form for Jane Doe](/ui-videos/rebac/assign-resource-instance.png)
 
-#### Video: assign resource instance roles \{#ui-example-4}
-
 <video controls>
   <source src={resourceInstanceToUser} />
 </video>
@@ -127,7 +120,7 @@ In your application, call `permit.check()` with a resource instance. The policy 
 
 ![Diagram of Permit sending a policy update with the Folder to File role derivation to the authorization microservice, which answers a permit.check() call from your application](/ui-videos/rebac/enforcing-rebac.png)
 
-The following check asks whether a user can perform the `assign` action on a specific member group. The code builds the instance key at runtime:
+The following check asks whether a user can perform the `edit` action on one file. The code builds the instance key at runtime:
 
 ```javascript
 await permit.check(userId, "edit", `file:${fileKey}`);
@@ -135,13 +128,13 @@ await permit.check(userId, "edit", `file:${fileKey}`);
 
 ### permit.check() parameters \{#function-permitcheck}
 
-`permit.check()` returns `true` when the user can perform the action on the resource, and `false` otherwise.
+`permit.check()` returns `true` when the user can perform the action on the resource instance, and `false` otherwise.
 
 | Parameter | Value in the example | Description |
 |---|---|---|
 | User | `userId` | The key of the user whose permissions you check. |
-| Action | `"assign"` | The action the user wants to perform, here assigning a member to a group. |
-| Resource | `` `member_group:${group}` `` | The resource instance, in `resource_type:instance_key` format. The template string inserts the key of the group instance. |
+| Action | `"edit"` | The action the user wants to perform on the file. |
+| Resource | `` `file:${fileKey}` `` | The resource instance, in `resource_type:instance_key` format. The template string inserts the key of the file instance. |
 
 ### Other ways to pass the resource instance \{#variant-permitcheck-rebac-calls}
 
@@ -156,10 +149,31 @@ await permit.check(userId, "edit", { type: "file", key: "readme", tenant: "defau
 
 ### Verify the policy
 
-Run a check for a user who has a derived role, and one for a user who doesn't:
+Run a check for a user who holds the derived role, and one for a user who doesn't. The following example uses the Folder and File schema of this guide: the derivation from `Folder#Admin` to `File#Editor`, a folder instance with the key `docs`, a file instance with the key `readme`, a relationship that makes `docs` the parent of `readme`, and an assignment of the folder `admin` role on `docs` to `jane@permit.io`. A check takes the keys of the resource and the instance, not the display names. Replace `<YOUR_API_KEY>` with your environment API key:
 
-- A user with a role on the parent instance gets `true` for an action that the derived role allows on the child instance.
-- After you delete the relationship between the two instances, the same check returns `false`.
+```javascript
+import { Permit } from "permitio";
+
+const permit = new Permit({
+  token: "<YOUR_API_KEY>",
+  pdp: "https://cloudpdp.api.permit.io",
+});
+
+// Jane holds folder:docs#admin, and docs is the parent of readme.
+console.log(await permit.check("jane@permit.io", "edit", "file:readme"));
+
+// Bob holds no role on either instance.
+console.log(await permit.check("bob@permit.io", "edit", "file:readme"));
+```
+
+The script prints `true` and then `false`. These checks confirm the policy:
+
+| Change you make | Result of the check for `jane@permit.io` |
+|---|---|
+| None | `true` |
+| Delete the relationship between `folder:docs` and `file:readme` | `false` |
+| Delete Jane's `folder:docs#admin` assignment | `false` |
+| Remove `edit` from `file#editor` in the Policy Editor | `false` |
 
 To see why a check was allowed or denied, open the **Audit Log** in the Permit dashboard. For more check options, see [Check permissions with permit.check()](/how-to/enforce-permissions/check).
 

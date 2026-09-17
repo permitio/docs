@@ -130,11 +130,11 @@ The app reads `PERMIT_TOKEN` as the API key and `PERMIT_PDP` as the address of t
 Run the PDP container. Replace `your-permit-api-key` with your environment API key. The command maps the container's port 7000 to port 7766 on your machine, which matches `PERMIT_PDP`.
 
 ```bash
-  docker run -it \
-    -p 7766:7000 \
-    --env PDP_API_KEY=your-permit-api-key \
-    --env PDP_DEBUG=True \
-    permitio/pdp-v2:latest
+docker run -it \
+  -p 7766:7000 \
+  --env PDP_API_KEY=your-permit-api-key \
+  --env PDP_DEBUG=True \
+  permitio/pdp-v2:latest
 ```
 
 For more PDP options, see [Run the PDP](/overview/run-pdp).
@@ -324,15 +324,15 @@ The policies depend on users, orders, and role assignments that exist in Permit.
 
 The handlers of the `/users` endpoints create or update users with `permit.api.users.sync()`, which creates the user if the user doesn't exist and updates the user if the user exists. The `number_of_rides` attribute is sent with the user. The handlers delete users with `permit.api.users.delete()`.
 
-```ts
-// For creating/updating user
-permit.api.users.sync({
-  key: userId,
-  attributes: { number_of_rides: noOfRides },
+```ts title="server/routes/users/index.post.ts and index.delete.ts"
+// Create the user if it does not exist, and update it if it does
+await permit.api.users.sync({
+  key: user,
+  ...(noOfRides ? { attributes: { number_of_rides: noOfRides } } : {}),
 });
 
-// For deleting a user
-permit.api.users.delete(userId);
+// Delete the user
+await permit.api.users.delete(user);
 ```
 
 The app also syncs resources and role assignments:
@@ -347,25 +347,28 @@ Resource instances and role assignments belong to a tenant. Pass the tenant key,
 
 When a customer creates an order, the app creates the order as a resource instance with its `cost`, and assigns the `Vendor` instance role on that order to the vendor. When an order is deleted, the app deletes the resource instance.
 
-```ts
-// Sync a new order with Permit
-permit.api.resourceInstances.create({
+```ts title="server/routes/orders/index.post.ts"
+// tenant is the city header on the request, for example "california"
+const { city: tenant, id, totalPrice, vendor } = newOrder;
+
+// Sync the new order with Permit
+await permit.api.resourceInstances.create({
   key: id,
-  resource: "Order",
+  resource: 'Order',
   attributes: { cost: totalPrice },
-  tenant: "california",
+  tenant,
 });
 
-// Set the Order's Vendor with Permit
-permit.api.roleAssignments.assign({
+// Assign the Order#Vendor resource role on this order to its vendor
+await permit.api.roleAssignments.assign({
   user: vendor,
-  role: "Vendor",
+  role: 'Vendor',
   resource_instance: `Order:${id}`,
-  tenant: "california",
+  tenant,
 });
 
 // Sync a deleted order with Permit
-permit.api.resourceInstances.delete(`Order:${id}`);
+await permit.api.resourceInstances.delete(`Order:${id}`);
 ```
 
 For more sync options, see [Sync users](/how-to/sync-users).
@@ -379,88 +382,82 @@ The app enforces permissions in two places:
 
 The middleware that protects the deliver endpoint checks whether the rider can deliver the order:
 
-```ts
-// This auto-checks all policies applying to the "deliver" action
-const canRiderDeliver = await permit.check(
-  userId, // user
-  "deliver", // action
-  { type: "Order", key: orderId, tenant: "california" } // resource
-);
+```ts title="server/middleware/permissions/check-rider-eligibility.ts"
+// user and tenant (city) come from the request headers, orderId from the path
+// One check evaluates every RBAC, ABAC, and ReBAC rule on the "deliver" action
+const canRiderDeliver = await permit.check({ key: user }, 'deliver', {
+  type: 'Order',
+  key: orderId,
+  tenant
+});
 
 // Prevent the rider from doing the delivery if not authorised
 if (!canRiderDeliver) {
   return {
     success: false,
-    message: "You are not permitted to perform this action",
+    message: 'You are not permitted to perform this action'
   };
 }
 ```
 
-The `permit-nuxt-example` app doesn't include frontend checks. The following Vue component is adapted from the [permit-vue-example OrdersDisplay component](https://github.com/permitio/permit-vue-example/blob/casl/src/components/OrdersDisplay.vue), which uses `permit-fe-sdk` to show the **Fulfill**, **Deliver**, and assign rider controls only when the check allows them.
+The `permit-nuxt-example` app enforces permissions only on the server. For the frontend half, the [permit-vue-example repository](https://github.com/permitio/permit-vue-example) on the `casl` branch builds the same food delivery UI with `permit-fe-sdk` and CASL.
 
-```ts
-<script setup lang="ts">
-// ...
+In that app, `src/stores/abilities.ts` creates the `permit-fe-sdk` client with a `backendUrl` and calls `loadLocalStateBulk()` once with every action and resource the UI checks: `create`, `read`, and `delete` on `Meal`, and `create`, `read`, `fulfill`, `assign-rider`, and `deliver` on `Order`. Components then read the stored results with `permit.value.check(action, resource, resourceAttributes)`, which returns a boolean without calling the backend again.
 
-const fulfill = async (orderId: number) => {
-  if (permit.value.check('fulfill', 'Order', {})) {
-    // ...
-  }
-};
+The `deliver` handler in `src/components/OrdersDisplay.vue` checks before it sends the request:
 
-const assignRider = async (e: FormSubmitEvent, orderId: number) => {
-  if (e.valid && permit.value.check('assign-rider', 'Order', {})) {
-    // ...
-  }
-};
-
+```vue title="src/components/OrdersDisplay.vue (script setup): the deliver handler"
 const deliver = async (orderId: number) => {
   if (permit.value.check('deliver', 'Order', {})) {
-    // ...
+    isDelivering.value = true;
+    const success = await orders.deliver(orderId);
+    isDelivering.value = false;
+    if (success) {
+      toast.add({
+        severity: 'success',
+        summary: 'Order Delivered',
+        life: 3000
+      });
+    }
   }
 };
-</script>
-
-<template>
-  <!-- ... --->
-
-  <Button
-    label="Fulfill"
-    v-if="!order.fulfilledTime && permit.check('fulfill', 'Order', {})"
-    @click="fulfill(order.id)"
-  />
-  <Button
-    label="Deliver"
-    v-if="!order.deliveredTime && permit.check('deliver', 'Order', {})"
-    @click="deliver(order.id)"
-  />
-  <Form
-    @submit="(e) => assignRider(e, order.id)"
-    v-if="
-      permit.check('assign-rider', 'Order', {}) &&
-      !order.riderAssignedTime
-    "
-    class="flex gap-4 items-end"
-  >
-    <!-- ... --->
-  </Form>
-
-  <!-- ... --->
-</template>
 ```
+
+The same check hides the button, so a rider who cannot deliver the order never sees it:
+
+```vue title="src/components/OrdersDisplay.vue (template): the Deliver button"
+<Button
+  type="submit"
+  label="Deliver"
+  v-if="!order.deliveredTime && permit.check('deliver', 'Order', {})"
+  @click="deliver(order.id)"
+  :loading="isDelivering"
+/>
+```
+
+The **Fulfill** button and the assign rider form in the same component follow this pattern with the `fulfill` and `assign-rider` actions. Read [src/components/OrdersDisplay.vue](https://github.com/permitio/permit-vue-example/blob/casl/src/components/OrdersDisplay.vue) for the complete component.
+
+:::warning Frontend checks hide controls, they do not enforce
+`permit.check()` in the browser reads a result the backend already returned, and anyone can call your API directly. Keep the server middleware check on every endpoint. A UI-only check leaves the endpoint open.
+:::
 
 ## Test the full policy \{#testing-your-implementation}
 
 Run the PDP and the app, then test each rule.
 
-1. Start the PDP and the app:
+1. Start the PDP in one terminal:
 
    ```bash
    docker run -it -p 7766:7000 --env PDP_API_KEY=your-permit-api-key --env PDP_DEBUG=True permitio/pdp-v2:latest
+   ```
+
+2. Start the app in a second terminal, from the project root:
+
+   ```bash
    npm run dev
    ```
 
-2. Test the authorization rules. Each row lists the expected result:
+3. Test the authorization rules. Each row lists the expected result:
 
    | Test | Expected result |
    |---|---|
@@ -471,7 +468,7 @@ Run the PDP and the app, then test each rule.
    | As the assigned rider, deliver the order | The order is delivered. |
    | As a user without a role in the current city, create an order | The app returns "You are not permitted to perform this action". |
 
-3. Test tenant isolation. Create orders in `california` and `washington`. A role assigned in one city doesn't grant permissions in the other city.
+4. Test tenant isolation. Create orders in `california` and `washington`. A role assigned in one city doesn't grant permissions in the other city.
 
 To see every decision, open the [audit log](/how-to/use-audit-logs/types-and-filtering) in Permit.
 

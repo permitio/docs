@@ -4,8 +4,8 @@ sidebar_label: "Management Guide"
 description: "Run day-2 operations on a self-hosted Permit Platform: credentials, health checks, configuration changes, scaling, backups, upgrades, support bundles, and uninstalling."
 ---
 
-:::info Enterprise Only
-This section is only relevant to Enterprise customers who acquired an on-prem license.
+:::info Enterprise on-premises license required
+The on-premises installer is available to Enterprise customers with an on-premises license. To get a license, [contact Permit.io](https://www.permit.io/demo).
 :::
 
 This page is for operators who run a self-hosted Permit Platform on Kubernetes. It covers day-2 operations: signing in, checking health, applying configuration changes, scaling, backing up, upgrading, rotating certificates, collecting a support bundle, and uninstalling. For every `values.yaml` key and installer flag, see the [on-premises reference](/how-to/deploy/on-prem/reference). For fixes to specific errors, see [on-premises troubleshooting](/how-to/deploy/on-prem/troubleshooting).
@@ -18,17 +18,13 @@ This page is for operators who run a self-hosted Permit Platform on Kubernetes. 
 
 The commands use the default namespace, `permit-platform`. If you installed with `--namespace`, replace `permit-platform` with your namespace. The installer deploys three Helm releases into that namespace: `third-party-services`, `migrations`, and `permit-platform`.
 
+Several procedures on this page re-run the installer, and every one of them shows `--gke --skip-images`. Replace those flags with the flags you installed with: `--gke` for any existing Kubernetes cluster, `--openshift` for OpenShift, or `--kind` for a local Kind cluster. A run with no target flag takes the Kind path and fails on an existing cluster, so never drop the target flag. See [Installer command reference](/how-to/deploy/on-prem/reference#installation-command-reference).
+
 ## Sign in and reach the platform \{#post-installation-access}
 
 ### Open the Permit frontend \{#primary-application-access}
 
-Open the domain you set in `global.frontendDomain` and sign in with the admin credentials:
-
-```
-URL: https://your-configured-domain.com
-Login: Use the admin credentials shown at end of installation
-       Or register a new account
-```
+Open `https://` plus the domain you set in `global.frontendDomain`, and sign in with the admin username and the admin password from the end of the installation output. A successful sign-in opens the Permit Policy Editor.
 
 The installer generates the admin password and prints it at the end of the installation. The installer stores the password in the `global-infrastructure-secret` secret under the `KEYCLOAK_ADMIN_PASSWORD` key. To read it again:
 
@@ -314,7 +310,9 @@ The restart is complete when `kubectl rollout status` reports that the deploymen
 
 ## Monitor resource usage \{#monitoring-and-alerting}
 
-`kubectl top` needs the Kubernetes Metrics Server in the cluster.
+`kubectl top` needs the Kubernetes Metrics Server in the cluster. Without the Metrics Server, `kubectl top` reports that the metrics API is not available, and the `kubectl get` and `kubectl describe` commands still work.
+
+A healthy platform shows every service pod `Running` with all containers ready, an endpoint for every service, and pod memory below the `limits.memory` you set in `values.yaml`. A pod at its memory limit is restarted by Kubernetes with reason `OOMKilled`, which `kubectl describe pod` reports.
 
 ### Pod and service health \{#health-monitoring}
 
@@ -345,7 +343,7 @@ kubectl logs -n permit-platform deployment/permit-backend-v2 --tail=100 | grep -
 
 ## Scale services \{#scaling-operations}
 
-For a permanent change, set `replicas` and `resources` for the service in `values.yaml` (see [Common customizations](#common-customizations)). Use the `kubectl` commands in this section for a temporary change. The next installer run resets them to the values in `values.yaml`.
+For a permanent change, set `replicas` and `resources` for the service in `values.yaml` (see [Common customizations](#common-customizations)). Use `kubectl scale` and `kubectl patch` for a temporary change only. The next installer run resets both to the values in `values.yaml`.
 
 ### Add replicas \{#horizontal-scaling}
 
@@ -433,6 +431,8 @@ kubectl get secrets -n permit-platform -o yaml > secrets-backup-$(date +%Y%m%d-%
 kubectl get pvc -n permit-platform -o yaml > pvc-backup-$(date +%Y%m%d-%H%M%S).yaml
 ```
 
+The backup is complete when all four files exist in the current directory and the `.sql` dump is not empty. Confirm the dump with `tail -2 backup-<timestamp>.sql`: a `pg_dump` run that finished ends the file with the line `-- PostgreSQL database dump complete`.
+
 The backups have these limits:
 
 - **Keycloak data isn't in the Permit database dump.** Keycloak stores its data in a separate `keycloak-postgres` deployment. Dump it with `kubectl exec -n permit-platform deploy/keycloak-postgres -- pg_dump -U keycloak keycloak > keycloak-backup.sql`.
@@ -457,6 +457,12 @@ kubectl exec -i -n permit-platform deployment/postgres -- psql -U permit -d perm
 cp values-backup-20241201-143022.yaml charts/permit-platform/values.yaml
 ./scripts/install-permit-platform.sh --gke --skip-images  # Re-apply configuration (use the flags you installed with)
 ```
+
+The restore succeeded when `psql` reports no errors, `helm list -n permit-platform` shows all three releases with status `deployed`, every pod is `Running`, and you can sign in to the Permit frontend and see your policy.
+
+:::warning Restoring over a running platform can leave mismatched data
+`psql` applies the dump into the live database while the Permit services hold open connections and caches. Scale the Permit services to zero before you restore (see [Stop and start services for planned maintenance](#planned-maintenance)), restore, then run the installer again to bring the services back with the replica counts from `values.yaml`.
+:::
 
 ## Upgrade Permit Platform \{#updates-and-upgrades}
 
@@ -536,7 +542,15 @@ The certificate is replaced when the `openssl x509 -noout -dates` command prints
 
 ### Rotate passwords \{#password-rotation}
 
-The installer keeps service passwords in `global-infrastructure-secret` and builds the database connection string in `permit-backend-v2-secret` from `values.yaml`. Every installer run reuses the passwords already in `global-infrastructure-secret`. Patching a secret doesn't change the password of the PostgreSQL user in the database. For help planning a rotation, contact [Permit support](#support).
+The installer generates the PostgreSQL, RabbitMQ, Keycloak admin, and Keycloak database passwords on the first install and stores all four in the `global-infrastructure-secret` secret. Every later installer run reads the four values out of that secret and reuses them, so an installer run never rotates a password.
+
+Read the current values with the commands in [Retrieve service credentials](#retrieving-service-credentials).
+
+:::warning Editing the secret locks the platform out of its own databases
+A password lives in two places: the `global-infrastructure-secret` secret, and the account inside PostgreSQL, RabbitMQ, or Keycloak. `kubectl patch` or `kubectl edit` changes only the secret. The Permit services then present the new value to an account that still has the old password, and they fail to connect until you set both sides to the same value in the same maintenance window.
+:::
+
+A rotation therefore means changing the account inside each service and the secret together, in an order that depends on which services your installation runs and how it terminates connections. Permit support plans that order with you. Open a rotation request with [Permit support](#support), and attach a [support bundle](#support-bundle) and the list of credentials you need rotated.
 
 ### Audit pod security settings \{#security-auditing}
 
@@ -609,6 +623,8 @@ kubectl exec -n permit-platform deployment/permit-backend-v2 -- python3 -c "impo
 kubectl get pv,pvc -n permit-platform
 kubectl describe pvc -n permit-platform
 ```
+
+On a healthy platform, neither connectivity command prints a failure message, and every persistent volume claim shows the phase `Bound`. A claim stuck in `Pending` means the cluster has no default storage class or no volume that satisfies the claim, which `kubectl describe pvc` reports in its events.
 
 ## Collect a support bundle \{#support-bundle}
 
