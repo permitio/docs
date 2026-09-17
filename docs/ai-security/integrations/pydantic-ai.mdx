@@ -1,161 +1,135 @@
 ---
-title: Pydantic AI Integration
+title: Secure a PydanticAI agent with Permit.io
 sidebar_label: Pydantic AI
-description: Learn how to secure AI agents using PydanticAI and Permit.io. This guide walks you through implementing fine-grained access control, policy enforcement, and compliance checks using the Four Perimeter model.
+description: "Add Permit.io permission checks to PydanticAI agent tools for prompt filtering, document filtering, portfolio actions, and response disclaimers in a financial advisor example."
 ---
 
-import TimelineWrapper from "../../../src/components/timeline/TimelineWrapper";
-import TimelineStep from "../../../src/components/timeline/TimelineStep";
+Add Permit.io permission checks to the tools of a PydanticAI financial advisor agent. This tutorial is for AI agent builders who use [PydanticAI](https://github.com/pydantic/pydantic-ai) and want each tool call to respect the user's permissions. It applies all four perimeters of the [Four-Perimeter Framework](/ai-security/framework), and the source is in [permitio/Permit-PydanticAI](https://github.com/permitio/Permit-PydanticAI).
 
-# Pydantic AI Integration
+| Perimeter | Agent tool | Permit call |
+| --- | --- | --- |
+| Prompt filtering | `validate_financial_query` | `permit.check()` for `receive` on `financial_advice` |
+| RAG data protection | `access_financial_knowledge` | `permit.filter_objects()` for `read` on `financial_document` |
+| Secure external access | `check_action_permissions` | `permit.check()` on `portfolio` |
+| Response enforcement | `validate_financial_response` | `permit.check()` for `requires_disclaimer` on `financial_response` |
 
-**PydanticAI** is a framework that helps developers build structured, typed, and auditable AI agents. It provides strong input/output validation, enforcement hooks, and tool-oriented design patterns. 
+## Prerequisites and tech stack \{#prerequisites-and-tech-stack}
 
-This guide demonstrates how to integrate **policy-based authorization** directly into AI agents using an ABAC (Attribute-Based Access Control) model, defining user roles, attributes, and resource permissions, and then enforcing them using Permit's SDKs and Policy Decision Point (PDP).
-
-:::info
-This guide uses Permit's [Four Perimeter Model for AI Access Control](/ai-security/framework). 
-
-These perimeters help ensure:
-
-- Only eligible users can interact with your AI agent
-- Sensitive data is protected based on user roles
-- External actions are never triggered without authorization
-- Outputs are policy-compliant before reaching the user
-:::
-
-By the end of this tutorial, you'll have a fully operational, policy-governed AI agent with attribute-based authorization.
-
-:::tip Project Code
-The full source code for the financial advisor agent is available here: [Secure Financial Advisor AI Agent](https://github.com/permitio/langchain-permit)
-:::
-
-## Prerequisites and Tech Stack
-
-### Required Tools & Technologies
-
-| Tool / Service | Purpose |
+| Tool or service | Purpose |
 | --- | --- |
-| [PydanticAI](https://github.com/eylonper/pydantic-ai) | Framework for building structured AI agents |
-| [Permit.io](https://www.permit.io/) | Authorization-as-a-service with policy-based access control |
-| [Anthropic](https://www.anthropic.com/) / [OpenAI](https://openai.com/) | LLM API for financial assistant |
-| [Docker](https://www.docker.com/) | To run the Permit PDP locally |
-| [Python 3.9+](https://www.python.org/) | For executing the PydanticAI agent code |
-| [Poetry](https://python-poetry.org/) | (Optional) Python dependency management |
+| [PydanticAI](https://github.com/pydantic/pydantic-ai) | Agent framework with typed tools and results |
+| [Permit.io account](https://app.permit.io/) and an environment API key ([Get your API key](/overview/get-api-key)) | Stores the policy |
+| An [Anthropic](https://www.anthropic.com/) API key | The example agent uses the `anthropic:claude-3-5-sonnet-latest` model. PydanticAI reads the key from `ANTHROPIC_API_KEY`. To use [OpenAI](https://openai.com/), change the model string in `example/main.py`. |
+| [Docker](https://www.docker.com/) | Runs the Edge policy decision point (PDP). The policy uses attribute-based access control (ABAC), which the Cloud PDP doesn't evaluate. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities). |
+| [Python 3.9 or later](https://www.python.org/) | Runs the agent |
+| [uv](https://docs.astral.sh/uv/) | Installs the example's dependencies |
 
-### Required Environment Variables
+:::note PydanticAI versions
+The example requires `pydantic-ai>=0.0.20` and uses the `result_type` argument and `result.data`. Later PydanticAI releases renamed some of these APIs. If the agent fails to start, check the [PydanticAI changelog](https://github.com/pydantic/pydantic-ai/releases) against the installed version.
+:::
 
-Configure the following environment variables in a `.env` file or your shell environment:
+### Required environment variables
+
+The example reads the Permit settings from these variables. It uses `PERMIT_KEY`, not `PERMIT_API_KEY`:
 
 ```bash
 PERMIT_KEY=<your-permit-api-key>
 PDP_URL=http://localhost:7766  # Or use the Cloud PDP URL
 ```
 
-These are automatically loaded via Python's `dotenv` utility:
+| Variable | Value |
+| --- | --- |
+| `PERMIT_KEY` | Your environment API key |
+| `PDP_URL` | Your Edge PDP, for example `http://localhost:7766`. `example/main.py` uses this value when `PDP_URL` isn't set. |
+| `ANTHROPIC_API_KEY` | Your Anthropic API key, for the agent model |
+
+The example loads a `.env` file with `python-dotenv`:
 
 ```python
 from dotenv import load_dotenv
 load_dotenv()
 ```
 
-:::tip
-For a [PDP setup guide](/concepts/pdp/overview/), see Permit PDP Overview
-:::
+## Plan the access model \{#planning-our-policies}
 
-### Required Credentials
+The financial advisor agent follows four rules:
 
-- **Permit API Key** – Available in the Permit.io dashboard under *Settings → API Keys*
-- **PDP URL** – Typically `http://localhost:7766` for local PDP; cloud options are available
-- **AN Anthropic or OpenAI API Key** for your LLM agent
+| Perimeter | Rule |
+| --- | --- |
+| Prompt filtering | Give AI-generated advice only to users who opted in |
+| RAG data protection | Show confidential documents only to users with high clearance |
+| Secure external access | Allow portfolio actions only for premium users |
+| Response enforcement | Add a disclaimer to responses that contain advice |
 
-## Planning Our Policies
+### Resources \{#defining-resources}
 
-Before writing any code, it's important to define the authorization model that governs how your AI agent behaves. 
-For this tutorial, we'll use a financial advisor agent as an example.
-We'll later implement our policies using Permit.io's no-code dashboard. 
+`example/config.py` creates these resources:
 
-Here's what our access model looks like from a real-world perspective:
-
-- **Only advises users who explicitly opted in**
-- **Only shows financial documents to cleared users**
-- **Only allows portfolio actions for premium users**
-- **Only appends disclaimers when required**
-
-To create actual policies based on these requirements, let's map out our resources, attributes, actions, and condition/roles/user sets:
-
-### Defining Resources
-
-| Resource Name | Purpose | Key Actions |
+| Resource | Actions | Attributes |
 | --- | --- | --- |
-| `financial_advice` | AI-generated investment suggestions | `receive` |
-| `financial_document` | Internal knowledge base documents | `read` |
-| `portfolio` | A user's financial assets | `view`, `update` |
-| `financial_response` | The AI-generated output shown to the user | `requires_disclaimer` |
+| `financial_advice` | `receive` | `is_ai_generated` (bool), `risk_level` (string) |
+| `financial_document` | `read` | `doc_type`, `classification` (`public`, `restricted`, `confidential`), `clearance_required` |
+| `portfolio` | `update`, `read`, `analyze` | `owner_id`, `value_tier` |
+| `financial_response` | `requires_disclaimer` | `contains_advice` (bool), `risk_level` (string) |
 
-Each resource can have attributes that help drive dynamic access checks:
-
-- `financial_document.classification`: `public`, `restricted`, `confidential`
-- `financial_response.contains_advice`: `true` or `false`
-
-### Defining User Attributes
+### User attributes \{#defining-user-attributes}
 
 | Attribute | Type | Description |
 | --- | --- | --- |
-| `clearance_level` | `string` | The user's permission tier: `low`, `high`, etc. |
-| `opted_in` | `boolean` | Whether the user accepted AI-based financial advice |
-| `role` | `string` | Role assigned to the user: `premium_user`, etc. |
+| `clearance_level` | string | The user's clearance: `low` or `high` |
+| `ai_advice_opted_in` | bool | Whether the user accepted AI-generated financial advice |
 
-### Defining Condition Sets
+### Condition sets \{#defining-condition-sets}
 
-- **AI Advice Consent Check**:
-    
-    ```hcl
-    user.opted_in == true
-    ```
-    
-- **Document Clearance Match**:
-    
-    ```hcl
-    user.clearance_level == resource.classification
-    ```
-    
-- **Sensitive Portfolio Access**:
-    
-    ```hcl
-    user.role == "premium_user"
-    ```
-    
-- **Response Disclaimer Required**:
-    
-    ```hcl
-    resource.contains_advice == true
-    ```
-    
+`example/config.py` creates two user sets and two resource sets:
 
-### Defining Roles & User Sets
+| Set | Type | Condition |
+| --- | --- | --- |
+| `opted_in_users` | User set | `user.ai_advice_opted_in` equals `true` |
+| `high_clearance_users` | User set | `user.clearance_level` equals `"high"` |
+| `confidential_docs` | Resource set on `financial_document` | `resource.classification` equals `"confidential"` |
+| `finance_advice` | Resource set on `financial_advice` | `resource.is_ai_generated` equals `true` |
 
-We'll model two main user types:
+The design this example is based on also describes these conditions. Only the first matches an attribute that `config.py` creates, and there under the name `ai_advice_opted_in`:
 
-| Role | Description |
+- AI advice consent:
+
+  ```hcl
+  user.opted_in == true
+  ```
+
+- Document clearance match. A user set condition can't compare a user attribute to a resource attribute, so `config.py` uses `high_clearance_users` and `confidential_docs` instead:
+
+  ```hcl
+  user.clearance_level == resource.classification
+  ```
+
+- Sensitive portfolio access. `role` isn't a user attribute in `config.py`; the example grants portfolio actions through the `premium_user` role:
+
+  ```hcl
+  user.role == "premium_user"
+  ```
+
+- Response disclaimer required. `config.py` defines the `contains_advice` attribute but no resource set on it:
+
+  ```hcl
+  resource.contains_advice == true
+  ```
+
+### Roles and rules \{#defining-roles--user-sets}
+
+| Role | Permissions created by `config.py` |
 | --- | --- |
-| `premium_user` | Can do everything: read docs, get advice, update portfolios |
-| `restricted_user` | Read public docs only, no external actions, no advice |
+| `premium_user` | `financial_advice:receive`, `financial_document:read`, `portfolio:update`, `portfolio:read`, `portfolio:analyze` |
+| `restricted_user` | None |
 
-We'll also define:
+The example defines two condition set rules: `opted_in_users` can `receive` on `finance_advice`, and `high_clearance_users` can `read` on `confidential_docs`. `config.py` lists these rules but doesn't create them, so grant them in the Policy Editor.
 
-- **User Sets**:
-    - `opted_in_users`: `opted_in == true`
-    - `high_clearance_users`: `clearance_level == "high"`
-- **Resource Sets**:
-    - `confidential_docs`: `classification == "confidential"`
-    - `ai_generated_responses`: `contains_advice == true`
+No role or rule in `config.py` grants `requires_disclaimer` on `financial_response`. The response enforcement tool adds a disclaimer only when that check is allowed, so grant `requires_disclaimer` to `premium_user` in the Policy Editor.
 
-Having a clear understanding of the individual elements that comprise our policies, let's define their schema in Permit.io.
+## Run the Edge PDP \{#install-and-run-the-permit-pdp}
 
-## Install and Run the Permit PDP
-
-To perform real-time authorization checks, you'll need to run a local Policy Decision Point (PDP):
+Pull and start the PDP. Replace `<YOUR_API_KEY>` with your [environment API key](https://app.permit.io/settings/api-keys):
 
 ```bash
 docker pull permitio/pdp-v2:latest
@@ -166,150 +140,120 @@ docker run -it -p 7766:7000 \
   permitio/pdp-v2:latest
 ```
 
-- Replace `<YOUR_API_KEY>` with your [Permit.io API Key](https://app.permit.io/settings/api-keys)
-- The PDP will be available at `http://localhost:7766`
+The PDP listens on `http://localhost:7766`.
 
-## Permit.io Policy Setup
+## Configure the policy in Permit \{#permitio-policy-setup}
 
-With our perimeters and policies mapped out, it's time to configure our **authorization schema** in the [Permit.io dashboard](https://app.permit.io/). This includes defining **resources**, **actions**, **user and resource sets**, and **ABAC rules**.
+Create the policy with the setup script, or by hand in the [Permit dashboard](https://app.permit.io/).
 
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    Define Resources
-    Go to **Policy → Resources**, and define the following resources via the UI:
+### Create the policy with the setup script
 
-    `financial_advice`
-    ```json
-    {
-    "actions": ["receive"],
-    "attributes": {
-        "is_ai_generated": "boolean"
-    }
-    }
-    ```
+`example/config.py` creates the resources, the user attributes, the `premium_user` and `restricted_user` roles, and the four condition sets. It doesn't create users, role assignments, or the condition set rules. Run the script from the `example/` folder:
 
-    `financial_document`
-    ```json
-    {
-    "actions": ["read"],
-    "attributes": {
-        "classification": "string", // e.g. public, restricted, confidential
-        "doc_type": "string"
-    }
-    }
-    ```
+```python
+python config.py
+```
 
-    `portfolio`
-    ```json
-    {
-    "actions": ["view", "update"]
-    }
-    ```
+The block shows a shell command, not Python code. From the repository root, the equivalent command is `uv run python example/config.py`. The script reads `PERMIT_KEY` from the environment.
 
-    `financial_response`
-    ```json
-    {
-    "actions": ["requires_disclaimer"],
-    "attributes": {
-        "contains_advice": "boolean"
-    }
-    }
-    ```
+### Create the policy in the dashboard
 
-    ![](/img/ai-security/integrations/pydantic/1.png)
+1. Open **Policy > Resources** and create the resources. These JSON blocks list the values to enter in the form:
 
-    </TimelineStep>
+   `financial_advice`
 
-    <TimelineStep stepNumber={2}>
-        Add User Attributes
-    Navigate to **Directory → Users → Settings** and define:
+   ```json
+   {
+   "actions": ["receive"],
+   "attributes": {
+       "is_ai_generated": "boolean"
+   }
+   }
+   ```
 
-    ```json
-    {
-    "opted_in": "boolean",
-    "clearance_level": "string",
-    "role": "string"
-    }
-    ```
+   `financial_document`
 
-    ![](/img/ai-security/integrations/pydantic/2.png)
+   ```json
+   {
+   "actions": ["read"],
+   "attributes": {
+       "classification": "string", // e.g. public, restricted, confidential
+       "doc_type": "string"
+   }
+   }
+   ```
 
-    ![](/img/ai-security/integrations/pydantic/3.png)
+   `portfolio`. `config.py` also adds the `read` and `analyze` actions.
 
-  </TimelineStep>
+   ```json
+   {
+   "actions": ["view", "update"]
+   }
+   ```
 
-  <TimelineStep stepNumber={3}>
-    Create Condition Sets
-    Go to **Policy → ABAC → Condition Sets** and define the following:
+   `financial_response`
 
-    **User Sets:**
+   ```json
+   {
+   "actions": ["requires_disclaimer"],
+   "attributes": {
+       "contains_advice": "boolean"
+   }
+   }
+   ```
 
-    - Opted-in users who can receive AI advice
-    - High-clearance users for accessing
+   ![Resources tab with the financial_advice, financial_document, portfolio, and financial_response resources](/img/ai-security/integrations/pydantic/1.png)
 
-    ![](/img/ai-security/integrations/pydantic/4.png)
+2. Open **Directory > Users > Settings** and add the user attributes. `config.py` names the opt-in attribute `ai_advice_opted_in` and doesn't create `role`:
 
-    ![](/img/ai-security/integrations/pydantic/5.png)
+   ```json
+   {
+   "opted_in": "boolean",
+   "clearance_level": "string",
+   "role": "string"
+   }
+   ```
 
-    **Resource Sets**
+   ![User attribute settings in the Directory screen](/img/ai-security/integrations/pydantic/2.png)
 
-    - Confidential document classifications
-    - AI-generated advice content
+   ![User attributes list after adding the attributes](/img/ai-security/integrations/pydantic/3.png)
 
-    ![](/img/ai-security/integrations/pydantic/6.png)
+3. Open **Policy > ABAC Rules** and create the user sets from [Condition sets](#defining-condition-sets): opted-in users who can receive AI advice, and high-clearance users.
 
-    ![](/img/ai-security/integrations/pydantic/7.png)
+   ![User set form for opted-in users](/img/ai-security/integrations/pydantic/4.png)
 
-  </TimelineStep>
+   ![User set form for high-clearance users](/img/ai-security/integrations/pydantic/5.png)
 
-  <TimelineStep stepNumber={4}>
-    **Policy Configuration** <br/>
-    Here is what our [**Permit.io**](https://www.permit.io/) policy configuration dashboard looks like:
+4. Create the resource sets: confidential documents and AI-generated advice.
 
-    ![](/img/ai-security/integrations/pydantic/8.png)
+   ![Resource set form for confidential documents](/img/ai-security/integrations/pydantic/6.png)
 
-  </TimelineStep>
+   ![Resource set form for AI-generated advice](/img/ai-security/integrations/pydantic/7.png)
 
-  <TimelineStep stepNumber={5}>
-    **Use a Script Instead** (Optional): <br/>
-    We can also set up the configuration by running the `config.py` file in the project repo:
+5. In the **Policy Editor**, grant the role permissions and the condition set rules from [Roles and rules](#defining-roles--user-sets).
 
-    ```python
-    python config.py
-    ```
+   ![Policy Editor with the roles, user sets, and resource sets configured](/img/ai-security/integrations/pydantic/8.png)
 
-    This creates:
+### Create the test users
 
-    - All required resources, attributes, and roles
-    - Sample condition and resource sets
-    - A usable policy matrix with attached rules
+In the **Directory** screen, create the users that `config.py` describes but doesn't create. See [Sync users](/how-to/sync-users).
 
-    </TimelineStep>
-</TimelineWrapper>
+| User key | Role | `clearance_level` | `ai_advice_opted_in` |
+| --- | --- | --- | --- |
+| `user@example.com` | `premium_user` | `high` | `true` |
+| `restricted@example.com` | `restricted_user` | `low` | `false` |
 
-Once Permit.io is configured, you're ready to start building a secure AI agent with **PydanticAI + Permit**.
+`example/main.py` runs the agent as `user@example.com`.
 
-## Prompt Filtering
+## Perimeter 1: Filter prompts \{#prompt-filtering}
 
-Before a user query reaches the AI agent, we need to validate that it's allowed. **Prompt filtering** ensures:
+Prompt filtering rejects a request before the agent acts on it. The `validate_financial_query` tool classifies whether the question asks for advice, then checks `receive` on `financial_advice` with `is_ai_generated` set to the classification result.
 
-- Users can only request actions they're authorized for
-- Risky or sensitive prompts (like financial advice) are only handled for verified users
-- Unauthorized queries are rejected early, before reaching the model
+### How prompt filtering works \{#how-it-works}
 
-In this implementation, we'll validate that users are:
-
-- **Explicitly opted in** for AI-generated financial advice
-- Not requesting prohibited actions (e.g. investing guidance without consent)
-
-### How It Works
-
-1. **Classify Prompt Intent** – Detect whether a query is seeking financial advice
-2. **Check Permissions** – Use Permit to confirm the user has opted in
-3. **Block or Allow** – If allowed, continue. If not, return a denial message
-
-**Code Example**: `validate_financial_query` <br/>
-This function is called before processing user input in the agent:
+1. `classify_prompt_for_advice` detects whether the question asks for financial advice.
+2. `permit.check()` asks the PDP whether the user can `receive` `financial_advice` with that `is_ai_generated` value. The `opted_in_users` rule on `finance_advice` allows opted-in users.
+3. When the PDP denies the check, the tool returns a denial message to the agent. When it allows the check, the tool returns `True`.
 
 ```python
 @financial_agent.tool
@@ -349,9 +293,9 @@ async def validate_financial_query(
         raise SecurityError(f"Prompt permission check failed: {str(e)}")
 ```
 
-### Classifying Financial Prompts
+### Classify financial prompts \{#classifying-financial-prompts}
 
-Here's the simple keyword-based prompt classifier:
+The example classifies prompts with a keyword list:
 
 ```python
 def classify_prompt_for_advice(question: str) -> bool:
@@ -363,37 +307,24 @@ def classify_prompt_for_advice(question: str) -> bool:
     return any(keyword in question_lower for keyword in advice_keywords)
 ```
 
-:::tip
-You can replace this with a more robust NLP-based intent classifier later.
-:::
+The function lowercases the question but not the keywords, so the keyword `"should I"` never matches. Use lowercase keywords, or replace the keyword list with an intent classifier.
 
-### Expected Behavior
+### Expected prompt filtering results \{#expected-behavior}
 
-| User | Prompt | Allowed? | Reason |
-| --- | --- | --- | --- |
-| Alice (opted-in) | "Should I invest in bonds?" | ✅ | Advice is allowed |
-| Bob (not opted-in) | "What's a safe investment?" | ❌ | Advice blocked |
-| Carol (opted-in) | "Tell me today's market news" | ✅ | Not advice-related |
-| Dave (restricted) | "What's the best strategy?" | ❌ | Advice detected, no opt-in |
+| User | Prompt | Result |
+| --- | --- | --- |
+| `user@example.com` (opted in) | "Can you recommend a bond fund?" | Allowed |
+| `restricted@example.com` (not opted in) | "Can you recommend a bond fund?" | Denied: "User has not opted in to receive AI-generated financial advice." |
 
-## Data Protection
+## Perimeter 2: Filter documents \{#data-protection}
 
-Once a user passes the prompt filtering stage, we need to restrict what information the AI agent can access based on the user's permissions.
+RAG data protection limits the documents the agent can use to the ones the user can `read`. The `access_financial_knowledge` tool sends every candidate document, with its `classification` and `doc_type` attributes, to `permit.filter_objects()`. The tool returns the content of the allowed documents only.
 
-This layer ensures:
+### How document filtering works \{#how-it-works-1}
 
-- AI agents can only read documents a user is cleared for
-- Sensitive knowledge (e.g., confidential reports, internal analysis) is never leaked to unauthorized users
-- Each AI query dynamically filters the documents it sees
-
-### How It Works
-
-1. The user's request references a set of documents
-2. Permit checks each document's classification against the user's clearance level
-3. Only authorized documents are passed to the AI agent for context and generation
-
-**Code Example**: `access_financial_knowledge` <br/>
-This function runs before injecting documents into the AI's prompt or tool execution:
+1. The query includes a list of candidate documents.
+2. `filter_objects` runs one check per document for `read` on `financial_document`, with the document's attributes.
+3. The tool keeps the documents the PDP allows and passes their content to the agent.
 
 ```python
 @financial_agent.tool
@@ -432,9 +363,9 @@ async def access_financial_knowledge(
         raise SecurityError(f"Failed to filter documents: {str(e)}")
 ```
 
-### Document Model & Classifications
+### Document model and classifications \{#document-model--classifications}
 
-Each document is modeled with a sensitivity level:
+Each document has a classification:
 
 ```python
 class FinancialDocument(BaseModel):
@@ -444,27 +375,18 @@ class FinancialDocument(BaseModel):
     content: str
 ```
 
-Permit.io will match the classification against user permissions to decide if the content can be shared.
+The PDP evaluates the `classification` attribute against the `confidential_docs` resource set and the user's `clearance_level`.
 
-### Expected Behavior
+### Expected document filtering results \{#expected-behavior-1}
 
-| User | Document Classification | Access |
+| User | Document classification | Result |
 | --- | --- | --- |
-| Alice (`clearance: high`) | `confidential` | ✅ |
-| Bob (`clearance: low`) | `confidential` | ❌ |
-| Carol (`clearance: medium`) | `restricted` | ✅ |
-| Dave (`clearance: none`) | `public` | ✅ |
+| `user@example.com` (`premium_user`, `clearance_level: high`) | `confidential` | Allowed |
+| `restricted@example.com` (`restricted_user`, `clearance_level: low`) | `confidential` | Denied |
 
-This protects high-value data from being included in LLM prompts or output unless the user is explicitly allowed to see it.
+## Perimeter 3: Authorize external actions \{#secure-external-access}
 
-## Secure External Access
-
-Your AI agent may interact with external systems — like APIs, databases, or third-party services — to retrieve or modify real-world data. This perimeter ensures those actions are only allowed when explicitly authorized.
-
-This is especially critical for high-impact operations, such as **portfolio updates, bank transactions, sensitive customer record edits, and triggering external workflows or webhooks.**
-
-**Code Example**: `check_action_permissions` <br/>
-This tool checks whether the user is allowed to perform a particular external action (e.g., updating a portfolio):
+Secure external access checks permission before the agent changes data in another system, such as updating a portfolio, moving money, or calling a webhook. The `check_action_permissions` tool checks the requested action on `portfolio`:
 
 ```python
 @financial_agent.tool
@@ -486,21 +408,18 @@ async def check_action_permissions(
         raise SecurityError(f"Failed to check portfolio update permission: {str(e)}")
 ```
 
-This is a lightweight but powerful enforcement check — it runs before any real-world interaction.
+The check runs before the agent calls the external system. In `example/main.py`, the tool always checks the `update` action.
 
-### Real-World Scenarios
+### Expected portfolio results \{#real-world-scenarios}
 
-| **User Attributes** | **Attempted Action** | **Allowed?** |
+| User | Action | Result |
 | --- | --- | --- |
-| `membership: basic` | Modify investment portfolio | ❌ Denied |
-| `membership: premium`, `verified: true` | Modify investment portfolio | ✅ Allowed |
-| `membership: premium`, `verified: false` | Modify investment portfolio | ❌ Denied |
+| `user@example.com` (`premium_user`) | `update` on `portfolio` | Allowed |
+| `restricted@example.com` (`restricted_user`) | `update` on `portfolio` | Denied |
 
-This ensures that portfolio updates (or any other external action) are never executed unless all security conditions are satisfied.
+### Call an external API after the check \{#combining-with-external-apis}
 
-### Combining with External APIs
-
-This works in tandem with any service call:
+Call the external API only when the check returns `True`:
 
 ```python
 if await check_action_permissions(...):
@@ -510,12 +429,9 @@ else:
     raise SecurityError("Unauthorized portfolio update attempt.")
 ```
 
-## Response Enforcement
+## Perimeter 4: Enforce the response \{#response-enforcement}
 
-Even when the inputs, data, and actions are secure, **the final AI-generated response** must be validated before it's shown to the user. This ensures the AI doesn't **leak sensitive data, violate regulations** (e.g., offering financial advice without disclaimers)**,** or **create legal liability due to unfiltered content.**
-
-**Code Example**: `validate_financial_response` <br/>
-This PydanticAI tool intercepts and inspects the final AI response before it's sent to the user:
+Response enforcement checks the final answer before the user sees it. The `validate_financial_response` tool classifies whether the answer contains advice, checks `requires_disclaimer` on `financial_response`, and appends a disclaimer when the answer contains advice and the check allows it:
 
 ```python
 @financial_agent.tool
@@ -555,9 +471,11 @@ async def validate_financial_response(
         raise SecurityError(f"Failed to check response content: {str(e)}")
 ```
 
-### Response Classification
+The tool sends `contains_advice` as the string `"True"` or `"False"`, while `config.py` defines the attribute as a boolean. A condition that compares `contains_advice` to the boolean `true` doesn't match the string value.
 
-The system uses a simple keyword-based classifier to identify financial advice:
+### Classify responses \{#response-classification}
+
+The example detects advice in a response with a keyword list:
 
 ```python
 def classify_response_for_advice(response_text: str) -> bool:
@@ -568,151 +486,100 @@ def classify_response_for_advice(response_text: str) -> bool:
     return any(keyword in response_text.lower() for keyword in advice_indicators)
 ```
 
-:::tip
-You can replace this with more advanced NLP or moderation APIs in production.
-:::
+In production, replace the keyword list with an intent classifier or a moderation API.
 
-Once implemented, this perimeter gives you full confidence that **every answer shown to your users is policy-compliant**.
+## Run the agent and verify the perimeters \{#running-the-agent--testing-behavior}
 
-## Running the Agent & Testing Behavior
+1. Start the Edge PDP. Replace `<YOUR_API_KEY>` with your environment API key:
 
-With everything implemented, you're ready to run the AI agent and verify that its behavior matches your fine-grained policies. This section walks you through setting up the environment, launching the agent, and testing different user roles and permissions.
+   ```bash
+   docker pull permitio/pdp-v2:latest
 
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    Start the Permit PDP
-    Run the Permit Policy Decision Point (PDP) locally to enable real-time policy evaluations:
+   docker run -it -p 7766:7000 \
+   --env PDP_DEBUG=True \
+   --env PDP_API_KEY=<YOUR_API_KEY> \
+   permitio/pdp-v2:latest
+   ```
 
-    ```bash
-    docker pull permitio/pdp-v2:latest
+2. Clone the example and install its dependencies:
 
-    docker run -it -p 7766:7000 \
-    --env PDP_DEBUG=True \
-    --env PDP_API_KEY=<YOUR_API_KEY> \
-    permitio/pdp-v2:latest
-    ```
+   ```bash
+   git clone https://github.com/permitio/langchain-permit  # Update if different
+   cd langchain-permit/pydantic-ai-examples
+   poetry install  # Or use `pip install -r requirements.txt`
+   ```
 
-    :::tip
-    Replace `<YOUR_API_KEY>` with your key from Permit.io dashboard → Settings → API Keys.
+   :::warning
+   The PydanticAI example isn't in `langchain-permit`, and the repository has no `pydantic-ai-examples` folder. Clone [permitio/Permit-PydanticAI](https://github.com/permitio/Permit-PydanticAI) instead, and install the dependencies with `uv sync --all-extras` from the repository root.
+   :::
 
-    You may also use the cloud PDP by setting `PDP_URL=https://cloudpdp.api.permit.io`.
-    :::
-    
-  </TimelineStep>
+   This run command belongs to the same `pydantic-ai-examples` layout, which doesn't exist:
 
-  <TimelineStep stepNumber={2}>
-    Launch the Agent
-    Clone the repo and install dependencies:
+   ```bash
+   poetry run python -m pydantic_ai_examples.secure_ai_agent
+   ```
 
-    ```bash
-    git clone https://github.com/permitio/langchain-permit  # Update if different
-    cd langchain-permit/pydantic-ai-examples
-    poetry install  # Or use `pip install -r requirements.txt`
-    ```
+   In `Permit-PydanticAI`, the agent is `example/main.py`. Run it with `uv run python example/main.py`. The script runs two queries as `user@example.com` and prints each result.
 
-    Then start the secure financial agent:
+3. Set the environment variables in a `.env` file in the repository root, or export them. Add `ANTHROPIC_API_KEY` as well:
 
-    ```bash
-    poetry run python -m pydantic_ai_examples.secure_ai_agent
-    ```
+   ```
+   PERMIT_KEY=your-permit-api-key
+   PDP_URL=http://localhost:7766
+   ```
 
-    This will start a CLI tool that simulates user queries and applies all four perimeters during execution.
-  </TimelineStep>
+4. Test with both users. The PDP reads the attributes stored on each user in Permit. These JSON blocks describe a fully authorized user and a limited user, but `config.py` uses different attribute names: `ai_advice_opted_in` instead of `opted_in`, `clearance_level` values `high` and `low`, and no `membership_tier`.
 
-  <TimelineStep stepNumber={3}>
-    Environment Setup
-    Ensure you have the required environment variables in a `.env` file or export them manually:
+   **Fully authorized premium user:**
 
-    ```
-    PERMIT_KEY=your-permit-api-key
-    PDP_URL=http://localhost:7766
-    ```
+   ```json
+   {
+   "sub": "user-001",
+   "attributes": {
+       "membership_tier": ["premium"],
+       "clearance_level": "confidential",
+       "opted_in": true}
+   }
+   ```
 
-    These will be automatically loaded by the agent using `dotenv`.
-  </TimelineStep>
+   Use `user@example.com` from [Create the test users](#create-the-test-users) for this profile. The user can get advice with a disclaimer, read confidential documents, and update portfolios.
 
-  <TimelineStep stepNumber={4}>
-    Try Simulated Users
-    Use test users with different roles and attributes to observe how the perimeters respond:
+   **Limited basic user:**
 
-    **Fully Authorized Premium User:**
+   ```json
+   {
+   "sub": "user-002",
+   "attributes": {
+       "membership_tier": ["basic"],
+       "clearance_level": "restricted",
+       "opted_in": false}
+   }
+   ```
 
-    ```json
-    {
-    "sub": "user-001",
-    "attributes": {
-        "membership_tier": ["premium"],
-        "clearance_level": "confidential",
-        "opted_in": true}
-    }
-    ```
+   Use `restricted@example.com` for this profile. The user is denied advice, confidential documents, and portfolio actions.
 
-    Result: Can access documents, request advice, execute actions, and see disclaimers when needed.
+   To run the agent as `restricted@example.com`, change `user_id` in the `PermitDeps(...)` call in `example/main.py`.
 
-    **Limited Basic User**
+5. Send test prompts, for example:
+   - "What's the best investment strategy in a recession?"
+   - "Can I get a breakdown of my current portfolio?"
+   - "What documents do I need to file taxes as a freelancer?"
 
-    ```json
-    {
-    "sub": "user-002",
-    "attributes": {
-        "membership_tier": ["basic"],
-        "clearance_level": "restricted",
-        "opted_in": false}
-    }
-    ```
+   For each prompt, open [audit logs](/how-to/use-audit-logs/types-and-filtering) in the Permit dashboard to see which tools ran checks and whether the PDP allowed them.
 
-    Result: Blocked from advice, sensitive documents, and bookings.
-  </TimelineStep>
+### Expected results \{#behavior-summary-table}
 
-  <TimelineStep stepNumber={5}>
-    Test Inputs & Validate Results
+| Request | `user@example.com` | `restricted@example.com` |
+| --- | --- | --- |
+| Ask for financial advice | Allowed. The answer includes a disclaimer if you granted `requires_disclaimer`. | Denied |
+| Read confidential documents | Allowed | Denied |
+| Update a portfolio | Allowed | Denied |
+| Ask a question that isn't advice | Allowed through the `premium_user` role | Denied: "User is not authorized for this type of query." |
 
-    Try asking:
+## Next steps \{#final-thoughts--resources}
 
-    - "What's the best investment strategy in a recession?"
-    - "Can I get a breakdown of my current portfolio?"
-    - "What documents do I need to file taxes as a freelancer?"
-
-    Then watch:
-
-    - The input gets classified
-    - Permissions are checked
-    - Data is filtered or denied
-    - Responses are validated and modified with disclaimers if needed
-
-    :::tip
-    You can view allow/deny logs in the Permit Audit Logs panel for each perimeter in real time.
-    :::
-
-  </TimelineStep>
-</TimelineWrapper>
-
-### Behavior Summary Table
-
-| Feature | Premium User | Basic User | Not Opted-In |
-| --- | --- | --- | --- |
-| Ask for financial advice | ✅ Allowed (with disclaimer) | ❌ Blocked | ❌ Blocked |
-| Access confidential docs | ✅ Allowed | ❌ Blocked | ❌ Blocked |
-| Modify investment portfolio | ✅ Allowed | ❌ Blocked | ❌ Blocked |
-| Generic public info | ✅ Allowed | ✅ Allowed | ✅ Allowed |
-
-## Final Thoughts & Resources
-
-By combining **PydanticAI** and **Permit.io**, you've implemented a layered access control model that protects every part of the agent workflow: from what users say, to what data the model uses, what it's allowed to do, and how it responds.
-
-By following this guide, you've learned how to:
-
-- **Model fine-grained ABAC policies** in Permit.io using attributes like `membership_tier`, `opted_in`, and `clearance_level`
-- **Enforce Prompt Filtering**: Block unauthorized input before it reaches the LLM
-- **Apply Data Protection**: Dynamically filter documents based on user roles
-- **Secure External Access**: Authorize sensitive operations like portfolio updates
-- **Validate Responses**: Ensure compliance with disclaimers and advice checks
-
-This architecture ensures your AI agents respect organizational rules, user permissions, and regulatory boundaries, without sacrificing flexibility or developer experience.
-
-### Further Reading & Resources
-
-- GitHub: [Try the full agent example](https://github.com/permitio/Permit-PydanticAI)
-- GitHub: [Read the agent docs](https://github.com/permitio/permit-pydanticai/blob/main/example/docs.md)
-- Blog: [AI Agent Access Control Overhaul with PydanticAI](https://www.permit.io/blog/ai-agents-access-control-with-pydantic-ai)
-- Got Questions? Join the [Permit.io Slack Community](https://io.permit.io/blog-slack)
+- Read how the four perimeters fit together in the [Four-Perimeter Framework](/ai-security/framework).
+- Learn how user sets and resource sets work in [Build ABAC policies](/how-to/build-policies/abac/building-abac-policy).
+- Read the [agent documentation in the Permit-PydanticAI repository](https://github.com/permitio/Permit-PydanticAI/blob/main/example/docs.md).
+- Read the [PydanticAI access control post on the Permit blog](https://www.permit.io/blog/ai-agents-access-control-with-pydantic-ai).
+- Ask questions in the [Permit Slack community](https://io.permit.io/slack).
