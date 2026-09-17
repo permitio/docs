@@ -1,84 +1,96 @@
 ---
 sidebar_position: 1
-title: n8n Integration
-description: "Automate authorization workflows with n8n and Permit.io. Check permissions, find authorized users, and build dynamic approval processes using RBAC, ABAC, and ReBAC policies."
+title: Add Permit.io permission checks to n8n workflows
+sidebar_label: n8n Integration
+description: "Install the Permit.io community node in n8n, connect it to a PDP, and route workflows on permission checks, user permissions, and authorized users."
 ---
 
 import permitn8ninstallation from "/static/ui-videos/n8n/permit-n8n-installation.mp4";
 import credentialsconfiguration from "/static/ui-videos/n8n/credentials-workflow.mp4";
 import abacexpenseexample from "/static/ui-videos/n8n/abac-expense-approval-system.mp4";
 
-# n8n Integration
+Add Permit.io permission checks to n8n workflows with the Permit community node, so a workflow can branch on whether a user is allowed to act, or find the users who are allowed to approve a request. This guide is for developers who build n8n workflows and already have a Permit policy.
 
-## Overview
+[n8n](https://docs.n8n.io/) is a workflow automation platform. The Permit node sends requests to a Permit policy decision point (PDP) and returns the PDP's response as the node's output, which later nodes in the workflow can read.
 
-n8n is an open-source workflow automation platform that lets you connect different services and build complex, multi-step automations and AI agents. Integrating Permit with n8n allows you to embed fine-grained authorization checks directly into your workflows, so access control is enforced automatically at any step you choose.
+## Prerequisites \{#quick-start}
 
-The n8n Permit integration transforms how you handle authorization in n8n workflows by:
+- An n8n instance, on n8n Cloud or self-hosted, where you can install community nodes. See [n8n workflows](https://docs.n8n.io/workflows/).
+- A Permit.io policy with the resources, actions, and roles your workflow checks.
+- Your environment API key. See [Get your API key](/overview/get-api-key).
+- For attribute-based access control (ABAC) policies, an Edge PDP that your n8n instance can reach over the network. See [Run the PDP](/overview/run-pdp).
 
-- Automating permission checks that can control workflow routing and decision-making
-- Enabling real-time authorization validation that redirects workflow execution based on access control results
-- Automatically identifying which team members have the authority to approve, review, or process specific requests
-- Seamlessly extracting context from incoming data to make intelligent access control decisions
-- Creating authorization-driven workflow logic that scales with your organization's permission structure
+## 1. Install the Permit node \{#installation}
 
-## Quick Start
+1. In the n8n workflow editor, click **+** to add a node.
+2. Search for **Permit** and select the Permit node.
+3. Click **Install node** and wait for the installation to finish.
 
-### Prerequisites
+The package name is `@permitio/n8n-nodes-permitio`. For other installation methods, see [Install community nodes](https://docs.n8n.io/integrations/community-nodes/installation/) in the n8n documentation.
 
-Before you begin, ensure you have:
-
-- [n8n](https://docs.n8n.io/) (cloud or self-hosted)
-- A [Permit.io account](https://app.permit.io) with an API key
-- Basic understanding of [n8n workflow concepts](https://docs.n8n.io/workflows/)
-- Local PDP container for ABAC/ReBAC policies (optional but recommended)
-
-### Installation
-
-Install the `@permitio/n8n-nodes-permitio` community node via the n8n UI or follow the [installation guide](https://docs.n8n.io/integrations/community-nodes/installation/).
-
-<video controls>
+<video controls aria-label="Installing the Permit community node from the n8n node panel">
   <source src={permitn8ninstallation} />
 </video>
 
-### Configuration
+## 2. Add Permit API credentials \{#configuration}
 
-Configure Permit API credentials in n8n with your environment API key and PDP URL:
+1. In n8n, open **Credentials** and create a credential.
+2. Search for and select **Permit API**.
+3. Fill in the fields:
 
-- **API Key:** Your Permit.io environment API key from Settings → API Keys
-- **PDP URL:**
-  - **Cloud PDP:** `https://cloudpdp.api.permit.io` (default)
-  - **Self-hosted PDP:** Your PDP's network-accessible URL:
-    - Same machine: `http://localhost:7766`
-    - Different server: `http://your-pdp-server:7766`
-    - Docker network: `http://pdp-container:7766`
-    - Kubernetes: `http://pdp-service.namespace:7766`
+| Field | Value |
+|---|---|
+| **API Key** | Your Permit environment API key. The node sends the key as a bearer token to the PDP. |
+| **PDP URL** | The PDP that the node sends requests to. The default is the Cloud PDP, `https://cloudpdp.api.permit.io`. |
 
-<video controls>
+When you save the credential, n8n tests the credential with a permission check request to the PDP URL.
+
+<video controls aria-label="Creating a Permit API credential in n8n with an API key and PDP URL">
   <source src={credentialsconfiguration} />
 </video>
 
-:::tip
-For ABAC and ReBAC policies, use a local PDP container for better performance and advanced policy support.
-:::
+### Choose a PDP URL \{#choose-a-pdp-url}
 
-### Core Operations
+The Cloud PDP supports role-based access control (RBAC) and relationship-based access control (ReBAC). For ABAC policies, use an Edge PDP. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
 
-The Permit node provides three core operations:
+For an Edge PDP, set **PDP URL** to an address that your n8n instance can reach:
 
-- **Check Permissions**: Verify if a user can perform an action on a resource
-- **Get User Permissions**: Retrieve all permissions for a specific user
-- **Get Authorized Users**: Find users who can perform actions on resources
+| Where the PDP runs | Example PDP URL |
+|---|---|
+| Same machine as a self-hosted n8n | `http://localhost:7766` |
+| Another server | `http://your-pdp-server:7766` |
+| Same Docker network as n8n | `http://pdp-container:7766` |
+| Kubernetes | `http://pdp-service.namespace:7766` |
 
-Each operation integrates with n8n's expression system for dynamic authorization workflows.
+n8n Cloud can't reach `localhost` or a private network. To use an Edge PDP with n8n Cloud, expose the PDP at a public HTTPS address, and restrict who can reach that address.
 
-## Authorization Models
+## 3. Add a permission check to a workflow \{#core-operations}
 
-The n8n Permit integration supports all three authorization models, allowing you to choose the right approach for your use case.
+Add the Permit node to a workflow, select the **Permit API** credential, and choose an operation:
 
-### Role-Based Access Control (RBAC)
+| Operation | What the node returns | PDP endpoint |
+|---|---|---|
+| **Check** | Whether a user can perform an action on a resource. | `/allowed` |
+| **Get User Permissions** | The permissions of a user, per tenant and resource instance. | `/user-permissions` |
+| **Get Authorized Users** | The users who can perform an action on a resource type, with the role that grants the action. | `/authorized_users` |
 
-Grant permissions based on user roles. Simple and effective for basic authorization needs.
+Node fields accept n8n expressions, so you can take the user, action, or resource from earlier nodes. For each operation's fields, see [Permit node reference](#operations-reference).
+
+### Verify the check \{#verify-the-check}
+
+1. Set **Operation** to **Check**, and set **User**, **Action**, and **Resource** to a user, action, and resource key from your policy.
+2. Run the node.
+3. The output has an `allow` field. For a user whose role allows the action, `allow` is `true`. For a user without such a role, `allow` is `false`.
+
+If `allow` is `false` for a user who should be allowed, check that the user is synced to the environment of your API key, and look up the decision in the [audit log](/how-to/use-audit-logs/types-and-filtering).
+
+## Check RBAC, ABAC, and ReBAC policies \{#authorization-models}
+
+The Permit node sends the same operations for every policy model. The values you set in the node decide which policy the PDP evaluates. The JSON objects below show the values for each model.
+
+### Role-based access control (RBAC) \{#role-based-access-control-rbac}
+
+Set **User**, **Action**, and **Resource**. The PDP allows the action when one of the user's roles has the permission:
 
 ```json
 {
@@ -88,9 +100,9 @@ Grant permissions based on user roles. Simple and effective for basic authorizat
 }
 ```
 
-### Attribute-Based Access Control (ABAC)
+### Attribute-based access control (ABAC) \{#attribute-based-access-control-abac}
 
-Make authorization decisions based on user, resource, and environmental attributes. The node automatically extracts attributes from webhook payloads when **Enable ABAC** is checked.
+Set **User**, **Action**, and **Resource**, and turn on **Enable ABAC**. In the **Check** operation, **Enable ABAC** sends the `body` field of the incoming item, such as a webhook payload, as the resource attributes. Every field in the body becomes a resource attribute. The ABAC policy then evaluates conditions on attributes such as `expense_amount`:
 
 ```json
 {
@@ -105,9 +117,11 @@ Make authorization decisions based on user, resource, and environmental attribut
 }
 ```
 
-### Relationship-Based Access Control (ReBAC)
+ABAC checks need an Edge PDP. See [Choose a PDP URL](#choose-a-pdp-url).
 
-Control access based on relationships between users and specific resource instances.
+### Relationship-based access control (ReBAC) \{#relationship-based-access-control-rebac}
+
+Set **User**, **Action**, and **Resource**, and set **Resource Key** to the key of the resource instance. The PDP evaluates the roles the user has on that instance, including roles derived from relationships:
 
 ```json
 {
@@ -118,16 +132,13 @@ Control access based on relationships between users and specific resource instan
 }
 ```
 
-:::tip
-Use a local PDP container (`http://localhost:7766`) for ABAC and ReBAC policies. Cloud PDP supports RBAC workflows.
-:::
+## Example: expense approval workflow \{#practical-example-expense-approval-workflow}
 
-## Practical Example: Expense Approval Workflow
+This workflow receives expense submissions, checks with an ABAC policy whether the employee can submit the expense, and emails the users who can approve it.
 
-This example demonstrates building an automated expense approval system using ABAC policies with the Permit n8n node.
-![Expense Approval Workflow](/img/n8n/abac-expense-example.png)
+![The ABAC Expense Approval System workflow in the n8n editor: a Webhook node, a Check Expense Permission node, an If node, then Get Authorized Approvers and Send email on the true branch, and Respond to Webhook on the false branch](/img/n8n/abac-expense-example.png)
 
-### Workflow Architecture
+### Workflow structure \{#workflow-architecture}
 
 ```mermaid
 graph LR
@@ -138,35 +149,26 @@ graph LR
     D --> F[JSON Response]
 ```
 
-### Node Configuration
+### Node settings \{#node-configuration}
 
-**1. Webhook Node**
-Receives expense submissions with employee data and expense details.
+1. **Webhook node:** receives the expense submission as JSON, with the employee and expense details.
+2. **Permit node, Check operation:**
+   - **User:** `{{$node['Webhook'].json.body.employee_email}}`
+   - **Action:** `submit`
+   - **Resource:** `expense`
+   - **Enable ABAC:** on. The node sends the webhook body, including `expense_amount` and `category`, as resource attributes.
+3. **IF node:** routes on the `allow` field of the Permit node output. When `allow` is `true`, the item goes to the Get Authorized Users node. When `allow` is `false`, the item goes to a Respond to Webhook node that returns an error response.
+4. **Permit node, Get Authorized Users operation:**
+   - **Action:** `approve`
+   - **Resource Type:** `expense`
+   - **Resource Attributes (JSON):** `{"expense_amount": 1500, "category": "Travel"}`
+5. **Send Email node:** emails the users in the Get Authorized Users output about the pending expense.
 
-**2. Permit Check Node**
+The workflow depends on an ABAC policy in Permit that allows `submit` on `expense` only below an amount limit, and a role that allows `approve` on `expense`. See [Build ABAC policies](/how-to/build-policies/abac/overview).
 
-- **Operation:** Check
-- **User:** `{{$node['Webhook'].json.body.employee_email}}`
-- **Action:** `submit`
-- **Resource:** `expense`
-- **Enable ABAC:** (automatically extracts `expense_amount`, `category`, etc.)
+### Test the workflow with example payloads \{#example-payloads}
 
-**3. IF Node**
-Routes based on permission result: approved requests go to user lookup, denied requests return error.
-
-**4. Get Authorized Users Node**
-
-- **Operation:** Get Authorized Users
-- **Action:** `approve`
-- **Resource Type:** `expense`
-- **Resource Attributes:** `{"expense_amount": 1500, "category": "Travel"}`
-
-**5. Send Email Node**
-Notifies authorized approvers about pending expense requests.
-
-### Example Payloads
-
-**Approved Request:**
+Send this payload to the webhook. When your policy allows the amount, the Check returns `allow: true`, and the workflow emails the authorized approvers:
 
 ```json
 {
@@ -177,9 +179,7 @@ Notifies authorized approvers about pending expense requests.
 }
 ```
 
-**Response:** Email sent to authorized approvers.
-
-**Denied Request:**
+Send this payload with an amount above your policy's limit. The Check returns `allow: false`, and the workflow returns the error response you configured on the denied branch:
 
 ```json
 {
@@ -189,28 +189,28 @@ Notifies authorized approvers about pending expense requests.
 }
 ```
 
-**Response:** `{"error": "Access denied", "reason": "Exceeds spending limit"}`
-
-<video controls>
+<video controls aria-label="Running the expense approval workflow in n8n with an allowed and a denied expense">
   <source src={abacexpenseexample} />
 </video>
 
-## Operations Reference
+## Permit node reference \{#operations-reference}
 
-### Check Permissions
+Each operation sends a `POST` request to the PDP URL of the credential and returns the PDP response as the node output.
 
-Verify if a user has permission to perform a specific action on a resource.
+### Check \{#check-permissions}
 
-**Configuration:**
+Checks whether a user can perform an action on a resource.
 
-- **User:** User identifier (supports expressions)
-- **Action:** Action to check (e.g., `read`, `write`, `submit`)
-- **Resource:** Resource type (e.g., `document`, `expense`)
-- **Tenant:** Tenant identifier (defaults to `default`)
-- **Enable ABAC:** Auto-extract attributes from webhook payload
-- **Resource Key:** Specific resource instance (for ReBAC)
+| Field | Description |
+|---|---|
+| **User** | The user key. Supports expressions. |
+| **Action** | The action key, such as `read` or `submit`. |
+| **Tenant** | The tenant key. The default is `default`. |
+| **Resource** | The resource type key, such as `document` or `expense`. |
+| **Enable ABAC** | Sends the `body` field of the incoming item as resource attributes. Off by default. |
+| **Resource Key** | The resource instance key, for ReBAC checks. Optional. |
 
-**Response:**
+The output has an `allow` field with the decision, `true` or `false`. The PDP can also return `query` and `debug` fields with details of the evaluation. In the example below, only `allow` matches the PDP response format; the PDP response has no `decision` field:
 
 ```json
 {
@@ -222,17 +222,17 @@ Verify if a user has permission to perform a specific action on a resource.
 }
 ```
 
-### Get User Permissions
+### Get User Permissions \{#get-user-permissions}
 
-Retrieve all permissions for a specific user across resources.
+Returns the permissions of a user. See [Get user permissions](/how-to/enforce-permissions/user-permissions).
 
-**Configuration:**
+| Field | Description |
+|---|---|
+| **User** | The user key. |
+| **Resource Types** | A comma-separated list of resource types to include, such as `expense,document`. Optional. |
+| **Enable ABAC** | Includes permissions granted by ABAC policies. Off by default. |
 
-- **User:** User identifier
-- **Resource Types:** Comma-separated list (e.g., `expense,document`)
-- **Enable ABAC:** Include attribute-based permissions
-
-**Response:**
+The PDP returns an object with one entry per tenant or resource instance. Each entry lists the `permissions` of the user there, as `resource:action` strings, and can include the `roles` that grant them. The example below, from the node's README, is simplified and doesn't match that format:
 
 ```json
 {
@@ -251,19 +251,19 @@ Retrieve all permissions for a specific user across resources.
 }
 ```
 
-### Get Authorized Users
+### Get Authorized Users \{#get-authorized-users}
 
-Find all users who can perform a specific action on a resource.
+Returns the users who can perform an action on a resource type, and the role assignment that grants each user the action. See [Get authorized users](/how-to/enforce-permissions/authorized-users).
 
-**Configuration:**
+| Field | Description |
+|---|---|
+| **Action** | The action key, such as `approve`. |
+| **Resource Type** | The resource type key, such as `expense`. |
+| **Tenant** | The tenant key. The default is `default`. |
+| **Resource Attributes (JSON)** | A JSON object of resource attributes. The default is `{}`. |
+| **Enable ABAC** | Includes users authorized by ABAC policies. Off by default. |
 
-- **Action:** Action to check (e.g., `approve`)
-- **Resource Type:** Resource type (e.g., `expense`)
-- **Tenant:** Tenant identifier
-- **Resource Attributes:** JSON object with resource attributes
-- **Enable ABAC:** Include attribute-based user discovery
-
-**Response:**
+Example output. An Edge PDP returns a single object with the `resource`, `tenant`, and `users` fields, not an array, and each assignment also has `tenant` and `resource` fields:
 
 ```json
 [
@@ -282,25 +282,18 @@ Find all users who can perform a specific action on a resource.
 ]
 ```
 
-### Getting Help
+In the output, `users` maps each user key to the role assignments that allow the action.
 
-- [Permit.io Documentation](https://docs.permit.io)
-- [n8n Community Forum](https://community.n8n.io)
-- [GitHub Issues](https://github.com/permitio/n8n-nodes-permitio/issues)
-- [Slack Community](https://io.permit.io/slack)
+## Get help \{#getting-help}
 
-## Next Steps
+- For bugs in the Permit node, open an issue in the [n8n-nodes-permitio repository](https://github.com/permitio/n8n-nodes-permitio/issues).
+- For n8n questions, use the [n8n community forum](https://community.n8n.io).
+- For Permit questions, ask in the [Permit Slack community](https://io.permit.io/slack).
 
-Now that you have the basics, explore:
+## Next steps \{#next-steps}
 
-- [Attribute-Based Access Control (ABAC)](/how-to/build-policies/abac/overview)
-- [Relationship-Based Access Control (ReBAC)](/how-to/build-policies/rebac/overview)
-- [Policy as Code with Terraform](/integrations/infra-as-code/terraform-provider)
-- [Self-Deployed PDP Setup](/concepts/pdp/overview)
-- [Permit CLI for Automation](/how-to/permit-cli/)
-
----
-
-:::info
-**Need Help?** Join our [Slack community](https://io.permit.io/slack) or check out our [GitHub repository](https://github.com/permitio/n8n-nodes-permitio) for support and examples.
-:::
+- [Build ABAC policies](/how-to/build-policies/abac/overview)
+- [Build ReBAC policies](/how-to/build-policies/rebac/overview)
+- [Run an Edge PDP](/concepts/pdp/overview)
+- [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities)
+- [Manage policy as code with Terraform](/integrations/infra-as-code/terraform-provider)

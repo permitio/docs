@@ -1,78 +1,118 @@
 ---
 sidebar_position: 1
-title: Trino Integration
-description: Use Permit to enforce fine-grained authorization decisions for every query that flows through Trino.
+title: Enforce Trino access control with Permit.io
+sidebar_label: Trino Integration
+description: "Connect Trino's Open Policy Agent access control plugin to a Permit PDP to authorize, filter, and mask every Trino query with Permit policies."
 ---
 
-## Overview
+Connect Trino to a Permit.io policy decision point (PDP) so that Permit policies decide which catalogs, schemas, tables, and columns each Trino user can query, which rows they see, and which column values are masked. This guide is for data platform engineers who run a Trino cluster and manage its access control.
 
-Trino is an open-source distributed SQL engine that sits in front of the data you store in your databases.
-Because all queries route through a single coordinator, Trino becomes an ideal point for enforcing database-level access control.
-You can learn more about Trino in their [official documentation](https://trino.io/docs/current/).
+[Trino](https://trino.io/docs/current/) is an open-source distributed SQL engine. Every query goes through the Trino coordinator, and Trino's Open Policy Agent (OPA) access control plugin sends an authorization request to a policy endpoint for each query. The Permit PDP serves those endpoints and answers them from the policy in your Permit environment.
 
-Pairing Trino with Permit's PDP enables you to:
+With the integration, you can:
 
-- Centralize database-level permission logic with Permit's Policy Builder.
-- Control access to databases and tables, and even individual columns.
-- Filter or mask data before it leaves your databases, based on user permissions.
-- Enforce the decision before data leaves your database.
-- Audit access to your data using Permit's audit logs.
+- Allow or deny access to catalogs, schemas, tables, columns, and functions with Permit roles and permissions.
+- Filter rows with SQL predicates that Permit selects based on the user's permissions.
+- Mask column values with SQL expressions that Permit selects based on the user's permissions.
+- Review every decision in the Permit audit log.
 
-The integration is most effective for organizations that want to enforce database-level access control across all their databases.
-It can apply both to internal users, like analysts accessing data using BI tools, and external users accessing data through APIs
-or other applications.
+The same setup covers internal users, such as analysts who use BI tools, and application users whose queries reach Trino through your APIs.
 
-## Quick Start
+## Prerequisites
 
-1. **Prepare Permit**
-  - Create a new [Permit environment](/manage-your-account/projects-and-env#creating-a-new-environment) dedicated to the Trino cluster.
-  - Copy the PDP API key from the dashboard.
-2. **Sync the schema**
-  - Install the latest [Permit CLI](/how-to/permit-cli).
-  - Run `permit env apply trino --url http://<trino-host>:8080 --user <trino-user>` and point it at a user that can read cluster metadata.
-  - The CLI introspects catalogs, schemas, tables, functions, and (optionally) columns, then creates matching resources and actions in Permit.
-3. **Deploy the PDP**
-  - Run a Permit PDP that targets the same environment. Ensure Trino can reach it (default port `7766`).
-  - Enable `PDP_ALLOW_UNAUTHENTICATED_TRINO=True` to allow unauthenticated Trino queries to be checked by the PDP.
-  - Optionally, [mount a Trino authz config file](/concepts/pdp/configuration#pdp_trino_authz_config_path) at to define filtering rules.
-4. **Configure Trino to use the PDP for access control**
-  - Configure the Trino's `/etc/trino/access-control.properties` to call the PDP:
-  ```yaml
-  access-control.name=opa
-  opa.policy.uri=http://<pdp-host>:7766/trino/allowed
-  opa.policy.row-filters-uri=http://<pdp-host>:7766/trino/row-filter
-  opa.policy.batch-column-masking-uri=http://<pdp-host>:7766/trino/batch-column-masking
-  opa.log-requests=true
-  opa.log-responses=true
-  ```
-- Restart the Trino coordinator.
-5. **Assign policies**
-  - Use the [Permit Policy Editor](https://app.permit.io/policy-editor) (or via API, SDK, etc.) to grant roles actions such as `trino_sys#ExecuteQuery` and table-level `SelectFromColumns`.
-  - Test queries as different users and confirm audit entries appear both in Permit and Trino.
-  - Use the [Permit Audit Logs](https://app.permit.io/audit-log) to review the access control decisions.
+- A Trino cluster where you can edit the coordinator configuration and restart the coordinator.
+- A Permit.io account. See [Create a Permit.io account](/quickstart).
+- The [Permit CLI](/how-to/permit-cli), to create Permit resources from your Trino schema.
+- Docker or another way to run the Permit PDP container on a network that Trino can reach. See [Run the PDP container](/how-to/deploy/deploy-to-production#installing-the-pdp).
 
-Want a sandbox that shows the full stack running? Try the public demo: https://github.com/permitio/trino-authz-example
+## Set up Trino access control with Permit \{#quick-start}
 
-:::warning Warning:
-Trino does not currently support passing an API key or credentials when calling external authorization endpoints.
-As a result, you must expose the PDP's Trino authorization routes (such as `/trino/allowed`, `/trino/row-filter`, `/trino/batch-column-masking`) without authentication, by setting `PDP_ALLOW_UNAUTHENTICATED_TRINO=True`.
+### 1. Create a Permit environment for Trino
 
-Because these endpoints are unauthenticated, **do not expose your PDP** to the public internet or any untrusted networks.
-Always deploy the PDP behind a firewall or within a secure, trusted network accessible only by the Trino cluster.
+1. Create a [Permit environment](/manage-your-account/projects-and-env#creating-a-new-environment) dedicated to the Trino cluster. See [Policy isolation](#policy-isolation) for why a dedicated project and environment helps.
+2. Copy the environment API key. See [Copy and rotate the environment API key](/manage-your-account/projects-and-env#fetching-and-rotating-the-api-key).
 
-For more information, follow the [Trino issue](https://github.com/trinodb/trino/issues/27022) on this topic.
+### 2. Create Permit resources from your Trino schema
+
+Run `permit env apply trino`, and point it at a Trino user that can read the cluster metadata:
+
+```bash
+permit env apply trino --url http://<trino-host>:8080 --user <trino-user>
+
+# Usage: permit env apply trino [options]
+#
+# Apply permissions policy from a Trino schema, creating resources from catalogs, schemas, tables, columns.
+#
+# Options:
+#   --api-key [api-key]        API key for Permit authentication
+#   -u, --url <url>            Trino cluster URL (e.g., http://localhost:8080)
+#   --user <user>              Trino username
+#   --password [password]      Trino password or authentication token
+#   --catalog [catalog]        Restrict to a specific catalog
+#   --schema [schema]          Restrict to a specific schema
+#   --create-column-resources  Create individual column resources (default: false) (default: false)
+#   -h, --help                 Show help
+```
+
+Replace `<trino-host>` with your Trino coordinator host and `<trino-user>` with the Trino user. The CLI reads the catalogs, schemas, tables, and functions in the cluster, and creates a matching resource with actions in your Permit environment. Add `--create-column-resources` to also create a resource for each column. See [Permit CLI Trino options](#permit-cli---trino-schema-generation) for the rest of the flags.
+
+In the Permit dashboard, open **Policy** > **Resources**. Resources with keys such as `trino_sys` and `trino_table_<catalog>_<schema>_<table>` are listed.
+
+### 3. Run the PDP with Trino routes enabled
+
+Run a Permit PDP connected to the same environment, with the environment API key from step 1. Set `PDP_ALLOW_UNAUTHENTICATED_TRINO=True` on the PDP container. The PDP listens on port `7766` by default.
+
+:::warning Trino routes have no authentication
+Trino's OPA plugin doesn't send an API key or other credentials to the policy endpoints. With `PDP_ALLOW_UNAUTHENTICATED_TRINO=True`, the PDP serves `/trino/allowed`, `/trino/row-filter`, and `/trino/batch-column-masking` without authentication, so anyone who can reach the PDP can query your authorization decisions.
+
+Run the PDP behind a firewall or in a private network that only the Trino cluster can reach. Never expose this PDP to the public internet. Follow the [Trino issue on credentials for the OPA plugin](https://github.com/trinodb/trino/issues/27022) for API key support.
 :::
 
+To filter rows or mask columns, also mount a Trino authorization config file into the PDP. See [PDP Trino config file](#pdp-trino-config-file) and [`PDP_TRINO_AUTHZ_CONFIG_PATH`](/concepts/pdp/configuration#pdp_trino_authz_config_path).
 
-## Advanced Access Control
+### 4. Point Trino at the PDP
 
-### Column-level Access Control
+1. Add these lines to `/etc/trino/access-control.properties` on the Trino coordinator. Replace `<pdp-host>` with the host name of the PDP.
 
-When Trino asks the PDP whether a query can read a table, the PDP first checks the table resource.
-If that fails, it next bulk-checks all columns referenced in the query.
+   ```yaml
+   access-control.name=opa
+   opa.policy.uri=http://<pdp-host>:7766/trino/allowed
+   opa.policy.row-filters-uri=http://<pdp-host>:7766/trino/row-filter
+   opa.policy.batch-column-masking-uri=http://<pdp-host>:7766/trino/batch-column-masking
+   opa.log-requests=true
+   opa.log-responses=true
+   ```
 
-Access is granted only when the user is permitted for **all** required columns.
-This allows scenarios where a user lacks table-level permissions but can still read a safe subset of columns.
+2. Restart the Trino coordinator so the OPA plugin loads the configuration.
+
+See [Trino coordinator configuration](#trino-coordinator-configuration) for what each property does.
+
+### 5. Grant permissions in Permit
+
+In the [Policy Editor](https://app.permit.io/policy-editor), or with the Permit API or an SDK, give roles the actions they need. A user needs at least:
+
+- `ExecuteQuery` on the `trino_sys` resource, to run any query.
+- `SelectFromColumns` on the table resource, for example `trino_table_postgresql_public_projects`, to read that table.
+
+Then assign the roles to your users. The Permit user key must match the Trino user name.
+
+### 6. Verify the setup
+
+1. Run a query in Trino as a user who has `SelectFromColumns` on the table. The query returns rows.
+2. Run the same query as a user who doesn't have the permission. Trino rejects the query with an access denied error.
+3. Open the [Permit audit log](https://app.permit.io/audit-log). Each check appears with the Trino user, the action (the Trino operation), and the resource key.
+
+With `opa.log-requests=true` and `opa.log-responses=true`, the Trino server log also shows each request to the PDP and its response.
+
+To see the full stack running locally, clone the [trino-authz-example repository](https://github.com/permitio/trino-authz-example).
+
+## Advanced access control \{#advanced-access-control}
+
+### Column-level access control \{#column-level-access-control}
+
+When Trino asks whether a user can read a table, the PDP first checks the table resource. If the table check denies, the PDP checks the column resource of every column in the query, in one bulk check. The PDP allows the query only when the user has the action on **all** of those columns.
+
+A user without table-level permission can still read a table through the columns they have permission for.
 
 ```mermaid
 %%{
@@ -103,12 +143,11 @@ flowchart TD
     style Deny fill:#c0392b,color:#fff,stroke:#922b21
 ```
 
-You can generate Permit column resources automatically with the CLI flag `--create-column-resources`.
+Column resources exist only if you ran the CLI with `--create-column-resources`, or created them yourself with keys in the form `trino_column_<catalog>_<schema>_<table>_<column>`.
 
-### Column-masking
+### Column masking \{#column-masking}
 
-Permit can instruct Trino to mask sensitive column values instead of blocking the query outright.
-Masks are defined in a YAML file that the PDP reads on startup:
+Column masking replaces a column's values with the result of a SQL expression instead of denying the query. You define masks in the `columnMasking` section of the [PDP Trino config file](#pdp-trino-config-file), which the PDP reads on startup:
 
 ```24:38:trino-authz-example/trino-authz.yaml
 columnMasking:
@@ -127,14 +166,13 @@ columnMasking:
         view_expression: "CONCAT(SUBSTRING(description, 1, 10), '...')"
 ```
 
-Masks return only when the user (or role) has the corresponding Permit action.
-You can review the [Audit Logs](https://app.permit.io/audit-log) to see the Permit action checked on the table resource, causing the mask to be applied.
+The PDP applies a column's mask when the user has the mask action on the table resource or on the column resource. The mask action is `AddColumnMask` unless you set `action` for the table or for a single column. Grant the mask action to the roles whose values must be masked.
 
-For more information, see the [Trino documentation](https://trino.io/docs/current/security/opa-access-control.html#column-masking).
+To see which mask action the PDP checked for a query, open the [Permit audit log](https://app.permit.io/audit-log). For how Trino applies masks, see [column masking in the Trino documentation](https://trino.io/docs/current/security/opa-access-control.html#column-masking).
 
-### Row-level Filtering
+### Row-level filtering \{#row-level-filtering}
 
-Row filters let you attach SQL predicates that Trino appends as `WHERE` clauses based on a user's permissions:
+A row filter is a SQL predicate that Trino applies to a table like a `WHERE` clause. You define row filters in the `rowFilters` section of the [PDP Trino config file](#pdp-trino-config-file):
 
 ```4:16:trino-authz-example/trino-authz.yaml
 rowFilters:
@@ -150,19 +188,16 @@ rowFilters:
       expression: "priority = 'high'"
 ```
 
-Each action configured in the YAML is checked against the user's permissions. Any action that is enabled for the user, will be applied to the query.
-If multiple filters apply, Trino chains them with `AND`.
+For each filter on the table, the PDP checks whether the user has the filter's `action` on the table resource. The PDP returns the expression of every filter the user has permission for. When more than one filter applies, Trino combines them with `AND`.
 
-You can review the [Audit Logs](https://app.permit.io/audit-log) to see the Permit action checked on the table resource, causing the filter to be applied.
+To see which filter actions the PDP checked for a query, open the [Permit audit log](https://app.permit.io/audit-log). For how Trino applies row filters, see [row filtering in the Trino documentation](https://trino.io/docs/current/security/opa-access-control.html#row-filtering).
 
-For more information, see the [Trino documentation](https://trino.io/docs/current/security/opa-access-control.html#row-filtering).
+#### Filter rows per user with `current_user` \{#user-specific-filtering-with-current_user}
 
-#### User-Specific Filtering with `current_user`
+A filter expression can call Trino's [`current_user`](https://trino.io/docs/current/functions/session.html) function to return different rows to different users:
 
-Filter expressions can reference Trino's [`current_user`](https://trino.io/docs/current/functions/session.html) function, enabling user-specific data access. The key pattern:
-
-- **Permit** determines **which filter** applies (based on the user's role/permissions).
-- **The SQL expression** determines **which rows** using `current_user`.
+- **Permit** decides **which filter** applies, based on the user's permissions.
+- **The SQL expression** decides **which rows** the filter keeps, based on `current_user`.
 
 ```yaml
 rowFilters:
@@ -176,15 +211,15 @@ rowFilters:
       expression: "owner_id = current_user"   # Users see only their records
 ```
 
-Assign `view_all` to admin roles and `view_own` to regular users in Permit. When a user queries the table, the appropriate filter is applied based on their permissions.
+Grant `view_all` to admin roles and `view_own` to regular user roles in Permit. When a user queries `orders`, the PDP returns the filter that matches the user's permission.
 
 :::tip
-For `current_user` to return the correct identity, configure [Trino authentication](#trino-authentication) (e.g., JWT) to pass the user identifier.
+`current_user` returns the user that Trino authenticated. To pass your application user's identity to Trino, configure [Trino authentication](#trino-authentication), for example with a JSON Web Token (JWT).
 :::
 
-#### Subqueries in Filter Expressions
+#### Use subqueries in filter expressions \{#subqueries-in-filter-expressions}
 
-Filters can include subqueries for more complex scoping:
+A filter expression can include a subquery:
 
 ```yaml
 rowFilters:
@@ -193,15 +228,15 @@ rowFilters:
       expression: "team_id IN (SELECT team_id FROM team_members WHERE user_id = current_user)"
 ```
 
-This resolves team membership at query time, allowing users to see data for all teams they belong to.
+Trino runs the subquery at query time, so the user sees the rows of every team the `team_members` table lists for them.
 
-:::warning
-When a user has multiple filter actions, Trino chains them with `AND` (intersection). Design role assignments so users typically have one filter action per table.
+:::warning Multiple filter actions narrow the result
+If a user has more than one filter action on a table, Trino combines the filters with `AND`, so the user sees only rows that match every filter. Give each user one filter action per table.
 :::
 
-## Reference
+## Reference \{#reference}
 
-### Architecture
+### Architecture \{#architecture}
 
 ```mermaid
 sequenceDiagram
@@ -226,105 +261,58 @@ sequenceDiagram
   WebApp ->> User: Response
 ```
 
-Every query to Trino triggers a call to the PDP. Permit returns `allow` or `deny`, plus optional filter and masking instructions. If Trino cannot reach the PDP or the PDP errors, Trino denies the query.
+For every query, Trino calls the PDP. The PDP returns allow or deny, and returns row filter and column mask expressions when Trino asks for them. If the PDP can't evaluate the policy, it returns deny.
 
-### Permit / Trino Resource Mapping
+| PDP route | Trino property | Returns |
+|---|---|---|
+| `POST /trino/allowed` | `opa.policy.uri` | Allow or deny for one operation. |
+| `POST /trino/row-filter` | `opa.policy.row-filters-uri` | The row filter expressions the user has permission for. |
+| `POST /trino/batch-column-masking` | `opa.policy.batch-column-masking-uri` | The column masks the user has permission for. |
 
-When the Permit PDP receives an authorization request from Trino, it maps the request into a `permit.check()` call.
-The resource name and actions are converted to the corresponding Trino resource and action the user is trying to perform.
+### Permit and Trino resource mapping \{#permit--trino-resource-mapping}
 
-All queries are checked with the current Trino user's identity, with permissions on the "default" tenant.
-You can use Trino's several Authentication mechanisms to identify the user, like [JWT](https://trino.io/docs/current/security/jwt.html) or [OAuth2](https://trino.io/docs/current/security/oauth2.html).
+The PDP turns each Trino authorization request into a `permit.check()` call:
 
-By default, if the query does not match any resource or action in Permit, the request is denied. You are not required to create a resource for every table in your database.
+- **User:** the Trino user name, used as the Permit user key.
+- **Action:** the Trino operation name, such as `SelectFromColumns`.
+- **Resource:** a resource type key built from the Trino object names, as listed in the table below.
+- **Tenant:** always `default`.
 
-#### System Scope
+If no resource or permission in Permit matches the request, the PDP denies it. Use lowercase keys with underscores, as the PDP builds them. A key that doesn't match counts as an unknown resource, and the PDP denies the request.
 
-**Resource Name:** `trino_sys`
-**Actions:** `ExecuteQuery`, `ImpersonateUser`, `SetSystemSessionProperty`
+| Trino object | Permit resource key | Example actions (Trino operations) |
+|---|---|---|
+| System, users, and session properties | `trino_sys` | `ExecuteQuery`, `ImpersonateUser`, `SetSystemSessionProperty` |
+| Catalog (a data source connection) | `trino_catalog_<catalog>` | `AccessCatalog`, `FilterCatalogs`, `DropCatalog` |
+| Schema | `trino_schema_<catalog>_<schema>` | `ShowSchemas`, `CreateSchema`, `SetSchemaAuthorization` |
+| Table, view, or materialized view | `trino_table_<catalog>_<schema>_<name>` | `SelectFromColumns`, `InsertIntoTable`, `FilterColumns`, `SetTableProperties`, and your row filter and column mask actions |
+| Column (optional, see [column-level access control](#column-level-access-control)) | `trino_column_<catalog>_<schema>_<table>_<column>` | `SelectFromColumns`, and your column mask actions |
+| Function or procedure | `trino_function_<catalog>_<schema>_<name>` | `ExecuteFunction`, `CreateFunction`, `ExecuteProcedure` |
 
-This resource represents the entire Trino system. Actions here apply at the highest level, governing general permissions such as running queries or impersonating users across the cluster.
+To identify users, configure Trino authentication, such as [JWT](https://trino.io/docs/current/security/jwt.html) or [OAuth 2.0](https://trino.io/docs/current/security/oauth2.html). See [Trino authentication](#trino-authentication).
 
-#### Catalog
+### Permit CLI Trino options \{#permit-cli---trino-schema-generation}
 
-**Resource Name:** `trino_catalog_<catalog>`
-**Actions:** `AccessCatalog`, `FilterCatalogs`, `DropCatalog`
+`permit env apply trino` creates Permit resources from a Trino schema. The command output in [step 2](#2-create-permit-resources-from-your-trino-schema) lists every flag.
 
-A catalog in Trino represents a data source connection—such as a database or data warehouse. This resource governs access and management permissions for that catalog.
+| Flag | Required | Description |
+|---|---|---|
+| `--url`, `-u` | Yes | Trino cluster URL, for example `http://localhost:8080`. |
+| `--user` | Yes | Trino user. The user needs permission to read the Trino schema. |
+| `--password` | No | Trino password or authentication token. |
+| `--api-key` | No | Permit environment API key. Without it, the CLI uses your signed-in session. |
+| `--catalog` | No | Read only this catalog. |
+| `--schema` | No | Read only this schema. |
+| `--create-column-resources` | No | Create a resource for each column. Default: `false`. |
 
-#### Schema
+The command only creates resources:
 
-**Resource Name:** `trino_schema_<catalog>_<schema>`
-**Actions:** `ShowSchemas`, `CreateSchema`, `SetSchemaAuthorization`
+- **Tables or columns you add** in Trino don't appear in Permit until you run the command again. Until then, the PDP denies requests on them.
+- **Dropped tables or columns** in Trino keep their Permit resources. Delete those resources in the Permit dashboard.
 
-A schema organizes database objects within a catalog, grouping related tables. This resource allows control over schema-level actions like listing, creating, or administering schemas.
+### PDP Trino config file \{#pdp-trino-config-file}
 
-#### Table / View / Materialized View
-
-**Resource Name:** `trino_table_<catalog>_<schema>_<name>`
-**Actions:** `SelectFromColumns`, `InsertIntoTable`, `FilterColumns`, `SetTableProperties`, custom row-filter and column-mask actions
-
-This resource covers tables, views, and materialized views within a schema, representing structured sets of data.
-Actions here usually correspond to reading, writing, filtering, or updating attributes of each table-like object.
-
-#### Column (optional)
-
-**Resource Name:** `trino_column_<catalog>_<schema>_<table>_<column>`
-**Actions:** `SelectFromColumns`, custom column-mask actions
-
-This resource represents a specific column within a table or view, and enables fine-grained access or masking rules at the column level.
-
-#### Function
-
-**Resource Name:** `trino_function_<catalog>_<schema>_<function>`
-**Actions:** `ExecuteFunction`, `CreateFunction`
-
-A function in Trino is a reusable computation or operation available within a schema. This resource is used to control who can execute or create that function.
-
-#### Procedure
-
-**Resource Name:** `trino_procedure_<catalog>_<schema>_<procedure>`
-**Actions:** `ExecuteProcedure`
-
-Procedures are database routines in Trino that perform complex operations. This resource represents permission to execute those procedures.
-
-
-
-Stick to lowercase keys with underscores. Mismatches cause Permit to view the request as an unknown resource and default to `deny`.
-
-### Permit CLI - Trino schema generation
-
-The Permit CLI can generate the Permit resources for your Trino schema automatically.
-
-```bash
-permit env apply trino --url http://<trino-host>:8080 --user <trino-user>
-
-# Usage: permit env apply trino [options]
-#
-# Apply permissions policy from a Trino schema, creating resources from catalogs, schemas, tables, columns.
-#
-# Options:
-#   --api-key [api-key]        API key for Permit authentication
-#   -u, --url <url>            Trino cluster URL (e.g., http://localhost:8080)
-#   --user <user>              Trino username
-#   --password [password]      Trino password or authentication token
-#   --catalog [catalog]        Restrict to a specific catalog
-#   --schema [schema]          Restrict to a specific schema
-#   --create-column-resources  Create individual column resources (default: false) (default: false)
-#   -h, --help                 Show help
-```
-
-The command will need permissions to read the Trino schema. You can use the `--user` flag to specify a user that has the necessary permissions.
-
-The command only adds resources. Removing a table or column in Trino does not delete the Permit resource automatically; you can remove the resource manually in the Permit UI.
-
-Modifying the Trino schema, like adding a new table or column, will not automatically update the Permit resources.
-You will need to run the command again to add the new resources. Trino resources that are not mapped to Permit resources will be denied.
-
-### PDP Trino config file
-
-Configuring Trino column-masking and row-filtering is done by mounting the PDP with a config file at `/app/config/trino-authz.yaml`.
-You can use a custom path by setting the `PDP_TRINO_AUTHZ_CONFIG_PATH` environment variable.
+The PDP reads row filters and column masks from a YAML file at `/app/config/trino-authz.yaml`. To use another path, set [`PDP_TRINO_AUTHZ_CONFIG_PATH`](/concepts/pdp/configuration#pdp_trino_authz_config_path). If the file is missing or fails to parse, the PDP starts without row filters and column masks.
 
 Example:
 
@@ -355,11 +343,28 @@ rowFilters:
     - action: filter_out_todo
 ```
 
-After updating the file, restart the PDP, so the changes take effect.
+`rowFilters` maps a table resource key to a list of filters:
 
-### Trino coordinator configuration
+| Field | Required | Description |
+|---|---|---|
+| `action` | Yes | The Permit action on the table resource that turns on the filter. |
+| `expression` | Yes | The SQL predicate Trino applies to the table. |
 
-Point Trino's OPA plugin at the PDP endpoints by updating the `/etc/trino/access-control.properties` file.
+`columnMasking` maps a table resource key to a mask configuration:
+
+| Field | Required | Description |
+|---|---|---|
+| `action` | No | The Permit action that turns on the masks for the table. Default: `AddColumnMask`. |
+| `columns[].column_name` | Yes | The column to mask. If a column is listed twice, the PDP keeps the first entry. |
+| `columns[].view_expression` | Yes | The SQL expression that replaces the column value. |
+| `columns[].identity` | No | The Trino user to evaluate the expression as. |
+| `columns[].action` | No | An action for this column that overrides the table-level `action`. |
+
+The PDP reads the file only on startup. Restart the PDP after you change the file.
+
+### Trino coordinator configuration \{#trino-coordinator-configuration}
+
+Point Trino's OPA plugin at the PDP routes in `/etc/trino/access-control.properties`:
 
 ```
 access-control.name=opa
@@ -370,92 +375,93 @@ opa.log-requests=true
 opa.log-responses=true
 ```
 
-After updating the file, restart the coordinator, so the plugin reloads its configuration.
+| Property | Value |
+|---|---|
+| `access-control.name` | `opa`, to use Trino's OPA access control plugin. |
+| `opa.policy.uri` | The PDP's `/trino/allowed` route. |
+| `opa.policy.row-filters-uri` | The PDP's `/trino/row-filter` route. Leave it out if you don't use row filters. |
+| `opa.policy.batch-column-masking-uri` | The PDP's `/trino/batch-column-masking` route. Leave it out if you don't use column masks. |
+| `opa.log-requests`, `opa.log-responses` | `true` to log the requests to the PDP and its responses in the Trino server log. |
 
-## Operational considerations
+Restart the coordinator after you change the file, so the plugin reloads the configuration. For all plugin properties, see [OPA access control in the Trino documentation](https://trino.io/docs/current/security/opa-access-control.html).
 
-### Multiple access control systems
+## Operational considerations \{#operational-considerations}
 
-Trino supports [multiple access control systems](https://trino.io/docs/current/security/built-in-system-access-control.html#multiple-access-control-systems).
-Using that, you can combine Permit authorization for application users, and Trino's built-in file-based access control for administrative users.
+### Multiple access control systems \{#multiple-access-control-systems}
 
-### Trino authentication
+Trino can run [more than one access control system](https://trino.io/docs/current/security/built-in-system-access-control.html#multiple-access-control-systems). For example, use Permit for application users, and Trino's built-in file-based access control for administrators.
 
-You can use Trino's authentication mechanisms to identify the user, like [JWT](https://trino.io/docs/current/security/jwt.html) or [OAuth2](https://trino.io/docs/current/security/oauth2.html).
+### Trino authentication \{#trino-authentication}
 
-Using it, you can pass-through the user's identity to Trino, so the PDP can check against the application user's identity and permissions. This is essential for row filters that use `current_user`.
+The PDP checks permissions for the user that Trino authenticated. To check your application user's permissions, pass that user's identity to Trino with a Trino authentication method, such as [JWT](https://trino.io/docs/current/security/jwt.html) or [OAuth 2.0](https://trino.io/docs/current/security/oauth2.html). Row filters that use `current_user` depend on that identity.
 
-#### JWT Authentication Setup
+#### JWT authentication setup \{#jwt-authentication-setup}
 
-JWT authentication allows your application to pass user identity to Trino via tokens. The user identifier extracted from the JWT becomes the value of `current_user` in Trino queries.
+With JWT authentication, your application sends a token to Trino, and Trino uses one claim of the token as the user name. That user name is the value of `current_user` and the Permit user key.
 
-1. Configure Trino's JWT authentication in `/etc/trino/config.properties`:
+1. Configure JWT authentication in `/etc/trino/config.properties`:
 
-```properties
-http-server.authentication.type=JWT
-http-server.authentication.jwt.key-file=https://cluster.example.net/.well-known/jwks.json
-http-server.authentication.jwt.principal-field=sub
-```
+   ```properties
+   http-server.authentication.type=JWT
+   http-server.authentication.jwt.key-file=https://cluster.example.net/.well-known/jwks.json
+   http-server.authentication.jwt.principal-field=sub
+   ```
 
-The `principal-field` setting determines which JWT claim becomes `current_user`. Common options:
-- `sub` (subject) - standard JWT claim for user identity
-- `user_id` - if your tokens use a custom claim
-- `email` - if using email as the user identifier
+   `principal-field` sets the JWT claim that becomes the Trino user. Common values:
 
-2. When your application queries Trino, include the JWT in the Authorization header:
+   | Claim | Use when |
+   |---|---|
+   | `sub` | The standard JWT subject claim holds the user ID. |
+   | `user_id` | Your tokens carry the user ID in a custom claim. |
+   | `email` | You identify users by email address. |
 
-```http
-Authorization: Bearer <jwt-token>
-```
+2. When your application queries Trino, send the JWT in the `Authorization` header:
 
-3. The user identifier from the JWT is then available as `current_user` in row filter expressions.
+   ```http
+   Authorization: Bearer <jwt-token>
+   ```
+
+3. In row filter expressions, `current_user` returns the claim value from the JWT.
 
 :::tip
-Make sure the user identifier in your JWT matches the format used in your row filter expressions. For example, if your `employee_id` column contains UUIDs, configure `principal-field` to extract the UUID claim from your JWT.
+The claim value must match the values in the column your filter compares with `current_user`. For example, if the `employee_id` column holds UUIDs, set `principal-field` to the claim that holds the user's UUID.
 :::
 
-For more information, see the [Trino authentication documentation](https://trino.io/docs/current/security/authentication-types.html).
+For all authentication methods, see [authentication types in the Trino documentation](https://trino.io/docs/current/security/authentication-types.html).
 
-### Policy isolation
+### Policy isolation \{#policy-isolation}
 
-We recommend using a dedicated Permit project and environments for the Trino cluster authorization.
-This will help you isolate the authorization decisions from the rest of your data.
+Use a dedicated Permit project and environments for the Trino cluster. A database schema can produce many resources and actions. A dedicated project keeps them, and their audit logs, apart from your application's policy.
 
-Your database schema can include many resources and actions.
-Using a dedicated Permit project and environments will help you manage the complexity, follow audit trails, and isolate the authorization decisions from the rest of your data.
+See [Projects and environments](/manage-your-account/projects-and-env).
 
-Read more about [Permit projects and environments](/manage-your-account/projects-and-env).
+### Performance considerations \{#performance-considerations}
 
-### Performance considerations
+Trino calls the PDP for every query, and for row filters and column masks, so the PDP adds to query latency.
 
-Database access control is a performance-intensive operation, often requiring high throughput and low latency for policy evaluations.
+- Run the PDP close to the Trino coordinator, to cut network latency.
+- Run PDPs dedicated to the Trino cluster.
+- Scale the PDPs horizontally to handle the query load.
 
-We recommend the following performance optimizations:
-- Use a local PDP to minimize network latency.
-- Deploy a dedicated PDP(s) for the Trino cluster.
-- Scale the PDP cluster horizontally to handle the load.
+See [PDP deployment models](/concepts/pdp/overview#production-deployment-models).
 
-For more information, see the [Permit PDP Deployment Models](/concepts/pdp/overview#production-deployment-models) documentation.
+## FAQ \{#faq}
 
-## FAQ
+### Can I combine RBAC or ABAC with row-level filtering? \{#can-i-combine-rbacabac-with-row-level-filtering}
 
-### Can I combine RBAC/ABAC with row-level filtering?
+Yes. Role-based access control (RBAC) or attribute-based access control (ABAC) policies in Permit decide **which filter action** a user has. The filter's SQL expression decides **which rows** the user sees. For example, a `manager` role can grant a `view_team_data` action that applies a team-scoped filter.
 
-Yes. Permit's policy model (RBAC/ABAC) determines **which filter action** a user has.
-The row filter SQL expression determines **which rows** they see.
-For example, a "manager" role derived via RBAC could grant a `view_team_data` action that applies a team-scoped filter.
+### Are row filters dynamic? \{#are-row-filters-dynamic}
 
-### Are row filters dynamic?
+The filter expressions are static SQL in the YAML file. An expression can call Trino's `current_user` function, which Trino resolves at query time. For example, `owner_id = current_user` returns different rows for each user.
 
-Filter expressions are static SQL defined in YAML, but they can use Trino's `current_user` function which resolves dynamically at query time. This allows `owner_id = current_user` to return different rows for different users.
+### How does `current_user` get its value? \{#how-does-current_user-get-populated}
 
-### How does `current_user` get populated?
+From Trino authentication. With JWT authentication, `http-server.authentication.jwt.principal-field` sets which claim becomes `current_user`. See [JWT authentication setup](#jwt-authentication-setup).
 
-From Trino's authentication. With JWT, configure `http-server.authentication.jwt.principal-field` to specify which claim becomes `current_user`. See [JWT Authentication Setup](#jwt-authentication-setup).
+### Can filters use user attributes from Permit? \{#can-filters-access-user-attributes-from-permit}
 
-### Can filters access user attributes from Permit?
-
-Not directly. Store user-to-group mappings in a database table and use subqueries:
+No. Filter expressions run in Trino and can't read Permit user attributes. Store the data a filter needs, such as user-to-team mappings, in a table, and use a subquery:
 
 ```yaml
 rowFilters:
@@ -463,3 +469,10 @@ rowFilters:
     - action: your_action
       expression: "team_id IN (SELECT team_id FROM team_members WHERE user_id = current_user)"
 ```
+
+## Next steps
+
+- [PDP configuration variables for Trino](/concepts/pdp/configuration#trino-authorization)
+- [Deploy the PDP to production](/how-to/deploy/deploy-to-production)
+- [Permit CLI commands](/how-to/permit-cli)
+- [Review decisions in the audit log](/how-to/use-audit-logs/types-and-filtering)

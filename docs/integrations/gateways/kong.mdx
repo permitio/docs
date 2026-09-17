@@ -1,37 +1,42 @@
 ---
 sidebar_position: 3
-title: Kong API Gateway x Permit
-description: "Add permission checks to Kong Gateway requests by connecting Permit's PDP through Kong's OPA plugin."
+title: Authorize Kong Gateway requests with Permit
+sidebar_label: Kong API Gateway x Permit
+description: "Run the Permit PDP next to Kong Gateway and configure the Kong OPA plugin to send each route request to the PDP for a permission check."
 ---
 
-## Overview
+Authorize requests that pass through Kong Gateway with a Permit.io policy, without adding permission checks to your service code. This page is for developers who already route and authenticate traffic with Kong. You run the Permit policy decision point (PDP) next to Kong, then configure the Kong Open Policy Agent (OPA) plugin on a route to ask the PDP about each request.
 
-Kong is one of the most popular API gateways out there; but managing access to API and services behind it can be quite a
-bit of work especially as the application evolves requiring more and more advanced permissions models such as **RBAC**, **ABAC** & **ReBAC**.
+## How the Kong integration works \{#overview}
 
-With a recent update - Permit can now seamlessly integrate with Kong Gateway. And you can add permissions to your API within minutes
-without having to write a single line of code.
+The Permit PDP is built on OPA, so Kong's standard OPA plugin can call it. When the PDP runs with the Kong integration enabled, it exposes a `/kong` endpoint that reads the input the OPA plugin sends and runs a permission check:
 
-## Connect your Kong Gateway to Permit.io
+| Check field | Value the PDP uses |
+|---|---|
+| User | The `username` of the Kong consumer that made the request |
+| Action | The HTTP method of the request, in lowercase (for example, `get` or `post`) |
+| Resource type | Derived from the request path (see [Map request paths to resources](#map-request-paths-to-resources)) |
+| Tenant | `default` |
 
-If you have **Kong Gateway** properly configured to relay requests from your users to your backend, you can **easily use Permit.io to authorize requests**
-as they go in, with a **real time administration layer**. This layer that has a nice user interface that is
-easy to understand for everybody in your organization, while still **remaining policy-as-code behind the scenes**.
+When the PDP allows the request, Kong forwards it to your service. When the PDP denies it, Kong returns HTTP `403`. You manage the policy in the Permit dashboard, and Permit keeps it as policy as code.
 
-## Installing the PDP sidecar
-
-Since **Permit.io uses OPA internally**, you can use the **standard Kong OPA plugin**.
-
-:::note
-This guide assumes that you already have Kong configured, and your authentication is done through Kong.
+:::danger The PDP requires an API key header that the Kong OPA plugin doesn't send
+The PDP rejects requests to `/kong` without an `Authorization: Bearer <API key>` header, with HTTP `401`. The [Kong OPA plugin configuration](https://developer.konghq.com/plugins/opa/reference/) has no field for request headers to OPA. When the PDP returns a status other than `200`, the OPA plugin returns HTTP `500` to the client. Before you roll out this integration, confirm with Permit that your PDP version accepts requests from the Kong OPA plugin: ask in the [Permit Slack community](https://io.permit.io/slack).
 :::
 
-First, you will need to set up your Policy Decision Point, or PDP, next to your Kong Gateway. In the Permit.io architecture,
-the PDP is a small container that makes authorization decisions. You configure it through Permit.io's cloud service,
-but once it is running - it's completely independent (so it keeps running even if disconnected from the Internet) and can
-continue to make decisions extremely quickly, on the order of 1-5 ms.
+## Prerequisites \{#connect-your-kong-gateway-to-permitio}
 
-To run the PDP, you can use the following command:
+- Kong Gateway configured to route requests to your backend, with authentication handled by Kong so each request has a consumer
+- The Kong OPA plugin, which Kong provides on Kong Gateway Enterprise
+- Docker on a host that Kong can reach
+- A Permit.io policy with resources named after your route paths, and actions named after lowercase HTTP methods ([Configure your first RBAC policy](/overview/configure-your-first-rbac-policy))
+- Your environment API key ([Get your API key](/overview/get-api-key))
+
+## 1. Run the PDP next to Kong \{#installing-the-pdp-sidecar}
+
+The PDP is a container that makes authorization decisions. Permit's cloud configures it, and the PDP evaluates checks locally with the policy it has received.
+
+Run the PDP with the Kong integration enabled. Replace `YOUR_PERMIT_API_KEY` with your environment API key:
 
 ```sh
 docker run \
@@ -42,32 +47,31 @@ docker run \
 ⁠  permitio/pdp-v2:latest
 ```
 
-To get your API key, go to the [Permit.io App](https://app.permit.io/) and click **“Copy SDK secret key”** from your user profile.
+The command maps port `7766` on the host to the PDP's port `7000`. `PDP_KONG_INTEGRATION=true` enables the `/kong` endpoint. Without it, the PDP answers `/kong` requests with HTTP `503`.
 
-_![Copy API Key](/img/updated/kong/kong-1.png)_
-
-## Adding the OPA plugin to Kong
-
-Once the PDP container is running, you can configure your runtime instance to authorize requests through the PDP.
-In your Kong Route configuration, add a plugin. The option is located in the bottom right of the screenshot below.
-
-:::tip REMEMBER
-If you changed any of the below values in the PDP configuration, they will need to be changed to match in the Kong's configuration as well.
+:::warning Copying the command
+The `docker run` command for the PDP contains invisible characters at the start of some lines. If Docker reports an unknown command or flag, type the command again instead of pasting it.
 :::
 
-![Add Kong OPA plugin](/img/integrations/kong/kong-1.png)
+## 2. Add the OPA plugin to a Kong route \{#adding-the-opa-plugin-to-kong}
 
-In the plugin configuration, set the following values:
+In Kong Manager, open the route you want to protect and add a plugin. The **Add plugin** link is in the **Plugins** section of the route page.
+
+![Kong Manager route page with the Plugins section and the Add plugin link](/img/integrations/kong/kong-1.png)
+
+Choose the OPA plugin and set the following values. If you changed the port or host of the PDP, use your values here too.
 
 ### Consume OPA Input
 
-`Config.include Consumer In Opa Input` - this should be checked.
+Check `Config.include Consumer In Opa Input`. The PDP uses the consumer's username as the user key. Without the consumer, the PDP denies every request.
 
 ### Config.Opa Host
 
-This is the PDP IP address - `e.g. 192.168.60.231`
+The IP address or host name of the PDP, for example `192.168.60.231`.
 
 ### Config.Opa Path
+
+The PDP endpoint for Kong:
 
 ```
 /kong
@@ -75,33 +79,47 @@ This is the PDP IP address - `e.g. 192.168.60.231`
 
 ### Config.Opa Port
 
+The host port the PDP container listens on:
+
 ```
 7766
 ```
 
 ### Config.Opa Protocol
 
+The protocol Kong uses to call the PDP:
+
 ```
 http
 ```
 
-Please use the image below for extra reference:
+The completed plugin form looks like this:
 
-![Input the OPA plugin values to connect it to Kong](https://permit-instructions-files.s3.us-east-2.amazonaws.com/instructions-kong-2.png)
+![Kong OPA plugin form with Include Consumer In Opa Input checked and the PDP host, path /kong, port 7766, and protocol http filled in](https://permit-instructions-files.s3.us-east-2.amazonaws.com/instructions-kong-2.png)
 
-By default, `/` will be mapped to the "index" resource, and other routes to the first element in their paths.
+## Map request paths to resources
 
-:::tip example
-`/repo` will be mapped to the `repo` resource.
-:::
+The PDP picks the resource type from the request path with the first matching rule:
 
-## Wrapping Up
+| Request path | Resource type |
+|---|---|
+| `/v<number>/<segment>...`, for example `/v1/repo/42` | `<segment>` (`repo`) |
+| `/<segment>...`, for example `/repo` | `<segment>` (`repo`) |
+| `/` | `index` |
 
-Finally, go to the route you configured to see the **outcome of the permission check**.
+The rules come from the file `/config/kong_routes.json` in the PDP container. Each rule is a regular expression paired with a resource type name, or with the index of a capture group whose value is the resource type. The PDP reads the file at startup. If no rule matches a path, the PDP denies the request. For an example of a custom mapping table, see the Permit blog post [No-code permissions with Kong and Permit.io](https://www.permit.io/blog/no-code-permissions-with-kong-and-permitio).
 
-As you see, Permit.io makes it easy to add permissions to Kong-based applications.
-You can easily configure Kong Gateway to use Permit's powerful permission engine to decide whether requests are allowed,
-and empower non technical people in your organization to manage permissions themselves.
+## 3. Verify the permission check \{#wrapping-up}
 
-For more information, such as **how to customize the resource mapping table**,
-see **[our blog post about Kong integration](https://www.permit.io/blog/no-code-permissions-with-kong-and-permitio)**.
+1. Send a request through the Kong route as a consumer who has permission for the action on the resource. Kong forwards the request to your service.
+2. Send the same request as a consumer without that permission. Kong returns HTTP `403`.
+3. Open **Audit Log** in the Permit dashboard. Each request appears as a decision with the consumer's username, the lowercase HTTP method, and the resource type. See [View and filter audit logs](/how-to/use-audit-logs/types-and-filtering).
+
+If the PDP container logs `Got request from Kong with no consumer`, check `Config.include Consumer In Opa Input` in the plugin configuration. If it logs `no matching route`, add a rule for the path to the route mapping file.
+
+## Next steps
+
+- [Enforce permissions at an API gateway or proxy](/integrations/gateways/overview)
+- [Configure the PDP](/concepts/pdp/configuration)
+- [Deploy the PDP to production](/how-to/deploy/deploy-to-production)
+- [View and filter audit logs](/how-to/use-audit-logs/types-and-filtering)

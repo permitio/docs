@@ -1,41 +1,42 @@
 ---
 sidebar_position: 1
-title: CASL
-description: "Integrate CASL with Permit using the permit-fe-sdk to control frontend feature flags in a React or Next.js app based on RBAC and ABAC permissions."
+title: Control frontend features with CASL and Permit
+sidebar_label: CASL
+description: "Show or hide parts of a React or Next.js UI based on Permit.io RBAC and ABAC permission checks, with the permit-fe-sdk and CASL."
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-CASL is a versatile, open-source JavaScript library widely used for managing Access Control Lists (ACLs)
-and implementing Role-Based Access Control (RBAC) in JavaScript applications. It allows developers to
-enforce granular permissions within applications, ensuring that resources and actions are accessible
-only to authorized users or roles across various technology stacks.
+Show or hide parts of your React or Next.js UI based on the permissions of the signed-in user, with the `permit-fe-sdk` package and CASL. This guide is for frontend developers who already have a Permit.io policy and want the UI to match what the backend allows.
 
-::::note
-Please note that the following example implementation and the `permit-fe-sdk` fully supports version 6 of CASL.
-::::
+[CASL](https://casl.js.org/) is an open-source JavaScript library that describes what a user can do as a list of rules, called an ability. The [permit-fe-sdk](https://github.com/permitio/permit-fe-sdk) package loads permission results for the signed-in user from your backend, which runs `permit.check()` against your policy decision point (PDP), and turns the results into CASL rules.
 
-## Permit.io & CASL
+:::warning Frontend checks don't protect your data
+A user can change code that runs in the browser. Use frontend checks to decide what the UI shows, and enforce every permission again in your backend with `permit.check()`.
+:::
 
-Leveraging CASL and Permit.io together, developers can create a refined system where frontend feature
-flags are controlled based on user permissions and roles. This synergy not only facilitates a secure and
-tailored user experience but also empowers development teams to manage and roll out new features effectively
-and safely across diverse user bases.
+## How the pieces fit together \{#permitio--casl}
 
-## Our frontend SDK
+1. When a user signs in, the `AbilityLoader` component calls `loadLocalStateBulk()` from `permit-fe-sdk` with a list of actions and resources.
+2. `loadLocalStateBulk()` sends one `POST` request to your backend route, at `<backendUrl>?user=<loggedInUser>`, with the list in a `resourcesAndActions` body field.
+3. The backend route runs `permit.check()` for each item against the PDP, and returns the results as a `permittedList` array of booleans, in the same order.
+4. `permit-fe-sdk` stores the results in `permitState`, and `permitState.getCaslJson()` returns them as CASL rules.
+5. Your components read the results with `permitState.check()` and render only what the user is allowed to see.
 
-In our dedicated pursuit to enhance developer experience and streamline frontend feature management, we
-crafted a specialized package at Permit.io, encapsulating both Permit and CASL. The
-**[permit-fe-sdk](https://github.com/permitio/permit-fe-sdk)** enables developers to integrate sophisticated
-permission-based feature toggling seamlessly across various frontend frameworks.
+## Prerequisites \{#our-frontend-sdk}
 
-## React/NextJS Implementation
+- A Permit.io policy with the resources and actions you check. See [Configure your first RBAC policy](/overview/configure-your-first-rbac-policy).
+- Your users synced to Permit with the same user key your authentication provider returns. See [Sync users](/how-to/sync-users).
+- Your environment API key. See [Get your API key](/overview/get-api-key).
+- A running PDP. The example backend route connects to a PDP container at `http://localhost:7766`. See [Run the PDP](/overview/run-pdp).
+- A React or Next.js app with an authentication provider. The example uses [Clerk](https://clerk.com/). Any authentication provider works if it gives you the ID of the signed-in user.
 
-In order to start using the `permit-fe-sdk`, below is a step-by-step guide on how to incorporate it into your
-React or NextJS app.
+## Add CASL and Permit to a React or Next.js app \{#reactnextjs-implementation}
 
-### Installing the relevant packages
+### 1. Install the packages \{#installing-the-relevant-packages}
+
+Install CASL, the CASL React bindings, `permit-fe-sdk` for the frontend, and `permitio` (the Permit Node.js SDK) for the backend route:
 
 <Tabs groupId="install">
 <TabItem value="npm" label="npm" default>
@@ -54,19 +55,11 @@ yarn add @casl/ability @casl/react permit-fe-sdk permitio
 </TabItem>
 </Tabs>
 
-### Create an API route to handle the permissions checks
+### 2. Create a backend route for bulk permission checks \{#create-an-api-route-to-handle-the-permissions-checks}
 
-As part of the CASL component that we will be creating later in this guide, we will need to specify an API
-route that we can call, which will perform bulk `permit.check()` operations for us, returning the result for
-each.
+`permit-fe-sdk` doesn't call the PDP directly, because the call needs your API key. Instead, it calls a route in your backend. The route receives the user key in the `user` query parameter and the list of checks in the `resourcesAndActions` body field, runs `permit.check()` for each item, and returns all results in one response. The frontend loads every result before the UI renders.
 
-::::tip
-The bulk `permit.check()` allows us to send over multiple permit check queries to run against the policy engine at once.
-This allows us to get all the answers, before we start to render the app and it's UI. q1 1§1
-::::
-
-Here is a basic implementation of such endpoint, which we have under `/api/something`. You can name the file
-as you wish.
+This example is a Next.js API route. You can give the file any name. The frontend code later in this guide calls the route at `/api/something`:
 
 ```js
 import { Permit } from "permitio";
@@ -116,24 +109,16 @@ export default async function handler(req, res) {
 }
 ```
 
-Pay attention that we have imported the Permit library and we initialized the Permit object. You can follow
-this [guide](/overview/connecting-your-app#1-get-your-permit-environment-api-key) to understand where to fetch your API key from.
+In the route:
 
-This handler also allows you to deal with two policy models: **RBAC** & **ABAC**. As part of the bulk check, you can pass
-`userAttributes` and `resourceAttributes` - but they are **optional**.
+- Replace `YOUR_PERMIT_API_KEY` with your environment API key. In a real app, load the key from an environment variable. Anyone with the key can change the environment's policy through the Permit API.
+- `pdp` is the address of your PDP. Change it if your PDP doesn't run on `localhost:7766`.
+- `userAttributes` and `resourceAttributes` are optional. Pass them for attribute-based access control (ABAC) policies. Role-based access control (RBAC) checks don't need them.
+- Every check uses the `default` tenant. Change `tenant` if your users belong to other tenants.
 
-Once we are done with this step, we need to make sure pull and launch our PDP - you can also find the steps on
-how to do this [here](/overview/connecting-your-app#2-setup-your-pdp-policy-decision-point-container).
+### 3. Create the AbilityLoader component \{#creating-the-abilityloader-component}
 
-### Creating the `AbilityLoader` Component
-
-The AbilityLoader component is integral to this setup, diligently working to asynchronously retrieve and
-establish user-specific permissions, particularly upon user sign-in.
-
-In this scenario, we're employing Clerk.com as our authentication provider to obtain the userId, which we have
-synchronized with Permit. This allows us to identify the currently logged-in user and correlate them with the
-associated policy for their role. It's crucial to highlight that **you can choose any authentication provider**
-that best fits your needs—Permit is designed to integrate seamlessly with all of them.
+The `AbilityLoader` component loads the permissions of the signed-in user once, after sign-in, and shares them with the rest of the app. This example gets the user ID from Clerk:
 
 ```js
 import React, { createContext, useEffect, useState } from "react";
@@ -178,35 +163,28 @@ export const AbilityLoader = ({ children }) => {
 };
 ```
 
-::::note
-In this guide, we do not cover how you should sync your user into Permit, nor how to setup your policy.
-::::
+Replace the resource keys and actions in the `loadLocalStateBulk()` list with the resources and actions of your policy. Set `backendUrl` to the path of your backend route. `loadLocalStateBulk()` runs its request only once per page load. Later calls return without sending another request.
 
-Let's break the above code down into smaller chunks so we know exactly what is happening.
+The next sections explain each part of the `AbilityLoader` component.
 
-#### Creating a Context
+#### Share the abilities with a React context \{#creating-a-context}
 
-The `AbilityContext` is crafted to share the user's permissions (or "abilities"), which are managed and
-determined by CASL, across different components.
-
-When AbilityContext is employed, it allows the permissions (or "abilities") data to be accessible and
-utilized by any component that consumes this context, without the need to prop-drill the data through
-numerous component layers.
+`AbilityContext` is a React context that holds the CASL ability of the signed-in user. Any component that reads the context gets the ability, without passing it through props at each level:
 
 ```js
 // Create Context
 export const AbilityContext = createContext();
 ```
 
-#### Getting abilities
+#### Load the permission results \{#getting-abilities}
 
-This step uses the `id` of the presently logged-in user from the session, transmitting a request to the
-previously defined API endpoint, and subsequently loading each of the **actions** and **resources** into the
-local state.
+The `getAbility` function takes the ID of the signed-in user and:
 
-It executes permit checks against the established policy to ascertain whether the current user is
-authorized to execute the specified actions on the defined resources. Subsequently, the outcome is stored
-in `permitState`, from which the results of the permission checks are returned.
+1. Creates a `permit-fe-sdk` client with `Permit()`. `loggedInUser` is the user key that Permit checks, and `backendUrl` is your backend route.
+2. Calls `loadLocalStateBulk()` with the actions and resources to check. The function sends the list to the backend route and stores the results in `permitState`.
+3. Converts the results to CASL rules with `permitState.getCaslJson()`, and creates a CASL `Ability` from the rules. Each rule has an `action`, a `subject` (the resource), and `inverted: true` when the check denied the action.
+
+This excerpt shows the same function with a different route and resource list:
 
 ```js
 const getAbility = async (loggedInUser) => {
@@ -228,52 +206,17 @@ const getAbility = async (loggedInUser) => {
 };
 ```
 
-### Working with RBAC & ABAC
+#### Provide the context to child components \{#returning-the-abilitycontextprovider}
 
-::::danger be careful
-If you are using Cloud PDP for running your Permit checks, please be aware that Cloud PDP supports **RBAC and ReBAC** only.
-**ABAC is not supported on Cloud PDP**. ABAC policies (adding extra user and resource attributes) require using a container PDP.
-For detailed capabilities and limits, see [Cloud PDP Capabilities](/concepts/pdp/cloud-pdp-capabilities).
-::::
-
-The `AbilityLoader` supports both basic RBAC policies and ABAC policies, where you can check a users permissions not just based on
-their role, but also `extra conditions` on the role, or the resource.
-
-You can simply just pass them into the `loadLocalStateBulk` function as `userAttributes` and `resourceAttributes`.
-The conditions will be evaluated in the same `permit.check` function and the result will be returned.
-
-```js
-await permit.loadLocalStateBulk([
-    { action: 'view', resource: 'statament' },
-    { action: 'view', resource: 'products' },
-    { action: 'delete', resource: 'file' },
-    { action: 'create', resource: 'document' },
-    {
-      action: 'view',
-      resource: 'files_for_poland_employees',
-      userAttributes: {
-        department: "Engineering",
-        salary: "100K"
-      }
-      resourceAttributes: { country: 'PL' },
-    },
-  ]);
-```
-
-#### Returning the `AbilityContext.Provider`
-
-The last step in the `AbilityLoader` is to enable this component to be a wrapper for the whole app, so that the
-abilities are globally accessible.
+The `AbilityLoader` component returns the context provider with the loaded ability, so the component can wrap the whole app:
 
 ```js
 <AbilityContext.Provider value={ability}>{children}</AbilityContext.Provider>
 ```
 
-### Wrapping our App with the `AbilityLoader`
+### 4. Wrap your app with AbilityLoader \{#wrapping-our-app-with-the-abilityloader}
 
-Once we are ready to utilize the abilities to render parts of the UI based on the users permissions,
-we need to wrap our whole application in the `<AbilityLoader>` component, getting access to the `permitState`
-globally.
+Wrap your app in `<AbilityLoader>` so that permissions load when a user signs in. In a Next.js app with the Pages Router, wrap the page component in `pages/_app.js`. `AbilityLoader` uses Clerk's `useUser()`, so it goes inside `ClerkProvider`:
 
 ```js
 import { ClerkProvider } from "@clerk/nextjs";
@@ -293,18 +236,19 @@ function MyApp({ Component, pageProps }) {
 export default MyApp;
 ```
 
-### Conditionally rendering components with `permitState`
+### 5. Render components based on permissions \{#conditionally-rendering-components-with-permitstate}
 
-First of all, in the file where you want to render part of the UI based on a condition, make sure you import
-`permitState`.
+Import `permitState` in each file that renders UI based on a permission:
 
 ```js
 import { permitState } from "permit-fe-sdk";
 ```
 
-Then, utilize permitState to render parts of the HTML.
+`permitState.check()` returns the stored result for an action and resource. It doesn't call the backend. If the action and resource weren't in the `loadLocalStateBulk()` list, `permitState.check()` returns `false`.
 
-#### Conditional render for RBAC
+#### Render based on an RBAC permission \{#conditional-render-for-rbac}
+
+Pass the action and the resource key. This element renders only when the user can `view` a `document`:
 
 ```js
 <div>
@@ -314,7 +258,9 @@ Then, utilize permitState to render parts of the HTML.
 </div>
 ```
 
-#### Conditional render for ABAC
+#### Render based on an ABAC permission \{#conditional-render-for-abac}
+
+For an ABAC check, pass the same resource key and resource attributes that you passed to `loadLocalStateBulk()`. The `permit-fe-sdk` source defines `permitState.check(action, resource, resourceAttributes)`: the third argument is the resource attributes. User attributes come from the `userAttributes` option of `Permit()`:
 
 ```js
 <div>
@@ -332,4 +278,46 @@ Then, utilize permitState to render parts of the HTML.
 </div>
 ```
 
+## Check ABAC permissions with attributes \{#working-with-rbac--abac}
 
+:::danger ABAC needs an Edge PDP
+The Cloud PDP supports RBAC and relationship-based access control (ReBAC) only. If your backend route sends checks to the Cloud PDP, ABAC policies that use user or resource attributes don't evaluate. Use an Edge PDP for ABAC. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+:::
+
+The same `AbilityLoader` handles RBAC and ABAC checks. For an ABAC check, add `userAttributes` and `resourceAttributes` to an item in the `loadLocalStateBulk()` list. The backend route passes the attributes to `permit.check()`, and the PDP evaluates the conditions of your ABAC policy:
+
+```js
+await permit.loadLocalStateBulk([
+    { action: 'view', resource: 'statament' },
+    { action: 'view', resource: 'products' },
+    { action: 'delete', resource: 'file' },
+    { action: 'create', resource: 'document' },
+    {
+      action: 'view',
+      resource: 'files_for_poland_employees',
+      userAttributes: {
+        department: "Engineering",
+        salary: "100K"
+      }
+      resourceAttributes: { country: 'PL' },
+    },
+  ]);
+```
+
+In this list, the last item asks whether a user in the Engineering department can `view` resources of the `files_for_poland_employees` type with `country` set to `PL`.
+
+## Verify the integration \{#verify-the-integration}
+
+1. Sign in to your app as a user who has a role that allows `view` on `document`.
+2. In the browser developer tools, open the **Network** tab. Confirm one `POST` request to your backend route with the `user` query parameter, and a response with a `permittedList` array that has one boolean per item in your list.
+3. Confirm that the `Document` element renders.
+4. Sign in as a user without that permission. The `permittedList` entry for `document` is `false`, and the `Document` element doesn't render.
+
+If every result is `false`, check the backend route's console output for the results, check that the user key matches a user synced to Permit, and check the decisions in the [audit log](/how-to/use-audit-logs/types-and-filtering).
+
+## Next steps
+
+- [Check permissions with permit.check()](/how-to/enforce-permissions/check)
+- [Build ABAC policies](/how-to/build-policies/abac/overview)
+- [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities)
+- [permit-fe-sdk on GitHub](https://github.com/permitio/permit-fe-sdk)

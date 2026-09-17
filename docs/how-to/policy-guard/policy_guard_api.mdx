@@ -1,32 +1,41 @@
 ---
 sidebar_position: 2
-title: Policy Guard API
-description: "Manage Policy Guard scopes, project associations, and permission rules across projects with the Policy Guard API."
+title: Manage Policy Guards with the API
+sidebar_label: Policy Guard API
+description: "Create a Policy Guard scope, add projects to it, and add, list, and remove permission rules with the Permit API."
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
+Use the Permit API to create a Policy Guard scope, attach projects to it, and add the permission rules that every project in the scope enforces. This guide is for workspace administrators who call the Permit API from a terminal or a script. For what a Policy Guard is and how Permit applies it, see [Policy Guards](/how-to/policy-guard/policy_guard).
 
+The example on this page makes sure only the `admin` role can create documents in every project in the scope.
 
-The Policy Guard API allows you to manage policies at the organization level.
-Policy Guards help enforce centralized control over permissions and roles across specific projects included in the policy.
+## Prerequisites
 
-For example, let's say you want to ensure that only admins can create documents, while all other roles are restricted to read-only access.
-To achieve this, you would create a Policy Guard that defines these permissions, assigning the "admin" role the ability to create documents,
-while restricting the "viewer" role to read-only access.
-This policy would then apply consistently across all projects included in the Policy Guard.
-Let's see how you can use the [Policy Guard API](https://api.permit.io/v2/redoc#tag/Policy-Guards-(EAP)) for the example above.
+- An organization API key, or a Workspace Owner account. Other API keys get a `403 Forbidden` error from the Policy Guard endpoints. See [API key types](/api/api-with-cli).
+- The ID of each project you want to guard. See [Get the project ID](/manage-your-account/projects-and-env#getting-the-project-id).
+- `curl`.
 
-:::note Info
-For more information on Policy Guards, see the [Policy Guard documentation](/how-to/policy-guard/policy_guard).
-:::
+## Placeholders in the requests
 
+| Placeholder | Replace with |
+|---|---|
+| `API_SECRET_KEY` | Your organization API key. |
+| `{policy_guard_scope_id}` | The scope's `id` from the create response, or the scope's `key` (for example `policy_guard_acme`). |
+| `c3b6f5d7-8b1e-4c6d-9e9f-8c9d6f8e0c8f` in `project_id` | The ID of your project. |
 
-## Example API Usage
+Send request bodies as JSON with a `Content-Type: application/json` header. All endpoints are listed under [Policy Guards (EAP) in the API reference](https://api.permit.io/v2/redoc#tag/Policy-Guards-(EAP)).
 
-**First, we'll create a new policy guard scope in order to define the scope of the policy guard.**
+## Example API usage \{#example-api-usage}
 
-### Create a New Policy Guard Scope
+### 1. Create a Policy Guard scope \{#create-a-new-policy-guard-scope}
+
+A scope holds a unique `key` and the list of projects that the Policy Guard applies to. Send `POST /v2/policy_guards/scopes`:
+
+| Field | Required | Description |
+|---|---|---|
+| `key` | Yes | A unique key for the scope. |
+| `policy_guard_scope_details` | No | A list of objects, each with a `project_id`. Permit marks every environment of each listed project as guarded. |
+
 ```bash
 curl -X POST 'https://api.permit.io/v2/policy_guards/scopes' \
 -H 'authorization: Bearer API_SECRET_KEY' \
@@ -40,25 +49,23 @@ curl -X POST 'https://api.permit.io/v2/policy_guards/scopes' \
 }'
 ```
 
-**To retrieve details about a specific policy guard scope, use the scope's ID. This allows you to confirm its settings and ensure it's correctly configured.**
+The response is the scope object, with `id`, `key`, `organization_id`, and `policy_guard_scope_details`. Use the `id` or the `key` as `{policy_guard_scope_id}` in the next requests.
 
-### Get a Policy Guard Scope by ID
+### 2. Get a Policy Guard scope \{#get-a-policy-guard-scope-by-id}
+
+Send `GET /v2/policy_guards/scopes/{policy_guard_scope_id}` to confirm the scope's key and projects:
+
 ```bash
 curl 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scope_id}' \
 -H 'authorization: Bearer API_SECRET_KEY'
 ```
 
-**If you need to remove a policy guard scope, you can delete it by specifying its ID. This will remove all associated permissions and roles.**
+The response has the same fields as the create response. To list all scopes in the organization, send `GET /v2/policy_guards/scopes`.
 
-### Delete a Policy Guard Scope
-```bash
-curl -X DELETE 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scope_id}' \
--H 'authorization: Bearer API_SECRET_KEY'
-```
+### 3. Add a project to a Policy Guard scope \{#assign-a-project-to-a-policy-guard-scope}
 
-**To extend the policy guard to include a new project, you can associate it with the existing policy guard scope.**
+Send `POST /v2/policy_guards/scopes/{policy_guard_scope_id}/associate` with the `project_id` of the project to add. Permit marks every environment of the project as guarded and applies the scope's rules to each environment.
 
-### Assign a Project to a Policy Guard Scope
 ```bash
 curl -X POST 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scope_id}/associate' \
 -H 'authorization: Bearer API_SECRET_KEY' \
@@ -67,20 +74,21 @@ curl -X POST 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scope_
 }'
 ```
 
-**If a project is no longer part of the policy guard, you can disassociate it by providing the project's detail. This will remove the project's permissions defined in the scope.**
+Permit applies the rules in a background task. The response is a task object with `task_id` and `status` (`processing`, `success`, `failure`, or `cancelled`). To wait for the task to finish before the response returns, add the `wait` query parameter with a number of seconds, for example `?wait=10`.
 
-### Remove a Project from a Policy Guard Scope
-```bash
-curl -X DELETE 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scope_id}/disassociate' \
--H 'authorization: Bearer API_SECRET_KEY' \
---data-raw '{
-    "project_id": "c3b6f5d7-8b1e-4c6d-9e9f-8c9d6f8e0c8f"
-}'
-```
+### 4. Add a role-based permission rule \{#add-a-permission-rule-to-a-policy-guard-scope}
 
-**For adding and removing permission rules, you need to provide the resource, role, action, and whether the action is allowed or not.**
+Send `POST /v2/policy_guards/scopes/{policy_guard_scope_id}/rules` to add a rule. This rule allows the `admin` role to `create` on the `documents` resource in every environment of every project in the scope:
 
-### Add a Permission Rule to a Policy Guard Scope
+| Field | Required | Description |
+|---|---|---|
+| `resource_key` | Yes | The key of the resource. Permit creates the resource in an environment where it doesn't exist. |
+| `action_key` | Yes | The key of the action. |
+| `is_allowed` | Yes | `true` grants the permission. Permit locks the permission from edits in the guarded environments. |
+| `role_key` | No | The key of the role. |
+| `user_set` | No | A user set, as an object with `key`, `attribute`, `operator`, and `value`. |
+| `resource_set` | No | A resource set, as an object with `key`, `attribute`, `operator`, and `value`. |
+
 ```bash
 curl -X POST 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scope_id}/rules' \
 -H 'authorization: Bearer API_SECRET_KEY' \
@@ -91,12 +99,12 @@ curl -X POST 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scope_
     "is_allowed": true
 }'
 ```
-:::note Info
-The `resource_key`, `role_key`, and `action_key` are unique identifiers for resources, roles, and actions.
-We use `key` to create and guard objects, as IDs are unique within each environment.
-:::
 
-**For adding ABAC rules, you can provide user set and resource set**
+Rules use keys, not IDs, because IDs are unique to each environment. A key refers to the same resource, role, or action in every environment of the scope. The response is a task object, as in the previous step. Adding a rule that already exists in the scope returns a conflict error.
+
+### 5. Add an attribute-based permission rule \{#add-an-abac-permission-rule}
+
+Attribute-based access control (ABAC) rules use a user set, a resource set, or both, instead of a role. This rule allows users whose `email` contains `permit` to `create` documents:
 
 ```bash
 curl -X POST 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scope_id}/rules' \
@@ -113,18 +121,33 @@ curl -X POST 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scope_
     "is_allowed": true
 }'
 ```
-:::note Info
-Using ABAC rules, you can define user and resource sets to guard permissions based on their attributes.
-For locking a user set, specify the user set, resource, and action.
-For locking a resource set, specify the resource set, resource, action, and either a role or user set.
 
-For example, if you will try to create rule with user set and role key, it will throw an error.
-:::
+Each rule needs `resource_key` and `action_key`, plus one of these combinations:
 
+| To guard | Set |
+|---|---|
+| A role | `role_key` |
+| A user set | `user_set` |
+| A resource set for a role | `resource_set` and `role_key` |
+| A resource set for a user set | `resource_set` and `user_set` |
 
-**If you need to revoke permissions for a specific action, you can remove the corresponding permission rule. This is how you would revoke the "admin" role's ability to create documents.**
+A rule with both `role_key` and `user_set` and no `resource_set` fails with a `400 Bad Request` error.
 
-### Remove a Permission Rule from a Policy Guard Scope
+### 6. List the rules of a Policy Guard scope \{#list-all-permission-rules-for-a-policy-guard-scope}
+
+Send `GET /v2/policy_guards/scopes/{policy_guard_scope_id}/rules` to see every rule the scope enforces. The rules you added appear in the response array, each with its `id`, `scope_id`, and rule fields.
+
+```bash
+curl 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scope_id}/rules' \
+-H 'authorization: Bearer API_SECRET_KEY'
+```
+
+## Remove rules, projects, and scopes
+
+### Remove a permission rule \{#remove-a-permission-rule-from-a-policy-guard-scope}
+
+Send `DELETE /v2/policy_guards/scopes/{policy_guard_scope_id}/rules` with the same `resource_key`, `action_key`, and `role_key`, `user_set`, or `resource_set` that you used to create the rule. This request removes the rule that locks the `admin` role's permission to create documents:
+
 ```bash
 curl -X DELETE 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scope_id}/rules' \
 -H 'authorization: Bearer API_SECRET_KEY' \
@@ -135,10 +158,34 @@ curl -X DELETE 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scop
 }'
 ```
 
-**To view all permission rules associated with a specific policy guard scope, you can retrieve them using the scope's ID. This helps in auditing and understanding the current permissions in place.**
+A successful request returns `204 No Content`. If no rule in the scope matches the body, the API returns `404 Not Found`.
 
-### List all Permission Rules for a Policy Guard Scope
+### Remove a project from a Policy Guard scope \{#remove-a-project-from-a-policy-guard-scope}
+
+Send `DELETE /v2/policy_guards/scopes/{policy_guard_scope_id}/disassociate` with the `project_id`. Permit marks the project's environments as no longer guarded, so project members can edit the permissions again.
+
 ```bash
-curl 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scope_id}/rules' \
+curl -X DELETE 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scope_id}/disassociate' \
+-H 'authorization: Bearer API_SECRET_KEY' \
+--data-raw '{
+    "project_id": "c3b6f5d7-8b1e-4c6d-9e9f-8c9d6f8e0c8f"
+}'
+```
+
+A successful request returns `204 No Content`.
+
+### Delete a Policy Guard scope \{#delete-a-policy-guard-scope}
+
+Send `DELETE /v2/policy_guards/scopes/{policy_guard_scope_id}` to delete the scope. A successful request returns `204 No Content`.
+
+```bash
+curl -X DELETE 'https://api.permit.io/v2/policy_guards/scopes/{policy_guard_scope_id}' \
 -H 'authorization: Bearer API_SECRET_KEY'
 ```
+
+## Next steps
+
+- [Policy Guards: scopes, rules, and how Permit applies them](/how-to/policy-guard/policy_guard)
+- [Policy Guards (EAP) endpoints in the API reference](https://api.permit.io/v2/redoc#tag/Policy-Guards-(EAP))
+- [Build ABAC policies with user sets and resource sets](/how-to/build-policies/abac/building-abac-policy)
+- [API key types](/api/api-with-cli)
