@@ -243,7 +243,7 @@ Coded React diagrams (`DiagramFrame` and friends): a 2px text-colour top rule an
 
 ### Timeline steps
 
-`TimelineWrapper` / `TimelineStep`: numbered circles on a vertical rail for long step-by-step guides.
+`TimelineWrapper` / `TimelineStep`: numbered circles on a vertical rail for long step-by-step guides. Drawn like the diagrams' stage nodes: a 1px `--pm-border-strong` rail and outlined circles with the number in `--pm-text` on the page colour (they were white on Tailwind orange-500, 2.80:1, with a fixed `#a666f4` rail in both themes).
 
 ## Do's and Don'ts
 

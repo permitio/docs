@@ -1,5 +1,6 @@
 import React from "react";
 
+// Vertical step rail for long how-to guides. Styles: src/css/components/_timeline.scss.
 const TimelineWrapper = ({ children }) => {
   // Count the number of children and pass the index + 1 as a prop to each TimelineStep
   const steps = React.Children.toArray(children).map((child, index) => {
@@ -8,16 +9,7 @@ const TimelineWrapper = ({ children }) => {
       : child;
   });
 
-  return (
-    <div
-      className="ml-4 border-purple-500" // border-l-2 not working
-      style={{
-        borderLeft: "2px solid #A666F4",
-      }}
-    >
-      {steps}
-    </div>
-  );
+  return <div className="pm-timeline">{steps}</div>;
 };
 
 export default TimelineWrapper;

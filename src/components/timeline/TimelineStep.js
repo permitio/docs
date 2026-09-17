@@ -1,11 +1,10 @@
 import React from "react";
 
+// One step on a <TimelineWrapper> rail. Styles: src/css/components/_timeline.scss.
 const TimelineStep = ({ stepNumber, children }) => (
-  <div className="mb-12 relative">
-    <div className="w-8 h-8 rounded-full bg-orange-500 flex justify-center items-center text-white font-bold absolute left-0 -ml-4">
-      {stepNumber}
-    </div>
-    <div className="ml-10">{children}</div>
+  <div className="pm-timeline__step">
+    <div className="pm-timeline__marker">{stepNumber}</div>
+    <div className="pm-timeline__body">{children}</div>
   </div>
 );
 
