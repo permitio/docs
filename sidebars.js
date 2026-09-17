@@ -39,6 +39,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "getting-started/ai-support",
+          label: "Get AI Support",
+        },
+        {
+          type: "doc",
           id: "getting-started/slack-support",
           label: "Get Support on Slack",
         },
