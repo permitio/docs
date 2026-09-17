@@ -95,7 +95,7 @@ export function CardGrid({ items, numbered = false, columns = 4, category }) {
   const List = numbered ? "ol" : "ul";
   return (
     <List className={styles.cards} data-columns={columns}>
-      {items.map(({ title, description, href, icon }, index) => (
+      {items.map(({ title, method, description, href, icon }, index) => (
         <li key={href} className={styles.cardItem}>
           <Link
             to={href}
@@ -106,6 +106,7 @@ export function CardGrid({ items, numbered = false, columns = 4, category }) {
               {numbered ? String(index + 1).padStart(2, "0") : <i className={icon} />}
             </span>
             <span className={styles.cardTitle}>{title}</span>
+            {method && <code className={styles.cardMethod}>{method}</code>}
             <span className={styles.cardDescription}>{description}</span>
             <i className={clsx("ri-arrow-right-line", styles.cardArrow)} aria-hidden="true" />
           </Link>

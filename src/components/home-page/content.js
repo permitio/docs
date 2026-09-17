@@ -35,6 +35,39 @@ export const homePaths = [
   },
 ];
 
+// Queries beyond a single allow/deny check. `method` is the SDK call as each
+// page names it.
+export const homeQueries = [
+  {
+    title: "Bulk check",
+    method: "bulkCheck()",
+    description: "Evaluate many user, action, and resource checks in a single call, for lists, tables, and dashboards.",
+    href: "/how-to/enforce-permissions/bulk-check",
+    icon: "ri-stack-line",
+  },
+  {
+    title: "Get user permissions",
+    method: "getUserPermissions()",
+    description: "Return everything a user can do across resources and tenants, including ABAC access, to drive your UI.",
+    href: "/how-to/enforce-permissions/user-permissions",
+    icon: "ri-user-settings-line",
+  },
+  {
+    title: "Get authorized users",
+    method: "authorized_users()",
+    description: "List the users who can perform an action on a resource, with the role assignments that grant it.",
+    href: "/how-to/enforce-permissions/authorized-users",
+    icon: "ri-team-line",
+  },
+  {
+    title: "Check in all tenants",
+    method: "checkInAllTenants()",
+    description: "Find every tenant where a user can perform an action, without one check per tenant.",
+    href: "/how-to/enforce-permissions/all-tenants-check",
+    icon: "ri-building-2-line",
+  },
+];
+
 // Package identifiers as the SDK pages install them.
 export const homeSdks = [
   { name: "Node.js", registry: "npm", pkg: "permitio", href: "/sdk/nodejs/quickstart-nodejs" },
