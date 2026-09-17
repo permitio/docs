@@ -1,101 +1,147 @@
 ---
 title: Security
 sidebar_label: Security
-description: The security properties of the HTTP Egress Proxy — SSRF protection, server-side credential isolation, response scrubbing, TLS modes, agent identity and drift protection, rate limiting, and audit — and the preconditions each one depends on.
+description: Understand the security properties of the HTTP Egress Proxy, including SSRF protection, credential isolation, response scrubbing, TLS modes, rate limiting, agent identity and drift protection, and audit, and the settings each property depends on.
 sidebar_position: 7
 ---
 
-# Security
-
-The egress proxy is a trust boundary for everything your agents send to the outside world. This page summarizes the protections it applies to that traffic — and, where a protection is conditional, the setting it depends on.
+This page is for security teams and operators who evaluate or run the HTTP Egress Proxy. The proxy is a trust boundary for the traffic AI agents send to external services. Each section describes one protection, its limits, and the setting it depends on.
 
 ## Deny by default
 
-No outbound request is allowed unless a [workflow rule](./egress-rules) explicitly permits it. A request that matches no rule in the token's workflow is denied. The cheap, fail-closed checks (authentication, SSRF on the literal target, deny-by-default) all run **before the proxy touches the destination** — no DNS lookup and no TCP connect to the target happen until a rule authorizes the request, so a blocked target is never connected to.
+The proxy denies every outbound request unless a [workflow rule](/permit-mcp-gateway/http-egress-proxy/egress-rules) permits it. A request that matches no rule in the token's workflow is denied.
+
+Authentication, the server-side request forgery (SSRF) check on the literal target, and the workflow match run before the proxy touches the destination. The proxy makes no DNS lookup and no TCP connection to the target until a rule authorizes the request, so the proxy never connects to a blocked target.
 
 ## SSRF protection
 
-Server-Side Request Forgery — tricking a server into calling internal addresses — is a top risk for any proxy that forwards on behalf of an agent. The proxy defends against it in two stages:
+In an SSRF attack, a caller tricks a server into sending requests to internal addresses. The proxy blocks SSRF in two stages:
 
-- **Before any DNS lookup**, internal IP literals (loopback, private/internal ranges, link-local and cloud-metadata addresses such as `169.254.169.254`, carrier-grade NAT — including obfuscated and legacy IP encodings) and known cluster-internal hostname suffixes (`.local`, `.internal`, `.cluster.local`, and similar) are rejected outright.
-- **After DNS resolution**, an ordinary hostname that resolves into a private, loopback, link-local, or metadata range is rejected before any connection — and **every** resolved address is re-checked and the validated address is **pinned** so the connection can't be re-pointed at an internal host between the check and the connect (a DNS-rebinding / time-of-check-to-time-of-use defense).
+1. **Before any DNS lookup**, the proxy rejects internal IP literals and known cluster-internal host name suffixes:
+   - Loopback, private, and internal ranges.
+   - Link-local and cloud metadata addresses, such as `169.254.169.254`.
+   - Carrier-grade NAT addresses.
+   - Obfuscated and legacy IP encodings of those addresses.
+   - Host name suffixes such as `.local`, `.internal`, and `.cluster.local`.
+2. **After DNS resolution**, the proxy rejects a host name that resolves to a private, loopback, link-local, or metadata address, before any connection. The proxy checks every resolved address and pins the validated address, so a DNS rebinding attack cannot redirect the connection to an internal host between the check and the connection.
 
-A single blocked address rejects the whole connection, and resolution only happens after a rule has authorized the dial.
+One blocked address rejects the whole connection. The proxy resolves the host name only after a rule authorizes the request.
 
 ## Credential isolation
 
-Upstream secrets are stored in the gateway, bound to specific host patterns, and injected into requests **server-side**, so the agent never holds them. They are also **write-only** — once stored they can't be read back through any interface, only overwritten or deleted. See [Credentials & Connections](./credentials).
+The gateway stores upstream secrets, binds each secret to specific host patterns, and injects secrets into requests on the server side, so the agent never holds them. Secrets are write-only: no interface returns a stored secret, and you can only overwrite or delete it. See [Credentials and connections](/permit-mcp-gateway/http-egress-proxy/credentials).
 
-:::warning Enable the vault before storing production secrets
-Encryption at rest is **not on by default**. When the gateway runs with the KMS vault enabled (`VAULT_ENABLED=true` plus an `AWS_KMS_KEY_ID`), credential records are encrypted at rest with AES-256-GCM envelope encryption. **Without the vault configured, credentials are written to the gateway's store in plaintext** — the gateway logs a loud warning but does not block it. Enable the vault before storing live upstream API keys. If you self-host, confirm this with whoever operates your gateway.
+:::warning Enable the KMS vault before storing production secrets
+Encryption at rest is off by default. Without the KMS vault, the gateway writes credentials to its store in plaintext. The gateway logs a warning but still stores the credential. With the vault enabled, the gateway encrypts credential records at rest with AES-256-GCM envelope encryption.
+
+To enable the vault, set `VAULT_ENABLED=true` and `AWS_KMS_KEY_ID` on the gateway. Enable the vault before you store live upstream API keys. If someone else operates your gateway, confirm the vault setting with them.
 :::
 
 ## Response scrubbing
 
-When the proxy injects a secret into a request, response scrubbing (**on by default, configurable per credential**) makes a **best-effort** pass to remove that secret from the upstream response — headers, trailers, and the streamed body, matching the raw value plus the encodings the proxy itself produces (standard and URL-safe base64, lowercase hex; percent-encoded forms only when the credential is injected as a **query** parameter). Two things to know:
+When the proxy injects a secret into a request, response scrubbing removes that secret from the upstream response. Scrubbing is on by default and configurable per credential. Scrubbing is best-effort.
 
-- It is a **literal byte match**. An upstream that reflects the value in a different form — re-cased, or JSON `\uXXXX`-escaped — can still return it.
-- If the upstream returns a **compressed or non-`chunked`** body while scrubbing is active, the response is withheld entirely rather than streamed unscrubbed. This fail-closed withholding only runs while scrubbing is on.
+The scrubber checks response headers, trailers, and the streamed body. It matches the raw secret and the encodings the proxy produces:
 
-Scrubbing can be turned off per credential (`--no-scrub-response`). With it off, an injected secret the upstream echoes is returned to the agent verbatim, and the fail-closed withholding no longer applies — so leave it on. See [Credentials → Response scrubbing](./credentials#response-scrubbing).
+- Standard base64 and URL-safe base64.
+- Lowercase hex.
+- Percent-encoding, only when the credential is injected as a query parameter.
+
+Scrubbing has these limits:
+
+- **Literal byte match.** The scrubber matches bytes. If the upstream reflects the secret in another form, such as different letter case or JSON `\uXXXX` escapes, the secret can reach the agent.
+- **Compressed or non-chunked bodies.** If the upstream returns a compressed or non-`chunked` body while scrubbing is on, the proxy withholds the whole response instead of streaming it unscrubbed.
+
+You can turn scrubbing off per credential with `--no-scrub-response`. With scrubbing off, the proxy returns any echoed secret to the agent, and it no longer withholds responses it cannot scrub. Keep scrubbing on. See [Response scrubbing for credentials](/permit-mcp-gateway/http-egress-proxy/credentials#response-scrubbing).
 
 ## TLS modes
 
-`CONNECT` (HTTPS) tunnels are handled in one of two modes, decided by the **tunnel rule** — the `all`-method, path-less rule that authorizes the HTTPS connection (see [Workflows & Rules](./egress-rules#https-needs-a-tunnel-rule)):
+The proxy handles each HTTPS `CONNECT` tunnel in one of two modes. The domain's tunnel rule, the rule with method class `all` and no path, sets the mode. See [HTTPS needs a tunnel rule](/permit-mcp-gateway/http-egress-proxy/egress-rules#https-needs-a-tunnel-rule).
 
 | Mode | Behavior |
 | --- | --- |
-| **`passthrough`** (default) | The encrypted tunnel is forwarded opaquely. Authentication and the domain/tunnel-rule authorization apply, but the proxy does not see the path or body and cannot inject credentials or scrub responses inside the tunnel. |
-| **`intercept`** | The proxy terminates TLS with your host's own certificate authority and re-applies the full check set — path- and method-level rules, authorization, credential injection, and response scrubbing — to every decrypted request. |
+| **`passthrough`** (default) | The proxy forwards the encrypted tunnel without reading it. Authentication and tunnel rule authorization apply. The proxy cannot see the path or body, inject credentials, or scrub responses inside the tunnel. |
+| **`intercept`** | The proxy terminates TLS with your host's certificate authority and runs every check on each decrypted request: path and method rules, authorization, credential injection, and response scrubbing. |
 
-Because only the tunnel rule is consulted at set-up, TLS mode is effectively **per domain** for HTTPS. You set it in the [dashboard](https://app.agent.security) workflow editor; see [HTTPS interception](./connecting-agents#https-interception). In intercept mode the rule set is captured when a tunnel opens, so a rule change takes effect on the **next** connection.
+The proxy reads only the tunnel rule when a tunnel opens, so for HTTPS the TLS mode is set per domain. Set the mode in the [dashboard](https://app.agent.security) workflow editor. See [HTTPS interception](/permit-mcp-gateway/http-egress-proxy/connecting-agents#https-interception).
 
-**Revocation and open tunnels:** revocation is re-evaluated on each new request the gateway inspects. Traffic already flowing inside an established `passthrough` tunnel is opaque and is **not** re-checked — it continues until the client closes it or the idle timeout fires. If you need revocation (or a policy change) to interrupt an in-progress HTTPS connection, use `intercept`. See [Revocation](./authorization#revocation).
+In intercept mode, the proxy captures the rule set when a tunnel opens. A rule change applies to the next connection.
+
+### Revocation and open tunnels
+
+The proxy checks revocation on each new request it inspects. Traffic inside an established `passthrough` tunnel is opaque, so the proxy does not re-check it. The traffic continues until the client closes the tunnel or the idle timeout ends it. If revocation or a policy change must stop an in-progress HTTPS connection, use `intercept` mode. See [Revocation](/permit-mcp-gateway/http-egress-proxy/authorization#revocation).
 
 ## Rate limiting and DoS bounds
 
-The proxy meters every request that reaches a matching workflow rule against per-agent budgets — per **host** (600 requests / 60s by default) and per **registrable domain** (1200 / 60s) — and sheds excess with a `429` and a `Retry-After`. These budgets run before the policy and approval checks, so a flood is rejected cheaply. Additional bounds — token-size caps, slow-client timeouts, and a ceiling on concurrent connections — protect the proxy itself.
+The proxy counts every request that matches a workflow rule against two per-agent budgets in a fixed time window. When an agent exceeds a budget, the proxy returns `429` with a `Retry-After` header. The budgets run before the Permit policy and approval checks, so the proxy rejects a flood of requests before doing policy work.
 
-Note that if the counter store is unreachable the limiter **fails open** (requests are allowed), so treat rate limiting as availability protection rather than a hard security boundary.
+| Budget | Gateway default | Gateway setting |
+| --- | --- | --- |
+| Requests per agent and destination host | 600 per window | `PROXY_RATE_LIMIT_PER_HOST` |
+| Requests per agent and registrable domain (for example `example.com` for `api.example.com`) | 1200 per window | `PROXY_RATE_LIMIT_PER_ETLD` |
+| Window length | 60 seconds | `PROXY_RATE_LIMIT_WINDOW_SECS` |
+
+These values are gateway defaults. A gateway operator can change them, and setting a budget to `0` turns that budget off.
+
+Other limits protect the proxy itself: token size caps, timeouts for slow clients, and a cap on concurrent connections.
+
+:::warning Rate limiting fails open
+If the rate limiter's counter store is unreachable, the proxy allows requests without counting them. Treat rate limiting as availability protection, not as a security boundary.
+:::
 
 ## Agent identity and drift protection
 
-*(Opt-in — [contact us](mailto:support@permit.io) to enable it for your account.)*
+Agent identity is opt-in. [Email Permit support](mailto:support@permit.io) to enable it for your account.
 
-A host can additionally require every agent session to **register its intent**: before its first governed request, the agent declares what it is working on, in exactly twelve distinct words, with [`asg proxy register-session`](./cli). The gateway builds a behavioral baseline from those declarations, and a sharp change in an agent's declared intent — the signature of a hijacked or steered agent — **blocks the session**: registrations and governed requests are denied until a human re-approves the agent.
+A host with agent identity enabled requires every agent session to register its intent. Before its first governed request, the agent declares its task in exactly twelve distinct words with [`asg proxy register-session`](/permit-mcp-gateway/http-egress-proxy/cli#the-asg-proxy-command-tree). The gateway builds a behavioral baseline from these declarations.
 
-**Recovery is user-driven.** The block response the agent receives carries a **re-approval link** to your gateway's own consent screen (`/reconsent-agent`). The agent is instructed to show that link to the person running it — never to open it itself. That person signs in (a recent sign-in, within the last day, is required), reviews **what the agent last declared it was doing**, and decides:
+A sharp change in an agent's declared intent can mean an attacker hijacked or steered the agent. When the gateway detects such a change, it blocks the session. The gateway denies the agent's registrations and governed requests until a person re-approves the agent.
 
-- **Re-approve** — the block lifts, and the agent's next registration starts a clean baseline.
-- **Keep blocked** — nothing changes; the agent stays denied.
+### Recover a drift-blocked agent
 
-Only the account that originally authorized the agent can unblock it — a link forwarded to anyone else shows an error instead of the review screen. Completing a fresh consent flow ([`asg proxy authorize`](./authorization#human-consent)) clears the block the same way. An operator can always clear a block with `asg proxy identity reconsent` — and for automated agents running under an operator-minted token (no human delegation), that is the only recovery path. Re-approvals — by the user or by an operator — are recorded in the [audit trail](#audit-trail), including who cleared the block.
+The person who runs the agent recovers it:
 
-:::tip Review before you re-approve
-The review screen shows the agent's own declared intent — the words that tripped the block. If they don't match what you asked the agent to do, keep it blocked and investigate: a drift block is often the first visible sign of prompt injection.
+1. The block response the agent receives includes a re-approval link to your gateway's consent screen (`/reconsent-agent`). The agent shows the link to the person running it. The agent does not open the link.
+2. The person opens the link and signs in.
+3. The review screen shows what the agent last declared it was doing. The person chooses one of two actions:
+   - **Re-approve agent.** The block lifts, and the agent's next registration starts a new baseline.
+   - **Keep blocked.** Nothing changes, and the agent stays denied.
+
+Only the account that authorized the agent can unblock it. Anyone else who opens the link sees an error instead of the review screen.
+
+Other ways to clear a block:
+
+- A new consent flow with [`asg proxy authorize`](/permit-mcp-gateway/http-egress-proxy/authorization#human-consent) clears the block.
+- An operator can clear a block with `asg proxy identity reconsent`. For an automated agent that runs with an operator-minted token and no person delegating access, the operator command is the only way to clear the block.
+
+The [audit trail](#audit-trail) records each re-approval, including who cleared the block.
+
+:::tip Review the declared intent before you re-approve
+The review screen shows the words that triggered the block. If they do not match the task you gave the agent, keep the agent blocked and investigate. A drift block is often the first visible sign of prompt injection.
 :::
 
-[`asg proxy doctor`](./connecting-agents#diagnose-with-doctor) reports a drift-blocked session as a failing check, with the same re-approval link. For the background on agent identity and drift detection, see [Agent Verification](/permit-mcp-gateway/advanced-features#agent-verification).
+[`asg proxy doctor`](/permit-mcp-gateway/http-egress-proxy/connecting-agents#diagnose-with-doctor) reports a drift-blocked session as a failed check and shows the re-approval link. For background on agent identity and drift detection, see [Agent verification](/permit-mcp-gateway/advanced-features#agent-verification).
 
 ## Audit trail
 
-Proxy decisions are logged on a **best-effort, fire-and-forget** path — the agent, the target host and path, the matched rule, and the allow/deny outcome — and appear alongside your MCP audit data (and in **CLIs / APIs → Activity** in the dashboard); see [Audit Logs](/permit-mcp-gateway/audit-logs). Two caveats to set expectations:
+The proxy logs each decision on a best-effort, fire-and-forget path. Each record includes the agent, the target host and path, the matched rule, and the allow or deny outcome. Proxy records appear with your MCP audit data and in **CLIs / APIs → Activity** in the dashboard. See [Audit logs](/permit-mcp-gateway/audit-logs).
 
-- The record identifies the **agent** (its client id), not the human who authorized it. To attribute a call to a person, correlate the agent's client id against the consent grants.
-- Authentication failures are recorded as **metrics only** (they can't be attributed to a tenant before the token is verified), and events may be shed if the ingestion sink falls behind — so don't treat the proxy audit log as a guaranteed-complete compliance record.
+The proxy audit log has these limits:
+
+- **Agent, not person.** A record identifies the agent by its client ID, not the person who authorized it. To attribute a call to a person, match the agent's client ID against the consent grants.
+- **Authentication failures are metrics only.** The proxy cannot attribute a request to a tenant before it verifies the token, so authentication failures are counted as metrics and not logged per tenant.
+- **Events can be dropped.** If the audit ingestion falls behind, the proxy can drop events. Do not use the proxy audit log as a guaranteed-complete compliance record.
 
 ## What the proxy does and doesn't do
 
-The proxy governs the traffic that is **routed through it**. To make that governance effective:
+The proxy governs only the traffic that goes through it. To make the proxy's controls effective:
 
-- **Route all of an agent's egress through the proxy.** An agent configured to bypass the `HTTP_PROXY` settings, or one that dials raw IPs directly, isn't governed. In production, pair the proxy with network controls that prevent agents from reaching the internet except through it.
-- **Use `intercept` mode where you need body- and path-level control over HTTPS.** In `passthrough` mode, HTTPS is governed at the domain level only — no path/method rules, no injection, no scrubbing, and no in-flight revocation inside an open tunnel.
-- **Enable the KMS vault before storing production credentials** (see [Credential isolation](#credential-isolation)).
+- **Send all of an agent's egress through the proxy.** The proxy does not govern an agent that ignores the `HTTP_PROXY` settings or connects to IP addresses directly. In production, add network controls that block agents from reaching the internet except through the proxy.
+- **Use `intercept` mode where you need path-level and body-level control over HTTPS.** In `passthrough` mode, the proxy governs HTTPS at the domain level only. Path and method rules, credential injection, response scrubbing, and revocation inside an open tunnel do not apply.
+- **Enable the KMS vault before storing production credentials.** See [Credential isolation](#credential-isolation).
 
----
+## Next steps \{#whats-next}
 
-## What's next
-
-- [**Workflows & Rules**](./egress-rules) — the allow-list these protections enforce.
-- [**Authorization & Trust**](./authorization) — the policy and consent gates.
-- [**Connecting Agents**](./connecting-agents) — routing traffic and TLS trust setup.
+- [Workflows and rules](/permit-mcp-gateway/http-egress-proxy/egress-rules): the allow-list these protections enforce.
+- [Authorization and trust](/permit-mcp-gateway/http-egress-proxy/authorization): the policy and consent gates.
+- [Connecting agents](/permit-mcp-gateway/http-egress-proxy/connecting-agents): routing traffic and TLS trust setup.

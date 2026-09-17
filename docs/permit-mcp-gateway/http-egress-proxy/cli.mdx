@@ -1,23 +1,24 @@
 ---
 title: The asg CLI
 sidebar_label: asg CLI
-description: Install and use the asg command-line tool — the operator's front door for enabling the HTTP Egress Proxy, managing credentials, minting agent tokens, and wiring agents into the proxy.
+description: Reference for the asg command-line tool, which operators use to enable the HTTP Egress Proxy, manage credentials, mint agent tokens, and diagnose setup, and which people use to launch agents through the proxy.
 sidebar_position: 2
 ---
 
-# The `asg` CLI
+`asg` is the command-line tool for the Permit MCP Gateway and its HTTP Egress Proxy. This reference covers installation, configuration, output and exit codes, the `asg run` agent launcher, and the `asg proxy` commands.
 
-`asg` is the command-line tool for managing the Permit MCP Gateway, including the HTTP Egress Proxy control plane. Most of what you can do in the **CLIs / APIs** section of the [dashboard](https://app.agent.security) — enable the proxy, manage credentials, mint tokens, run diagnostics — you can also do with `asg`, scripted and CI-friendly.
+`asg` serves two readers:
 
-The CLI is the operator and automation surface. End users who simply delegate access to an agent normally do that through the browser consent flow, not the CLI.
+- **Operators and CI pipelines** manage the proxy control plane with an admin token. Most actions in the **CLIs / APIs** section of the [dashboard](https://app.agent.security) have an `asg proxy` command: enable the proxy, manage credentials, mint tokens, and run diagnostics.
+- **People launching an agent** use `asg init` and `asg run` to start an agent session through the proxy. These commands need no admin token. Consent happens in the browser.
 
-:::note Workflows are authored in the dashboard
-Egress policy lives in **API workflows** (a set of allowed domains and rules). Today you create and edit workflows in the [dashboard](https://app.agent.security) under **CLIs / APIs → Workflows** — there is no CLI command for authoring them yet. The CLI handles everything around them: enabling the proxy, storing credentials, minting workflow-bound tokens, and connecting agents.
+:::note Create API workflows in the dashboard
+Egress policy lives in API workflows, which are sets of allowed domains and rules. The `asg` CLI has no command to create or edit workflows. Create and edit them in the [dashboard](https://app.agent.security) under **CLIs / APIs → Workflows**. The CLI works with existing workflows: it mints workflow-bound tokens, runs the consent flow, and launches agents bound to a workflow.
 :::
 
 ## Install
 
-The published package is `@permitio/agent-security-cli`. The quickest way to use it is without installing — run it on demand with your package runner:
+The published npm package is `@permitio/agent-security-cli`. To run it without installing, use your package runner:
 
 ```bash
 # With Bun (recommended)
@@ -27,7 +28,7 @@ bunx @permitio/agent-security-cli --help
 npx -y @permitio/agent-security-cli --help
 ```
 
-To install it globally and get the `asg` command on your `PATH`:
+To install it globally and add the `asg` command to your `PATH`:
 
 ```bash
 # With Bun
@@ -37,7 +38,7 @@ bun install -g @permitio/agent-security-cli
 npm install -g @permitio/agent-security-cli
 ```
 
-Verify the install:
+Verify the installation. Both commands print their subcommands and options:
 
 ```bash
 asg --help
@@ -46,9 +47,11 @@ asg proxy --help
 
 ## Configure
 
-`asg` resolves settings in priority order: environment variables, then a config file at `~/.agent-security/`, then built-in defaults.
+`asg` reads settings in this order of priority: environment variables, then the config files in `~/.agent-security/`, then built-in defaults.
 
-The admin token is issued by your **gateway operator** (it's the gateway deployment's admin secret); the CLI never mints one. If you're a tenant developer, ask your platform administrator for it. Save it to a file, then:
+Control-plane commands need an admin token. The gateway operator issues the admin token: it is the gateway deployment's admin secret, and the CLI cannot mint one. If you are a tenant developer, ask your platform administrator for the token.
+
+Save the admin token to a file, then point `asg` at your gateway and store the token:
 
 ```bash
 # Point at your gateway and store an admin token (saved with restrictive permissions).
@@ -59,72 +62,153 @@ asg login --token-file ./admin-token   # reads the token from a file, not a proc
 asg whoami
 ```
 
-You can also supply settings through environment variables, which is the preferred approach in CI:
+`asg whoami` confirms that the gateway accepts the token.
+
+In CI, set these environment variables instead of using config files:
 
 | Variable | Purpose |
 | --- | --- |
-| `AGENT_SECURITY_API_KEY` | Admin token used to authenticate control-plane commands. |
+| `AGENT_SECURITY_API_KEY` | Admin token for control-plane commands. |
 | `AGENT_SECURITY_GATEWAY_URL` | Your gateway's admin URL. |
 | `AGENT_SECURITY_SUBDOMAIN` | Default host subdomain, so you can omit it from each command. |
-| `AGENT_SECURITY_CONSENT_URL` | Consent origin used by `asg proxy authorize` (usually auto-derived). |
-| `AGENT_SECURITY_PROXY_TOKEN_FILE` | Path to the agent's proxy token file (set by `asg proxy env`). |
+| `AGENT_SECURITY_CONSENT_URL` | Consent origin used by `asg proxy authorize`. The CLI usually derives the value automatically. |
+| `AGENT_SECURITY_PROXY_TOKEN_FILE` | Path to the agent's proxy token file. `asg proxy env` sets the variable. |
 
-:::warning Treat the admin token as a high-value secret
-Prefer the interactive prompt, `AGENT_SECURITY_API_KEY`, or the `--token-file` form over passing the token as a `--token` flag — command-line flags are visible to other users on the machine via the process list. The secret-bearing flags on the proxy and login commands (`--token`, `--secret`, `--client-secret`) each have a companion `--<flag>-file` that reads the value from a file instead. The CLI scrubs secret-shaped strings from its own output, but the process list is outside its control.
+:::warning Keep the admin token out of command-line flags
+Anyone with the admin token can change the gateway configuration for your hosts. Other users on the same machine can read command-line flags from the process list, so a `--token` flag exposes the token. Use the interactive prompt, `AGENT_SECURITY_API_KEY`, or `--token-file` instead. Each secret-bearing flag (`--token`, `--secret`, `--client-secret`) has a companion `--<flag>-file` option that reads the value from a file. The CLI scrubs secret-shaped strings from its error output, but it cannot hide values in the process list.
 :::
 
 ## Output and exit codes
 
-Every command supports machine-readable output so agents and CI can drive it deterministically:
+Every command supports machine-readable output, so agents and CI can parse results:
 
 ```bash
 asg proxy doctor acme --json --quiet
 ```
 
-- `--json` emits structured JSON to stdout.
-- `--quiet` drops decorative output (spinners, hints).
-- `--yes` accepts confirmation prompts non-interactively.
+| Flag | Effect |
+| --- | --- |
+| `--json` | Writes structured JSON to stdout. |
+| `--quiet` | Removes decorative output such as spinners and hints. With `--json`, prints the same JSON object on one line. |
+| `--yes` | Accepts confirmation prompts without asking. |
 
-Exit codes are stable:
+Exit codes:
 
 | Code | Meaning |
 | --- | --- |
-| `0` | Success |
-| `1` | User error — bad input, missing token, cancelled prompt, or a human-denied approval |
-| `2` | Server error — gateway unreachable, 5xx, or network failure |
+| `0` | Success. |
+| `1` | User error: bad input, missing token, cancelled prompt, or a denied or timed-out approval or consent. |
+| `2` | Server error: gateway unreachable, 5xx response, or network failure. |
+| `3` | `asg init` only: the configuration was saved, but one or more preflight reachability checks warned. |
 
-## The `asg proxy` command tree
+## Launch an agent with asg run
+
+`asg run` starts an agent as a child process with the proxy environment and a workflow-bound token already set. The agent's traffic goes through the proxy without any token handling in the agent's code. `asg run` needs no admin token.
+
+Before you start, an operator must enable proxy mode for the host and create at least one API workflow.
+
+### 1. Bootstrap the machine with asg init
+
+Run `asg init` once per machine. Pass the tenant's full host name:
+
+```bash
+asg init --host acme-corp.example.com
+```
+
+`asg init` fetches the gateway URL, the consent URL, and the host's interception certificate authority (CA) from the gateway's public endpoints. It saves them under `~/.asg/`, which is separate from the operator configuration in `~/.agent-security/`. It then runs preflight reachability checks and prints a next step for any check that warns.
+
+### 2. Launch the agent
+
+Pass the workflow slug and the command to run after `--`:
+
+```bash
+asg run --workflow ship_pr -- pytest -k smoke
+```
+
+To launch Claude Code or the Cursor agent CLI with an adapter, use `--client` instead of a command:
+
+```bash
+asg run --workflow ship_pr --client claude
+```
+
+`asg run` performs these steps in order:
+
+1. **Consent.** Opens a browser for you to sign in and approve access for the workflow. If you omit `--workflow`, the consent screen shows a workflow picker. Every launch is a separate agent identity, so every launch asks for consent.
+2. **Environment.** Builds the proxy environment from the workflow-bound token. The token is embedded in the proxy URL, so HTTP clients that cannot send a `Proxy-Authorization` header still authenticate.
+3. **Canary.** Sends one request through the proxy. If the proxy rejects the token, `asg run` stops and reports the error before the agent starts.
+4. **Launch.** Starts the command as a child process with the environment added.
+
+When the canary passes, `asg run` prints a success message with the HTTP status and starts the command.
+
+The environment applies only to the child process and its descendants. After the agent exits, `HTTP_PROXY` is not set in your shell.
+
+`asg run` sets these environment variables for the child process:
+
+| Variable | Value |
+| --- | --- |
+| `HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy`, `https_proxy` | The proxy URL with the token embedded. |
+| `NO_PROXY`, `no_proxy` | `localhost,127.0.0.1,.internal` |
+| `NODE_USE_ENV_PROXY` | `1`, so Node.js versions that support proxy environment variables use them. |
+| `AGENT_SECURITY_PROXY_TOKEN_FILE` | Path to the token file, for `asg proxy register-session` and `asg proxy doctor` inside the session. |
+| `NODE_EXTRA_CA_CERTS`, `DENO_CERT`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`, `AWS_CA_BUNDLE` | Paths to the interception CA files. Set only when the workflow uses intercept mode. |
+
+### asg run options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `--workflow <slug>` | None | API workflow to bind the token to. Omit it to pick a workflow on the consent screen. |
+| `--client generic\|claude\|cursor` | `generic` | `generic` runs the command after `--`. `claude` launches Claude Code. `cursor` launches `cursor agent`. The adapters add a system prompt snippet or rule. The proxy environment enforces the workflow in every case. |
+| `--host <subdomain>` | Subdomain saved by `asg init`, or `AGENT_SECURITY_SUBDOMAIN` | Host to launch against. |
+| `--no-browser` | Opens a browser | Prints the consent URL instead of opening it. Use it over SSH or on headless machines. |
+| `--name <label>` | `asg-cli` | Readable prefix for the agent ID, for example `triage`. Lowercase letters, digits, and hyphens, up to 32 characters. Each launch is still a separate agent. |
+| `--timeout <seconds>` | `300` | Time to wait for browser approval. |
+| `--no-tunnel` | Tunnel on | Connects to the proxy listener directly instead of through the gateway's WebSocket tunnel. Works only inside the gateway's cluster. |
+
+Run `asg run --help` for the full option list.
+
+## The asg proxy command tree
+
+Control-plane commands in this table need the admin token, except `asg proxy authorize` (browser consent) and `asg proxy register-session` (proxy token).
 
 | Command | What it does |
 | --- | --- |
-| `asg proxy config <host> --enable\|--disable` | Turn proxy mode on or off for a host. |
-| `asg proxy credentials list\|create\|update\|delete` | Manage stored upstream secrets (write-only). See [Credentials](./credentials). |
-| `asg proxy connect <provider> <host> --key <credential-key> --client-id <id>` | Connect an OAuth provider (`github_app`, `notion`, `google`, `atlassian`) and store the resulting credential. |
-| `asg proxy token create <host> --client-id <id> --workflow <slug>` | Mint a short-lived, workflow-bound proxy access token (`--out <file>` writes it securely). |
-| `asg proxy authorize <agent-client-id> --workflow <slug>` | Run the browser consent flow so a human can delegate access to an agent for a workflow, within a trust ceiling. |
-| `asg proxy env <host>` | Print the `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` environment for the current shell. |
-| `asg proxy container-config <host>` | Emit Docker, Docker Compose, Kubernetes ConfigMap, or shell bootstrap config. |
-| `asg proxy ca status\|download\|rotate\|trust-shell` | Manage the per-host TLS-interception certificate authority. See [Connecting Agents](./connecting-agents#https-interception). |
-| `asg proxy doctor <host>` | Diagnose proxy setup end to end. |
+| `asg proxy config <host> --enable\|--disable` | Turns proxy mode on or off for a host. |
+| `asg proxy credentials list\|create\|update\|delete` | Manages stored upstream secrets. Secrets are write-only. See [Credentials and connections](/permit-mcp-gateway/http-egress-proxy/credentials). |
+| `asg proxy connect <provider> <host> --key <credential-key> --client-id <id>` | Connects an OAuth provider (`github_app`, `notion`, `google`, `atlassian`) and stores the resulting credential. |
+| `asg proxy token create <host> --client-id <id> --workflow <slug>` | Mints a short-lived, workflow-bound proxy access token. `--out <file>` writes the token to a file with restrictive permissions. |
+| `asg proxy authorize <agent-client-id> --workflow <slug>` | Runs the browser consent flow so a person can delegate access to an agent for a workflow, within a trust ceiling. See [Human consent](/permit-mcp-gateway/http-egress-proxy/authorization#human-consent). |
+| `asg proxy env <host>` | Prints `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, and `AGENT_SECURITY_PROXY_TOKEN_FILE` exports for the current shell. |
+| `asg proxy container-config <host>` | Writes Docker, Docker Compose, Kubernetes ConfigMap, or shell bootstrap configuration. |
+| `asg proxy ca status\|download\|rotate\|trust-shell` | Manages the host's TLS interception CA. See [HTTPS interception](/permit-mcp-gateway/http-egress-proxy/connecting-agents#https-interception). |
+| `asg proxy doctor <host>` | Diagnoses proxy setup end to end. See [Diagnose with doctor](/permit-mcp-gateway/http-egress-proxy/connecting-agents#diagnose-with-doctor). |
+| `asg proxy preset list` | Lists the built-in preset catalog. |
+| `asg proxy register-session` | Run by the agent. Declares the agent session's intent when the host requires agent identity. Needs a proxy token, not the admin token. |
+| `asg proxy identity status\|config` | Shows an agent's identity state, or sets the host's agent identity settings. |
+| `asg proxy identity reconsent --client-id <id>` | Operator override that clears an agent's drift block. |
+| `asg proxy guardian enable\|disable\|status` | Turns the intent guardian on or off for a host, or shows its state. Enabling the guardian requires agent identity on the host. |
 
-Run `asg proxy <command> --help` for the full flag list of any command. `asg proxy --help` also lists preset packs (`asg proxy preset list` browses the built-in catalog) and two opt-in capabilities. **Agent identity registration** has agents declare their session intent with `asg proxy register-session`; a drift-blocked session is recovered by the agent's own user through a browser re-approval link — see [Security → Agent identity and drift protection](./security#agent-identity-and-drift-protection). The **intent guardian** judges each request against an operator-declared task description. [Contact us](mailto:support@permit.io) to enable the opt-in capabilities for your account.
+Run `asg proxy <command> --help` for the full flag list of any command.
+
+Agent identity and the intent guardian are opt-in capabilities. [Email Permit support](mailto:support@permit.io) to enable them for your account. See [Agent identity and drift protection](/permit-mcp-gateway/http-egress-proxy/security#agent-identity-and-drift-protection).
 
 ## Passing the host subdomain
 
-Most commands take the host subdomain as a positional argument (e.g. `asg proxy config acme`). If you've set a default with `asg config set subdomain acme` (or `AGENT_SECURITY_SUBDOMAIN`), you can omit it. Commands that already take another positional keep the host as the **second positional** (e.g. `asg proxy credentials create stripe acme`). `asg proxy authorize` is the exception: it takes the agent's client id positionally and the host as `--subdomain`.
+Most commands take the host subdomain as a positional argument, for example `asg proxy config acme`. If you set a default with `asg config set subdomain acme` or `AGENT_SECURITY_SUBDOMAIN`, you can omit the subdomain.
+
+Commands that take another positional argument put the host subdomain second, for example `asg proxy credentials create stripe acme`. `asg proxy authorize` is an exception: it takes the agent's client ID as the positional argument and the host as `--subdomain`.
 
 ## Shell completions
 
-Enable tab-completion for your shell:
+To turn on tab completion, add the completion script to your shell profile:
 
 ```bash
 asg completion --shell zsh >> ~/.zshrc    # or: --shell bash >> ~/.bashrc
 ```
 
----
+Open a new shell, then type `asg ` and press Tab to see the available commands.
 
-## What's next
+## Next steps \{#whats-next}
 
-- [**Workflows & Rules**](./egress-rules) — the egress policy model in depth.
-- [**Credentials & Connections**](./credentials) — static secrets, OAuth connections, and request signing.
-- [**Connecting Agents**](./connecting-agents) — `asg proxy env`, `container-config`, and `doctor` in context.
+- [Workflows and rules](/permit-mcp-gateway/http-egress-proxy/egress-rules): the egress policy model.
+- [Credentials and connections](/permit-mcp-gateway/http-egress-proxy/credentials): static secrets, OAuth connections, and request signing.
+- [Connecting agents](/permit-mcp-gateway/http-egress-proxy/connecting-agents): `asg proxy env`, `asg proxy container-config`, and `asg proxy doctor` in context.
