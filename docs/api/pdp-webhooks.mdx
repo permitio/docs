@@ -1,21 +1,30 @@
 ---
 sidebar_position: 6
 title: PDP Sync Error Webhooks
-description: "Define a webhook so Permit notifies you when a PDP reports a data synchronization error."
+description: "Create a webhook so Permit.io sends a POST request to your endpoint when an online PDP cannot sync policy data."
 sidebar_label: Sync Error Webhooks
 ---
 
-# PDP Sync Error Webhooks
+Create a PDP sync error webhook so Permit.io notifies your system when a policy decision point (PDP) is online but cannot sync its policy data. This page is for operators who run PDPs and want an alert, for example in their own monitoring or paging tool, when a PDP falls out of sync.
 
-Permit.io PDPs report their state to the API, so when data synchronization doesn't work, the system can automatically retry. If it doesn't work after several retries, Permit's support team will be notified automatically so they can look into the issue. If you want to be notified too, you can define a webhook to make Permit notify you when that happens.
+## How sync error notifications work
 
-Note that the system will only trigger the notification flow if a PDP reports it's online, but cannot sync. If a PDP is offline, no report will be made.
+1. Each PDP reports its state to Permit.
+2. When a PDP reports that it is online but cannot sync, Permit retries the sync.
+3. If the sync still fails after several retries, Permit sends a POST request to the URL of the `pdp_sync_error` webhook you defined for the environment.
 
-First, make sure your PDP is of at least version 0.2.24. This feature won't work with older PDPs.
+Permit triggers the webhook only for a PDP that reports it is online. A PDP that is offline sends no report, so an offline PDP does not trigger the webhook. To find PDPs that stopped reporting, use the [PDP statistics API](/api/pdp-statistics).
 
-To define a webhook, POST to
-https://api.permit.io/v2/projects/{project}/envs/{environment}/webhooks
-as follows:
+## Prerequisites
+
+- An environment API key. See [Get your API key](/overview/get-api-key).
+- The keys or IDs of the project and environment your PDPs connect to. See [Get the project and environment](/api/examples/get-project-and-env).
+- An endpoint that is reachable from the internet and accepts POST requests with a JSON body.
+
+## Create the webhook \{#create-the-webhook}
+
+Send a POST request to `https://api.permit.io/v2/projects/{project}/envs/{environment}/webhooks` with `type` set to `pdp_sync_error` and `url` set to your endpoint. `{project}` and `{environment}` accept either keys or IDs. Replace `API_SECRET_KEY` with your API key.
+
 ```bash
 curl \
 	-H 'Authorization: Bearer API_SECRET_KEY' \
@@ -24,9 +33,15 @@ curl \
 	'https://api.permit.io/v2/projects/{project_id}/envs/{env_id}/webooks'
 ```
 
-As with other APIs, the project and environment can be either IDs or keys.
 
-On a sync error, Permit will trigger a POST request to your defined URL, with a payload that looks like this:
+## Verify the webhook
+
+Send a GET request with the same API key to `https://api.permit.io/v2/projects/{project}/envs/{environment}/webhooks`. The API returns HTTP 200. Confirm that the response includes your webhook URL.
+
+## Webhook payload
+
+On a sync error, Permit sends a POST request to your URL with the IDs of the organization, project, environment, and the PDPs that failed to sync:
+
 ```json
 {
     "org_id": "a40c5d1f-d889-43e9-94ea-b9b33585fc6b",
@@ -36,9 +51,17 @@ On a sync error, Permit will trigger a POST request to your defined URL, with a 
 }
 ```
 
-## Example receiver
+| Field | Description |
+| --- | --- |
+| `org_id` | ID of the organization (workspace) |
+| `project_id` | ID of the project |
+| `env_id` | ID of the environment |
+| `pdp_ids` | IDs of the PDPs that could not sync. Look them up with the [PDP statistics API](/api/pdp-statistics). |
 
-Here's an example receiver for the webhook:
+## Example webhook receiver \{#example-receiver}
+
+This FastAPI app receives the webhook at the `/webhook` path and prints the payload. Replace the `print` call with your alerting logic.
+
 ```python
 from uuid import UUID
 
@@ -60,4 +83,8 @@ def post_webhook(webhook_data: PDPErrorWebhook):
     print(f"Got webhook with {webhook_data}")
 ```
 
-The full reference for the webhooks API is available at [https://api.permit.io/v2/redoc#tag/Webhooks](https://api.permit.io/v2/redoc#tag/Webhooks).
+## Related pages
+
+- [PDP statistics API](/api/pdp-statistics): check PDP uptime and find lost update messages
+- [Run the PDP](/overview/run-pdp)
+- [Cloud API reference](/api/api-reference)

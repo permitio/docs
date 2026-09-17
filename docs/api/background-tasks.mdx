@@ -1,15 +1,27 @@
 ---
 sidebar_position: 6
 title: Background APIs
-description: "Understand APIs that run in the background"
+description: "Start a long-running Permit API operation as a background task, then poll or wait for its result with the task ID."
 ---
 
-# Background APIs
+Some Permit.io API operations take too long to finish within one HTTP request, so they run as background tasks. This page is for developers who call these endpoints: it shows how to start a background task, get its result, wait for it to finish, and handle a failed task. The examples use the Copy Environment endpoint.
 
-Some APIs in Permit run in the background and can be triggered without awaiting a response.
-These APIs are commonly used for operations that require scheduling, are not time-sensitive, or may take significant time to complete.
+## Background task endpoints
 
-Let's look at the Copy Environment API to explain how background APIs should be used - 
+| Operation | Start the task | Get the task result |
+| --- | --- | --- |
+| Copy an environment | `POST /v2/projects/{proj_id}/envs/{env_id}/copy/async` | `GET /v2/projects/{proj_id}/envs/{env_id}/copy/async/{task_id}/result` |
+
+For the request body of each endpoint, see the [Environments section of the API reference](https://api.permit.io/v2/redoc#tag/Environments).
+
+## Prerequisites
+
+- An API key with write access to the project that contains the environment. See [Get your API key](/api/api-with-cli#get-your-api-key).
+- The keys or IDs of the project and the source environment. See [Get the project and environment](/api/examples/get-project-and-env).
+
+## Start a background task \{#start-a-background-task}
+
+Send the request to the `/async` endpoint. This example copies the `staging` environment of the `default` project into a new environment with the key `prod`. Replace `API_SECRET_KEY` with your API key.
 
 ```bash
 curl --location 'https://api.permit.io/v2/projects/default/envs/staging/copy/async' \
@@ -24,9 +36,8 @@ curl --location 'https://api.permit.io/v2/projects/default/envs/staging/copy/asy
 }'
 # Response: 202 Accepted
 ```
-When triggering `Copy Environment`, the API will return a `202 Accepted` response, indicating that the job has been accepted and is being processed in the background.
 
-The response contains information about the task, including the `task_id`, which can be used to check its status.
+The API returns `202 Accepted`, which means Permit accepted the task and is running it in the background. The response body holds the task status and a `task_id`:
 
 ```json
 {
@@ -37,12 +48,16 @@ The response contains information about the task, including the `task_id`, which
 }
 ```
 
-After some time, you can check the status of the task using the `task_id`.
+## Get the task result \{#get-the-task-result}
+
+Call the result endpoint with the `task_id` from the start response:
 
 ```bash
 curl --location 'https://api.permit.io/v2/projects/default/envs/staging/copy/async/{task_id}/result' \
   -H 'authorization: Bearer API_SECRET_KEY'
 ```
+
+While the task runs, `status` is `processing`. When the task finishes, `status` is `success` and `result` holds the created object. For Copy Environment, `result` is the new environment:
 
 ```json
 {
@@ -65,26 +80,31 @@ curl --location 'https://api.permit.io/v2/projects/default/envs/staging/copy/asy
 }
 ```
 
-## Waiting for Background tasks
+The task `status` field has one of these values:
 
-You can also wait for the background task to be completed by using the `wait` query parameter.
+| Status | Meaning |
+| --- | --- |
+| `processing` | The task is still running. Check again later. |
+| `success` | The task finished. `result` holds the result. |
+| `failure` | The task failed. `error` holds the error details. |
+| `cancelled` | The task was cancelled. |
 
-The `wait` parameter specifies the maximum time to wait for the task to complete in seconds.
-By default, `wait=0` will return immediately with the current status of the task.
-The API responds with the task result as soon as it is completed.
+## Wait for a background task to finish \{#waiting-for-background-tasks}
 
-You can provide the `wait` parameter to the initial request or the result status check request.
+Add the `wait` query parameter to hold the request open until the task finishes. `wait` is the maximum number of seconds to wait. The API responds as soon as the task finishes, or when `wait` seconds pass, whichever comes first. The default, `wait=0`, returns the current status immediately.
+
+Both the start request and the result request accept `wait`:
 
 ```bash
 curl --location 'https://api.permit.io/v2/projects/default/envs/staging/copy/async?wait=60` \
   -H 'authorization: Bearer API_SECRET_KEY'
 ```
 
-Background tasks may take a long time, up to 30 minutes, so you may want to check the status every couple of seconds.
+If the response still shows `processing` when the wait ends, call the result endpoint again. For a large environment, poll the result endpoint every few seconds instead of holding one long request open.
 
-## Error Handling
+## Handle a failed background task \{#error-handling}
 
-When a background task fails, the API will still return a `200 OK` response, but the status will be `failed,` and the error message will be included in the response.
+When a background task fails, the result endpoint still returns HTTP `200 OK`. Check the `status` field in the body, not the HTTP status code. For a failed task, `result` is `null` and `error` holds the error code, a title, and a message:
 
 ```json
 {
@@ -100,3 +120,11 @@ When a background task fails, the API will still return a `200 OK` response, but
   }
 }
 ```
+
+In this example, the source environment does not exist. Fix the cause named in `error.message`, then start a new task. If you can't resolve the error, ask in the [Permit Slack community](https://io.permit.io/slack).
+
+## Related pages
+
+- [Create, copy, and merge environments](/manage-your-account/creating-environments)
+- [Call the Permit API](/api/api-with-cli)
+- [Cloud API reference](/api/api-reference)

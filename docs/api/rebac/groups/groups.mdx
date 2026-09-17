@@ -1,64 +1,77 @@
 ---
 sidebar_position: 1
 title: Groups API
-description: "Group resource instances and users with the Groups API to assign roles to a group instead of each member."
+description: "Create groups with the Permit.io Groups API, add users and child groups, and assign a role to a group so every member derives it."
 slug: /api/rebac/groups
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
+Use the Permit.io Groups API to give a set of users the same access in one call: assign a role to a group, and every member of the group derives that role. This page is for developers who manage relationship-based access control (ReBAC) groups through the API. To manage groups in the Permit dashboard instead, see [Groups UI](/api/rebac/groups-ui).
 
-The Groups API simplifies relationship-based permission management for your resource instances and users by using groups. Groups, as suggests the name, group together resource instances and users, enabling you to assign group members with permissions on resource instances.
+## How groups work \{#key-features}
 
-:::tip Performance-Optimized Endpoints
-The Groups API has been updated with new, performance-optimized endpoints. See the [Additional API Operations](#additional-api-operations) section for the latest recommended methods. Previous GET endpoints are considered deprecated in favor of these improved alternatives. They should not be used and will be removed in the future.
-:::
+A group is a resource instance of a group resource type, in one tenant. For example, the `marketing` instance of the `teams` resource type is a group. Groups build on [ReBAC role derivation](/how-to/build-policies/rebac/overview#role-derivation):
 
-## Key Features:
+- **Group members.** When you add a user to a group, Permit assigns the user the `member` role on the group instance. When you remove the user, Permit removes that role, and the user stops deriving the group's roles.
+- **Group roles.** When you assign a role on a resource instance to a group, Permit creates three objects: a relation between the group resource type and the resource type, a relationship between the group instance and the resource instance, and a role derivation from the group's `member` role to the assigned role. Every member of the group derives the assigned role on the resource instance, including users you add later.
+- **Group hierarchy.** When you assign one group to another group, Permit links the two groups with a relationship and a derivation between their `member` roles. Group-to-group assignment works only between groups of the same resource type.
 
-- **Create, Update, Delete, and List Groups**: The Groups API provides a comprehensive set of endpoints to manage the lifecycle of your groups, ensuring you have complete control over their configuration and membership.
+### Example: a marketing team that edits a training video
 
-- **Assigning roles to Groups**: Groups can be assigned roles directly (instead of users). When adding users to a group through the API, you set them to automatically derive their permissions from the roles assigned to the group, ensuring consistent and manageable access control. See the [Groups API Redoc](https://api.permit.io/v2/redoc#tag/Groups) for more information.
+The marketing team must edit the `training_video` instance of the `social_media` resource type.
 
-- **Group Resource Instances, and Users**: Organize your resource instances and users into groups, allowing for simplified ReBAC permissions for:
+1. Create a group with the instance key `marketing` and the resource type `teams`.
+2. Assign the `editor` role on `social_media:training_video` to the `marketing` group.
+3. Add the marketing users to the group.
 
-- **Users:** Including users in User Groups allows you to assign an entire cluster of users with a single role (Instead of assigning roles to each user individually). You can set a role assigned to the group to be automatically assigned to all its members and revoked once their membership is removed.
+Every user in the `marketing` group, including users you add later, derives the `editor` role on `social_media:training_video`. [Give a user group access to a resource instance](#example-usage-for-user-groups) sets up this example step by step.
 
-:::info How it Works:
-Say we create a marketing group and assign a `member` role to it, we then assign users to the Group via a `member` role. The API then [derives](/how-to/build-policies/rebac/overview/#role-derivation) other roles based on this assignment (See example below)
-:::
+## Prerequisites
 
-- **Resource Instances**: Grouping resources in a Resource Group enables you to manage access control for multiple resources simultaneously, ensuring all included resources share the same permission configuration.
+- An environment API key. See [Get your API key](/api/api-with-cli#get-your-api-key).
+- The keys or IDs of your project and environment. See [Get the project and environment](/api/examples/get-project-and-env).
+- A tenant for the group, the resource instances, and the users. A group, the resource instances it gets roles on, and its users must all use the same tenant.
+- Familiarity with [ReBAC in Permit](/how-to/build-policies/rebac/overview).
 
-:::info How it Works:
-Following the previous example, we can create another group in our marketing group titled `social_media`. This group will contain resource instances of marketing materials. We can assign this newly created group the role of editor.
-The Groups API creates an automatic derivation between the `social_media#editor` role and the `marketing#member` role - meaning all users with the `marketing#member` role will automatically be assigned with the `social_media#editor` role. New resources added to `social_media` will be accessible to edit by members of the marketing group, and new users added as members to the marketing group will automatically have editor access to social media assets.
-:::
+## Groups API endpoints
 
-## Example Usage for User Groups:
+All paths start with `https://api.permit.io/v2/schema/{proj_id}/{env_id}`.
 
-Let's dive deeper into a simple use-case example for User Groups:
+| Task | Method and path | Notes |
+| --- | --- | --- |
+| Create a group | `POST /groups` | |
+| List groups | `GET /groups/direct` | Use instead of the deprecated `GET /groups` |
+| Get a group | `GET /groups/direct/{group_instance_key}` | Use instead of the deprecated `GET /groups/{group_instance_key}` |
+| Delete a group | `DELETE /groups/{group_instance_key}` | |
+| Assign a role to a group | `POST /groups/{group_instance_key}/roles` | |
+| Remove a role from a group | `DELETE /groups/{group_instance_key}/roles` | |
+| List the roles of a group | `GET /groups/{group_instance_key}/roles` | Early access |
+| Add a user to a group | `PUT /groups/{group_instance_key}/users/{user_id}` | |
+| Remove a user from a group | `DELETE /groups/{group_instance_key}/users/{user_id}` | |
+| List the users of a group | `GET /groups/{group_instance_key}/users` | Early access |
+| Assign a group to a group | `PUT /groups/{group_instance_key}/assign_group` | |
+| Remove a group from a group | `DELETE /groups/{group_instance_key}/assign_group` | |
+| List child groups | `GET /groups/{group_instance_key}/children` | Early access |
+| List parent groups | `GET /groups/{group_instance_key}/parents` | Early access |
 
-Say our company has several teams, each with a few employees assigned to each team. Our goal is to allow all members of the Marketing Team to Edit Social Media resources based on their group membership.
+`group_instance_key` in a path has the format `resource_type:instance`, for example `teams:marketing`. The API reference marks the `GET /groups` and `GET /groups/{group_instance_key}` endpoints as deprecated. Use the `/groups/direct` endpoints for new code.
 
-For this purpose, we will first create a group named `teams`. The group, `teams` is a resource, while each specific team (Such as `marketing`) is a resource instance.
+## Give a user group access to a resource instance \{#example-usage-for-user-groups}
 
-Users are assigned to the `marketing` via the `member` role (The `member` role here is, of course, just an example. Feel free to customize roles as you wish).
+This procedure sets up the marketing team example: members of the `marketing` group get the `editor` role on the `training_video` instance of `social_media`.
 
-As mentioned above, we also have a `social_media` resource, and a `training_video` - which is a resource instance of the `social_media` type. This resource instance supports the role `editor`.
+In every command, replace `API_SECRET_KEY` with your API key, and `{project_id}`, `{proj_id}`, and `{env_id}` with your project and environment keys or IDs. The samples use the tenants `default` and `business`. Use one tenant key of your own in every call.
 
-Let's set this up:
+### 1. Create the group \{#api-calls-create-group-add-role-to-group-add-users-to-group}
 
-### API Calls: Create Group, Add Role to Group, Add Users to Group:
-
-
-To **create a new group**, make a POST request with the following data:
+Send a POST request with the group instance key, the resource type key, and the tenant. If you omit `group_resource_type_key`, the group's resource type is `group`.
 
 ```bash
 curl 'https://api.permit.io/v2/schema/{project_id}/{env_id}/groups' \
  -H 'authorization: Bearer API_SECRET_KEY' \
  --data-raw '{"group_instance_key": "marketing", "group_resource_type_key": "teams", "group_tenant": "default"}'
 ```
+
+### 2. Create the resource and resource instance
 
 Create the `social_media` resource:
 
@@ -68,7 +81,7 @@ curl 'https://api.permit.io/v2/schema/{proj_id}/{env_id}/resources' \
  --data-raw '{"key": "social_media", "name": "social media", "actions":{}}'
 ```
 
-Create a `training_video` resource instance:
+Create the `training_video` resource instance. Resource instances are facts objects, so the v2 path is `/v2/facts/{proj_id}/{env_id}/resource_instances`:
 
 ```bash
 curl 'https://api.permit.io/v2/schema/{proj_id}/{env_id}/resource_instances' \
@@ -76,15 +89,19 @@ curl 'https://api.permit.io/v2/schema/{proj_id}/{env_id}/resource_instances' \
  --data-raw '{"key": "training_video", "tenant": "business", "resource":"social_media"}'
 ```
 
-Create a role called `editor`
+### 3. Create the editor role
+
+The role you assign to a group must be a role of the target resource type. For the resource role endpoint, see [ReBAC API calls](/api/rebac/rebac-api-calls#creating-resource-roles).
+
 ```bash
 curl 'https://api.permit.io/v2/schema/{proj_id}/{env_id}/roles' \
  -H 'authorization: Bearer API_SECRET_KEY' \
  --data-raw '{"key": "editor", "name”: "editor"}'
 ```
 
-Next, we assign the `editor` role to the `marketing` group instance:
-Note: `group_instance_key` is formatted as `type:instance`
+### 4. Assign the editor role to the group
+
+Send a POST request to `/groups/{group_instance_key}/roles` with the resource type, the resource instance, the role, and the tenant. All four fields are required. The group instance key in the path uses the `type:instance` format, here `teams:marketing`.
 
 ```bash
 curl 'https://api.permit.io/v2/schema/{project_id}/{env_id}/group/teams:marketing/roles' \
@@ -92,9 +109,9 @@ curl 'https://api.permit.io/v2/schema/{project_id}/{env_id}/group/teams:marketin
  --data-raw '{"resource": "social_media", "resource_instance": "training_video", "role": "editor", tenant:"business"}'
 ```
 
-Finally, assign a user to the `teams:marketing` group instance:
+### 5. Add users to the group
 
-To **add users to a group**, make a PUT request with the following data:
+Send a PUT request for each user, with the tenant in the body. In the path, the group instance key is `teams:marketing` and `{user_id}` is the user key or ID.
 
 ```bash
 curl -X PUT \
@@ -103,35 +120,47 @@ curl -X PUT \
      --data-raw '{"tenant":"business"}'
 ```
 
-### Automated Role Derivation:
+### What Permit creates when you assign a role to a group \{#automated-role-derivation}
 
-Once we assign the `editor` role to `teams:marketing` group instance,  the following will be automated by the API:
+After step 4, Permit creates these objects:
 
+- A role derivation from the `member` role on `teams` to the `editor` role on `social_media`.
+- A relation between the `teams` resource type and the `social_media` resource type.
+- A relationship between the `teams:marketing` instance and the `social_media:training_video` instance.
 
-A role derivation will be created from `team#member` to `social_media#editor`
-A relation will be created between the `teams` group and the `social_media` resource. The name of this relation will be `team_group`.
-A relationship will be created between `teams#marketing` and `social_media#training_video`.
-If a new user is assigned the member role on the `marketing` resource, they will automatically be assigned the editor role on the `social_media#training_video` instance.
-Thus, every new `marketing` member will be able to edit the `social_media#training_video` resource instance.
+Every user with the `member` role on `teams:marketing` derives the `editor` role on `social_media:training_video`, including users you add to the group later.
 
-## Example Usage for Resource Groups
+### 6. Verify the group setup
 
-Let's dive deeper into a simple use-case example for Resource Groups:
+List the roles of the group. The response includes the `editor` role on `social_media:training_video`.
 
-Say we have a Group and inside the group, we have the Support team and Organization 1. Our goal is to allow all members of the Support Team to be members in Organization 1 and in all of his related instances.
+```bash
+curl -X GET \
+'https://api.permit.io/v2/schema/{proj_id}/{env_id}/groups/{group_instance_key}/roles' \
+  -H 'authorization: Bearer API_SECRET_KEY'
+```
 
-For this purpose, we will first create a group named `Group`. The group, `group` is a resource, while each specific group inside (Such as `support-team`) is a resource instance.
+List the users of the group. The response includes the users you added in step 5.
 
-Users are assigned to the `support-team` via the `member` role.
+```bash
+curl -X GET \
+'https://api.permit.io/v2/schema/{proj_id}/{env_id}/groups/{group_instance_key}/users' \
+  -H 'authorization: Bearer API_SECRET_KEY'
+```
 
-As mentioned above, we also have an `Org1` resource instance.
-This resource instance supports the role of `member`.
+Then run `permit.check()` for a group member, an action that the `editor` role grants on `social_media`, and the `social_media:training_video` instance. The check returns `true`. See [Check permissions](/how-to/enforce-permissions/check).
 
-Let's set this up:
+## Assign a group to another group \{#example-usage-for-resource-groups}
 
-### API Calls: Create Group, Add Role to Group, Add Group to Group:
+Assign one group to another group to build a group hierarchy, for example a support team inside an organization. In this example, the `support` group and the `org1` group both use the default `group` resource type, and `org1` is assigned to `support`.
 
-To **create a new group** with Group instance `support`, make a POST request with the following data:
+### Limitation: groups must share a resource type \{#assign-group-to-group}
+
+You can assign a group only to a group of the same resource type. For example, you can assign `group:org1` to `group:support`, but not to `teams:marketing`.
+
+### 1. Create the two groups \{#api-calls-create-group-add-role-to-group-add-group-to-group}
+
+Create the `support` group:
 
 ```bash
 curl 'https://api.permit.io/v2/schema/{project_id}/{env_id}/groups' \
@@ -142,7 +171,7 @@ curl 'https://api.permit.io/v2/schema/{project_id}/{env_id}/groups' \
 
 ```
 
-Create another Group instance `org1`:
+Create the `org1` group:
 
 ```bash
 curl 'https://api.permit.io/v2/schema/{project_id}/{env_id}/groups' \
@@ -152,7 +181,9 @@ curl 'https://api.permit.io/v2/schema/{project_id}/{env_id}/groups' \
 --data-raw '{"group_instance_key": "org1", "group_tenant": "default"}'
 ```
 
-Now, we want to create a connection between those two group instances.
+### 2. Assign one group to the other
+
+Send a PUT request to `/groups/{group_instance_key}/assign_group`. The body holds the key of the other group in the `type:instance` format, here `group:org1`. In the path, replace `{group_instance_key}` with `group:support`.
 
 ```bash
 curl -X PUT \
@@ -164,55 +195,15 @@ curl -X PUT \
 --data-raw '{"group_instance_key": "group:org1"}'
 ```
 
-Once we assign the `org1` group instance  to the `support` group instance, the following will be automated by the API:
+When you assign `org1` to `support`, Permit creates:
 
-- A role derivation will be created from group#member' to `group#member`
-- A relation will be created between the `group` resource and the `group` resource. The name of this relation will be `group`.
-- A relationship will be created between `group#support-team` and `group#org1`.
+- A role derivation from the `member` role on `group` to the `member` role on `group`.
+- A relation from the `group` resource type to itself.
+- A relationship between the `group:support` instance and the `group:org1` instance.
 
-## Assign Group to Group
+### 3. Verify the group hierarchy
 
-**Current behavior:**
-
-The "Assign Group to Group" functionality currently supports only groups that belong to the same resource type.
-
-Extended support for this function may be added in the future to allow assignment between groups with different resource types.
-
-## Additional API Operations
-
-The Groups API provides several improved endpoints for querying and managing group relationships, memberships, and permissions. These operations allow you to retrieve detailed information about your groups with enhanced performance.
-
-:::tip Performance Improvements
-The endpoints documented below are **new and improved** versions that offer better performance compared to the previous API methods. The older GET endpoints have been **deprecated** in favor of these optimized alternatives.
-:::
-
-### List All Groups
-
-To **retrieve all groups** (without nested relationships), make a GET request:
-
-```bash
-curl -X GET \
-'https://api.permit.io/v2/schema/{proj_id}/{env_id}/groups/direct' \
-  -H 'authorization: Bearer API_SECRET_KEY'
-```
-
-This endpoint returns a flat list of all groups without their hierarchical relationships, useful for getting a quick overview of all groups in your environment. This is the **recommended method** for listing groups with improved performance.
-
-### Get a Specific Group
-
-To **retrieve details of a specific group**, make a GET request with the group instance key:
-
-```bash
-curl -X GET \
-'https://api.permit.io/v2/schema/{proj_id}/{env_id}/groups/direct/{group_instance_key}' \
-  -H 'authorization: Bearer API_SECRET_KEY'
-```
-
-This returns detailed information about the `marketing` group, including its configuration and metadata.
-
-### Get Child Groups
-
-To **retrieve all child groups** of a specific group, make a GET request:
+List the child groups of a group:
 
 ```bash
 curl -X GET \
@@ -220,11 +211,7 @@ curl -X GET \
   -H 'authorization: Bearer API_SECRET_KEY'
 ```
 
-This endpoint returns all groups that are children of the `marketing` group, helping you understand the hierarchical structure. For example, if `marketing` has child groups like `content-team` and `design-team`, they will be listed here.
-
-### Get Group Parents
-
-To **retrieve all parent groups** of a specific group, make a GET request:
+List the parent groups of a group:
 
 ```bash
 curl -X GET \
@@ -232,32 +219,40 @@ curl -X GET \
   -H 'authorization: Bearer API_SECRET_KEY'
 ```
 
-This endpoint returns all groups that are parents of the `content-team` group, allowing you to trace the group hierarchy upward.
+The child list of one group includes the other group, and the parent list of the other group includes the first group.
 
-### Get Group Users
+## List and get groups \{#additional-api-operations}
 
-To **retrieve all users** assigned to a specific group, make a GET request:
+### List all groups \{#list-all-groups}
 
-```bash
-curl -X GET \
-'https://api.permit.io/v2/schema/{proj_id}/{env_id}/groups/{group_instance_key}/users' \
-  -H 'authorization: Bearer API_SECRET_KEY'
-```
-
-This endpoint returns all users that are members of the `marketing` group, including their user details and assigned roles within the group.
-
-### Get Group Roles
-
-To **retrieve all roles** assigned to a specific group, make a GET request:
+List the groups in an environment as a flat, paginated list, without their hierarchy:
 
 ```bash
 curl -X GET \
-'https://api.permit.io/v2/schema/{proj_id}/{env_id}/groups/{group_instance_key}/roles' \
+'https://api.permit.io/v2/schema/{proj_id}/{env_id}/groups/direct' \
   -H 'authorization: Bearer API_SECRET_KEY'
 ```
 
-This endpoint returns all role assignments for the `marketing` group, showing which roles the group has on various resource instances.
+To filter the list, add the `tenant`, `resource`, or `search` query parameter. Use `page` and `per_page` (up to 100) to page through results.
 
-## API Reference
+### Get a specific group \{#get-a-specific-group}
 
-For complete API documentation including request/response schemas, query parameters, and additional endpoints, visit the [Groups API Reference](https://api.permit.io/scalar#tag/groups).
+Get one group by its group instance key, for example `teams:marketing`:
+
+```bash
+curl -X GET \
+'https://api.permit.io/v2/schema/{proj_id}/{env_id}/groups/direct/{group_instance_key}' \
+  -H 'authorization: Bearer API_SECRET_KEY'
+```
+
+The response holds the group resource type key, the group instance key, the tenant, and the group ID.
+
+## API reference \{#api-reference}
+
+For request and response schemas of every Groups endpoint, see the [Groups section of the Permit API reference](https://api.permit.io/v2/redoc#tag/Groups).
+
+## Related pages
+
+- [Groups UI](/api/rebac/groups-ui): manage groups in the Permit dashboard
+- [What is ReBAC?](/how-to/build-policies/rebac/overview)
+- [ReBAC API calls](/api/rebac/rebac-api-calls)
