@@ -4,9 +4,6 @@ sidebar_label: Food Ordering Demo
 description: "Build a family food ordering agent with the Permit.io Access Request MCP server, in which children request access and approvals and parents review them, using ReBAC, Gemini, LangGraph, and FastAPI."
 ---
 
-import TimelineWrapper from "../../../src/components/timeline/TimelineWrapper";
-import TimelineStep from "../../../src/components/timeline/TimelineStep";
-
 Build a family food ordering assistant in which an AI agent requests access and one-time approvals through the Permit.io Access Request MCP server, and a parent approves or denies each request. This tutorial is for AI agent builders who want a working human-in-the-loop (HITL) agent, from the Permit policy to a running chat client.
 
 In this tutorial, you:
@@ -52,37 +49,33 @@ The finished code is in the [permitio/permit-mcp](https://github.com/permitio/pe
 
 Clone the Access Request MCP server repository, and install the server into a Python virtual environment.
 
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Clone the Access Request MCP server repository** <br/>
-    Clone the repository and change to the project directory:
+### 1. Clone the Access Request MCP server repository
+
+The [permitio/permit-mcp](https://github.com/permitio/permit-mcp) repository holds the base server and the finished food ordering example. Clone the repository and change to the project directory:
+
 ```bash
 git clone https://github.com/permitio/permit-mcp
 cd permit-mcp
 ```
-    :::info Source code
-    The [permitio/permit-mcp](https://github.com/permitio/permit-mcp) repository contains the base server and the finished food ordering example.
-    :::
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Create and activate a virtual environment** <br/>
-    Create the environment with [uv](https://github.com/astral-sh/uv). If the `uv` command isn't found, install uv with the [uv installation instructions](https://github.com/astral-sh/uv#installation).
+
+### 2. Create and activate a virtual environment
+
+Create the environment with [uv](https://github.com/astral-sh/uv). If the `uv` command isn't found, install uv with the [uv installation instructions](https://github.com/astral-sh/uv#installation).
+
 ```bash
 uv venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Install the project dependencies** <br/>
-    Install the project in editable mode:
+
+### 3. Install the project dependencies
+
+Install the project in editable mode:
+
 ```bash
 uv pip install -e .
 ```
-    :::info Installed packages
-    The install adds `mcp`, `permit` (the Permit Python SDK), `httpx`, `python-dotenv`, and `aiosqlite`. The LangGraph client and the FastAPI backend need more packages, which you add in their sections.
-    :::
-  </TimelineStep>
-</TimelineWrapper>
+
+The install adds `mcp`, `permit` (the Permit Python SDK), `httpx`, `python-dotenv`, and `aiosqlite`. The LangGraph client and the FastAPI backend need more packages, which you add in their own sections.
 
 ## Model the permissions in Permit \{#permitio-policy-setup}
 
@@ -94,92 +87,82 @@ Define the access control model in the Permit dashboard:
 
 The MCP server tools and the FastAPI backend use these definitions to create requests and check permissions.
 
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Create a ReBAC resource for restaurants** <br/>
-    - In the [Permit dashboard](https://app.permit.io/), go to **Policy** > **Resources**.
-    - Click **Create a Resource**.
-    - Fill in the details:
-      - **Name**: `restaurants`
-      - **Actions**: `create`, `read`, `update`, `delete`
-      - **ReBAC roles**: `parent`, `child-can-view`
+### 1. Create a ReBAC resource for restaurants
 
-![New Resource panel with the restaurants name and key, the read, create, update, and delete actions, and the ReBAC roles parent and child-can-order](/img/ai-security/MCP/food-demo/1.png)
+- In the [Permit dashboard](https://app.permit.io/), go to **Policy** > **Resources**.
+- Click **Create a Resource**.
+- Fill in the details:
+  - **Name**: `restaurants`
+  - **Actions**: `create`, `read`, `update`, `delete`
+  - **ReBAC roles**: `parent`, `child-can-view`
+- In the **Policy Editor** tab, grant the roles these permissions:
 
-    The screenshots show a role named `child-can-order`. Name the role `child-can-view`: the FastAPI backend assigns and requests `child-can-view`.
+| Role | Permissions on `restaurants` |
+| --- | --- |
+| `parent` | `create`, `read`, `update`, `delete` |
+| `child-can-view` | `read` |
 
-    - In the **Policy Editor** tab, grant the roles these permissions:
-      | Role | Permissions |
-      | --- | --- |
-      | `parent` | `create`, `read`, `update`, `delete` |
-      | `child-can-view` | `read` |
+A child can read a restaurant and its dishes only with the `child-can-view` role on that restaurant instance. Use that exact role name: the FastAPI backend assigns `child-can-view`, and the system instruction the backend sends to Gemini names `child-can-view` as the role to request.
 
-![Policy Editor with the child role granted read on restaurants, and the parent role granted create, delete, read, and update](/img/ai-security/MCP/food-demo/2.png)
+### 2. Create the Permit Elements
 
-    :::info What the roles do
-    A child can read a restaurant and its dishes only with the `child-can-view` role on that restaurant instance.
-    :::
+[Permit Elements](/embeddable-uis/overview) are embeddable UI components for access request and approval flows. The Access Request MCP server calls the same flows through the Permit API. Open **Elements** in the dashboard sidebar.
 
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Create the Permit Elements** <br/>
-    [Permit Elements](/embeddable-uis/overview) are embeddable UI components for access request and approval flows. The Access Request MCP server calls the same flows through the Permit API. Open **Elements** in the dashboard sidebar.
-    ![Elements screen with the Create Element button under User Management](/img/ai-security/MCP/food-demo/3.png)
-    - Create a **User Management** element for restaurant access requests:
-        - **Name**: `Restaurant Requests`
-        - **Configure elements based on**: ReBAC Resource Roles
-        - **Resource Type**: `restaurants`
-        - **Role permission levels**: Level 1 - Workspace Owner: `parent`
-        - **Assignable Roles**: `child-can-view`
-:::info What the Restaurant Requests element does
-Parents approve or deny the access requests that children send for restaurants.
-:::
-    - Create an **Operation Approval** element for dish approvals:
-        - **Name**: `Dish approval`
-        - **Resource Type**: `restaurants`
-:::info What the Dish approval element does
-Creating the element adds the `_Reviewer_` and `_Approved_` roles to the `restaurants` resource. A user with `_Reviewer_` can approve requests. A user with `_Approved_` has the `operate` permission, which the `order_dish` tool checks before a child orders an expensive dish.
-![Dish Approval element editor with the restaurants resource type and the default _Approved_ and _Reviewer_ roles](/img/ai-security/MCP/food-demo/5.png)
-:::
-    - Create an **Approval Management** element for one-time operation requests:
-        - **Name**: `Dish requests`
+![Permit dashboard Elements screen, with the Create Element tile under the User Management section](/img/ai-security/MCP/food-demo/3.png)
 
-:::info What the Dish requests element does
-Reviewers, the parents in this demo, approve or deny one-time operation requests, such as an order for an expensive dish.
-:::
+Create three elements.
 
-    :::tip Copy the element config IDs
-    Click **Get Code** on the **Restaurant Requests** and **Dish requests** elements, and copy each config ID from the embed code, for example `restaurant-requests` and `dish-requests`. You add the IDs to your `.env` file.
-    ![Element Embed Code dialog with the restaurant-requests config ID highlighted in the iframe source URL](/img/ai-security/MCP/food-demo/4.png)
-    :::
+**Restaurant Requests**, a **User Management** element, lets parents approve or deny the access requests that children send for restaurants:
 
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Collect your project configuration** <br/>
-    Collect these values for your `.env` file:
-      - `PERMIT_API_KEY`: see [Get your API key](/overview/get-api-key).
-      - `PROJECT_ID` and `ENV_ID`: see [Get project and environment IDs](/api/examples/get-project-and-env).
-      - `PERMIT_PDP_URL`: see [Run the PDP](/overview/run-pdp).
-  </TimelineStep>
-  <TimelineStep stepNumber={4}>
-    **Add test users and a resource instance** <br/>
-    The LangGraph client uses these users. The FastAPI backend creates its own users and restaurants when it first starts.
-        - Go to **Directory** > **Instances**.
-        - Click **Add Instance**:
-          - **Resource Type**: `restaurants`
-          - **Instance Key**: `pizza-palace`
-          - **Tenant**: Default Tenant, or your working tenant
-![New Resource Instance panel with the restaurants resource type, the pizza-palace instance key, and Default Tenant](/img/ai-security/MCP/food-demo/6.png)
-        - Switch to the **Users** tab.
-        - Click **Add User**:
-            - **Key**: `joe`
-            - **Instance Access**: `restaurants:pizza-palace#parent`
-        - Click **Save**.
-        - Create another user with the key `henry`, and don't assign a role.
+- **Name**: `Restaurant Requests`
+- **Configure elements based on**: ReBAC Resource Roles
+- **Resource Type**: `restaurants`
+- **Role permission levels**: Level 1 - Workspace Owner: `parent`
+- **Assignable Roles**: `child-can-view`
 
-In the **Directory**, `joe` has the `parent` role on `restaurants:pizza-palace`, and `henry` has no role.
-  </TimelineStep>
-</TimelineWrapper>
+**Dish approval**, an **Operation Approval** element, adds the `_Reviewer_` and `_Approved_` roles to the `restaurants` resource. A user with `_Reviewer_` can approve requests. A user with `_Approved_` has the `operate` permission, which the `order_dish` tool checks before a child orders an expensive dish:
+
+- **Name**: `Dish approval`
+- **Resource Type**: `restaurants`
+
+![Dish Approval element editor showing the restaurants resource type, the _Approved_ role with the Operate permission, and the _Reviewer_ role with the Review permission](/img/ai-security/MCP/food-demo/5.png)
+
+**Dish requests**, an **Approval Management** element, lets reviewers, the parents in this demo, approve or deny one-time operation requests such as an order for an expensive dish:
+
+- **Name**: `Dish requests`
+
+Click **Get Code** on the **Restaurant Requests** and **Dish requests** elements, and copy each config ID from the embed code, for example `restaurant-requests` and `dish-requests`. You add the IDs to your `.env` file in [Configure the Access Request MCP server](#mcp-server-configuration).
+
+![Element Embed Code dialog for the Restaurant Requests element, with the restaurant-requests config ID highlighted in the iframe source URL](/img/ai-security/MCP/food-demo/4.png)
+
+### 3. Collect your project configuration
+
+Collect these values for your `.env` file:
+
+- `PERMIT_API_KEY`: see [Get your API key](/overview/get-api-key).
+- `PROJECT_ID` and `ENV_ID`: see [Get project and environment IDs](/api/examples/get-project-and-env).
+- `PERMIT_PDP_URL`: see [Run the PDP](/overview/run-pdp).
+
+### 4. Add test users and a resource instance
+
+The LangGraph client uses the users you add here. The FastAPI backend creates its own users and restaurant instances when it first starts, so this step serves the LangGraph client only.
+
+- Go to **Directory** > **Instances**.
+- Click **Add Instance**:
+  - **Resource Type**: `restaurants`
+  - **Instance Key**: `pizza-palace`
+  - **Tenant**: Default Tenant, or your working tenant
+
+![New Resource Instance panel with the restaurants resource type, the pizza-palace instance key, and Default Tenant selected](/img/ai-security/MCP/food-demo/6.png)
+
+- Switch to the **Users** tab.
+- Click **Add User**:
+  - **Key**: `joe`
+  - **Instance Access**: `restaurants:pizza-palace#parent`
+- Click **Save**.
+- Create another user with the key `henry`, and don't assign a role.
+
+To confirm the setup, open **Directory**. The user `joe` has the `parent` role on `restaurants:pizza-palace`, and `henry` has no role.
 
 ## Configure the Access Request MCP server \{#mcp-server-configuration}
 
@@ -191,7 +174,7 @@ Create a `.env` file in the root of the cloned repository. The variables and whe
 | `ACCESS_ELEMENTS_CONFIG_ID` | The config ID of the **Restaurant Requests** element, for example `restaurant-requests` |
 | `OPERATION_ELEMENTS_CONFIG_ID` | The config ID of the **Dish requests** element, for example `dish-requests` |
 | `TENANT` | `default`, or your working tenant |
-| `PERMIT_API_KEY`, `PROJECT_ID`, `ENV_ID`, `PERMIT_PDP_URL` | The values you collected in the Permit setup |
+| `PERMIT_API_KEY`, `PROJECT_ID`, `ENV_ID`, `PERMIT_PDP_URL` | The values you collected in [Collect your project configuration](#3-collect-your-project-configuration) |
 
 To check the configuration, run the base server as described in [Run the server from the command line](/ai-security/access-request-mcp/implementation-guide#verifying-its-working). The server logs `Starting Permit MCP server...`.
 
@@ -204,27 +187,20 @@ The Access Request MCP server includes access request and approval tools. The fo
 - `list_dishes`: lists the dishes at a restaurant.
 - `order_dish`: places an order after permission and price checks.
 
-The tools read a SQLite database and call `permit.check()` to enforce the ReBAC roles and operation approvals.
+Both tools read a SQLite database and call `permit.check()` to enforce the ReBAC roles and the operation approvals.
 
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Create the custom server file** <br/>
-    - In the repository root, create `food_ordering_mcp.py`:
+### 1. Create the custom server file
+
+In the repository root, create `food_ordering_mcp.py`:
+
 ```bash
 touch food_ordering_mcp.py
 ```
 
-:::info What food_ordering_mcp.py does
-`food_ordering_mcp.py` is the entry point of your custom MCP server. The file:
+`food_ordering_mcp.py` is the entry point of your custom MCP server. The file initializes the Permit SDK client, connects to the SQLite database named in the first command-line argument, registers the Access Request MCP server tools through the `PermitServer` class, and adds the food ordering tools.
 
-- Initializes the Permit SDK client.
-- Connects to the SQLite database named in the first command-line argument.
-- Registers the Access Request MCP server tools.
-- Adds the food ordering tools.
-:::
+Add the imports, the environment variables, and the MCP server setup:
 
-
-    - Add the imports, the environment variables, and the MCP server setup:
 ```python
 from typing import List, Tuple
 import aiosqlite
@@ -256,21 +232,14 @@ mcp = FastMCP("family_food_ordering_system")
 permit_server = PermitServer(mcp)  # Register default tools
 ```
 
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Add the `list_dishes` tool** <br/>
-    `list_dishes` returns the dishes and prices at a restaurant if the user has the `read` permission on the restaurant instance. Otherwise, the tool returns an access denied error, and the agent can offer an access request.
+### 2. Add the list_dishes tool
+
+`list_dishes` returns the dishes and prices at a restaurant if the user has the `read` permission on the restaurant instance. Otherwise the tool raises an access denied error, and the agent can offer to create an access request. Append the tool to `food_ordering_mcp.py`:
+
 ```python
 @mcp.tool()
 async def list_dishes(user_id: str, restaurant_id: str) -> List[Tuple[str, float]]:
-    """
-    Lists the dishes available at a restaurant, with their prices in dollars.
-    Dishes are listed only when the user has access to the restaurant.
-
-    Args:
-        user_id: The ID of the user.
-        restaurant_id: The key of the restaurant.
-    """
+    """List the dishes and prices at a restaurant, if the user has access to it."""
     permitted = await permit.check(user_id, 'read', f"restaurants:{restaurant_id}")
     if not permitted:
         raise ToolError("Access denied. You are not permitted to view dishes.")
@@ -282,29 +251,24 @@ async def list_dishes(user_id: str, restaurant_id: str) -> List[Tuple[str, float
         await cursor.close()
         return dishes
 ```
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Add the `order_dish` tool with ReBAC and a price limit** <br/>
 
-:::info[What order_dish checks]
+Keep the docstring. FastMCP publishes the docstring as the tool description, and the backend passes that description to Gemini. A tool without a docstring reaches the model with a generated placeholder description, and the model then picks the wrong tool more often.
+
+### 3. Look up the dish and the user in order_dish
+
+`order_dish` runs four checks before it places an order:
 
 - The dish exists at the restaurant.
 - The user has the `read` permission on the restaurant instance.
 - A child who orders a dish over $10 has the `operate` permission, which an approved operation approval grants.
-- After an approved order, the tool unassigns the `_Approved_` role, so the approval covers one order.
-:::
+- After an approved order, the tool unassigns the `_Approved_` role, so one approval covers one order.
+
+Append the first half of the tool to `food_ordering_mcp.py`. This half reads the dish price and the user's role from SQLite, and raises an error when either row is missing:
 
 ```python
 @mcp.tool()
 async def order_dish(user_id: str, restaurant_id: str, dish_name: str) -> str:
-    """
-    Places an order for a dish.
-
-    Args:
-        user_id: The ID of the person ordering.
-        restaurant_id: The key of the restaurant.
-        dish_name: The name of the dish to order.
-    """
+    """Place an order for a dish, identified by the restaurant key and the dish name."""
     MAX_ALLOWED_DISH_PRICE = 10  # dollars
 
     async with aiosqlite.connect(DB_NAME) as db:
@@ -324,7 +288,13 @@ async def order_dish(user_id: str, restaurant_id: str, dish_name: str) -> str:
 
     if user is None:
         raise ToolError(f"User '{user_id}' not found.")
+```
 
+### 4. Check the permissions in order_dish
+
+The second half of `order_dish` continues the same function body, at one level of indentation. Two `permit.check()` calls enforce the policy: `read` on the restaurant instance, and `operate` for a child who orders a dish over the price limit. After an approved order, `unassign_role` removes the `_Approved_` role, so the approval does not carry over to the next order:
+
+```python
     permitted_restaurant = await permit.check(user_id, "read", f"restaurants:{restaurant_id}")
     if not permitted_restaurant:
         raise ToolError("You are not allowed to order from this restaurant.")
@@ -346,57 +316,58 @@ async def order_dish(user_id: str, restaurant_id: str, dish_name: str) -> str:
     return f"Order successfully placed for {dish_name}!"
 ```
 
-    End the file with an entry point that starts the server over stdio:
+End the file with an entry point that starts the server over standard input and output (stdio):
+
 ```python
 if __name__ == "__main__":
     mcp.run(transport="stdio")
 ```
-  </TimelineStep>
-  <TimelineStep stepNumber={4}>
-    **Run the custom server** <br/>
-    Start the server with a database file name:
+
+### 5. Run the custom server
+
+Start the server with a database file name:
+
 ```bash
 uv run food_ordering_mcp.py food_ordering.db
 ```
-    The server exposes the Access Request MCP server tools and the `list_dishes` and `order_dish` tools over standard input and output (stdio). The server waits for an MCP client and prints nothing. The FastAPI backend creates the `users`, `restaurants`, and `dishes` tables in the database when the backend first starts.
-  </TimelineStep>
-</TimelineWrapper>
+
+The server exposes the Access Request MCP server tools and the `list_dishes` and `order_dish` tools over stdio. An stdio server waits for an MCP client and prints nothing, so a terminal that stays silent without exiting means the server started. A traceback instead means a missing environment variable or a failed import. The FastAPI backend creates the `users`, `restaurants`, and `dishes` tables in the database when the backend first starts.
 
 ## Build a LangGraph agent client \{#creating-a-langgraph--langchain-mcp-client}
 
-Build a single-user agent in `client.py`, in the repository root. The client:
+Build a single-user agent in `client.py`, in the repository root. The LangGraph client:
 
 - Uses Gemini to decide which tool to call.
 - Loads the Access Request MCP server tools, such as `create_access_request` and `approve_operation_approval`, as LangGraph tools.
 - Runs the conversation as a LangGraph graph.
-- Pauses for human review with `interrupt()`, after you add the human review node in the next section.
+- Pauses for human review with `interrupt()`, after you add the human review node in [Add human review with interrupt()](#adding-human-in-the-loop-with-interrupt).
 
-The client starts the base server, `src/permit_mcp/server.py`, and works with the `joe` and `henry` users you created in Permit.
+The LangGraph client starts the base server, `src/permit_mcp/server.py`, and works with the `joe` and `henry` users you created in the Permit Directory.
 
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Install the LangGraph dependencies** <br/>
-    In the project directory, add the packages:
+### 1. Install the LangGraph dependencies
+
+In the project directory, add the packages:
+
 ```bash
 uv add langchain-mcp-adapters langgraph langchain-google-genai
 ```
-    The packages are:
-    - `langchain-mcp-adapters`: converts MCP tools into LangGraph-compatible tools.
-    - `langgraph`: runs the agent as a graph of nodes.
-    - `langchain-google-genai`: calls Gemini models.
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Add a Google API key** <br/>
-    Create an API key in [Google AI Studio](https://aistudio.google.com/app/apikey) and add the key to your `.env` file:
+
+- `langchain-mcp-adapters`: converts MCP tools into LangGraph-compatible tools.
+- `langgraph`: runs the agent as a graph of nodes.
+- `langchain-google-genai`: calls Gemini models.
+
+### 2. Add a Google API key
+
+Create an API key in [Google AI Studio](https://aistudio.google.com/app/apikey) and add the key to your `.env` file:
+
 ```bash
 GOOGLE_API_KEY=your-key-here
 ```
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Build the client** <br/>
-    Create `client.py` in the project root, and add the code blocks in order:
-    - **Imports**: <br/>
-    Import the dependencies:
+
+### 3. Create client.py and the Gemini client
+
+Create `client.py` in the project root. Import the dependencies:
+
 ```python
 import os
 from typing_extensions import TypedDict, Literal, Annotated
@@ -412,7 +383,9 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 import asyncio
 from langgraph.graph.message import add_messages
 ```
-        Load the environment and create the Gemini LLM client. The client pins the `gemini-2.5-flash` model. Google retires model versions, so check the [Gemini models list](https://ai.google.dev/gemini-api/docs/models) and use a current model name.
+
+Load the environment and create the Gemini LLM client. The `global_llm_with_tools` variable holds the LLM after the tools are bound to it, so the graph nodes can reach it:
+
 ```python
 load_dotenv()
 
@@ -423,8 +396,13 @@ llm = ChatGoogleGenerativeAI(
     google_api_key=os.getenv('GOOGLE_API_KEY')
 )
 ```
-    - **MCP server parameters**: <br/>
-    Tell the client how to start the MCP server as a subprocess:
+
+Google retires model versions. Check the [Gemini models list](https://ai.google.dev/gemini-api/docs/models) and use a model name that the list still shows.
+
+### 4. Add the MCP server parameters and the graph state
+
+`StdioServerParameters` tells the client how to start the MCP server as a subprocess. `State` is the graph state: a list of messages that LangGraph appends to with `add_messages`:
+
 ```python
 server_params = StdioServerParameters(
     command="python",
@@ -434,8 +412,11 @@ server_params = StdioServerParameters(
 class State(TypedDict):
     messages: Annotated[list, add_messages]
 ```
-    - **Graph nodes and graph builder**: <br/>
-    Route between the LLM and the tools:
+
+### 5. Add the graph nodes and the graph builder
+
+`call_llm` sends the conversation to Gemini. `route_after_llm` routes to the `run_tool` node when Gemini's last message has a tool call, and ends the graph otherwise. `setup_graph` compiles the graph with an in-memory checkpointer, which keeps the conversation between turns:
+
 ```python
 async def call_llm(state):
     response = await global_llm_with_tools.ainvoke(state["messages"])
@@ -457,10 +438,11 @@ async def setup_graph(tools):
     memory = MemorySaver()
     return builder.compile(checkpointer=memory)
 ```
-    `call_llm` sends the conversation to Gemini. `route_after_llm` routes to the `run_tool` node when Gemini's last message has a tool call, and ends the graph otherwise. `setup_graph` builds the graph and compiles the graph with an in-memory checkpointer, which keeps the conversation between turns.
 
-    - **Response streaming and chat loop**: <br/>
-    `stream_responses` prints each LLM reply as the graph runs. `chat_loop` reads queries until you type `quit`, `exit`, or `q`, and adds instructions that tell Gemini to look up resource instance keys first:
+### 6. Add response streaming and the chat loop
+
+`stream_responses` prints each LLM reply as the graph runs:
+
 ```python
 async def stream_responses(graph, config, invokeWith):
     async for event in graph.astream(invokeWith, config, stream_mode='updates'):
@@ -470,7 +452,11 @@ async def stream_responses(graph, config, invokeWith):
                 if content:
                     print('\n' + ", ".join(content)
                           if isinstance(content, list) else content)
+```
 
+`chat_loop` reads queries until you type `quit`, `exit`, or `q`, and prefixes each query with instructions that tell Gemini to look up resource instance keys first. Every query runs on the thread `"1"`, so the checkpointer treats the session as one conversation:
+
+```python
 async def chat_loop(graph):
     while True:
         try:
@@ -495,8 +481,11 @@ async def chat_loop(graph):
         except Exception as e:
             print(f"Error: {e}")
 ```
-    - **Entry point**: <br/>
-    `main` starts the MCP server, converts its tools to LangGraph tools, binds the tools to the LLM, builds the graph, saves a diagram of the graph, and starts the chat loop:
+
+### 7. Add the entry point
+
+`main` starts the MCP server, converts its tools to LangGraph tools, binds the tools to the LLM, builds the graph, saves a diagram of the graph, and starts the chat loop:
+
 ```python
 async def main():
     async with stdio_client(server_params) as (read, write):
@@ -517,20 +506,27 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
-    - **Run the client**: <br/>
+
+### 8. Run the LangGraph client and send a request
+
+Start the client:
+
 ```bash
 uv run client.py
 ```
-        The client writes a diagram of the graph to `workflow_graph.png`. The diagram shows the `call_llm` node, which either ends the run or calls `run_tool` and returns to `call_llm`. <br/>
-        ![LangGraph diagram with start, call_llm, run_tool, and end nodes, where call_llm routes to run_tool or to end](/img/ai-security/MCP/food-demo/7.png) <br/>
-        Send a request as `henry`, then list the requests as `joe`:
+
+The client writes a diagram of the graph to `workflow_graph.png`, then prints the `Query:` prompt. The diagram shows the `call_llm` node, which either ends the run or calls `run_tool` and returns to `call_llm`.
+
+![LangGraph workflow diagram with start, call_llm, run_tool, and end nodes, where call_llm routes either to run_tool or to end](/img/ai-security/MCP/food-demo/7.png)
+
+Send a request as `henry`, then list the requests as `joe`:
+
 ```text
 Query: My user id is henry, request access to pizza palace with the reason: I am now 18, and the role child-can-view
 Query: My user id is joe, list all access requests
 ```
-        After the first query, the agent calls `create_access_request` and reports that the request was sent. After the second query, the agent lists the pending request from `henry`.
-  </TimelineStep>
-</TimelineWrapper>
+
+After the first query, the agent calls `create_access_request` and reports that the request was sent. After the second query, the agent lists the pending request from `henry`, with the reason you gave. The same request appears in the Permit dashboard under **Elements** > **Restaurant Requests**.
 
 ## Add human review with `interrupt()` \{#adding-human-in-the-loop-with-interrupt}
 
@@ -577,7 +573,7 @@ async def human_review_node(state) -> Command[Literal["call_llm", "run_tool"]]:
 
 ### Route tool calls to the human review node \{#update-graph-routing}
 
-Change `route_after_llm` so that tool calls go to `human_review_node` instead of `run_tool`:
+Change `route_after_llm` in `client.py` so that tool calls go to `human_review_node` instead of `run_tool`:
 
 ```python
 def route_after_llm(state) -> Literal[END, "human_review_node"]:
@@ -587,7 +583,7 @@ def route_after_llm(state) -> Literal[END, "human_review_node"]:
 
 ### Add the human review node to the graph \{#wire-in-the-hitl-node}
 
-In `setup_graph`, add `human_review_node` as a node:
+In `setup_graph`, add `human_review_node` as a node. The node needs no static edges, because it returns a `Command` that names the next node:
 
 ```python
 async def setup_graph(tools):
@@ -635,11 +631,11 @@ For the interrupt API, see the [LangGraph human-in-the-loop documentation](https
 
 ### Verify the human review step \{#verify-the-human-review-step}
 
-Run the client again. The regenerated `workflow_graph.png` includes `human_review_node` between `call_llm` and `run_tool`:
+Run `uv run client.py` again. The regenerated `workflow_graph.png` includes `human_review_node` between `call_llm` and `run_tool`:
 
-![LangGraph diagram in which call_llm routes to human_review_node or to end, and human_review_node routes to run_tool or back to call_llm](/img/ai-security/MCP/food-demo/8.png)
+![LangGraph workflow diagram in which call_llm routes to human_review_node or to end, and human_review_node routes to run_tool or back to call_llm](/img/ai-security/MCP/food-demo/8.png)
 
-Ask the agent, as `joe`, to approve `henry`'s access request. The client prints the review question before `approve_access_request` runs. Answer `yes`, and Permit assigns the role to `henry`. Answer `no`, and the agent reports that you declined the tool call.
+Ask the agent, as `joe`, to approve `henry`'s access request. Before `approve_access_request` runs, the client prints the review question, the tool name, and the tool arguments, then waits at the `Approve? (yes/no):` prompt. Answer `yes`, and Permit assigns the `child-can-view` role to `henry` on that restaurant instance. Answer `no`, and the agent reports that you declined the tool call, and the role assignments in the Permit **Directory** do not change.
 
 ## Serve the agent with FastAPI and a CLI \{#serve-the-agent-with-fastapi-and-a-cli}
 
@@ -652,7 +648,9 @@ The LangGraph client serves one person at a terminal. To serve several family me
 
 In this design, a child can't approve a request, because the backend never gives a child the approval tools. A parent approves the request from a separate chat session.
 
-Build the backend and the CLI client in the repository root, next to `food_ordering_mcp.py`. Before you start:
+### Prepare the backend files \{#prepare-the-backend-files}
+
+Build the backend and the CLI client in the repository root, next to `food_ordering_mcp.py`. Before you write the code:
 
 - The CLI client is also named `client.py`. If you built the LangGraph client in the same directory, rename the LangGraph client file first, for example to `langgraph_client.py`.
 - Copy [`utils.py`](https://github.com/permitio/permit-mcp/blob/main/examples/food-ordering-system/utils.py) and [`permit_client.py`](https://github.com/permitio/permit-mcp/blob/main/examples/food-ordering-system/permit_client.py) from `examples/food-ordering-system` to the repository root. `utils.py` defines the helpers the backend imports: `init_db`, `get_user`, `verify_password`, `create_access_token`, `get_current_websocket_user`, `filter_tools_by_role`, `convert_mcp_tools_to_gemini`, and `retry_tool_call`.
@@ -665,14 +663,16 @@ Build the backend and the CLI client in the repository root, next to `food_order
 
 ### Build the FastAPI backend \{#build-the-fastapi-backend}
 
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Create the backend file** <br/>
-     Create `server.py` in the repository root: <br/>
+#### 1. Create server.py and read the settings
+
+Create `server.py` in the repository root:
+
 ```bash
 touch server.py
 ```
-    Import the dependencies and read the settings:
+
+Import the dependencies and read the settings. `genai_client` and `server_params` are created once at module level and reused by every connection: `genai_client` calls Gemini, and `server_params` describes how to start `food_ordering_mcp.py` with your database file:
+
 ```python
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -708,7 +708,11 @@ server_params = StdioServerParameters(
     env=None,
 )
 ```
-    Create the FastAPI app. The `lifespan` handler runs `init_db()` at startup, which creates and fills the database, creates the restaurant instances in Permit, syncs the users, and assigns their roles:
+
+#### 2. Create the app with a startup handler
+
+The `lifespan` handler runs `init_db()` at startup. `init_db()` creates the SQLite tables, adds the demo users, restaurants, and dishes, creates the restaurant instances in Permit, syncs the users, and assigns their roles:
+
 ```python
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -717,10 +721,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 ```
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Add the WebSocket connection manager** <br/>
-    `ConnectionManager` tracks the open WebSocket connection of each user.
+
+#### 3. Add the WebSocket connection manager
+
+`ConnectionManager` tracks the open WebSocket connection of each user, so the backend can push a message to one user by ID:
 
 ```python
 class ConnectionManager:
@@ -740,10 +744,10 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 ```
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Add the sign-in endpoint** <br/>
-    The `/token` endpoint checks the username and password against the database and returns a JWT access token that expires after 30 minutes.
+
+#### 4. Add the sign-in endpoint
+
+The `/token` endpoint checks the username and password against the database and returns a JWT access token that expires after 30 minutes:
 
 ```python
 @app.post("/token")
@@ -762,16 +766,10 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 ```
-  </TimelineStep>
-  <TimelineStep stepNumber={4}>
-    **Add the WebSocket chat endpoint** <br/>
-    The `/ws/chat` endpoint connects the CLI client, Gemini, and the MCP server: <br/>
-    - Authenticate the user from the token, and start the MCP server subprocess.
-    - Filter the tools by the user's role, convert the tools to Gemini function declarations, and prepare the conversation.
-    - Receive each message, send the message to Gemini, and run the tool calls Gemini returns until Gemini replies with text only.
-    - Close the MCP session when the connection ends.
 
-    The endpoint pins the `gemini-2.5-flash` model. Google retires models, so check the [Gemini models list](https://ai.google.dev/gemini-api/docs/models) and use a current model name.
+#### 5. Authenticate the WebSocket connection
+
+The `/ws/chat` endpoint connects the CLI client, Gemini, and the MCP server. Start the endpoint by resolving the user from the bearer token in the connection headers. A connection with no valid token, or with a user who has no role, is closed with the policy violation code `1008`:
 
 ```python
 @app.websocket("/ws/chat")
@@ -787,7 +785,13 @@ async def websocket_chat(websocket: WebSocket):
 
     client_id = current_user.get("id")
     await manager.connect(websocket, client_id)
+```
 
+#### 6. Start the MCP server and filter the tools by role
+
+The next block continues `websocket_chat`. Each connection gets its own MCP server subprocess, held open by an `AsyncExitStack`. `filter_tools_by_role` drops the tools the signed-in role must not call, and `convert_mcp_tools_to_gemini` turns the remaining MCP tool schemas into Gemini function declarations:
+
+```python
     try:
         exit_stack = AsyncExitStack()
         stdio_transport = await exit_stack.enter_async_context(stdio_client(server_params))
@@ -799,14 +803,26 @@ async def websocket_chat(websocket: WebSocket):
         tools_result = await session.list_tools()
         filtered_tools = filter_tools_by_role(tools_result.tools, current_user["role"])
         mcp_tools = [{"function_declarations": convert_mcp_tools_to_gemini(filtered_tools)}]
+```
 
+#### 7. Add the tool call helper
+
+`run_tool` calls one MCP tool through `retry_tool_call`, which retries the call twice before it gives up. `retry_tool_call` returns the exception instead of raising it, so `run_tool` checks the return value and shapes either an error or a result for Gemini:
+
+```python
         async def run_tool(fc):
             result = await retry_tool_call(session, fc.name, fc.args)
             if isinstance(result, Exception):
                 return {"name": fc.name, "response": {"result": {"error": str(result)}}}
             content = [{"text": c.text} for c in result.content]
             return {"name": fc.name, "response": {"result": {"content": content, "is_error": result.isError}}}
+```
 
+#### 8. Send each message to Gemini
+
+The outer loop waits for a message from the CLI client and rebuilds the conversation from the history the client sent. The inner loop calls Gemini with the filtered tools and a system instruction that carries the signed-in user's ID and role, so the model never has to ask for them:
+
+```python
         while True:
             data = json.loads(await websocket.receive_text())
             message = data.get("message")
@@ -828,8 +844,15 @@ async def websocket_chat(websocket: WebSocket):
                         """
                     )
                 )
+```
 
-                # Send model response (if any)
+The endpoint pins the `gemini-2.5-flash` model. Google retires models, so check the [Gemini models list](https://ai.google.dev/gemini-api/docs/models) and use a model name that the list still shows.
+
+#### 9. Stream the reply and run the tool calls
+
+Still inside the inner loop, send any text Gemini returned to the CLI client, then leave the inner loop when Gemini returned no function calls:
+
+```python
                 if hasattr(response, "text") and response.text:
                     contents.append({"role": "model", "parts": [{"text": response.text}]})
                     await manager.send_message(json.dumps({
@@ -839,7 +862,11 @@ async def websocket_chat(websocket: WebSocket):
                 function_calls = getattr(response, "function_calls", None)
                 if not function_calls:
                     break
+```
 
+When Gemini did return function calls, record them in the conversation, run them together with `asyncio.gather`, and append their responses. The inner loop then calls Gemini again with the tool results:
+
+```python
                 await manager.send_message(json.dumps({
                     "type": "status", "content": "Processing function calls..."
                 }), client_id)
@@ -857,8 +884,13 @@ async def websocket_chat(websocket: WebSocket):
                     "role": "user",
                     "parts": [{"function_response": r} for r in results]
                 })
+```
 
-            # Send the full history so the CLI client accepts the next message
+#### 10. Send the updated history and close the session
+
+After the inner loop ends, send the full conversation back to the CLI client. The client stores the conversation, sends it with the next message, and unblocks its input prompt. The `finally` block closes the MCP session when the connection ends:
+
+```python
             await manager.send_message(json.dumps({
                 "type": "history_update", "content": contents
             }), client_id)
@@ -873,17 +905,14 @@ async def websocket_chat(websocket: WebSocket):
         manager.disconnect(client_id)
         await exit_stack.aclose()
 ```
-  </TimelineStep>
-</TimelineWrapper>
 
 ### Build the CLI chat client \{#building-a-command-line-chat-client}
 
 The CLI client signs the user in to the FastAPI backend, then opens the WebSocket chat to send messages and print the replies.
 
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Create the client file** <br/>
-    Create `client.py` in the repository root. Import the libraries and set the backend URLs:
+#### 1. Create client.py and set the backend URLs
+
+Create `client.py` in the repository root. Import the libraries and set the backend URLs. Change both URLs if your backend runs on another host or port:
 
 ```python
 import asyncio
@@ -896,10 +925,10 @@ from typing import Dict, List, Optional
 API_URL = "http://localhost:8000"  # Change if needed
 WS_URL = "ws://localhost:8000"     # WebSocket URL
 ```
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Add the sign-in function** <br/>
-    `login` posts the username and password to the `/token` endpoint and returns the access token, or `None` if sign-in fails.
+
+#### 2. Add the sign-in function
+
+`login` posts the username and password to the `/token` endpoint and returns the access token, or `None` if sign-in fails:
 
 ```python
 async def login(username: str, password: str) -> str | None:
@@ -921,80 +950,81 @@ async def login(username: str, password: str) -> str | None:
         print(f"Login failed: {response.json().get('detail')}")
         return None
 ```
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Start the chat session** <br/>
-    `chat` holds the message history and two flags: `is_processing` is true while the backend handles a message, and `is_displayed_processing` is true after the client prints the waiting message.
+
+#### 3. Start the chat session
+
+`chat` holds the message history and two flags. `is_processing` is true while the backend handles a message. `is_displayed_processing` is true after the client prints the waiting message, so the client prints it once per message:
 
 ```python
 async def chat(token: str):
     history: List[Dict] = []
-    is_processing = False  # Simple flag to track message processing state
+    is_processing = False
     is_displayed_processing = False
 
     print("\n--- Chat session started ---")
     print("Type 'exit' to quit.\n")
-
 ```
-  </TimelineStep>
-  <TimelineStep stepNumber={4}>
-    **Open the WebSocket connection** <br/>
-    Connect to the chat endpoint with the token. The nested `receive_messages` function runs in the background, reads each message from the backend, prints the message by type, and updates the history and flags. `nonlocal` lets `receive_messages` change the variables of `chat`.
+
+#### 4. Open the WebSocket connection
+
+The next block continues `chat`. Connect to the chat endpoint with the token in the `Authorization` header. Every block after this one belongs inside the body of this `async with` statement:
 
 ```python
-try:
-    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        headers = {"Authorization": f"Bearer {token}"}
 
-    async with websockets.connect(
-        f"{WS_URL}/ws/chat",
-        additional_headers=headers
-    ) as websocket:
-        # Start a background task for receiving messages
-        async def receive_messages():
-            nonlocal is_processing, history, is_displayed_processing
+        async with websockets.connect(
+            f"{WS_URL}/ws/chat",
+            additional_headers=headers
+        ) as websocket:
+```
 
-            while True:
-                try:
-                    message = await websocket.recv()
-                    data = json.loads(message)
+#### 5. Receive messages in the background
 
-                    message_type = data.get("type")
-                    content = data.get("content")
+`receive_messages` is nested inside `chat`. The function reads each message from the backend, prints the message by type, and updates the history and the flags. `nonlocal` lets `receive_messages` change the variables of `chat`:
 
-                    if message_type == "text":
-                        print(f"Assistant: {content}")
-                    elif message_type == "status":
-                        print(f"[Status] {content}")
-                    elif message_type == "error":
-                        print(f"Error: {content}")
-                        is_processing = False  # Unlock on error
+```python
+            async def receive_messages():
+                nonlocal is_processing, history, is_displayed_processing
+
+                while True:
+                    try:
+                        message = await websocket.recv()
+                        data = json.loads(message)
+
+                        message_type = data.get("type")
+                        content = data.get("content")
+
+                        if message_type == "text":
+                            print(f"Assistant: {content}")
+                        elif message_type == "status":
+                            print(f"[Status] {content}")
+                        elif message_type == "error":
+                            print(f"Error: {content}")
+                            is_processing = False
+                            is_displayed_processing = False
+                        elif message_type == "history_update":
+                            history = content
+                            is_processing = False
+                            is_displayed_processing = False
+                    except Exception as e:
+                        print(f"\nError receiving message: {str(e)}")
+                        is_processing = False
                         is_displayed_processing = False
-                    elif message_type == "history_update":
-                        history = content
-                        is_processing = False  # Unlock when complete
-                        is_displayed_processing = False
-                except Exception as e:
-                    print(f"\nError receiving message: {str(e)}")
-                    is_processing = False
-                    is_displayed_processing = False
-                    break
+                        break
 ```
-    Start `receive_messages` as a background task with `asyncio.create_task()`, so the client receives messages while the main loop reads input.
 
-  </TimelineStep>
-  <TimelineStep stepNumber={5}>
-  **Add the main chat loop** <br/>
+Start `receive_messages` as a background task, so the client receives messages while the main loop reads input:
 
 ```python
-      # Start the receiver task
-      receiver_task = asyncio.create_task(receive_messages())
+            receiver_task = asyncio.create_task(receive_messages())
 ```
-The main loop waits while the backend processes a message, and prints the waiting message once.
 
-When the backend is ready, the loop reads input with `input()` in a thread executor, so the input call doesn't block the event loop. If the input is `exit`, the chat ends. Otherwise, the loop sends the message and the history as JSON over the WebSocket.
+#### 6. Read input in the main loop
+
+The main loop waits while the backend processes a message, and prints the waiting message once. When the backend is ready, the loop reads input with `input()` in a thread executor, so the input call doesn't block the event loop:
 
 ```python
-            # Main input loop
             while True:
                 if is_processing:
                     if not is_displayed_processing:
@@ -1011,11 +1041,15 @@ When the backend is ready, the loop reads input with `input()` in a thread execu
                 if user_input.lower() == "exit":
                     print("Ending chat session.")
                     break
+```
 
-                # Set the processing flag before sending
+#### 7. Send the message and the history
+
+Still inside the main loop, set `is_processing` before sending, so the next `input()` call waits until the backend returns a `history_update` message. The payload carries the new message and the history the backend sent last:
+
+```python
                 is_processing = True
 
-                # Send the message
                 payload = {
                     "message": user_input,
                     "history": history
@@ -1029,28 +1063,24 @@ When the backend is ready, the loop reads input with `input()` in a thread execu
                     is_displayed_processing = False
                     break
 ```
-  </TimelineStep>
-  <TimelineStep stepNumber={6}>
-  **Clean up after the chat loop** <br/>
-  When the loop exits, because of an error or because the user typed `exit`, cancel the receiver task:
+
+#### 8. Clean up after the chat loop
+
+When the main loop exits, because of an error or because the user typed `exit`, cancel the receiver task. The `except` clauses belong to the `try` statement that opened the connection:
 
 ```python
-            # Clean up
             receiver_task.cancel()
-```
 
-Then handle WebSocket errors and other exceptions, and print a warning:
-
-```python
     except websockets.exceptions.WebSocketException as e:
         print(f"WebSocket connection error: {str(e)}")
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
 ```
-  </TimelineStep>
-  <TimelineStep stepNumber={7}>
-  **Add the entry point** <br/>
-    `main` asks for a username and password, calls `login`, and starts `chat` when sign-in succeeds. The `if __name__ == "__main__":` block runs `main` and exits cleanly on `Ctrl+C`.
+
+#### 9. Add the entry point
+
+`main` asks for a username and password, calls `login`, and starts `chat` when sign-in succeeds. The `if __name__ == "__main__":` block runs `main` and exits cleanly on `Ctrl+C`:
+
 ```python
 async def main():
     print("Welcome to the Food Ordering CLI tool!")
@@ -1073,38 +1103,85 @@ if __name__ == "__main__":
         print(f"Unexpected error: {str(e)}")
         sys.exit(1)
 ```
-  </TimelineStep>
-</TimelineWrapper>
 
 ### Run the app and review requests \{#running-the-project}
 
-1. Start the FastAPI backend:
+#### 1. Start the FastAPI backend
 
 ```bash
 fastapi dev server.py
 ```
 
-2. In a second terminal, start the CLI client:
+On the first run, `init_db()` fills the database and creates the Permit objects, and prints three lines:
+
+```text
+Initializing database
+Setting up Permit...
+Database initialization complete.
+```
+
+On later runs the database already holds the restaurants, so `init_db()` skips the seeding and prints only the first and the last line. The development server then reports that startup is complete and serves the app on port 8000, which is the port the CLI client's `API_URL` points to.
+
+#### 2. Start the CLI client
+
+In a second terminal, start the client:
 
 ```bash
 uv run client.py
 ```
 
-3. Sign in with one of the demo users that `init_db()` creates:
+The client prints the welcome line and asks for credentials:
 
-```python
-[
-    {"username": "joe", "password": 'joe_password',  "role": "parent"},
-    {"username": "jane", "password": 'jane_password', "role": "parent"},
-    {"username": "henry",  "password": 'henry_password', "role": "child"},
-    {"username": "rose",  "password": 'rose_password', "role": "child"},
-]
+```text
+Welcome to the Food Ordering CLI tool!
+Username:
 ```
 
-4. Sign in as `henry`, a child, and ask for the dishes at a restaurant that isn't allowed for children, such as Fancy French. The `list_dishes` tool returns an access denied error. Ask the agent to request access, and give a reason when the agent asks for one. The agent calls `create_access_request`.
-5. In another CLI session, sign in as `joe`, a parent, and ask for the pending access requests. Approve `henry`'s request. `henry` can list the Fancy French dishes.
-6. As `henry`, order the Pepperoni Pizza at Pizza Palace, which costs $10.99. The `order_dish` tool returns an approval required error, and the agent creates an operation approval request.
-7. As `joe`, list the operation approvals and approve the request. As `henry`, order the dish again. The order succeeds, and the `_Approved_` role is removed, so the next expensive order needs a new approval.
+#### 3. Sign in as a demo user
+
+`init_db()` creates four users. Sign in as one of them:
+
+| Username | Password | Role |
+| --- | --- | --- |
+| `joe` | `joe_password` | parent |
+| `jane` | `jane_password` | parent |
+| `henry` | `henry_password` | child |
+| `rose` | `rose_password` | child |
+
+After a successful sign-in, the client prints:
+
+```text
+Login successful!
+
+--- Chat session started ---
+Type 'exit' to quit.
+
+You:
+```
+
+A wrong password prints `Login failed: Incorrect username or password`, and the client exits.
+
+#### 4. Request access to a restricted restaurant
+
+`init_db()` marks Pizza Palace and Burger Bonanza as allowed for children, and assigns children the `child-can-view` role on those two restaurants only. Fancy French and Sushi World stay restricted.
+
+Sign in as `henry`, a child, and ask for the dishes at Fancy French. The client prints `[Status] Processing function calls...` while the tool runs. The `list_dishes` tool raises `Access denied. You are not permitted to view dishes.`, and the agent relays the denial. Ask the agent to request access, and give a reason when the agent asks for one. The agent calls `create_access_request`, and the request appears in the Permit dashboard under **Elements** > **Restaurant Requests**.
+
+#### 5. Approve the access request as a parent
+
+In a third terminal, run `uv run client.py` again and sign in as `joe`, a parent. Ask for the pending access requests, and approve `henry`'s request. The `parent` role gives `joe` the approval tools, which `filter_tools_by_role` withholds from a child.
+
+Back in `henry`'s session, ask for the Fancy French dishes again. The agent lists Escargot at $15.99, Foie Gras at $19.99, and Truffle Pasta at $18.49.
+
+#### 6. Request approval for an expensive dish
+
+As `henry`, order the Pepperoni Pizza at Pizza Palace, which costs $10.99. The `order_dish` tool raises `This dish costs $10.99. Approval required for expensive dishes.`, because a child needs the `operate` permission for a dish over $10. The agent then creates an operation approval request with `create_operation_approval`.
+
+#### 7. Approve the dish and confirm the one-time approval
+
+As `joe`, list the operation approvals and approve `henry`'s request. Permit assigns the `_Approved_` role to `henry` on that restaurant instance.
+
+As `henry`, order the Pepperoni Pizza again. The tool returns `Order successfully placed for Pepperoni Pizza!`. The same call unassigns the `_Approved_` role, so a third order of the Pepperoni Pizza raises the approval required error again. That confirms the approval covered one order.
 
 ## Next steps \{#final-thoughts--resources}
 

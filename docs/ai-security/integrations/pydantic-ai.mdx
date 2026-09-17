@@ -1,6 +1,6 @@
 ---
 title: Secure a PydanticAI agent with Permit.io
-sidebar_label: Pydantic AI
+sidebar_label: PydanticAI
 description: "Add Permit.io permission checks to PydanticAI agent tools for prompt filtering, document filtering, portfolio actions, and response disclaimers in a financial advisor example."
 ---
 
@@ -10,7 +10,7 @@ Add Permit.io permission checks to the tools of a PydanticAI financial advisor a
 | --- | --- | --- |
 | Prompt filtering | `validate_financial_query` | `permit.check()` for `receive` on `financial_advice` |
 | RAG data protection | `access_financial_knowledge` | `permit.filter_objects()` for `read` on `financial_document` |
-| Secure external access | `check_action_permissions` | `permit.check()` on `portfolio` |
+| Secure external access | `check_action_permissions` | `permit.check()` for `update` on `portfolio` |
 | Response enforcement | `validate_financial_response` | `permit.check()` for `requires_disclaimer` on `financial_response` |
 
 ## Prerequisites and tech stack \{#prerequisites-and-tech-stack}
@@ -21,7 +21,7 @@ Add Permit.io permission checks to the tools of a PydanticAI financial advisor a
 | [Permit.io account](https://app.permit.io/) and an environment API key ([Get your API key](/overview/get-api-key)) | Stores the policy |
 | An [Anthropic](https://www.anthropic.com/) API key | The example agent uses the `anthropic:claude-3-5-sonnet-latest` model. PydanticAI reads the key from `ANTHROPIC_API_KEY`. To use [OpenAI](https://openai.com/), change the model string in `example/main.py`. |
 | [Docker](https://www.docker.com/) | Runs the Edge policy decision point (PDP). The policy uses attribute-based access control (ABAC), which the Cloud PDP doesn't evaluate. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities). |
-| [Python 3.9 or later](https://www.python.org/) | Runs the agent |
+| [Python 3.11 or later](https://www.python.org/) | Runs the agent. `pyproject.toml` declares `requires-python = ">=3.9"`, but `example/config.py` imports `typing.NotRequired`, which Python added in 3.11, so the script fails to import on 3.9 and 3.10. The repository's `.python-version` pins 3.13. |
 | [uv](https://docs.astral.sh/uv/) | Installs the example's dependencies |
 
 :::note PydanticAI versions
@@ -41,7 +41,7 @@ ANTHROPIC_API_KEY=<your-anthropic-api-key>
 | Variable | Value |
 | --- | --- |
 | `PERMIT_KEY` | Your environment API key |
-| `PDP_URL` | Your Edge PDP, for example `http://localhost:7766`. `example/main.py` uses this value when `PDP_URL` isn't set. |
+| `PDP_URL` | Your Edge PDP. `example/main.py` falls back to `http://localhost:7766` when `PDP_URL` isn't set. |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key, for the agent model |
 
 The example loads a `.env` file with `python-dotenv`:
@@ -53,7 +53,7 @@ load_dotenv()
 
 ## Plan the access model \{#planning-our-policies}
 
-The financial advisor agent follows four rules:
+The financial advisor agent aims for four rules:
 
 | Perimeter | Rule |
 | --- | --- |
@@ -61,6 +61,8 @@ The financial advisor agent follows four rules:
 | RAG data protection | Show confidential documents only to users with high clearance |
 | Secure external access | Allow portfolio actions only for premium users |
 | Response enforcement | Add a disclaimer to responses that contain advice |
+
+The policy that `example/config.py` creates does not reach the first two rules for a `premium_user`, because the role grants `financial_advice:receive` and `financial_document:read` on the whole resource type. See [The `premium_user` role overrides the attribute rules](#defining-roles--user-sets).
 
 ### Resources \{#defining-resources}
 
@@ -91,30 +93,6 @@ The financial advisor agent follows four rules:
 | `confidential_docs` | Resource set on `financial_document` | `resource.classification` equals `"confidential"` |
 | `finance_advice` | Resource set on `financial_advice` | `resource.is_ai_generated` equals `true` |
 
-- `opted_in_users`:
-
-  ```text
-  user.ai_advice_opted_in == true
-  ```
-
-- `high_clearance_users`:
-
-  ```text
-  user.clearance_level == "high"
-  ```
-
-- `confidential_docs`:
-
-  ```text
-  resource.classification == "confidential"
-  ```
-
-- `finance_advice`:
-
-  ```text
-  resource.is_ai_generated == true
-  ```
-
 ### Roles and rules \{#defining-roles--user-sets}
 
 | Role | Permissions created by `config.py` |
@@ -125,6 +103,17 @@ The financial advisor agent follows four rules:
 The example defines two condition set rules: `opted_in_users` can `receive` on `finance_advice`, and `high_clearance_users` can `read` on `confidential_docs`. `config.py` lists these rules but doesn't create them, so grant them in the Policy Editor.
 
 No role or rule in `config.py` grants `requires_disclaimer` on `financial_response`. The response enforcement tool adds a disclaimer only when that check is allowed, so grant `requires_disclaimer` to `premium_user` in the Policy Editor.
+
+:::warning The `premium_user` role overrides the attribute rules
+`config.py` builds `premium_user` from a flat permission list, so the role grants `financial_advice:receive` and `financial_document:read` on the whole resource type. Policy Editor rules are allow rules, and a check is allowed when any rule allows it (see [Mix and Match Policies](/how-to/build-policies/overview#combining-models)). Those two role grants therefore allow every advice check and every document check for a `premium_user`, whatever `ai_advice_opted_in` and `clearance_level` hold on the user and whatever `classification` the document carries.
+
+Two consequences follow:
+
+- The `opted_in_users` and `high_clearance_users` rules change no decision for `user@example.com`. Setting `ai_advice_opted_in` to `false` or `clearance_level` to `low` on that user leaves every result in this tutorial the same.
+- `restricted@example.com` is denied everything because `restricted_user` has no permissions, not because of its attribute values.
+
+To let the attributes decide, clear `receive` on `financial_advice` and `read` on `financial_document` for `premium_user` in the **Policy Editor** and keep the two condition set rules. Each permission then comes only from a condition set rule: `receive` needs `ai_advice_opted_in` to be `true` and `is_ai_generated` to be `true`, and `read` needs `clearance_level` to be `high` and `classification` to be `confidential`. Requests outside those two sets, such as a question that isn't advice or a `public` document, then have no rule that allows them. Add the resource sets and rules you want for those cases before you remove the role grants. See [Build ABAC policies](/how-to/build-policies/abac/building-abac-policy).
+:::
 
 ## Run the Edge PDP \{#install-and-run-the-permit-pdp}
 
@@ -173,7 +162,7 @@ The script reads `PERMIT_KEY` from the environment.
 
    ![User set form for high-clearance users](/img/ai-security/integrations/pydantic/5.png)
 
-4. Create the resource sets: confidential documents and AI-generated advice.
+4. On the same tab, create the `confidential_docs` and `finance_advice` resource sets from [Condition sets](#defining-condition-sets).
 
    ![Resource set form for confidential documents](/img/ai-security/integrations/pydantic/6.png)
 
@@ -183,16 +172,18 @@ The script reads `PERMIT_KEY` from the environment.
 
    ![Policy Editor with the roles, user sets, and resource sets configured](/img/ai-security/integrations/pydantic/8.png)
 
+6. Confirm the policy in the **Policy Editor**: the `premium_user` row has `receive`, `read`, `update`, and `analyze` checked across the four resources, the `restricted_user` row has nothing checked, and the `opted_in_users` and `high_clearance_users` rows each have one action checked on their resource set.
+
 ### Create the test users
 
-In the **Directory** screen, create the users that `config.py` describes but doesn't create. See [Sync users](/how-to/sync-users).
+In the **Directory** screen, create the users that `config.py` describes but doesn't create, and assign each role in the `default` tenant. See [Sync users](/how-to/sync-users).
 
 | User key | Role | `clearance_level` | `ai_advice_opted_in` |
 | --- | --- | --- | --- |
 | `user@example.com` | `premium_user` | `high` | `true` |
 | `restricted@example.com` | `restricted_user` | `low` | `false` |
 
-`example/main.py` runs the agent as `user@example.com`.
+`example/main.py` runs the agent as `user@example.com`. A user key that doesn't exist in Permit gets denied on every check, so create both users before you run the agent.
 
 ## Perimeter 1: Filter prompts \{#prompt-filtering}
 
@@ -201,8 +192,8 @@ Prompt filtering rejects a request before the agent acts on it. The `validate_fi
 ### How prompt filtering works \{#how-it-works}
 
 1. `classify_prompt_for_advice` detects whether the question asks for financial advice.
-2. `permit.check()` asks the PDP whether the user can `receive` `financial_advice` with that `is_ai_generated` value. The `opted_in_users` rule on `finance_advice` allows opted-in users.
-3. When the PDP denies the check, the tool returns a denial message to the agent. When it allows the check, the tool returns `True`.
+2. `permit.check()` asks the PDP whether the user can `receive` `financial_advice` with that `is_ai_generated` value. Two rules can allow it: the `premium_user` role grant on `financial_advice:receive`, and the `opted_in_users` rule on the `finance_advice` resource set.
+3. When the PDP denies the check, the tool returns a denial string to the agent, which the agent relays in its answer. When the PDP allows the check, the tool returns `True` and the agent continues.
 
 ```python
 @financial_agent.tool
@@ -262,20 +253,23 @@ def classify_prompt_for_advice(question: str) -> bool:
 
 ### Expected prompt filtering results \{#expected-behavior}
 
-| User | Prompt | Result |
-| --- | --- | --- |
-| `user@example.com` (opted in) | "Can you recommend a bond fund?" | Allowed |
-| `restricted@example.com` (not opted in) | "Can you recommend a bond fund?" | Denied: "User has not opted in to receive AI-generated financial advice." |
+| User | Prompt | Result | Rule that decides |
+| --- | --- | --- | --- |
+| `user@example.com` (`premium_user`, opted in) | "Can you recommend a bond fund?" | Allowed | The `premium_user` role grant on `financial_advice:receive`, not the opt-in rule |
+| `restricted@example.com` (`restricted_user`, not opted in) | "Can you recommend a bond fund?" | Denied. The tool returns the string `User has not opted in to receive AI-generated financial advice`. | `restricted_user` has no permissions |
+
+The opt-in rule only changes the outcome after you clear the `premium_user` role grant on `financial_advice`. See [The `premium_user` role overrides the attribute rules](#defining-roles--user-sets).
 
 ## Perimeter 2: Filter documents \{#data-protection}
 
-RAG data protection limits the documents the agent can use to the ones the user can `read`. The `access_financial_knowledge` tool sends every candidate document, with its `classification` and `doc_type` attributes, to `permit.filter_objects()`. The tool returns the content of the allowed documents only.
+Retrieval-augmented generation (RAG) data protection limits the documents the agent can use to the ones the user can `read`. The `access_financial_knowledge` tool sends every candidate document, with its `classification` and `doc_type` attributes, to `permit.filter_objects()`, and returns the allowed documents only.
 
 ### How document filtering works \{#how-it-works-1}
 
-1. The query includes a list of candidate documents.
-2. `filter_objects` runs one check per document for `read` on `financial_document`, with the document's attributes.
-3. The tool keeps the documents the PDP allows and passes their content to the agent.
+1. The agent passes a list of candidate documents to the tool.
+2. `access_financial_knowledge` builds one resource dictionary per document, with the document ID in `key` and the document attributes in `attributes`. `permit.filter_objects()` reads `key`, `type`, `attributes`, `context`, and `tenant` from each dictionary, so the ID goes in `key`.
+3. `filter_objects` runs one bulk check for `read` on `financial_document`, one entry per document.
+4. `filter_objects` returns the resource dictionaries the PDP allowed, and the tool maps their `key` values back to the documents it hands the agent.
 
 ```python
 @financial_agent.tool
@@ -334,14 +328,18 @@ class FinancialDocument(BaseModel):
     )
 ```
 
-The PDP evaluates the `classification` attribute against the `confidential_docs` resource set and the user's `clearance_level`.
+`access_financial_knowledge` sends `classification` as a resource attribute on every check, which is what the `confidential_docs` resource set matches on.
 
 ### Expected document filtering results \{#expected-behavior-1}
 
-| User | Document classification | Result |
-| --- | --- | --- |
-| `user@example.com` (`premium_user`, `clearance_level: high`) | `confidential` | Allowed |
-| `restricted@example.com` (`restricted_user`, `clearance_level: low`) | `confidential` | Denied |
+| User | Document classification | Result | Rule that decides |
+| --- | --- | --- | --- |
+| `user@example.com` (`premium_user`, `clearance_level: high`) | `confidential` | Allowed | The `premium_user` role grant on `financial_document`, not the clearance rule |
+| `user@example.com` (`premium_user`, `clearance_level: high`) | `public` | Allowed | The `premium_user` role grant on `financial_document` |
+| `restricted@example.com` (`restricted_user`, `clearance_level: low`) | `confidential` | Denied | `restricted_user` has no permissions |
+| `restricted@example.com` (`restricted_user`, `clearance_level: low`) | `public` | Denied | `restricted_user` has no permissions |
+
+The clearance rule only changes the outcome after you clear the `premium_user` role grant on `financial_document`. See [The `premium_user` role overrides the attribute rules](#defining-roles--user-sets).
 
 ## Perimeter 3: Authorize external actions \{#secure-external-access}
 
@@ -369,7 +367,9 @@ async def check_action_permissions(
         raise SecurityError(f'Failed to check portfolio permission: {str(e)}')
 ```
 
-The check runs before the agent calls the external system. In `example/main.py`, the tool always checks the `update` action.
+The check runs before the agent calls the external system, so a denial stops the call instead of reverting it afterwards. The `portfolio_id` goes in the resource `key`, which puts the portfolio ID in the audit log entry for the check.
+
+The version of `check_action_permissions` in the example repository takes the same arguments but ignores `action` and always checks `update`. Pass `action` through, as the block above does, if you want the agent to ask about `read` and `analyze` as well.
 
 ### Expected portfolio results \{#real-world-scenarios}
 
@@ -411,7 +411,9 @@ async def update_portfolio(
 
 ## Perimeter 4: Enforce the response \{#response-enforcement}
 
-Response enforcement checks the final answer before the user sees it. The `validate_financial_response` tool classifies whether the answer contains advice, checks `requires_disclaimer` on `financial_response`, and appends a disclaimer when the answer contains advice and the check allows it:
+Response enforcement checks the final answer before the user sees it. The `validate_financial_response` tool classifies whether the answer contains advice, checks `requires_disclaimer` on `financial_response`, and appends a disclaimer when the answer contains advice and the check allows it.
+
+`contains_advice` is declared as a bool attribute in `example/config.py`, so pass the Python bool rather than a string. No role in `config.py` grants `requires_disclaimer`, so this check is denied and no disclaimer is added until you grant `requires_disclaimer` on `financial_response` to `premium_user` in the **Policy Editor**.
 
 ```python
 @financial_agent.tool
@@ -475,7 +477,7 @@ def classify_response_for_advice(response_text: str) -> bool:
     return any(indicator in response_lower for indicator in advice_indicators)
 ```
 
-In production, replace the keyword list with an intent classifier or a moderation API.
+A keyword list matches substrings, so it flags an answer that contains the word "should" in a sentence that gives no advice. Replace it with an intent classifier or a moderation API before you rely on it in production.
 
 ## Run the agent and verify the perimeters \{#running-the-agent--testing-behavior}
 
@@ -531,7 +533,7 @@ In production, replace the keyword list with an intent classifier or a moderatio
 
    The `answer` text comes from the model, so it differs between runs. The `includes_advice` and `disclaimer_added` flags come from the permission checks: `disclaimer_added=True` on the first response means `validate_financial_response` classified the answer as advice and the PDP allowed `requires_disclaimer` on `financial_response`.
 
-6. Run the agent as the restricted user. Change `user_id` in the `PermitDeps(...)` call in `example/main.py` from `user@example.com` to `restricted@example.com`, then run `uv run python example/main.py` again. The first response now carries the denial string from `validate_financial_query` instead of advice, and `disclaimer_added` stays `False`.
+6. Run the agent as the restricted user. Change `user_id` in the `PermitDeps(...)` call in `example/main.py` from `user@example.com` to `restricted@example.com`, then run `uv run python example/main.py` again. `validate_financial_query` returns its denial string to the agent instead of `True`, so the first answer reports that the user has not opted in, and `disclaimer_added` stays `False`.
 
 7. Open [audit logs](/how-to/use-audit-logs/types-and-filtering) in the Permit dashboard. Each run adds one entry per check, so you can see which tool ran which check and whether the PDP allowed it. Try these prompts and compare the entries between the two users:
 
@@ -541,12 +543,13 @@ In production, replace the keyword list with an intent classifier or a moderatio
 
 ### Expected results \{#behavior-summary-table}
 
-| Request | `user@example.com` | `restricted@example.com` |
+| Request | `user@example.com` (`premium_user`) | `restricted@example.com` (`restricted_user`) |
 | --- | --- | --- |
-| Ask for financial advice | Allowed. The answer includes a disclaimer if you granted `requires_disclaimer`. | Denied |
-| Read confidential documents | Allowed | Denied |
+| Ask for financial advice | Allowed. The answer includes the disclaimer once you grant `requires_disclaimer` on `financial_response`. | Denied. `validate_financial_query` returns `User has not opted in to receive AI-generated financial advice`. |
+| Read confidential documents | Allowed, through the `premium_user` role grant on `financial_document` | Denied. `restricted_user` has no permissions. |
+| Read public documents | Allowed | Denied |
 | Update a portfolio | Allowed | Denied |
-| Ask a question that isn't advice | Allowed through the `premium_user` role | Denied: "User is not authorized for this type of query." |
+| Ask a question that isn't advice | Allowed, through the `premium_user` grant on `financial_advice:receive` | Denied. `validate_financial_query` returns `User does not have permission to access this information`. |
 
 ## Next steps \{#final-thoughts--resources}
 

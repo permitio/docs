@@ -8,7 +8,7 @@ Run the Galactic Health Corporation (GHC) demo app and see how one healthcare ap
 
 GHC is a Next.js sample app set in the universe of "Rick and Morty". The app uses:
 
-- **[Role-based access control (RBAC)](/how-to/build-policies/rbac/overview)** to show beta features to a pilot group.
+- **[Role-based access control (RBAC)](/how-to/build-policies/rbac/overview)** to show a pilot group a benefits card that other users don't see.
 - **[Relationship-based access control (ReBAC)](/how-to/build-policies/rebac/overview)** to let members share their health data with caregivers.
 - **[Attribute-based access control (ABAC)](/how-to/build-policies/abac/overview)** to limit caregiver access to a date range.
 
@@ -20,14 +20,15 @@ The code is in the [Galactic-Health-Corporation repository](https://github.com/p
 
 ### GHC app key features \{#ghc-app-key-features}
 
+Every feature below maps to a resource, action, or role that `scripts/setupPermit.js` creates in your Permit environment.
+
 | Feature | What it does in GHC |
 |---|---|
-| User roles | Doctors, patients, caretakers, and administrators each have a role with its own access level. |
-| Patient management | Patients access their own health records, medical history, and treatment plans, and can grant limited access to caregivers or family members. |
-| Doctor-patient relationships | Doctors view and manage the medical records of the patients under their care. |
-| Attribute-based access | Attributes such as geographic location, patient age, date ranges, or treatment status restrict access to some resources. |
-| Feature pilot group | Users in a pilot group see beta features. |
-| Delegated permissions | Users delegate limited access to their health information to others, such as caregivers. |
+| Member data ownership | Each member holds the `owner` resource role on their own `member` instance, which derives `owner` on their profile, health plan, and medical records. |
+| Member groups | A group administrator holds `member_group#admin` and assigns other users the `member_group#org_member` role. Users in a group read each other's profiles. |
+| Delegated caregiver access | A member grants another user the `caregiver` resource role on their own member data. The caregiver then reads that member's health plan and medical records. |
+| Time-limited delegation | A `caregiver_bounds` user attribute holds a start and end date per delegation. Custom Rego denies the caregiver role outside that range. |
+| Benefits pilot group | The `Benefits Pilot Group` role grants `view` on the `benefits_pg` resource. The **Personal Benefits** card on the plan page renders only for users who hold that role. |
 
 ## Run GHC locally \{#getting-started}
 
@@ -67,9 +68,13 @@ The code is in the [Galactic-Health-Corporation repository](https://github.com/p
 
 ### Seed the policy in Permit \{#configuration-setup}
 
-From the repository root, run `npm run config`. The command runs `scripts/setupPermit.js`, which creates the resources, actions, and roles that GHC uses in your Permit environment.
+From the repository root, run `npm run config`. The command runs `scripts/setupPermit.js`, which creates the resources, actions, resource roles, relations, and role derivations listed in [ReBAC requirements](#requirements).
 
-**Verify:** In the Permit dashboard, open the **Policy** screen. The resources from the [resource table](#entities) appear on the **Resources** tab.
+:::danger The seed script deletes the environment's policy first
+`scripts/setupPermit.js` starts by deleting every resource, resource relation, resource role, role, and user in the environment the API key points at. Point `PERMIT_SDK_KEY` at an empty environment, or you lose the policy and directory data already there.
+:::
+
+**Verify:** In the Permit dashboard, open the **Policy** screen and the **Resources** tab. Six resources appear: `member`, `profile`, `health_plan`, `medical_records`, `member_group`, and `benefits_pg`. On the **Roles** tab, the `Benefits Pilot Group` role appears.
 
 ### Start the PDP and the app \{#running-the-application}
 
@@ -84,57 +89,69 @@ From the repository root, run `npm run config`. The command runs `scripts/setupP
    ```
 
 2. In a new terminal, from the repository root, run `npm run dev`.
-3. Open `http://localhost:3000`. The GHC sign-in page appears.
+3. Open `http://localhost:3000`.
+
+**Verify:** the browser redirects to the Clerk sign-in page at `/sign-in`, and the PDP terminal logs a policy update from Permit.
 
 ## RBAC and ReBAC model \{#permission-models---rbac-and-rebac}
 
-GHC builds most of its policy with ReBAC, and uses RBAC for the pilot group.
+GHC builds most of its policy with ReBAC, and uses one top-level RBAC role for the benefits pilot group.
 
 ### Entities
 
 | Entity | Definition |
 |---|---|
-| Resource | A type of object you manage access to. Each resource can have many instances. |
+| Resource | A type of object you manage access to. Each resource can have many instances, such as one member's health plan. |
 | Action | An operation a user can perform on a resource. The policy allows or denies each action. |
-| Relationship | A link between two resource instances, such as a member and the member's medical records. |
-| Resource role | A role assigned on a specific resource instance. |
-| Role derivation | A rule that grants a role on a related resource instance. In GHC, roles on a member derive roles on the member's profile, health plan, and medical records. |
+| Relation | A named link between two resource types. GHC uses `parent` (from `member`) and `belongs` (from `member_group`). |
+| Relationship tuple | One instance of a relation between two resource instances, such as `member_group:smith_family belongs profile:profile_user_rick`. |
+| Resource role | A role that applies to instances of one resource type. Permit writes it as `Resource#Role`, for example `health_plan#caregiver`. |
+| Role derivation | A rule that grants a resource role to users who hold another resource role on a related instance. In GHC, roles on a `member` instance derive roles on that member's profile, health plan, and medical records. |
+| Top-level role | A role assigned in a tenant rather than on an instance. GHC has one: `Benefits Pilot Group`. |
 
 ### ReBAC requirements \{#requirements}
 
-- Users can view their own profile details, health plans, and medical records.
-- Users can view the profiles of other users they have a relationship with, such as family members.
-- Users can delegate permission to view their health plan and medical records to other users, for a specific date range.
-- Users can view some features in the app based on their pilot group.
+- Users read their own profile, health plan, and medical records.
+- Users read the profiles of other users in the same member group.
+- Users delegate read access to their profile, health plan, and medical records to another user, for a specific date range.
+- Users in the benefits pilot group see the **Personal Benefits** card.
 
-The following table lists the resources, actions, relationships, and roles in the GHC model:
+`scripts/setupPermit.js` creates this model. Resource and role keys in the table are the keys the app checks against:
 
-| Resource                | Actions      | Relationships                                    | Resource Roles                              | Derived Roles                             | Description                                      |
-| ----------------------- | ------------ | ------------------------------------------------ | ------------------------------------------- | ----------------------------------------- | ------------------------------------------------ |
-| Member                  | Write, Read  | Parent of: Medical Records, Health Plan, Profile | Owner (read, write)                         | Caregiver (read)                          | The root entity for all member-related resources |
-| Profile                 | Write, Read  | Child of Member                                  | Owner (read, write)                         | Member:Caregiver, Member Group:Org Member | A member profile                                 |
-| Health Plan             | Write, Read  | Child of Member                                  | Owner (read, write)                         | Member:Caregiver                          | A member's health plan                           |
-| Medical Records         | Write, Read  | Child of Member                                  | Owner (read, write)                         | Member:Caregiver                          | A member's medical records                       |
-| Member Group            | List, Assign |                                                  | Admin (list, assign), Org member (list)     |                                           | A member group                                   |
-| New feature pilot group | View         |                                                  | Pilot group member (general role)           |                                           | A member group that has access to beta features  |
+| Resource (key) | Actions | Resource roles | Relations | Role derivations |
+| --- | --- | --- | --- | --- |
+| Member (`member`) | `read`, `write` | `owner` (read, write), `caregiver` (read) | Subject of `parent` on `profile`, `health_plan`, and `medical_records` | None. Both roles are assigned directly on a `member` instance. |
+| Profile (`profile`) | `read`, `write` | `owner` (read, write), `caregiver` (read) | `parent` from `member`, `belongs` from `member_group` | `owner` from `member#owner` via `parent`. `caregiver` from `member#caregiver` via `parent` and from `member_group#org_member` via `belongs`. |
+| Health Plan (`health_plan`) | `read` | `owner` (read), `caregiver` (read) | `parent` from `member` | `owner` from `member#owner` and `caregiver` from `member#caregiver`, both via `parent`. |
+| Medical Records (`medical_records`) | `read` | `owner` (read), `caregiver` (read) | `parent` from `member` | `owner` from `member#owner` and `caregiver` from `member#caregiver`, both via `parent`. |
+| Member Group (`member_group`) | `list`, `assign` | `admin` (list, assign), `org_member` (list) | Subject of `belongs` on `profile` | None. Both roles are assigned directly on a `member_group` instance. |
+| Benefits (`benefits_pg`) | `view` | None | None | None. The top-level `Benefits Pilot Group` role (`benefits_pg_role`) grants `benefits_pg:view`. |
+
+Instance keys follow the pattern `<resource>_<user id>`. The health plan of user `user_rick` is the instance `health_plan:health_plan_user_rick`.
+
+:::note The profile caregiver role has no date bounds
+`profile#caregiver` is derived from `member_group#org_member` as well as from `member#caregiver`, so every user in a member group can read the profiles of the other users in that group. The custom Rego rule in [ABAC model for time-limited delegation](#permission-models---abac) skips the `profile` resource for that reason. Date bounds apply to health plans and medical records.
+:::
 
 ### API endpoints
 
-GHC exposes the following endpoints. Each endpoint checks the listed roles or derived roles.
+GHC's Next.js API routes run the following checks. An endpoint with no check filters its results with the Permit API instead of calling `permit.check()`.
 
-| Endpoint                                        | Description                                    | Roles                       | Derived Roles                                                         |
-| ----------------------------------------------- | ---------------------------------------------- | --------------------------- | --------------------------------------------------------------------- |
-| `GET /account/dashboard/profile/{user}`         | Get the current user's details                 | `Profile:Caregiver`         | `Member:Owner#Profile`<br/>`Member Group:Org Member#Profile`          |
-| `GET /account/dashboard/health-plan/{user}`     | Get the current user's health plan             | `Health Plan:Caregiver`     | `Member:Owner#Health Plan`<br/>`Member:Caregiver#Health Plan`         |
-| `GET /account/dashboard/medical-records/{user}` | Get the current user's medical records         | `Medical Records:Caregiver` | `Member:Owner#Medical Records`<br/>`Member:Caregiver#Medical Records` |
-| `GET /account/member`                           | Get all the members from all the member groups | `Member Group:Org Member`   |                                                                       |
-| `GET /account/caregiver`                        | Get all the user's caregivers                  | `Member:Owner`              |                                                                       |
-| `POST /account/caregiver`                       | Add a caregiver to the user                    | `Member:Owner`              |                                                                       |
-| `DELETE /account/caregiver`                     | Remove a caregiver from the user               | `Member:Owner`              |                                                                       |
+| Endpoint | What it returns | Check | Resource roles that allow it |
+| --- | --- | --- | --- |
+| `GET /api/account/profile/{user}` | One user's profile details | `read` on `profile:profile_{user}` | `profile#owner`, `profile#caregiver` |
+| `GET /api/account/dashboard/health-plan/{user}` | One user's health plan | `read` on `health_plan:health_plan_{user}` | `health_plan#owner`, `health_plan#caregiver` |
+| `GET /api/account/dashboard/medical-records/{user}` | One user's medical records | `read` on `medical_records:medical_records_{user}` | `medical_records#owner`, `medical_records#caregiver` |
+| `GET`, `POST`, `DELETE /api/account/caregiver` | The signed-in user's caregivers, and grant or revoke a delegation | `write` on `member:member_{signed-in user}` | `member#owner` |
+| `POST /api/account/member-groups/assign`, `POST /api/account/member-groups/unassign`, `DELETE /api/account/member-groups` | Add or remove a group member, or delete a group | `assign` on `member_group:{group}` | `member_group#admin` |
+| `GET /api/account/dashboard/health-benefits` | One decision for the `action` and `resource` in the query string | The action and resource from the request | Whichever role grants that action. `permit-fe-sdk` calls this route. |
+| `GET /api/account/member` | The users in the groups the signed-in user administers | None. The route lists `admin` and `org_member` role assignments through the Permit API. | Not applicable |
+| `GET /api/account/member-groups`, `POST /api/account/member-groups` | List the signed-in user's groups, or create a group | None | Not applicable |
+| `GET /api/allowed-plans` | The users whose plans the signed-in user can open | None. The route lists the signed-in user's `caregiver` role assignments through the Permit API. | Not applicable |
 
 ## Test the caregiver flow \{#testing-the-application-flow}
 
-Test the RBAC and ReBAC model with three users: Rick, Morty, and Bird Person.
+Test the ReBAC model with three users: Rick, Morty, and Bird Person.
 
 1. Sign up for three GHC accounts: `rick@sanchez.app`, `morty@smith.app`, and `bird@person.app`.
 
@@ -142,30 +159,36 @@ Test the RBAC and ReBAC model with three users: Rick, Morty, and Bird Person.
    To use other email addresses, edit the user keys in the [Permit Directory](https://app.permit.io/user-management).
    :::
 
-2. Sign in as `rick@sanchez.app`. Rick's dashboard shows only Rick's own data, because each user owns their own member data.
-3. Open the **Delegate Permissions Wizard**. The wizard lists only the users in Rick's member groups: Morty and Bird Person.
-4. Share all the data with Morty, and assign Morty as a caregiver. You can limit Morty's access to a date range.
-5. Sign in as Morty. In the **Shared Access** section, Morty sees Rick's health plan and medical records. Morty's access comes from the `Member:Caregiver` role.
-6. Sign in as Bird Person. Bird Person sees only his own data, because he has no caregiver relationship with another user.
+2. Sign in as `rick@sanchez.app`. Rick's plan page shows only Rick's own data, because each user holds `member#owner` on their own member instance.
+3. Create a member group and add Morty and Bird Person to it. Adding a user to a group creates a `belongs` relationship tuple between the group and that user's profile.
+4. Open the **Delegate Permissions Wizard**. The wizard lists the users in Rick's member groups: Morty and Bird Person.
+5. Share the health plan and medical records with Morty, and set a date range that includes today. The wizard assigns Morty the `caregiver` role on `health_plan:health_plan_<rick>` and `medical_records:medical_records_<rick>`.
+6. Sign in as Morty. In the **Shared Access** section, Morty sees Rick's health plan and medical records.
+7. Sign in as Bird Person and open Rick's plan.
 
-The flow demonstrates these permissions:
+**Verify:** each user sees the following.
 
 | User | What the user sees | Why |
 |---|---|---|
-| Rick | All of his own health data | Rick has the `Owner` role on his member data. |
-| Morty | Rick's health plan and medical records | Rick assigned Morty the `Member:Caregiver` role. |
-| Bird Person | Only his own health data | Bird Person has no relationship with other users. |
-| Rick (pilot group) | A dashboard box that only the pilot group sees | Rick has the `Feature testing pilot group` role (RBAC). Other users don't see the box. |
+| Rick | His own profile, health plan, and medical records | Rick holds `member#owner`, which derives `owner` on his profile, health plan, and medical records. |
+| Morty | Rick's health plan and medical records under **Shared Access** | Rick assigned Morty `caregiver` on those instances, and the `read` permission comes with that resource role. |
+| Bird Person | Rick's profile, but not Rick's health plan or medical records | Bird Person's `member_group#org_member` role derives `profile#caregiver`. No derivation reaches Rick's health plan or medical records, so `GET /api/account/dashboard/health-plan/<rick>` returns `403` with `{"error":"Not allowed"}`. |
+
+To see the RBAC half of the model, assign the `Benefits Pilot Group` role to Rick on the **Directory** screen and reload the plan page. The **Personal Benefits** card appears for Rick and for no one else, because `permitState.check('view', 'benefits_pg')` returns `true` only for holders of that role.
+
+:::note The second pilot group needs its own resource
+The plan page also checks `view` on a resource named `alt_medicine_pg` for the **Alternative Medicine Recommendations** card. `scripts/setupPermit.js` doesn't create that resource, so the card stays hidden until you create the resource, a `view` action, and a role that grants it.
+:::
 
 ## ABAC model for time-limited delegation \{#permission-models---abac}
 
 ### ABAC requirements \{#requirements-1}
 
-A delegation must be limited to a date range. For example, Rick can give Morty access to his health plan and medical records for the next 30 days only.
+A delegation must be limited to a date range. For example, Rick gives Morty access to his health plan and medical records for one week only.
 
 ### Date boundaries on role assignments \{#model}
 
-Morty's instance-level role comes from the relationship between Rick and Morty. The relationship alone can't expire, so GHC adds date attributes that bound each role assignment. For example, if Morty has the `Member:Caregiver` role with `start_date` set to `2024-01-01` and `end_date` set to `2024-01-31`, Morty can view Rick's health plan and medical records only between those dates.
+Morty's `caregiver` resource role comes from the relationship between Rick's member data and Morty. A resource role assignment has no expiry of its own, so GHC bounds it with a user attribute and a custom Rego rule.
 
 GHC stores the bounds in a `caregiver_bounds` user attribute on the caregiver. Each key in `caregiver_bounds` is the resource instance the caregiver was granted access to, and each value holds an RFC 3339 `start_date` and `end_date`. The `POST /api/account/caregiver` handler writes this attribute with `permit.api.users.update()` before it assigns the `caregiver` role:
 
@@ -200,18 +223,18 @@ enforce_boundries(resource) {
 
 ### Implementation options \{#implementation}
 
-You can implement this ABAC rule in Permit in two ways:
+You can bound a role by time in Permit in two ways:
 
-| Option | How it works |
-|---|---|
-| Resource set in the Permit dashboard | Define a resource set with the date condition on the **ABAC Rules** tab. |
-| Custom Rego policy | Write Rego code that Permit combines with the generated policy and the PDP evaluates. |
+| Option | How it works | When to use it |
+|---|---|---|
+| Condition set in the Permit dashboard | A user set matches the user when an expiry attribute is still ahead of a `current_time` attribute that your app passes in each check. See [Time Based Role Example](/how-to/build-policies/abac/time-based-role). | You bound a top-level role, and you can add the attributes through the dashboard. |
+| Custom Rego policy | You write Rego that Permit combines with the generated policy, and the PDP evaluates both. See [Write custom policies with GitOps](/integrations/gitops/custom_policy). | You bound a derived resource role, which condition sets don't reach. |
 
-GHC uses the custom Rego option. The generated and custom policy code is in the [ghc-demo-policy repository](https://github.com/permitio/ghc-demo-policy).
+GHC uses the custom Rego option, because the caregiver role is derived through a relationship rather than assigned directly. The generated and custom policy code is in the [ghc-demo-policy repository](https://github.com/permitio/ghc-demo-policy).
 
-### Configure GitOps
+### Connect Permit to a policy repository with GitOps \{#configure-gitops}
 
-To write custom policy code, connect Permit to a Git repository with GitOps. Permit stores the generated policy in the repository, and you change the policy through branches and pull requests. See [Git and Permit](/integrations/gitops/github).
+Custom Rego lives in the policy repository, so connect Permit to a Git repository first. Permit writes the generated policy to that repository, and you change the custom policy through branches and pull requests. See [Connect a GitHub repository to Permit](/integrations/gitops/github) for the setup steps.
 
 ### Add the custom policy \{#configure-the-policy}
 
@@ -227,30 +250,26 @@ In the branch of your policy repository that Permit syncs for your environment:
    }
    ```
 
-To learn more about custom Rego in Permit, see [Write custom policies](/integrations/gitops/custom_policy).
+For more on custom Rego in Permit, see [Write custom policies with GitOps](/integrations/gitops/custom_policy).
 
 ### Test the time-limited delegation \{#application-flow}
 
-Run the caregiver flow from [Test the caregiver flow](#testing-the-application-flow) again, and set a date range in the **Delegate Permissions Wizard**. Morty can view Rick's data only while today's date is inside the range.
+Run the caregiver flow from [Test the caregiver flow](#testing-the-application-flow) again, with two date ranges.
 
-## Hosted app
+1. In the **Delegate Permissions Wizard**, share Rick's health plan with Morty and set a range that includes today.
+2. Sign in as Morty and open Rick's plan.
+3. Sign back in as Rick, revoke the delegation, and share the health plan again with a range that ends before today.
+4. Sign in as Morty and open Rick's plan again.
 
-A hosted instance of GHC runs at [ghc.up.railway.app](https://ghc.up.railway.app/). Sign in with one of the following users to try the flows without running the app locally.
+**Verify:** with the range that includes today, Morty sees Rick's health plan. With the range that ends before today, `GET /api/account/dashboard/health-plan/<rick>` returns `403` with `{"error":"Not allowed"}` and the **Shared Access** section shows no health plan. The generated policy still grants `health_plan#caregiver`, and `custom.allow` denies the request because `enforce_boundries` fails.
 
-:::warning Shared demo accounts
-These credentials are public, and anyone can sign in with them. Changes you make to permissions in the hosted app are visible to every other visitor. Don't enter real personal or health data.
+:::warning The PDP evaluates custom Rego only after GitOps syncs it
+The custom rule runs only once Permit has synced the policy repository branch for your environment and the PDP has pulled it. Until then, the PDP evaluates the generated policy alone, and a delegation whose date range has passed still grants access. Check the sync status in **Settings**, then **GitOps**, before you test.
 :::
-
-| User              | Password  | Groups                  |
-| ----------------- | --------- | ----------------------- |
-| rick@sanchez.app  | Aa123456! | ricks_org, smith_family |
-| morty@smith.app   | Aa123456! | smith_family            |
-| bird@person.app   | Aa123456! | ricks_org               |
-| homer@simpson.app | Aa123456! |                         |
 
 ## Next steps
 
 - [Build ReBAC policies](/how-to/build-policies/rebac/building-rebac-policies) with resource roles and role derivations.
-- [Write custom policies](/integrations/gitops/custom_policy) in Rego alongside the generated policy.
+- [Write custom policies with GitOps](/integrations/gitops/custom_policy) to add Rego rules alongside the generated policy.
 - [Teleco Demo Application](/modeling/pink-mobile) for a policy model built with the Node.js SDK.
 - [Check permissions with permit.check()](/how-to/enforce-permissions/check) for the check options the app uses.

@@ -1,11 +1,11 @@
 ---
 title: Deploy Nexus PDP
 sidebar_label: Deployment
-description: "Meet the storage, memory, port, probe, and shutdown requirements for running Permit Nexus PDP, and learn its logging and security model."
+description: "Run Permit Nexus PDP with Docker or Kubernetes, meet its storage, memory, port, probe, and shutdown requirements, and verify the deployment."
 sidebar_position: 5
 ---
 
-This page lists what you need to run Permit Nexus PDP (`permitio/pdp-v3`), a self-hosted policy decision point (PDP), in production: storage, memory, ports, health probes, and shutdown settings. It also covers Nexus PDP logs and the Nexus PDP security model. It is for operators who deploy Nexus PDP on Kubernetes or another container platform. For what Nexus PDP is, see [Permit Nexus PDP](/concepts/pdp/nexus-pdp).
+Run Permit Nexus PDP (`permitio/pdp-v3`), a self-hosted policy decision point (PDP), with Docker or on Kubernetes, and verify that it answers permission checks. This page lists the storage, memory, port, probe, and shutdown requirements, gives a runnable command and a pod spec, and covers the Nexus PDP logs and security properties an operator needs. For what Nexus PDP is, see [Permit Nexus PDP](/concepts/pdp/nexus-pdp).
 
 ## Prerequisites
 
@@ -85,8 +85,8 @@ The macOS AirPlay Receiver uses port `7000`. Map the Nexus PDP authorization API
 
 ## Verify a Nexus PDP deployment
 
-1. Send `GET /health/ready` to port `7001`, for example `curl -i http://localhost:7001/health/ready`. Nexus PDP returns HTTP `200` when every component that gates readiness is up, and HTTP `503` while any of them is still starting.
-2. Point an SDK at port `7000` of the Nexus PDP and run a permission check. See [Check permissions](/how-to/enforce-permissions/check). A decision that matches your policy confirms that Nexus PDP has your policy and data.
+1. Send `GET /health/ready` to the health port, `7001`: `curl -i http://localhost:7001/health/ready`. Nexus PDP returns HTTP `200` when every component that gates readiness is up, and HTTP `503` while any of them is still starting. A cold start can take minutes on a large data set, so retry until the response is `200`.
+2. Point an SDK at the authorization port and run a permission check. With the port mapping in [Run Nexus PDP with Docker](#run-nexus-pdp-with-docker), the PDP URL is `http://localhost:7766`. See [Check permissions](/how-to/enforce-permissions/check). A decision that matches your policy confirms that Nexus PDP has your policy and data.
 
 ## Health and readiness
 
@@ -126,9 +126,7 @@ A Nexus PDP that serves stale data, or that cannot ship decision logs, stays rea
 
 Nexus PDP writes structured logs to stdout at the `info` level by default. Set `RUST_LOG` to change the level: `info,edge_pdp=debug` adds debug logs from Nexus PDP itself. Nexus PDP captures the output of OPA and the NATS leaf node and writes it to the same log stream, labeled with the source process and log level, so the container logs contain all output.
 
-:::warning Debug log levels write authorization data to Nexus PDP logs
-`EDGE_NATS_LOG_LEVEL=trace` logs raw message payloads, which contain your authorization data. `EDGE_OPA_LOG_LEVEL=debug` logs authorization request and response bodies. Set these levels only for short debugging sessions, and remove them before the container serves production traffic. See [Nexus PDP child process logging](/concepts/pdp/nexus-pdp-configuration#child-process-logging).
-:::
+Raising the log level of the OPA or NATS child processes writes authorization data into the container logs. For the variables that control those levels and what each level exposes, see [Nexus PDP child process logging](/concepts/pdp/nexus-pdp-configuration#child-process-logging).
 
 ### Decision logs
 
@@ -139,7 +137,16 @@ The OPA process in Nexus PDP sends decision logs to Permit in batches over HTTPS
 
 `EDGE_DECISION_LOG_OPT_OUT` can only turn decision logging off. It cannot turn logging on for an environment where Permit has it off.
 
-## Security model
+## Security properties to plan your deployment around \{#security-model}
+
+Four properties of the container decide how you place, scope, and isolate a Nexus PDP.
+
+| Property | What it means for your deployment |
+|---|---|
+| [Request authentication](#request-authentication) | Every caller needs the container's own `PDP_API_KEY`. Treat the key as a shared secret between the container and the services that query it. |
+| [One environment per container](#one-environment) | Run one container per Permit environment, and route each service to the container for its environment. |
+| [Child process isolation](#child-process-environment) | Variables you set on the container do not all reach OPA and the NATS leaf node. Set Nexus PDP variables, not OPA or NATS variables. |
+| [Blast radius](#blast-radius) | A compromised container exposes one environment. Apply the network policy and secret scope of that environment to it. |
 
 ### Request authentication uses the container's own API key \{#request-authentication}
 

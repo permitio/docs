@@ -32,14 +32,14 @@ The app code is in the [permit-nuxt-example repository](https://github.com/permi
 |---|---|
 | Frontend | Nuxt.js with Vue, one page per role (customer, rider, vendor, admin) |
 | Backend | Nuxt server routes with authorization middleware that calls `permit.check()` |
-| Authorization | RBAC for basic permissions, ABAC for promotional offers, ReBAC for order assignments, and cities as tenants |
+| Authorization | RBAC for role permissions, ABAC for the free delivery offer, ReBAC for order assignments, and cities as tenants |
 | Data sync | Server routes that sync users, orders, and role assignments to Permit when they change |
 
 ## How the app uses each policy model \{#system-architecture-and-core-features}
 
 | Model | What it controls in the app |
 |---|---|
-| RBAC | Which roles can read, create, and change meals and orders |
+| RBAC | Which roles can create, delete, and act on meals and orders |
 | ABAC | Free delivery: orders that cost 500 or more, and riders with 500 or more rides |
 | ReBAC | Order assignments: the vendor who owns the order and the rider assigned to it |
 
@@ -54,15 +54,15 @@ Each role acts on orders at a different stage:
 
 ### Composite permissions
 
-Policies from all three models apply to the same action. For the deliver action:
+Policies from all three models apply to the same action. For the `deliver` action:
 
-- The `rider` role grants `deliver` on orders (RBAC).
-- The `Order#Rider` instance role links a rider to one order (ReBAC).
-- A rider user set with 500 or more rides grants `deliver` on free delivery orders (ABAC).
+- The `rider` role grants `deliver` on the `Order` resource type (RBAC).
+- The `Order#Rider` resource role links a rider to one order (ReBAC).
+- A user set of riders with 500 or more rides grants `deliver` on the resource set of free delivery orders (ABAC).
 
-The deliver endpoint runs two checks: a role check on the `Order` resource type, and a check on the specific order instance. Permit evaluates each check against every rule that applies to the action.
+The deliver endpoint runs two checks: `server/middleware/permissions/check-role.ts` checks `deliver` on the `Order` resource type, and `server/middleware/permissions/check-rider-eligibility.ts` checks `deliver` on the specific order instance. Permit evaluates each check against every rule that applies to the action.
 
-### Multitenant authorization
+### Multi-tenant authorization \{#multitenant-authorization}
 
 The app uses cities (`california` and `washington`) as tenants. A role assignment in one city doesn't grant the same permission in the other city.
 
@@ -76,20 +76,26 @@ The server routes sync these changes to Permit when they happen:
 
 ### Server endpoints
 
-The Nuxt server exposes these endpoints. The Authorization column lists the policy models that the endpoint's check depends on.
+The Nuxt server exposes these endpoints. The Authorization column lists the policy models that each endpoint's check depends on, and the Action column lists the action key the middleware derives from the method and path.
 
-| Method | Endpoint                  | Authorization             |
-| ------ | ------------------------- | ------------------------- |
-| GET    | `/meals`                  | `RBAC`                    |
-| POST   | `/meals`                  | `RBAC`                    |
-| DELETE | `/meal/:id/remove`        | `RBAC`                    |
-| GET    | `/orders`                 | `RBAC`                    |
-| POST   | `/orders`                 | `RBAC` & `ABAC`           |
-| POST   | `/order/:id/fulfill`      | `RBAC` & `ReBAC`          |
-| POST   | `/order/:id/assign-rider` | `RBAC`                    |
-| POST   | `/order/:id/deliver`      | `RBAC`, `ABAC`, & `ReBAC` |
-| POST   | `/users`                  | -                         |
-| DELETE | `/users`                  | -                         |
+| Method | Endpoint                  | Action                      | Authorization             |
+| ------ | ------------------------- | --------------------------- | ------------------------- |
+| GET    | `/meals`                  | `read` (not checked)        | None                      |
+| POST   | `/meals`                  | `create`                    | `RBAC`                    |
+| DELETE | `/meal/:id`               | `delete`                    | `RBAC`                    |
+| GET    | `/orders`                 | `read` (not checked)        | None                      |
+| POST   | `/orders`                 | `create`, `create-with-free-delivery` | `RBAC` & `ABAC` |
+| POST   | `/order/:id/fulfill`      | `fulfill`                   | `RBAC` & `ReBAC`          |
+| POST   | `/order/:id/assign-rider` | `assign-rider`              | `RBAC`                    |
+| POST   | `/order/:id/deliver`      | `deliver`                   | `RBAC`, `ABAC`, & `ReBAC` |
+| POST   | `/users`                  | None                        | None                      |
+| DELETE | `/users`                  | None                        | None                      |
+
+`check-role.ts` derives `read` for every `GET` request and then returns before calling `permit.check()`, with the comment "Allow the user to read meals and others even if they are not logged in". Reading meals and orders therefore succeeds for any caller, signed in or not. The `read` permission you grant in the Policy Editor documents the intent, and it feeds the frontend checks in [permit-vue-example](https://github.com/permitio/permit-vue-example), but it changes nothing in this app.
+
+:::warning A GET endpoint with no check returns data to anyone
+`/meals` and `/orders` return every meal and every order in the tenant without a permission check. The example does this to keep the demo browsable before you build the policy. Remove the early return for `read` in `check-role.ts` before you reuse this middleware in an application with real data.
+:::
 
 ## Set up and run the app \{#setup-and-configuration}
 
@@ -120,7 +126,11 @@ PERMIT_TOKEN=permit_key_XXXXXXXXXXXXXXXXXXXXXXXXX
 PERMIT_PDP=http://localhost:7766
 ```
 
-The app reads `PERMIT_TOKEN` as the API key and `PERMIT_PDP` as the address of the PDP.
+`nuxt.config.ts` maps `PERMIT_TOKEN` to `runtimeConfig.permitToken` and `PERMIT_PDP` to `runtimeConfig.permitPdp`, and `server/utils/permit.ts` builds the `Permit` client from both.
+
+:::warning Keep PERMIT_PDP on the container PDP
+The `sample.env` file in the repository points `PERMIT_PDP` at `https://cloudpdp.api.permit.io`. The Cloud PDP does not evaluate ABAC, so the free delivery checks in [Configure ABAC for free delivery](#configure-abac) return `false` against it. Set `PERMIT_PDP=http://localhost:7766` and run the container PDP in the next step. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+:::
 
 </TimelineStep>
 <TimelineStep>
@@ -155,12 +165,14 @@ npm run dev
 
 ### Open the app \{#access-the-app}
 
-Open `http://localhost:3000` in your browser. The app shows a page for each role's actions. Use the sidebar to set the current user ID, set roles, and delete users.
+Open `http://localhost:3000` in your browser. The app shows a page for each role's actions. Use the sidebar to set the current user ID, set roles, choose the current city, and delete users.
 
 ![Food delivery app with a sidebar for choosing the current user and role, and pages for customer, vendor, rider, and admin actions](/img/modeling/food-delivery-system-example-using-nuxt/app-view.png)
 
+**Verify:** the meal and order lists render, and placing an order answers "You are not permitted to perform this action". The empty Permit environment has no `Order` resource yet, so `permit.check()` returns `false`.
+
 :::info
-Reading meals and orders works without a check. The app denies every other action, such as creating a meal or an order, until you configure the policies in the next sections.
+The meal and order lists load because `GET /meals` and `GET /orders` return before the middleware calls `permit.check()`. Every other action stays denied until you build the policies in the next three sections.
 :::
 
 </TimelineStep>
@@ -172,17 +184,17 @@ Reading meals and orders works without a check. The app denies every other actio
 
 **Meals:**
 
-- All roles (`customer`, `rider`, `vendor`, and `admin`) can read meals.
-- Only `vendor` and `admin` can create, update, and delete meals.
+- Only `vendor` and `admin` can create and delete meals.
+- All roles (`customer`, `rider`, `vendor`, and `admin`) get `read`, which the middleware does not check.
 
 **Orders:**
 
-- All roles can read orders.
 - Only `customer` can create orders.
 - Only `vendor` can fulfill orders (mark them ready for delivery).
 - Only `admin` can assign riders to orders.
 - Only `rider` can deliver orders.
 - `admin` can also create, fulfill, and deliver orders.
+- All roles get `read`, which the middleware does not check.
 
 To configure these RBAC policies:
 
@@ -191,7 +203,14 @@ To configure these RBAC policies:
 
 ### Create the Meal and Order resources \{#create-resources}
 
-On the **Policy** screen, open the **Resources** tab. Create the `Meal` and `Order` resources with the actions the app uses.
+On the **Policy** screen, open the **Resources** tab. Create two resources, `Meal` and `Order`, with the action keys the app derives in its middleware and sends from its frontend. Type the keys exactly as listed, including the hyphens: `permit.check()` matches on the key, and a mismatch returns `false`.
+
+| Resource | Action keys | Where the key comes from |
+|---|---|---|
+| `Meal` | `create`, `read`, `delete` | `server/middleware/permissions/check-role.ts` maps `POST` to `create`, `DELETE` to `delete`, and everything else to `read`. |
+| `Order` | `create`, `read`, `fulfill`, `assign-rider`, `deliver` | `check-role.ts` maps `POST /orders` to `create` and takes any other `POST /order/:id/<action>` path segment as the action key. |
+
+Add the `create-with-free-delivery` action on `Order` in [Configure ABAC for free delivery](#configure-abac).
 
 ![Creating the Meal and Order resources and their actions on the Resources tab](/img/modeling/food-delivery-system-example-using-nuxt/rbac-creating-resources.gif)
 
@@ -213,7 +232,7 @@ In the **Policy Editor**, check the actions each role may perform on `Meal` and 
 
 ![Policy Editor with meal and order actions checked for each role](/img/modeling/food-delivery-system-example-using-nuxt/rbac-viewing-policies.gif)
 
-**Verify:** Refresh the app. Actions that the RBAC policy allows, such as a customer creating an order, succeed.
+**Verify:** refresh the app, then in the sidebar set the current user and assign that user the `customer` role in the current city. Place an order on the customer page. The order appears in the order list. Switch the current user to one with the `rider` role only and place another order: the app answers "You are not permitted to perform this action".
 
 </TimelineStep>
 </TimelineWrapper>
@@ -282,7 +301,7 @@ The user set and the resource set appear in the **Policy Editor**.
 
 ![Policy Editor with the create-with-free-delivery and deliver actions checked for the ABAC user set and resource set](/img/modeling/food-delivery-system-example-using-nuxt/abac-policy-table.gif)
 
-**Verify:** Refresh the app and create an order with meals that cost 500 or more as a customer. The order gets free delivery.
+**Verify:** refresh the app and, as a customer, create an order whose meals total 500 or more. The order's **Delivery Fee** row reads FREE. Create an order under 500 and the row shows the fee, because `create-with-free-delivery` returns `false` and `issue-free-delivery.ts` leaves `deliveryFee` in place.
 
 </TimelineStep>
 </TimelineWrapper>
@@ -294,17 +313,17 @@ The user set and the resource set appear in the **Policy Editor**.
 - A `vendor` can fulfill an order **only if** the vendor created the meals in that order.
 - A `rider` can deliver an order **only if** an admin assigned the order to that rider.
 
-The fulfill and deliver endpoints check the specific order instance, for example `{ type: "Order", key: orderId, tenant }`, so the PDP can evaluate the user's instance roles on that order.
+The fulfill and deliver endpoints check the specific order instance, `{ type: 'Order', key: orderId, tenant }`, so the PDP can evaluate the user's resource roles on that order. A resource role is a role that applies to instances of one resource type, written `Resource#Role`. See [ReBAC overview](/how-to/build-policies/rebac/overview).
 
 <TimelineWrapper>
 <TimelineStep>
 
-### Create the Vendor and Rider instance roles \{#create-instance-roles}
+### Create the Vendor and Rider resource roles \{#create-instance-roles}
 
 1. Open the `Order` resource for editing.
-2. In the ReBAC section, create two instance roles: `Vendor` and `Rider`. The Policy Editor shows them as `Order#Vendor` and `Order#Rider`.
+2. In the ReBAC section, create two resource roles with the keys `Vendor` and `Rider`. The Policy Editor shows them as `Order#Vendor` and `Order#Rider`. The app assigns `Vendor` in `server/routes/orders/index.post.ts` and `Rider` in `server/routes/order/[id]/assign-rider.post.ts`, both by that exact key.
 
-![Creating the Order#Vendor instance role and checking the fulfill action for it in the Policy Editor](/img/modeling/food-delivery-system-example-using-nuxt/rebac-vendor.gif)
+![Creating the Order#Vendor resource role and checking the fulfill action for it in the Policy Editor](/img/modeling/food-delivery-system-example-using-nuxt/rebac-vendor.gif)
 
 </TimelineStep>
 <TimelineStep>
@@ -313,7 +332,7 @@ The fulfill and deliver endpoints check the specific order instance, for example
 
 In the **Policy Editor**, check `fulfill` for `Order#Vendor` and `deliver` for `Order#Rider`.
 
-**Verify:** Refresh the app. As the vendor who created the meals, fulfill the order. As the rider assigned to the order, deliver the order.
+**Verify:** refresh the app. Sign in as the vendor who created the meals in an order and fulfill it: the order's **Fulfilled Time** fills in. Switch to a vendor who created no meals in that order and fulfill it again: the app answers "You are not permitted to perform this action", because that vendor holds no `Order#Vendor` role on the instance.
 
 </TimelineStep>
 </TimelineWrapper>
@@ -341,11 +360,11 @@ The app also syncs resources and role assignments:
 |---|---|
 | `permit.api.resources` | Resource types |
 | `permit.api.resourceInstances` | Individual resource instances, such as one order |
-| `permit.api.roleAssignments` | Role assignments, both environment-level (RBAC) and instance-level (ReBAC) |
+| `permit.api.roleAssignments` | Role assignments, both tenant-level (RBAC) and resource instance-level (ReBAC) |
 
-Resource instances and role assignments belong to a tenant. Pass the tenant key, or `"default"` if you don't use multitenancy. Permit also exposes condition sets through the [Condition Sets API](https://api.permit.io/v2/redoc#tag/Condition-Sets).
+Resource instances and role assignments belong to a tenant. Pass the tenant key, or `"default"` if your application is not multi-tenant. Permit also exposes condition sets through the [Condition Sets API](https://api.permit.io/v2/redoc#tag/Condition-Sets).
 
-When a customer creates an order, the app creates the order as a resource instance with its `cost`, and assigns the `Vendor` instance role on that order to the vendor. When an order is deleted, the app deletes the resource instance.
+When a customer creates an order, the app creates the order as a resource instance carrying its `cost`, and assigns the `Order#Vendor` resource role on that order to the vendor. The `cost` attribute is what the ABAC resource set from [Configure ABAC for free delivery](#configure-abac) reads. When an order is deleted, the app deletes the resource instance.
 
 ```ts title="server/routes/orders/index.post.ts"
 // tenant is the city header on the request, for example "california"
@@ -378,7 +397,7 @@ For more sync options, see [Sync users](/how-to/sync-users).
 The app enforces permissions in two places:
 
 - **Server middleware** calls [`permit.check()`](/how-to/enforce-permissions/check). One `permit.check()` call evaluates every RBAC, ABAC, and ReBAC rule that applies to the action.
-- **The Vue frontend** loads permissions for the user in bulk and shows or hides UI elements. See [CASL](/integrations/feature-flagging/casl) for the frontend setup.
+- **The Vue frontend** loads the user's permissions in bulk and shows or hides UI elements. See [Integrate CASL with Permit](/integrations/feature-flagging/casl) for that setup.
 
 The middleware that protects the deliver endpoint checks whether the rider can deliver the order:
 
@@ -457,20 +476,23 @@ Run the PDP and the app, then test each rule.
    npm run dev
    ```
 
-3. Test the authorization rules. Each row lists the expected result:
+3. Test the authorization rules. Use the sidebar to switch the current user, the current user's roles, and the current city. Each row lists the expected result:
 
-   | Test | Expected result |
-   |---|---|
-   | As a customer, create an order | The order is created. |
-   | As a customer, create an order that costs 500 or more | The order gets free delivery. |
-   | As the vendor who created the meals, fulfill the order | The order is fulfilled. |
-   | As an admin, assign a rider to the order | The rider is assigned. |
-   | As the assigned rider, deliver the order | The order is delivered. |
-   | As a user without a role in the current city, create an order | The app returns "You are not permitted to perform this action". |
+   | Test | Expected result | Model that decides |
+   |---|---|---|
+   | As a customer, create an order | The order appears in the order list. | RBAC |
+   | As a customer, create an order whose meals total 500 or more | The order's **Delivery Fee** row reads FREE. | ABAC |
+   | As a customer, create an order under 500 | The **Delivery Fee** row shows a fee. | ABAC |
+   | As the vendor who created the meals, fulfill the order | The order's **Fulfilled Time** fills in. | RBAC and ReBAC |
+   | As a vendor who created none of the meals, fulfill the order | "You are not permitted to perform this action". | ReBAC |
+   | As an admin, assign a rider to the order | The order's **Rider** and **Rider Assigned Time** fill in. | RBAC |
+   | As the assigned rider, deliver the order | The order's **Delivered Time** fills in. | RBAC, ABAC, and ReBAC |
+   | As a rider who was not assigned the order, deliver it | "You are not permitted to perform this action". | ReBAC |
+   | As a user with no role in the current city, create an order | "You are not permitted to perform this action". | RBAC |
 
-4. Test tenant isolation. Create orders in `california` and `washington`. A role assigned in one city doesn't grant permissions in the other city.
+4. Test tenant isolation. Assign a user the `customer` role in `california` only, create an order there, then switch the city to `washington` and create another order. The second attempt answers "You are not permitted to perform this action", because the role assignment belongs to the `california` tenant.
 
-To see every decision, open the [audit log](/how-to/use-audit-logs/types-and-filtering) in Permit.
+**Verify:** every row above matches. When a row does not, open the [Audit Log screen](/how-to/use-audit-logs/types-and-filtering) in Permit and select the entry for that check. The entry shows the user, action, resource, and tenant, and its decision log carries a human-readable `reason` for the result.
 
 ## Next steps \{#conclusion}
 

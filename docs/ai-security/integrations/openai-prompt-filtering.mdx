@@ -18,20 +18,24 @@ Some of these requests are fine for every user, and some need a specific role. A
 
 ## What you build \{#what-youll-build}
 
-A Node.js module that:
+A Node.js project with three files:
 
-1. Sends the prompt to OpenAI with a system prompt that returns JSON: `resourceType`, `resourceKey`, `attributes`, and `action`.
-2. Builds a Permit resource from that JSON.
-3. Calls `permit.check()` on a policy decision point (PDP) and allows or denies the request.
+| File | Contents |
+| --- | --- |
+| `src/classifier.js` | The `AccessClassifier` class, which sends the prompt to OpenAI and returns JSON with `resourceType`, `resourceKey`, `attributes`, and `action` |
+| `src/permit.js` | The Permit client and the `checkAccess` function, which turns that JSON into a Permit resource and calls `permit.check()` on a policy decision point (PDP) |
+| `index.js` | The entry script, which runs five prompts through both modules and prints each decision |
 
 The example covers two domains:
 
 | Domain | Resource types | Rule |
 | --- | --- | --- |
-| Hotel rates | `HotelType` with the `rateType` attribute (`IATA`, `premium`, `public`) | Users see public rates. `premium_user` also sees premium rates, and `iata_agent` also sees IATA rates. |
-| Financial advice | `FinancialAdvice`, `FinancialData` | `viewer` sees financial data. Only `ai_advisor` receives AI-generated financial advice. |
+| Hotel rates | `HotelType` with the `rateType` attribute (`IATA`, `premium`, `public`) | Every role sees public rates. `premium_user` also sees premium rates, and `iata_agent` also sees IATA rates. |
+| Financial requests | `FinancialAdvice`, `FinancialData` | `viewer` sees financial data. Only `ai_advisor` receives AI-generated financial advice. |
 
-The full source is in the [permit-prompt-filtering repository](https://github.com/permitio/permit-prompt-filtering).
+A policy decision point (PDP) is the Permit service that evaluates each permission check against your policy. This tutorial runs one as a local Docker container.
+
+The source this tutorial is based on is in the [permit-prompt-filtering repository](https://github.com/permitio/permit-prompt-filtering), which keeps the entry script in `server.js` instead of `index.js`.
 
 ## Prerequisites \{#tools--prerequisites}
 
@@ -43,8 +47,6 @@ The full source is in the [permit-prompt-filtering repository](https://github.co
 | [Docker](https://www.docker.com/) | Runs the PDP locally |
 
 ### Required credentials
-
-The app reads these environment variables:
 
 Create a `.env` file in the project root and add these values:
 
@@ -90,7 +92,7 @@ A role check needs structured input: a user, an action, and a resource. A chat p
 - **Defaults for missing details:** the system prompt tells the classifier which value to use when the prompt doesn't name one, for example `rateType: "public"`.
 - **One classifier, several domains:** you configure the resource type and attributes per classifier instance.
 
-An LLM classifier can return a wrong resource type or attribute. Your policy decides the result for whatever the classifier returns, so write the system prompt to default to the least privileged value.
+An LLM classifier can return a wrong resource type or attribute, and the PDP decides on whatever the classifier returns. If the classifier labels a premium-rate question as `rateType: "public"`, the PDP allows the request and the app answers with the public rate. Write the system prompt so a missing value defaults to the least privileged one, and check the [audit logs](#logs--observability) when a decision looks wrong.
 
 ## Configure the policy in Permit \{#defining-policies-with-permitio}
 
@@ -304,7 +306,7 @@ module.exports = AccessClassifier;
 
 ### Classifier output
 
-For a hotel classifier, `classify()` returns an object like the one in this block:
+For a hotel classifier, `classify()` returns an object like the one in this block. Run the `await` call inside an `async` function:
 
 ```js
 const classifier = new AccessClassifier('HotelType', ['rateType']);
@@ -378,7 +380,13 @@ async function checkAccess(userId, parsedRequest) {
 module.exports = { permit, checkAccess };
 ```
 
-The `Permit` client reads the PDP URL from `PDP_URL`. The Node.js SDK sets `throwOnError` to `true` by default, so a PDP that is unreachable or rejects the API key makes `permit.check()` throw instead of returning `false`. The `catch` block logs that error and rethrows it, which keeps a connection failure from looking like a denial. The version in the example repository is [`src/permit.js`](https://github.com/permitio/permit-prompt-filtering/blob/main/src/permit.js).
+Three details of `permit.check()` matter here:
+
+- **Errors throw by default.** The Node.js SDK sets `throwOnError` to `true`, so a PDP that is unreachable or that rejects the API key makes `permit.check()` throw instead of returning `false`. The `catch` block logs the message and rethrows, which keeps a connection failure from looking like a denial.
+- **The check runs in the `default` tenant.** The SDK fills in the tenant `default` when the resource has none, which is why [Create test users](#create-test-users) assigns each role in the `default` tenant.
+- **The resource key can be any string.** The resource sets in this tutorial match on the `rateType` attribute that `checkAccess` sends with the request, not on a resource instance stored in Permit, so the `resourceKey` the classifier invents doesn't have to exist in your Permit directory.
+
+The version in the example repository is [`src/permit.js`](https://github.com/permitio/permit-prompt-filtering/blob/main/src/permit.js).
 
 ## Run the classifier and the policy together \{#testing-the-system}
 
