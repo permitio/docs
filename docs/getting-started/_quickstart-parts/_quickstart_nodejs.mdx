@@ -1,17 +1,17 @@
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-## Add the SDK to your JS code
+### Install and initialize the Node.js SDK
 
-Initialise the **Node.js SDK** and check for permissions.
+Install the `permitio` package, import the `Permit` class, and create a `Permit` client that connects to your PDP.
 
-1. Install the Permit.io SDK
+1. Install the Permit.io Node.js SDK:
 
 ```
 npm install permitio
 ```
 
-2. Import the SDK into your code
+2. Import the `Permit` class with an ES module `import` or a CommonJS `require`:
 
 <Tabs groupId="jsimport">
 <TabItem value="import" label="Import" default>
@@ -30,8 +30,7 @@ const { Permit } = require("permitio");
 </TabItem>
 </Tabs>
 
-3. Create a new instance of the SDK. <br/>
-   You can find instructions on getting a secret API key in the previous section.
+3. Create a `Permit` client. Replace `[YOUR_API_KEY]` with your environment API key, and set `pdp` to the URL of your PDP:
 
 ```js
 // This line initializes the SDK and connects your Node.js app
@@ -51,15 +50,24 @@ const permit = new Permit({
 });
 ```
 
-## Check for permissions using the SDK
+| Option | Description |
+|---|---|
+| `token` | Your environment API key. |
+| `pdp` | The URL of the PDP that evaluates checks: `http://localhost:7766` for the container PDP, or `https://cloudpdp.api.permit.io` for the Cloud PDP. |
+| `log.level` | The SDK log level, for example `"debug"`. |
+| `throwOnError` | Set to `true` to make `permit.check()` throw when the PDP request fails, or `false` to make `permit.check()` return `false` instead. |
 
-You can run a permission check with `permit.check()`, passing in 3 arguments:
+### Check permissions with the Node.js SDK \{#check-for-permissions-using-the-sdk}
 
-- `user`: a unique string id that identifies the user doing the action. This is typically the user key.
-- `action`: the action performed.
-- `resource`: the resource (object) the action is performed on.
+Call `permit.check()` with three arguments. `permit.check()` returns a promise that resolves to `true` when the policy allows the action, and `false` otherwise.
 
-In the following example we are checking that a user with the unique id `john@smith.com` can `create` a `document` resource.
+| Argument | Description |
+|---|---|
+| `user` | The key that identifies the user in Permit, typically the user ID from your authentication provider. To pass attributes, use an object with `key` and `attributes`. |
+| `action` | The action key, for example `create`. |
+| `resource` | The resource type key, for example `document`, or an object with `type`, `tenant`, and `attributes`. |
+
+This example checks whether the user `john@permit.io` can `create` a `document`:
 
 ```js
 const permitted = await permit.check("john@permit.io", "create", "document");
@@ -70,24 +78,13 @@ if (permitted) {
 }
 ```
 
-:::info
-Usually instead of an email you'd use the unique identifier provided by your chosen authentication solution.
-You can also pass the entire decoded JWT, to include attributes about the user.
-:::
+If `john@permit.io` exists in your environment and has a role that grants `create` on `document`, the example prints `John is PERMITTED to create a document`. Otherwise, the example prints `John is NOT PERMITTED to create a document`. To add users and assign roles, see [Sync users](/how-to/sync-users).
 
-:::tip REMEMBER
+#### Check a permission in a specific tenant
 
-In cases where you are dealing with more than one tenant in your application, `permit.check()` can pass the **tenant** as part of the **resource**.
+In a multi-tenant application, pass the tenant key in the `tenant` field of the resource object. To look up the keys of your tenants, call the [list tenants API](https://api.permit.io/v2/redoc#tag/Tenants/operation/list_tenants).
 
-The tenant passed in needs to be either the **tenant id** or the **tenant key**.
-
-You can use the **[list_tenants API](https://api.permit.io/v2/redoc#tag/Tenants/operation/list_tenants)** to **get the ids and keys set for your tenants**.
-
-`tenant`: a unique tenant id or tenant key that you have defined within Permit.
-
-:::
-
-For example, if we want to check if `john@permit.io` can read documents that belong to the `awesome_inc` tenant:
+This example checks whether `john@permit.io` can `read` documents in the `awesome_inc` tenant:
 
 ```js
 const permitted = await permit.check(
@@ -102,15 +99,15 @@ const permitted = await permit.check(
 );
 ```
 
-## Check permissions against ABAC policies
+:::note Where checks run and where user data is stored
+`permit.check()` sends each check to the PDP URL you configure. A container PDP evaluates checks on your machine, using policy and data that the PDP loads from Permit. Users, roles, and attributes that you create in the dashboard or sync through the Permit API are stored in the Permit control plane.
+:::
 
-Above we have checked for permissions against an RBAC policy - but what if we have an **ABAC policy** we want to run a permission check for?
-An ABAC policy is made up of **User Sets** and **Resource Sets**, which you can read more about [here](/how-to/build-policies/abac/components#subject--subject-attributes).
+### Check ABAC permissions with the Node.js SDK
 
-With ABAC we define conditions based on **pre-configured attributes**.
+An attribute-based access control (ABAC) policy grants permissions based on user and resource attributes, grouped into user sets and resource sets. See [ABAC policy components](/how-to/build-policies/abac/components). ABAC checks need a container PDP.
 
-If we are running a `permit.check()` for an ABAC policy, we can attach **just-in-time attributes** to the `user` and the `resource`.
-There attributes are merged (and override) user and resource attributes that were persisted to the permit API.
+To check an ABAC policy, pass the user and the resource as objects with just-in-time attributes, which you pass in the check call. In this example, replace `check@permit.io`, `action`, `resource`, and `tenant` with a user key, action key, resource key, and tenant key from your environment:
 
 ```js
 const permitted = await permit.check(
@@ -140,18 +137,15 @@ const permitted = await permit.check(
 );
 ```
 
-:::note REMEMBER
+For more check options, see [Check permissions with permit.check()](/how-to/enforce-permissions/check).
 
-Permission checks are being run against the PDP container that's running locally on your machine - offering
-minimal latency and without leaving your network.
+### Run a full Node.js example app
 
-This means that your user data **never** goes outside your system, **keeping security high**.
+This single-file Express app runs a permission check on each request to `http://localhost:4000`.
 
-:::
-
-## Full app example
-
-Assuming a Node.js app made up of a single file, with the `permitio` and `express` modules installed.
+1. In a new project directory, install the `permitio` and `express` packages with `npm install permitio express`.
+2. Save the following code as `app.js`.
+3. Replace `[YOUR_API_KEY]` with your environment API key, and `[A_USER_ID]` with the key of a user in your environment.
 
 ```js
 const { Permit } = require("permitio");
@@ -194,3 +188,8 @@ app.listen(port, () => {
   console.log(`Example app listening at http://localhost:${port}`);
 });
 ```
+
+4. Run `node app.js`. The terminal prints `Example app listening at http://localhost:4000`.
+5. Open `http://localhost:4000` in a browser.
+
+If the user's role grants `create` on `document`, the page returns HTTP `200` with `John Smith is PERMITTED to create document!`. Otherwise, the page returns HTTP `403` with `John Smith is NOT PERMITTED to create document!`.

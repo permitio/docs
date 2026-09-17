@@ -1,28 +1,27 @@
-## Add the SDK to your .NET code
+### Install and initialize the .NET SDK
 
-We are now ready to init the .NET SDK and check for permissions.
+Create a .NET console project, install the `Permit` NuGet package, and create a `Permit` client that connects to your PDP. The full example app on this page uses `HttpListener` to serve HTTP requests.
 
-1. Create a new directory with an empty .NET project inside (we use HttpListener to demonstrate a REST API).
+1. Create a directory with an empty .NET console project. Run this shell command in your terminal:
 
 ```csharp
 mkdir hello-permissions-dotnet && cd hello-permissions-dotnet && dotnet new console
 ```
 
-1. Install the Permit.io SDK
+2. Install the Permit.io .NET SDK:
 
    ```bash
    dotnet add package Permit
    ```
 
-2. Import the SDK into your code
+3. Import the SDK namespaces into your code:
 
    ```csharp
    using PermitSDK;
    using PermitSDK.Models;
    ```
 
-3. Create a new instance of the SDK. <br/>
-   You can find instructions on getting a secret API key in the previous section.
+4. Create a `Permit` client. Replace `[YOUR_API_KEY]` with your environment API key, and pass the URL of your PDP as the second argument:
 
    ```csharp
    // This line initializes the SDK and connects your .NET app
@@ -33,7 +32,7 @@ mkdir hello-permissions-dotnet && cd hello-permissions-dotnet && dotnet new cons
    );
    ```
 
-   1. You can also set more config options when initializing the SDK.
+   To set more options, pass them as named arguments:
 
       ```csharp
       // you can also set more config options
@@ -64,7 +63,23 @@ mkdir hello-permissions-dotnet && cd hello-permissions-dotnet && dotnet new cons
       );
       ```
 
-## Check for permissions using the SDK
+The `Permit` constructor accepts these parameters. Parameter names are case-sensitive.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `token` | Required | Your environment API key. |
+| `pdp` | `http://localhost:7766` | The URL of the PDP: `http://localhost:7766` for the container PDP, or `https://cloudpdp.api.permit.io` for the Cloud PDP. |
+| `defaultTenant` | `default` | The tenant key to use when a check doesn't pass a tenant. |
+| `useDefaultTenantIfEmpty` | `true` | Whether to use `defaultTenant` when a check doesn't pass a tenant. |
+| `debugMode` | `false` | Whether to log debug messages. |
+| `apiUrl` | `https://api.permit.io` | The URL of the Permit API. |
+| `level`, `label`, `logAsJson` | `info`, `permitio-sdk`, `false` | Log level, log label, and JSON log output. |
+| `projectId`, `envId` | None | The project ID and environment ID. Set both to skip the API call that looks up the scope of the API key. |
+| `raiseErrors` | `false` | Whether a failed check request throws an error instead of returning `false`. |
+
+### Check permissions with the .NET SDK
+
+Call `await permit.Check()` with three arguments: the user key, the action key, and the resource key. `permit.Check()` returns `true` when the policy allows the action, and `false` otherwise. In this example, `user` is a `UserKey` object, as in the full example app below:
 
 ```csharp
 bool permitted = await permit.Check(user.key, "create", "document");
@@ -78,31 +93,19 @@ else
 }
 ```
 
-:::info
-Usually for the user ID you'd use the unique identifier provided by your chosen authentication solution.
-You can also pass the entire decoded JWT, to include attributes about the user.
+If the user has a role that grants `create` on `document`, the example writes `User is PERMITTED to create a document`. Otherwise, the example writes `User is NOT PERMITTED to create a document`. Use the user ID from your authentication provider as the user key. To add users and assign roles, see [Sync users](/how-to/sync-users).
+
+In a multi-tenant application, pass a `ResourceInput` with a `tenant` argument as the resource, as in the ABAC example below. To look up the keys of your tenants, call the [list tenants API](https://api.permit.io/v2/redoc#tag/Tenants/operation/list_tenants).
+
+:::note Where checks run and where user data is stored
+`permit.Check()` sends each check to the PDP URL you configure. A container PDP evaluates checks on your machine, using policy and data that the PDP loads from Permit. Users, roles, and attributes that you create in the dashboard or sync through the Permit API are stored in the Permit control plane.
 :::
 
-:::tip REMEMBER
+### Check ABAC permissions with the .NET SDK
 
-In cases where you are dealing with more than one tenant in your application, `permit.check()` can pass the **tenant** as part of the **resource**.
+An attribute-based access control (ABAC) policy grants permissions based on user and resource attributes, grouped into user sets and resource sets. See [ABAC policy components](/how-to/build-policies/abac/components). ABAC checks need a container PDP.
 
-The tenant passed in needs to be either the **tenant id** or the **tenant key**.
-
-You can use the **[list_tenants API](https://api.permit.io/v2/redoc#tag/Tenants/operation/list_tenants)** to **get the ids and keys set for your tenants**.
-
-`tenant`: a unique tenant id or tenant key that you have defined within Permit.
-
-:::
-
-## Check permissions against ABAC policies
-
-Above we have checked for permissions against an RBAC policy - but what if we have an **ABAC policy** we want to run a permission check for?
-An ABAC policy is made up of **User Sets** and **Resource Sets**, which you can read more about [here](/how-to/build-policies/abac/components#subject--subject-attributes).
-
-With ABAC we define conditions based on **pre-configured attributes**.
-
-If we are running a `permit.check()` for an ABAC policy, we replace the `userId` and the `resource` with objects, containing attributes.
+To check an ABAC policy, pass a `UserKey` and a `ResourceInput` with attributes. The `attributes` parameter of `ResourceInput` has the type `Dictionary<string, dynamic>`. In this example, replace `userId`, `resource`, `tenant`, and `action` with a user key, resource key, tenant key, and action key from your environment:
 
 ```dotnet
 UserKey user = new UserKey("userId", "John", "Smith", "john@smith.com");
@@ -119,18 +122,14 @@ var resourceInput = new ResourceInput(
 bool permitted = await permit.Check(user, "action", resourceInput);
 ```
 
-:::note REMEMBER
+For more check options, see [Check permissions with permit.check()](/how-to/enforce-permissions/check).
 
-Permission checks are being run against the PDP container that's running locally on your machine - offering
-minimal latency and without leaving your network.
+### Run a full .NET example app
 
-This means that your user data **never** goes outside your system, **keeping security high**.
+This single-file .NET console app listens on `http://localhost:4000/` and runs a permission check on each request.
 
-:::
-
-## Full app example
-
-Assuming a .NET app made up of a single file, with the `Permit` modules installed.
+1. Replace the contents of `Program.cs` in the project you created with the following code.
+2. Replace `[YOUR_API_KEY]` with your environment API key, and `userId` with the key of a user in your environment.
 
 ```csharp
 using System;
@@ -204,10 +203,14 @@ namespace PermitOnboardingApp
 }
 ```
 
-Now that your application is ready, let's run it:
+3. Run the app:
 
 ```bash
 dotnet run
 ```
 
-Finally, go to http://localhost:4000 to see the outcome of the permission check.
+The terminal prints `Listening for connections on http://localhost:4000/`.
+
+4. Open `http://localhost:4000` in a browser.
+
+The app checks whether the user can `create` a `task`. If the policy allows the action, the page returns HTTP `200` with `User JohnSmith is Permitted to create task`. Otherwise, the page returns HTTP `403` with `User JohnSmith is NOT Permitted to create task`.

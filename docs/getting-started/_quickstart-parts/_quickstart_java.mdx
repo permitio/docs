@@ -1,18 +1,16 @@
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-<br />
+### Install and initialize the Java SDK
 
-## Add the SDK to your Java code
+Add the `io.permit:permit-sdk-java` dependency, create a `Permit` client that connects to your PDP, and sync a user.
 
-Initialise the **Java SDK** and check for permissions.
+1. Add the Permit.io Java SDK to your project. The examples pin version `2.0.0`. To use a later version, check the [permit-java releases](https://github.com/permitio/permit-java/releases).
 
-1. Install the Permit.io SDK with:
-
-<Tabs groupId="language">
+<Tabs groupId="java-build-tool">
 <TabItem value="maven" label="Maven" default>
 
-For **[Maven](https://maven.apache.org/)** projects, use:
+For **[Maven](https://maven.apache.org/)** projects, add the dependency to your `pom.xml`:
 
 ```xml
 <dependency>
@@ -25,7 +23,7 @@ For **[Maven](https://maven.apache.org/)** projects, use:
   </TabItem>
   <TabItem value="gradle" label="Gradle">
 
-For **[Gradle](https://gradle.org/)** projects, configure `permit-sdk-java` as a dependency in your `build.gradle`.
+For **[Gradle](https://gradle.org/)** projects, add `permit-sdk-java` as a dependency in your `build.gradle`:
 
 ```groovy
 dependencies {
@@ -38,8 +36,7 @@ dependencies {
   </TabItem>
 </Tabs>
 
-2. Create a new instance of the SDK. <br/>
-   You can find instructions on getting a secret API key in the previous section.
+2. Create a `Permit` client. Replace `[YOUR_API_KEY]` with your environment API key, and pass the URL of your PDP to `withPdpAddress()`:
 
 ```java
 import io.permit.sdk.Permit;
@@ -57,10 +54,13 @@ Permit permit = new Permit(
     );
 ```
 
-3. Sync the user to the permissions system
+| Builder method | Description |
+|---|---|
+| `PermitConfig.Builder("[YOUR_API_KEY]")` | Your environment API key. |
+| `withPdpAddress()` | The URL of the PDP that evaluates checks: `http://localhost:7766` for the container PDP, or `https://cloudpdp.api.permit.io` for the Cloud PDP. |
+| `withDebugMode()` | Set to `true` to log more debug messages. |
 
-   When the user first logins, and after you check if he authenticated successfully (i.e: **by checking the JWT access token**) -
-   you need to declare the user in the permission system so you can run `permit.check()` on that user.
+3. Sync the user to Permit. After your application authenticates a user, for example by validating the user's JWT access token, create or update the user in Permit with `permit.api.users.sync()`. For role-based checks, the user must exist in Permit and have a role. Replace `[A_UNIQUE_USER_ID]` with the user's key.
 
 ```java
 import io.permit.sdk.api.models.CreateOrUpdateResult;
@@ -91,9 +91,19 @@ UserRead user = response.getResult();
 boolean wasCreated = response.wasCreated();
 ```
 
-<br />
+`permit.api.users.sync()` returns a `CreateOrUpdateResult<UserRead>`. `getResult()` returns the user, and `wasCreated()` returns `true` if Permit created the user. `permit.api.users.assignRole()` takes the user key, the role key, and the tenant key.
 
-## Check for permissions using the SDK
+### Check permissions with the Java SDK
+
+Call `permit.check()` with three arguments. `permit.check()` returns `true` when the policy allows the action, and `false` otherwise.
+
+| Argument | Description |
+|---|---|
+| `user` | A `User`. Create one from the user key with `User.fromString("<user key>")`. The user key is typically the user ID from your authentication provider. |
+| `action` | The action key, for example `"create"`. |
+| `resource` | A `Resource`. Build one with `new Resource.Builder("<resource key>")`, and set the tenant key with `withTenant()`. |
+
+This example checks whether a user can `create` a `document` in the `default` tenant. Replace `[A_USER_ID]` with the key of the user you synced:
 
 ```java
 import io.permit.sdk.enforcement.Resource;
@@ -116,31 +126,19 @@ if (permitted) {
 }
 ```
 
-:::info
-Usually for the user ID you'd use the unique identifier provided by your chosen authentication solution.
-You can also pass the entire decoded JWT, to include attributes about the user.
+If the user has a role in the `default` tenant that grants `create` on `document`, the example prints `User is PERMITTED to create a document`. Otherwise, the example prints `User is NOT PERMITTED to create a document`.
+
+In a multi-tenant application, pass the tenant key to `withTenant()` on the resource. To look up the keys of your tenants, call the [list tenants API](https://api.permit.io/v2/redoc#tag/Tenants/operation/list_tenants).
+
+:::note Where checks run and where user data is stored
+`permit.check()` sends each check to the PDP URL you configure. A container PDP evaluates checks on your machine, using policy and data that the PDP loads from Permit. Users, roles, and attributes that you sync with `permit.api.users.sync()` are stored in the Permit control plane.
 :::
 
-:::tip REMEMBER
+### Check ABAC permissions with the Java SDK
 
-In cases where you are dealing with more than one tenant in your application, `permit.check()` can pass the **tenant** as part of the **resource**.
+An attribute-based access control (ABAC) policy grants permissions based on user and resource attributes, grouped into user sets and resource sets. See [ABAC policy components](/how-to/build-policies/abac/components). ABAC checks need a container PDP.
 
-The tenant passed in needs to be either the **tenant id** or the **tenant key**.
-
-You can use the **[list_tenants API](https://api.permit.io/v2/redoc#tag/Tenants/operation/list_tenants)** to **get the ids and keys set for your tenants**.
-
-`tenant`: a unique tenant id or tenant key that you have defined within Permit.
-
-:::
-
-## Check permissions against ABAC policies
-
-Above we have checked for permissions against an RBAC policy - but what if we have an **ABAC policy** we want to run a permission check for?
-An ABAC policy is made up of **User Sets** and **Resource Sets**, which you can read more about [here](/how-to/build-policies/abac/components#subject--subject-attributes).
-
-With ABAC we define conditions based on **pre-configured attributes**.
-
-If we are running a `permit.check()` for an ABAC policy, we replace the `userId` and the `resource` with objects, containing attributes.
+To check an ABAC policy, pass a `User` and a `Resource` that carry attributes, set with `withAttributes()`. In this example, `tenant.key` stands for your tenant key and `resourceAttributes` for a `HashMap<String, Object>` of resource attributes. Replace `action` and `resource` with an action key and a resource key from your environment:
 
 ```java
 // Creating a UserSet
@@ -161,18 +159,15 @@ Resource resourceWithAttributes = new Resource.Builder("resource").withTenant(te
 permit.check(userWithAttributes, "action", resourceWithAttributes);
 ```
 
-:::note REMEMBER
+For more check options, see [Check permissions with permit.check()](/how-to/enforce-permissions/check).
 
-Permission checks are being run against the PDP container that's running locally on your machine - offering
-minimal latency and without leaving your network.
+### Run a full Java example app (Spring Boot)
 
-This means that your user data **never** goes outside your system, **keeping security high**.
+This single-file Spring Boot app syncs a user, assigns the user the `admin` role in the `default` tenant, and runs a permission check on each request to its root URL.
 
-:::
-
-## Full app example
-
-Assuming a Spring Boot app made up of a single file, with the SDK installed.
+1. Create a Spring Boot web project that includes the Permit.io Java SDK dependency.
+2. Save the following code as `DemoApplication.java` in the `com.example.myproject` package.
+3. Replace `[YOUR_API_KEY]` with your environment API key, and both `[A_USER_ID]` placeholders with the same user key.
 
 ```java
 package com.example.myproject;
@@ -259,14 +254,20 @@ public class DemoApplication {
 }
 ```
 
-## Full app example
+:::warning Set the API URL before you run the example
+The example calls `withApiUrl("https://api.stg.permit.io")`, which points the SDK at a non-default Permit API URL. The SDK's default API URL is `https://api.permit.io`. Unless your account uses a different API URL, remove the `withApiUrl()` call before you run the app.
+:::
 
-Example application using Spring framework and the Permit.io SDK.
-https://github.com/permitio/permit-java-example
+4. Start the app, for example with `./mvnw spring-boot:run` or `./gradlew bootRun`.
+5. Open the app's root URL (`http://localhost:8080` by default in Spring Boot) in a browser.
 
-#### Features
+If the `admin` role grants `create` on `document`, the page returns HTTP `200` with `Joe Doe is PERMITTED to create document!`. Otherwise, the page returns HTTP `403` with `Joe Doe is NOT PERMITTED to create document!`.
 
-- RBAC policy
+### Explore the Java example repository
+
+The [permit-java-example](https://github.com/permitio/permit-java-example) repository contains a blog application that uses the Permit.io Java SDK. The example covers:
+
+- RBAC (role-based access control) policy
 - ABAC policy
-- ReBAC policy
+- ReBAC (relationship-based access control) policy
 - Terraform setup

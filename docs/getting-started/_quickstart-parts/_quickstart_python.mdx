@@ -1,21 +1,20 @@
-## Add the SDK to your Python code
+### Install and initialize the Python SDK (asyncio)
 
-Initialise the **Python SDK** and check for permissions.
+Install the `permit` package, import the `Permit` class, and create a `Permit` client that connects to your PDP. The `Permit` class in the `permit` module uses `asyncio`. If your code doesn't use `asyncio`, use the sync Python SDK instead.
 
-1. Install the Permit.io SDK
+1. Install the Permit.io Python SDK:
 
 ```
 pip install permit
 ```
 
-2. Import the SDK into your code
+2. Import the `Permit` class:
 
 ```python
 from permit import Permit
 ```
 
-3. Create a new instance of the SDK.
-   You can find instructions on getting a secret API key in the previous section.
+3. Create a `Permit` client. Replace `<your-api-key>` with your environment API key, and set `pdp` to the URL of your PDP:
 
 ```python
 # This line initializes the SDK and connects your python app
@@ -35,15 +34,24 @@ permit = Permit(
 )
 ```
 
-## Check for permissions using the SDK
+| Option | Description |
+|---|---|
+| `token` | Your environment API key. |
+| `pdp` | The URL of the PDP that evaluates checks: `http://localhost:7766` for the container PDP, or `https://cloudpdp.api.permit.io` for the Cloud PDP. |
+| `pdp_timeout` | Optional. Timeout in seconds for requests to the PDP. Available since SDK version 2.5.0. |
+| `api_timeout` | Optional. Timeout in seconds for requests to the Permit API. Available since SDK version 2.5.0. |
 
-You can run a permission check with `permit.check()`, passing in 3 arguments:
+### Check permissions with the Python SDK (asyncio)
 
-- `user`: a unique string id that identifies the user doing the action. This is typically the user key.
-- `action`: the action performed.
-- `resource`: the resource (object) the action is performed on.
+Call `await permit.check()` inside an `async` function, with three arguments. `permit.check()` returns `True` when the policy allows the action, and `False` otherwise.
 
-In the following example we are checking that a user with the unique id `john@smith.com` can `create` a `document` resource.
+| Argument | Description |
+|---|---|
+| `user` | The key that identifies the user in Permit, typically the user ID from your authentication provider. To pass attributes, use a dictionary with `key` and `attributes`. |
+| `action` | The action key, for example `create`. |
+| `resource` | The resource type key, for example `document`, or a dictionary with `type`, `tenant`, and `attributes`. |
+
+This example checks whether the user `john@smith.com` can `create` a `document`:
 
 ```python
 permitted = await permit.check("john@smith.com", "create", "document")
@@ -54,24 +62,13 @@ else:
     print("John is NOT PERMITTED to create document!")
 ```
 
-:::info
-Usually instead of an email you'd use the unique identifier provided by your chosen authentication solution.
-You can also pass the entire decoded JWT, to include attributes about the user.
-:::
+If `john@smith.com` exists in your environment and has a role that grants `create` on `document`, the example prints `John is permitted to create a document`. Otherwise, the example prints `John is NOT PERMITTED to create document!`. To add users and assign roles, see [Sync users](/how-to/sync-users).
 
-:::tip REMEMBER
+#### Check a permission in a specific tenant
 
-In cases where you are dealing with more than one tenant in your application, `permit.check()` can pass the **tenant** as part of the **resource**.
+In a multi-tenant application, pass the tenant key in the `tenant` field of the resource dictionary. To look up the keys of your tenants, call the [list tenants API](https://api.permit.io/v2/redoc#tag/Tenants/operation/list_tenants).
 
-The tenant passed in needs to be either the **tenant id** or the **tenant key**.
-
-You can use the **[list_tenants API](https://api.permit.io/v2/redoc#tag/Tenants/operation/list_tenants)** to **get the ids and keys set for your tenants**.
-
-`tenant`: a unique tenant id or tenant key that you have defined within Permit.
-
-:::
-
-For example, if we want to check if `john@permit.io` can read documents that belong to the `awesome_inc` tenant:
+This example checks whether `john@permit.io` can `read` documents in the `awesome_inc` tenant:
 
 ```python
 permitted = await permit.check(
@@ -84,15 +81,15 @@ permitted = await permit.check(
 )
 ```
 
-## Check permissions against ABAC policies
+:::note Where checks run and where user data is stored
+`permit.check()` sends each check to the PDP URL you configure. A container PDP evaluates checks on your machine, using policy and data that the PDP loads from Permit. Users, roles, and attributes that you create in the dashboard or sync through the Permit API are stored in the Permit control plane.
+:::
 
-Above we have checked for permissions against an RBAC policy - but what if we have an **ABAC policy** we want to run a permission check for?
-An ABAC policy is made up of **User Sets** and **Resource Sets**, which you can read more about [here](/how-to/build-policies/abac/components#subject--subject-attributes).
+### Check ABAC permissions with the Python SDK (asyncio)
 
-With ABAC we define conditions based on **pre-configured attributes**.
+An attribute-based access control (ABAC) policy grants permissions based on user and resource attributes, grouped into user sets and resource sets. See [ABAC policy components](/how-to/build-policies/abac/components). ABAC checks need a container PDP.
 
-If we are running a `permit.check()` for an ABAC policy, we can attach **just-in-time attributes** to the `user` and the `resource`.
-There attributes are merged (and override) user and resource attributes that were persisted to the permit API.
+To check an ABAC policy, pass the user and the resource as dictionaries with just-in-time attributes, which you pass in the check call. In this example, replace `check@permit.io`, `action`, `resource`, and `tenant` with a user key, action key, resource key, and tenant key from your environment:
 
 ```python
 permitted = await permit.check(
@@ -122,45 +119,37 @@ permitted = await permit.check(
 )
 ```
 
-:::note REMEMBER
+For more check options, see [Check permissions with permit.check()](/how-to/enforce-permissions/check).
 
-Permission checks are being run against the PDP container that's running locally on your machine - offering
-minimal latency and without leaving your network.
+### Run a full Python example app (FastAPI)
 
-This means that your user data **never** goes outside your system, **keeping security high**.
+This single-file FastAPI app runs a permission check on each request to its root URL.
 
-:::
-
-## Full app example
-
-Assuming a Python app made up of a single file, with the `permit` and `FastAPI` modules installed.
-
-Create a new directory for your new python project.
+1. Create a directory for the project:
 
 ```
 mkdir hello-permissions && cd hello-permissions
 ```
 
-Optionally, create a new virtual environment for your project - you might need to install `pyenv` and `virtualenv`.
+2. Optional: create a virtual environment for the project. The following command needs `pyenv` and `pyenv-virtualenv`.
 
 ```
 pyenv virtualenv permissions && pyenv activate permissions
 ```
 
-Now install the Permit.io SDK. We will also install the `FastAPI` and `Uvicorn` packages in order to run an HTTP server in our example.
+3. Install the Permit.io SDK, FastAPI, and Uvicorn, the server that runs the app:
 
 ```
 pip install permit fastapi "uvicorn[standard]"
 ```
 
-Create a file called `test.py`.
+4. Create a file called `test.py`:
 
 ```
 touch test.py
 ```
 
-Copy the following code inside `test.py` and replace with your `API KEY` and `user-object`.
-You can find instructions on getting a secret API Key in the previous section.
+5. Copy the following code into `test.py`. Replace `[YOUR_API_KEY]` with your environment API key, and `john@smith.com` with the key of a user in your environment.
 
 ```python
 import asyncio
@@ -203,21 +192,21 @@ async def check_permissions():
 
 ```
 
-Now that your application is ready, let's run it!
-Go to your applications localhost live deployment to see the outcome of the permission check.
+6. Start the app. Replace `<YOUR_LOCALHOST_PORT_NUMBER>` with a free port, for example `8000`:
 
 ```
 uvicorn test:app --reload --port=<YOUR_LOCALHOST_PORT_NUMBER>
 ```
 
-## Full app example
+7. Open `http://localhost:<YOUR_LOCALHOST_PORT_NUMBER>` in a browser.
 
-Example application using FastAPI,SQLAlchemy,PostgreSQL and the Permit.io SDK.
-https://github.com/permitio/permit-python-example
+The app checks whether `john@smith.com` can `read` a `document`. If the policy allows the action, the app returns HTTP `200` with a JSON `result` message that contains `is PERMITTED`. Otherwise, the app returns HTTP `403` with a message that contains `is NOT PERMITTED`.
 
-#### Features
+### Explore the Python example repository
 
-- RBAC policy
+The [permit-python-example](https://github.com/permitio/permit-python-example) repository contains a FastAPI app that uses SQLAlchemy, PostgreSQL, and the Permit.io Python SDK. The example covers:
+
+- RBAC (role-based access control) policy
 - ABAC policy
-- ReBAC policy
+- ReBAC (relationship-based access control) policy
 - Terraform setup
