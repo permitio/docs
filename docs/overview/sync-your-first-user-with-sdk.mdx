@@ -1,200 +1,186 @@
 ---
 sidebar_position: 2
-title: Sync your First User
-description: "Sync a user into Permit.io with the API, assign roles at creation or afterwards, and add the user to a second tenant with a different role."
+title: Sync your First User with the API
+sidebar_label: Sync your First User with the API
+description: "Create your first user in Permit.io with the REST API, assign the user a role, and give the same user a different role in a second tenant."
 ---
-
-Syncing users is the handoff point
-between your application's user management (usually your authentication provider or IdP) and the Permit control plane.
-
-:::note NOTE
-**`Users`** are the **name** we use for both **human** and **machine identities**.
-:::
 
 import CodeBlock from "../../src/components/code-block/CodeBlock";
 import WhatsNext from "../../src/components/whats-next/WhatsNext";
 import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
 
-## TL;DR
+Create your first user in Permit.io with the Permit REST API, assign the user a role, and then give the same user a different role in a second tenant. This walkthrough is for developers who are new to Permit and want to see how users, roles, and tenants fit together. For the full reference on syncing users from your sign-in flow, see [Sync users](/how-to/sync-users).
 
-Sync users on-the-fly by passing their unique ID to the `createUser` API or `users.create/sync` SDK call.
-This should be done as part of your Authentication callback.
+In Permit, a **user** is any identity you check permissions for, human or machine. Syncing a user copies the identity from your application or identity provider (IdP) into the Permit control plane, so the policy decision point (PDP) can evaluate permission checks for that user.
 
-1. New users appear in the Directory under `All Tenants`.
-2. Assign roles to users to also link them to specific tenants.
-3. You can assign multiple users to multiple roles at multiple tenants.
-4. You can use the bulk API to load multiple users at once.
+## What you build \{#tldr}
 
----
+1. A user, `John Smith`, created with the Create User endpoint.
+2. A role assignment for John in the `default` tenant.
+3. A second tenant, `Marketing`, where John has the `Manager` role.
 
-## When to sync your users?
+You can repeat the same calls for any number of users, roles, and tenants. To load many users at once, use the [bulk endpoints](#bulk-user-syncing).
 
-Sync users into Permit during **sign-in** or **sign-up**, right after **authentication verifies their identity**. At that
-point, map their organizational role (for example Head of Marketing, Customer, or Patient) and relevant JWT claims to application-level roles,
-attributes, and relationships, so their permissions match their role from the first request.
+## Prerequisites
 
-## Our API Reference
+- Your environment API key ([Get your API key](/overview/get-api-key))
+- Your project ID and environment ID ([Use the Permit API and SDK](/overview/use-the-permit-api-and-sdk)). To see how workspaces, projects, and environments relate, read [Projects and environments](/manage-your-account/projects-and-env#managing-access-to-a-project).
+- A role to assign, for example `admin` ([Configure your first RBAC policy](/overview/configure-your-first-rbac-policy))
+- `cURL` or an HTTP client such as Postman
 
-In this walkthrough, you sync your first user into Permit with the API, either with a role
-or ready to receive one.
+The code samples show the request as `cURL` and as Node.js. The screenshots show the requests sent with `cURL` and Postman.
 
-You use two API endpoints:
+## API endpoints used in this walkthrough \{#our-api-reference}
 
-1. [Creating a user](https://api.permit.io/scalar#tag/users/POST/v2/facts/{proj_id}/{env_id}/users)
-2. [Assigning a role to a user](https://api.permit.io/scalar#tag/users/POST/v2/facts/{proj_id}/{env_id}/users/{user_id}/roles)
+| Task | Endpoint |
+|---|---|
+| Create a user | [`POST /v2/facts/{proj_id}/{env_id}/users`](https://api.permit.io/scalar#tag/users/POST/v2/facts/{proj_id}/{env_id}/users) |
+| Assign a role to a user | [`POST /v2/facts/{proj_id}/{env_id}/users/{user_id}/roles`](https://api.permit.io/scalar#tag/users/POST/v2/facts/{proj_id}/{env_id}/users/{user_id}/roles) |
+| Create a tenant | `POST /v2/facts/{proj_id}/{env_id}/tenants` |
+| Add a user to a tenant | `POST /v2/facts/{proj_id}/{env_id}/tenants/{tenant_id}/users` |
 
-:::note
-To learn how workspaces, projects, and environments fit together, read about
-[the Permit hierarchy](/manage-your-account/projects-and-env#managing-access-to-a-project).
-:::
+Every request authenticates with your environment API key as a bearer token. Sync a user when your application signs the user up or signs the user in. For the reasons, see [When to sync users](/how-to/sync-users#when-to-sync-your-users).
 
 <TimelineWrapper>
 <TimelineStep>
 
-## Sync Users from your identity provider
+## 1. Create a user with the API \{#sync-users-from-your-identity-provider}
 
-To create a user, send a POST request to the users endpoint with your project ID (`proj_id`),
-environment ID (`env_id`), and the user's unique details. The user is created in that environment,
-ready for role assignments.
+Send a `POST` request to the users endpoint. Replace `your_project_id` and `your_env_id` with your project and environment IDs, and `your_bearer_token` with your API key. The request body holds the user's unique `key` and optional profile fields. Permit creates the user in that environment, ready for role assignments.
 
 <CodeBlock folderPath="/walkthroughs/sync-first-user/sync-sdk-request" />
 
-:::tip Sync Users via SCIM
-Permit supports user synchronization through **SCIM** (System for Cross-domain Identity Management). It connects to
-identity providers like [Entra ID](/integrations/SCIM/EntraID), [Okta](/integrations/SCIM/OKTA), and others, and automatically provisions, updates,
-and deprovisions users in Permit.
+:::tip Sync users with SCIM
+Permit also syncs users with System for Cross-domain Identity Management (SCIM). A SCIM connection to an identity provider such as [Microsoft Entra ID](/integrations/SCIM/EntraID) or [Okta](/integrations/SCIM/OKTA) provisions, updates, and deprovisions users in Permit.
 :::
 
 </TimelineStep>
 <TimelineStep>
 
-## Verify the user was created in the Permit Directory
+## 2. Verify the user in the Permit Directory \{#verify-the-user-was-created-in-the-permit-directory}
 
-> This example runs the request with `cURL`.
-> The new user appears in the UI, under `Directory`.
+In the Permit dashboard, open **Directory** and select **All Tenants**. John Smith appears with the key `user|123456789` and no roles yet.
 
 <img
   src="/img/updated/walkthroughs/sync-users/api-request-success.png"
-  alt="Copy secret key from user menu"
+  alt="Permit Directory, All Tenants view, listing John Smith with key user|123456789 and an Add Roles link"
   data-zoomable
 />
 
-:::tip
-
-You can assign roles when you create the user. Include the `role_assignments`
-field in the request body (here, the `userData` object):
+:::tip Assign roles when you create the user
+To create a user with a role in one request, add the `role_assignments` field to the request body. Each entry is a `role` and the `tenant` it applies in:
 
 ```js
 role_assignments: [{ role: "manager", tenant: "default" }];
 ```
 
-The user is created with the role, in the right tenant, in one request.
-
 :::
 
-> Below is the request in Postman for **adding a user with a role assignment**:
+This Postman request creates a second user, Macy Smith, with the `Admin` role in the `default` tenant:
 
 <img
   src="/img/updated/walkthroughs/sync-users/api-request-role-postman.png"
-  alt="Copy secret key from user menu"
+  alt="Postman POST request to the Permit users endpoint with a role_assignments field, returning 200 OK"
   data-zoomable
 />
 
-> The result in the Permit `Directory`:
+Macy Smith appears in the Directory with `default • Admin` under **Top Level Access**:
 
 <img
   src="/img/updated/walkthroughs/sync-users/api-request-success-2.png"
-  alt="Copy secret key from user menu"
+  alt="Permit Directory listing John Smith and Macy Smith, with the Admin role shown for Macy Smith"
   data-zoomable
 />
 
 </TimelineStep>
 <TimelineStep>
 
-## Assign a role to the User (optional)
+## 3. Assign a role to the user (optional) \{#assign-a-role-to-the-user-optional}
 
-You can also `assign a role to the user` in a separate request after creating them, with this endpoint:
+If you created the user without `role_assignments`, assign a role in a separate request. Send a `POST` request to the user's `roles` endpoint with the `role` key and the `tenant` key:
 
 <CodeBlock folderPath="/walkthroughs/sync-first-user/assign-role" />
 
+In the Directory, the role appears under **Top Level Access** for the user.
+
 </TimelineStep>
 <TimelineStep>
 
-## Create a new tenant
+## 4. Create a second tenant \{#create-a-new-tenant}
 
-In Permit, a tenant is an isolated space in your application, with its own role assignments and resource instances.
-This is how Permit supports **multitenancy**: the same user can have different roles in different tenants (for example Admin in one tenant and
-Manager in another).
+A tenant is an isolated space in your application, with its own role assignments and resource instances. Tenants are how Permit supports multitenancy: the same user can have a different role in each tenant, for example Admin in one tenant and Manager in another.
 
-> Create a new `tenant` called `Marketing`.
+Create a tenant with the key `marketing` and the name `Marketing`:
 
 <CodeBlock folderPath="/walkthroughs/sync-first-user/create-tenant" />
 
-> The new tenant appears in the UI:
+The Marketing tenant appears in the tenant selector of the Directory:
 
 <img
   src="/img/updated/walkthroughs/sync-users/new-tenant.png"
-  alt="Copy secret key from user menu"
+  alt="Directory tenant selector listing All Tenants, Default Tenant, and Marketing"
   data-zoomable
 />
 
 </TimelineStep>
 <TimelineStep>
 
-## Add a user to a new tenant and assign them a different role
+## 5. Give the user a different role in the second tenant \{#add-a-user-to-a-new-tenant-and-assign-them-a-different-role}
 
-`Add the user` to the `new tenant` and `assign them a role` there.
+Add John Smith to the Marketing tenant with the `Manager` role. Send the user object with a `role_assignments` entry for the Marketing tenant to the tenant's users endpoint:
 
 <CodeBlock folderPath="/walkthroughs/sync-first-user/add-user-to-tenant" />
 
-> The same user now also exists in the `Marketing` tenant, with the `Manager` role there,
-> while keeping the `Employee` role in the default tenant:
+John Smith now has the `Manager` role in the Marketing tenant. His role in the default tenant doesn't change.
 
-### Marketing Tenant
+### John Smith in the Marketing tenant \{#marketing-tenant}
 
 <img
   src="/img/updated/walkthroughs/sync-users/marketing-tenant.png"
-  alt="Copy secret key from user menu"
+  alt="Directory filtered to the Marketing tenant, showing John Smith with the Manager role"
   data-zoomable
 />
 
-### Default Tenant
+### John Smith in the default tenant \{#default-tenant}
 
 <img
   src="/img/updated/walkthroughs/sync-users/default-tenant.png"
-  alt="Copy secret key from user menu"
+  alt="Directory filtered to the Default Tenant, showing John Smith with the Employee role and Macy Smith"
   data-zoomable
 />
 
 </TimelineStep>
 </TimelineWrapper>
 
-## Bulk user syncing
+## Sync users in bulk \{#bulk-user-syncing}
 
-The API also syncs and updates users in bulk:
+To create, update, or delete many users in one request, use the bulk endpoints:
 
-- [Bulk `Create` User](https://api.permit.io/scalar#tag/bulk-operations/POST/v2/facts/{proj_id}/{env_id}/bulk/users)
-- [Bulk `Replace` User](https://api.permit.io/scalar#tag/bulk-operations/PUT/v2/facts/{proj_id}/{env_id}/bulk/users)
-- [Bulk `Assign Roles` to Users](https://api.permit.io/scalar#tag/bulk-operations/POST/v2/facts/{proj_id}/{env_id}/role_assignments/bulk)
-- [Bulk `Unassign Roles` to Users](https://api.permit.io/scalar#tag/bulk-operations/DELETE/v2/facts/{proj_id}/{env_id}/role_assignments/bulk)
-- [Bulk `Delete` User](https://api.permit.io/scalar#tag/bulk-operations/DELETE/v2/facts/{proj_id}/{env_id}/bulk/users)
+| Task | Endpoint |
+|---|---|
+| Create users | [`POST /v2/facts/{proj_id}/{env_id}/bulk/users`](https://api.permit.io/scalar#tag/bulk-operations/POST/v2/facts/{proj_id}/{env_id}/bulk/users) |
+| Replace users | [`PUT /v2/facts/{proj_id}/{env_id}/bulk/users`](https://api.permit.io/scalar#tag/bulk-operations/PUT/v2/facts/{proj_id}/{env_id}/bulk/users) |
+| Assign roles to users | [`POST /v2/facts/{proj_id}/{env_id}/role_assignments/bulk`](https://api.permit.io/scalar#tag/bulk-operations/POST/v2/facts/{proj_id}/{env_id}/role_assignments/bulk) |
+| Unassign roles from users | [`DELETE /v2/facts/{proj_id}/{env_id}/role_assignments/bulk`](https://api.permit.io/scalar#tag/bulk-operations/DELETE/v2/facts/{proj_id}/{env_id}/role_assignments/bulk) |
+| Delete users | [`DELETE /v2/facts/{proj_id}/{env_id}/bulk/users`](https://api.permit.io/scalar#tag/bulk-operations/DELETE/v2/facts/{proj_id}/{env_id}/bulk/users) |
 
-## What did you learn?
+To decide between a one-time bulk import and syncing each user at sign-in, see [Plan your user sync](/overview/sync-application-data-into-permit).
 
-In this guide, you've learned how to:
+## What you did \{#what-did-you-learn}
 
-- Sync a user into Permit using the API.
-- Assign roles to a user either during creation or later through a dedicated API call.
-- Understand Permit's hierarchy (workspaces, projects, environments) and how it relates to API calls.
+- Created a user with the Permit API.
+- Assigned a role to the user, in the create request and in a separate request.
+- Gave the same user a different role in a second tenant.
 
-:::tip
-Permit is API-first: everything you can do in the UI, you can also do with the API.
-:::
+Everything you did with the API in this walkthrough, you can also do in the Permit dashboard.
 
-<WhatsNext progress={30} customText="Great stuff. Ready to learn more?">
-  <h2>What's next? 🎉</h2>
-  - Understand the **check()** function
-  - Run a local Policy Decision Point
-  - Perform an authorization check
+<WhatsNext progress={30} customText="Next: check a permission for the user you synced.">
+  <h2>What's next?</h2>
+  <ul>
+    <li><a href="/overview/perform-policy-check-with-cloud-pdp">Run your first policy check with the Cloud PDP</a></li>
+    <li><a href="/overview/local-authorization-microservice">Run a local PDP</a></li>
+    <li><a href="/how-to/enforce-permissions/check">Check permissions with permit.check()</a></li>
+    <li><a href="/how-to/sync-users">Sync users from your sign-in flow</a></li>
+  </ul>
 </WhatsNext>

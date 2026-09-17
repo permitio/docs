@@ -1,69 +1,62 @@
 ---
 sidebar_position: 7
-title: Sync Application Data into Permit
-description: "Sync the data your policies need into Permit.io: users and attributes, tenants, role assignments, resource instances, and relationship tuples."
+title: Sync Attributes, Tenants, Roles, and Relationships
+sidebar_label: Sync Application Data
+description: "Sync the data your policies evaluate into Permit.io with the SDK or the dashboard: user attributes, tenants, role assignments, resource instances, and relationship tuples."
 ---
-
-import userAttributes from "../../static/ui-videos/walkthroughs/sync-data/user-attribute.mp4";
 
 import WhatsNext from "../../src/components/whats-next/WhatsNext";
 import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
-import Video from "../../src/components/video/Video";
 import CodeBlock from "../../src/components/code-block/CodeBlock";
 
-Policy decisions **depend on data**. You can pass some data in the check arguments, but most of it is **synced
-to Permit in advance**. This guide covers each data entity and how to sync it to Permit.
+Sync the application data your Permit.io policies evaluate: user attributes, tenants, role assignments, resource instances, and relationship tuples. This page is for developers who have a policy and a first synced user, and need their real data in Permit. It shows the SDK call for each kind of data and where to edit the same data in the Permit dashboard.
 
-## Before we start: Understand Permit Data
+For creating users and the sign-in sync flow, see [Sync users](/how-to/sync-users). This page covers the data you add around those users.
 
-These are the data structures you can sync to Permit:
+## Prerequisites
 
-- **users** (`RBAC`, `ABAC`, & `ReBAC`)
-  - **user attributes** (`ABAC`)
-- **tenants** (`RBAC`, `ABAC` & `ReBAC`)
-  - **tenant attributes** (`ABAC`)
-- **role assignments** (`RBAC` & `ReBAC`)
-- **resource instances** (`ABAC` & `ReBAC`)
-  - **resource instance attributes** (`ABAC`)
-- **resource relationship tuples** (`ReBAC`)
+- A policy with roles and resources ([Configure your first RBAC policy](/overview/configure-your-first-rbac-policy))
+- An initialized Permit SDK and your environment API key ([Use the Permit API and SDK](/overview/use-the-permit-api-and-sdk))
+- A synced user ([Sync your first user with the API](/overview/sync-your-first-user-with-sdk))
 
-:::info
-Most permissions depend on data beyond the check arguments.
+## Data you can sync to Permit \{#before-we-start-understand-permit-data}
 
-Permit also supports event-driven sync of your data using OPAL scopes. See
-[Use an external data source](/how-to/manage-data/use-external-data-source).
-:::
+A permission check can pass some data in its arguments. Most data that a policy evaluates is synced to Permit before the check runs. The policy models are role-based access control (RBAC), attribute-based access control (ABAC), and relationship-based access control (ReBAC).
 
-:::note
-You can add application data in the Permit UI or with the SDK. This guide shows both where both are available.
+| Data | Used by | Node.js SDK call | Python SDK call |
+|---|---|---|---|
+| Users and user attributes | RBAC, ABAC, ReBAC | `permit.api.users.sync()` | `permit.api.users.sync()` |
+| Tenants and tenant attributes | RBAC, ABAC, ReBAC | `permit.api.tenants.create()` | `permit.api.tenants.create()` |
+| Role assignments | RBAC, ReBAC | `permit.api.roleAssignments.assign()` | `permit.api.role_assignments.assign()` |
+| Resource instances and their attributes | ABAC, ReBAC | `permit.api.resourceInstances.create()` | `permit.api.resource_instances.create()` |
+| Relationship tuples | ReBAC | `permit.api.relationshipTuples.create()` | `permit.api.relationship_tuples.create()` |
+
+In the Python SDK, each call is `async`, so `await` it. The code samples on this page show Node.js and the equivalent REST API request.
+
+:::info Event-driven data sync
+To load data from your own service as it changes, instead of calling the SDK, use Open Policy Administration Layer (OPAL) data sources. See [Use an external data source](/how-to/manage-data/use-external-data-source).
 :::
 
 <TimelineWrapper>
 <TimelineStep>
 
-## Users & User Attributes (ABAC)
+## Sync user attributes (ABAC) \{#users--user-attributes-abac}
 
-Send user attributes from your code with the Permit SDK. Use this for bulk operations or to
-connect attribute management to your existing systems.
+User attributes describe a user, for example a subscription tier or a department. ABAC policies use them in user set conditions.
 
-:::note How it works
-A SaaS platform has subscription tiers: Free, Pro, and Enterprise. When a user upgrades,
-your system syncs the new attribute (for example `subscriptionLevel: Pro`) to Permit's API.
-The next check sees the new attribute, so the user gets access to Pro features without manual steps.
-:::
+For example, a SaaS platform has Free, Pro, and Enterprise tiers. When a user upgrades, your backend syncs the new attribute value, for example `tier: "pro"`, to Permit. The next permission check for that user evaluates the new value, so the user gets the Pro features without a manual step.
 
-To add attributes to a user, call the SDK's `users.sync` function with the user and their custom attributes.
+To set attributes, pass an `attributes` object to `users.sync`. The call creates the user if the key doesn't exist, and updates the user if it does.
 
 <CodeBlock folderPath="/walkthroughs/sync-data/create-user" />
 
-:::tip VIA THE UI
-To add attributes to a single user in the dashboard, go to `Directory`, select
-the user, click the `three dots`, and select `Edit Attributes`.
+:::tip Edit user attributes in the dashboard
+Go to **Directory**, find the user, click the three-dot menu, and select **Edit Attributes**.
 
 <img
   src="/ui-videos/walkthroughs/sync-data/user-attributes.png"
-  alt="Tenant Attributes"
+  alt="User row menu in the Permit Directory with the Edit Attributes option"
   data-zoomable
 />
 :::
@@ -71,44 +64,32 @@ the user, click the `three dots`, and select `Edit Attributes`.
 </TimelineStep>
 <TimelineStep>
 
-## Tenants & Tenant Attributes (ABAC and ReBAC)
+## Sync tenants and tenant attributes \{#tenants--tenant-attributes-abac-and-rebac}
 
-Tenant attributes describe a tenant, which usually represents an organization or
-account in a multi-tenant system. Policies can use them to treat tenants differently.
+A tenant usually represents one customer organization or account in a multi-tenant application. Tenant attributes describe that organization, so policies can treat tenants differently.
 
-:::note How it works
-In a multi-tenant e-commerce application, each tenant (merchant) has settings such as
-region and industry. When a new tenant signs up and picks an industry (for example Retail) and a region (for example Europe), you
-sync these attributes to Permit's API. Your policies can then show the tenant's users only the content, features, or settings for that region and industry.
-:::
+For example, in a multi-tenant e-commerce application, each merchant is a tenant. When a merchant signs up and picks an industry and a region, your backend syncs those values as tenant attributes. Policies then show the merchant's users only the features allowed for that region and industry.
 
-For example:
+Common tenant attributes:
 
-- **Region**: Defines the geographical location of the tenant, such as North America, Europe, or Asia.
-- **Subscription Level**: Specifies the service tier, such as Basic, Pro, or Enterprise.
-- **Industry**: Indicates the tenant's sector, like Healthcare, Finance, or Retail.
+| Attribute | Example values |
+|---|---|
+| Region | North America, Europe, Asia |
+| Subscription level | Basic, Pro, Enterprise |
+| Industry | Healthcare, Finance, Retail |
 
-:::tip EXAMPLE
-Using tenant attributes, you can enforce policies like:
+A policy on tenant attributes can say: "Allow access to advanced analytics only for tenants with a Pro or Enterprise subscription."
 
-"Allow access to advanced analytics only for tenants with a Pro or Enterprise subscription."
-:::
-
-To create a tenant with attributes, call the SDK's `tenant.create` function.
+To create a tenant with attributes, call `tenants.create` with the tenant `key`, `name`, and `attributes`:
 
 <CodeBlock folderPath="/walkthroughs/sync-data/create-tenant" />
 
-:::tip VIA THE UI
-You can also add attributes to a single tenant in the dashboard.
-
-Go to `Directory`, then `Settings`, and select `Manage Tenants`. Find the tenant you want to
-update, click the `three dots` next to it, and choose `Edit Attributes`.
-
-Add or modify attributes as needed, specifying the name and value as a JSON object.
+:::tip Edit tenant attributes in the dashboard
+Go to **Directory**, click **Settings**, and select **Manage Tenants**. Find the tenant, click the three-dot menu, and select **Edit Attributes**. Enter the attributes as a JSON object of names and values.
 
 <img
   src="/ui-videos/walkthroughs/sync-data/tenant-attributes.png"
-  alt="Tenant Attributes"
+  alt="Manage Tenants screen in the Permit dashboard with the Edit Attributes option for a tenant"
   data-zoomable
 />
 :::
@@ -116,59 +97,39 @@ Add or modify attributes as needed, specifying the name and value as a JSON obje
 </TimelineStep>
 <TimelineStep>
 
-## Role Assignments (RBAC & ReBAC)
+## Sync role assignments (RBAC and ReBAC) \{#role-assignments-rbac--rebac}
 
-Role assignments define what a user can do, either across a tenant (RBAC) or on specific resource instances (ReBAC).
+A role assignment gives a user a role. A top-level role applies across one tenant (RBAC). An instance role applies to one resource instance (ReBAC).
 
-:::note How it works
-A project management tool has the roles Admin, Manager, and Contributor. When a user is added to a
-project as its Manager, your system syncs that assignment to Permit's API.
-The user can then assign tasks and view reports in that project, and their roles in other projects don't change.
-:::
+For example, a project management tool has Admin, Manager, and Contributor roles. When a user becomes Manager of one project, your backend syncs that instance role assignment. The user can assign tasks and view reports in that project, and the user's roles in other projects don't change.
 
-When creating a new user, you can assign top-level or instance-specific roles directly using the SDK's `users.sync` function.
-
-Define top-level roles by specifying the `role` and the `tenant` it belongs to. Roles are always an `array`,
-because a user can have **more than one role** in **multiple tenants**. For example:
+To assign a role, call `roleAssignments.assign` with the `user`, `role`, and `tenant`. Add `resource_instance`, in the format `resource_key:instance_key`, to assign an instance role. You can also assign roles when you create the user, with the `role_assignments` field of `users.sync`. A user can have several roles, in several tenants.
 
 <CodeBlock folderPath="/walkthroughs/sync-data/top-level-role-assignment" />
 
-You can also assign resource instance roles, which apply to one resource instance. For example, with a resource
-called `Dashboard` and two instances, `Dashboard A` and `Dashboard B`, the same user can be
-`Owner` of `Dashboard A` and `Viewer` of `Dashboard B`.
+With instance roles, one user can have different roles on different instances of the same resource. For example, with a `Dashboard` resource and the instances `Dashboard A` and `Dashboard B`, the same user can be Admin of Dashboard A and Viewer of Dashboard B. This is the shape of those two assignments:
 
 <CodeBlock folderPath="/walkthroughs/sync-data/resource-instance-role-assignment" />
 
 </TimelineStep>
 <TimelineStep>
 
-## Resource Instances and Resource Instance Attributes (ABAC & ReBAC)
+## Sync resource instances and their attributes \{#resource-instances-and-resource-instance-attributes-abac--rebac}
 
-Resource attributes describe a resource, so policies can depend on it.
-You define the attributes when you create the resource in Permit. Then, for each resource instance, you set values
-for those attributes.
+A resource instance is one object of a resource type, for example one repository of the `repository` resource. You define attributes on the resource type in the Policy Editor. Each instance then stores its own values for those attributes, and policies use the values.
 
-:::note How it works
-A learning management system has a "Courses" resource with attributes such as `difficultyLevel`
-(Beginner, Intermediate, Advanced) and `category` (Math, Science). When a course is created, you sync
-it to Permit's API with its attribute values, and can add instance data such as the instructor or a course
-ID. Policies then use those values, for example to grant certain users access only to Advanced-level Math courses.
-:::
+For example, a learning management system has a `course` resource with a `difficulty_level` attribute (Beginner, Intermediate, Advanced) and a `category` attribute (Math, Science). When a course is created, your backend syncs the course instance with its attribute values. A policy can then give some users access only to Advanced Math courses.
 
-To create a resource instance with custom attributes, call the SDK's `resource_instances.create` function. For example:
+To create a resource instance, call `resourceInstances.create` with the instance `key`, the `resource` type, the `tenant`, and the `attributes`:
 
 <CodeBlock folderPath="/walkthroughs/sync-data/create-resource-instance" />
 
-:::tip via the UI
-
-To add resource instance attributes directly from the UI:
-
-Go to `Directory`, then `Instances`. Select the resource instance,
-click the `three dots`, and select `Edit Attributes`.
+:::tip Edit resource instance attributes in the dashboard
+Go to **Directory** and open the **Instances** tab. Find the resource instance, click the three-dot menu, and select **Edit Attributes**.
 
 <img
   src="/ui-videos/walkthroughs/sync-data/resource-instance-attributes.png"
-  alt="Empty Resource Screen"
+  alt="Instances tab of the Permit Directory with the Edit Attributes option for a resource instance"
   data-zoomable
 />
 :::
@@ -176,50 +137,46 @@ click the `three dots`, and select `Edit Attributes`.
 </TimelineStep>
 <TimelineStep>
 
-## Relationship Tuples (ReBAC)
+## Sync relationship tuples (ReBAC) \{#relationship-tuples-rebac}
 
-In Permit, relationship tuples define how resource instances relate to each other, and they are the core of ReBAC. Users
-are connected to resources through role assignments, and relationships between resources carry those roles across related instances.
+A relationship tuple says how two resource instances relate, for example that a document belongs to a project. Users get instance roles through role assignments. Relationship tuples, with the role derivations in your policy, extend those roles to related instances.
 
-:::note How it works
-A collaboration platform has "Projects" and "Documents". A relationship tuple
-says that a document `belongs_to` a project. When a user becomes Project Manager of that
-project, they get access to every document in it. You sync the relationships to
-Permit's API instead of setting permissions on every document.
-:::
+For example, a collaboration platform has projects and documents. A tuple says that a document belongs to a project. When a user becomes Project Manager of that project, the user gets access to every document in the project. You sync one tuple per document, instead of assigning roles on every document.
 
-The format for each relation tuple is as follows:
+Each tuple has the format `subject : relation : object`. To create one, call `relationshipTuples.create` with these fields:
 
-`<Subject> : <Relation> : <Object>`
-
-To create a relationship tuple, call the SDK's `relationship_tuples.create` function with
-the `subject`, `relation`, `object`, and `tenant`:
-
-- `subject` - The resource instance assigned the new relation
-- `relation`: The relation to assign between the subject and object
-- `object`: The resource instance on which the new relation is assigned
-- `tenant` - The tenant the subject and object belong to. If the resource instances don't exist yet, the tenant is required to
-  create them, otherwise it is ignored.
-
-For example:
+| Field | Required | Description |
+|---|---|---|
+| `subject` | Yes | The resource instance that gets the relation, as `resource_key:instance_key`. |
+| `relation` | Yes | The relation between the subject and the object, as defined on the resource in the Policy Editor. |
+| `object` | Yes | The resource instance the relation points to, as `resource_key:instance_key`. |
+| `tenant` | When neither instance exists | The tenant of both instances. Permit creates missing instances in this tenant. When both instances exist, Permit uses their stored tenant. |
 
 <CodeBlock folderPath="/walkthroughs/sync-data/relationship-tuples" />
 
-:::tip VIA THE UI
-To configure relationship tuples in the Permit no-code UI:
-
-Go to `Directory`, then `Instances`. Select the resource instance, click the
-`three dots`, and select `Edit Resource Instance`. Define the Subject, Relation, and Object, then save.
+:::tip Create relationship tuples in the dashboard
+Go to **Directory** and open the **Instances** tab. Find the resource instance, click the three-dot menu, and select **Edit Resource Instance**. Under **Relationships**, choose the relation and the related instance, then save.
 :::
 
 </TimelineStep>
 </TimelineWrapper>
 
-<WhatsNext progress={80} customText="You can now sync any data into Permit!">
-  <h2>What's next? 🎉</h2>
+## Verify the synced data
+
+Open **Directory** in the Permit dashboard:
+
+- The **Users** tab lists each user with its top-level roles and instance roles.
+- The **Instances** tab lists each resource instance with its tenant and the number of relationships.
+- **Settings** > **Manage Tenants** lists each tenant.
+
+Then run a [`permit.check()`](/how-to/enforce-permissions/check) that depends on the synced data, for example a check on a resource instance, and confirm the result matches your policy.
+
+<WhatsNext progress={80} customText="Next: query permissions across many resources and users.">
+  <h2>What's next?</h2>
   <ul>
-    <li>Implement bulk permission checks to optimize authorization workflows</li>
-    <li>Use policy-based filtering to retrieve only relevant data</li>
-    <li>Query and manage user permissions dynamically</li>
+    <li><a href="/overview/advanced-authorization-queries">Run bulk checks and other advanced authorization queries</a></li>
+    <li><a href="/how-to/enforce-permissions/check">Pass attributes, tenants, and relationships to permit.check()</a></li>
+    <li><a href="/how-to/build-policies/abac/defining-attributes">Define user and tenant attributes</a></li>
+    <li><a href="/how-to/build-policies/rebac/building-rebac-policies">Build ReBAC policies with relations and role derivations</a></li>
   </ul>
 </WhatsNext>

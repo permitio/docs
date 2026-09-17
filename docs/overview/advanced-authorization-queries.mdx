@@ -1,120 +1,114 @@
 ---
 sidebar_position: 8
 title: Advanced Authorization Queries
-description: "Go beyond a single permit.check(): run bulk checks, filter objects by policy, list authorized users, and get a user's permissions."
+description: "Go beyond a single permit.check(): run bulk checks, filter a list of objects, list the users authorized on a resource, and get all of a user's permissions."
 ---
-
-A single `permit.check()` answers one question about one user, action, and resource. Advanced queries answer broader ones:
-which resources a user can access, which users can act on a resource, and what a user can do across tenants.
 
 import WhatsNext from "../../src/components/whats-next/WhatsNext";
-import TimelineStep from "../../src/components/timeline/TimelineStep";
-import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
-import Video from "../../src/components/video/Video";
 import CodeBlock from "../../src/components/code-block/CodeBlock";
 
----
+Answer authorization questions that a single `permit.check()` can't: which of many resources a user can access, which users can act on a resource, and what a user can do across tenants. This walkthrough is for developers who already run permission checks and need to query permissions in bulk. Each section names the query, the SDK function that runs it, and a sample.
 
-Every query below uses the same example.
+## Prerequisites
 
-:::info
-**Alice** and **Bob** are users in a blogging application. Here's how they interact with the blog posts:
+- A policy with users and role assignments ([Sync attributes, tenants, roles, and relationships](/overview/sync-applications-data))
+- A Permit SDK connected to a policy decision point (PDP) ([Run the PDP](/overview/run-pdp))
 
-| **User** | **Blog Post(s)**         | **Permissions**                                     |
-| -------- | ------------------------ | --------------------------------------------------- |
-| Alice    | Blog Post 1, Blog Post 2 | **Edit**, **Read** (Full permissions for her posts) |
-| Bob      | Blog Post 3              | **Edit**, **Read** (Full permissions for his post)  |
-| Alice    | Blog Post 3              | **Read** (View only)                                |
-| Bob      | Blog Post 1, Blog Post 2 | **Read** (View only)                                |
+## Choose a query
 
-:::
+| Question | Query | Node.js | Python | Go | PDP endpoint |
+|---|---|---|---|---|---|
+| Can the user perform each of these actions on these resources? | [Bulk check](#bulk-check) | `permit.bulkCheck()` | `permit.bulk_check()` | `permit.BulkCheck()` | `POST /allowed/bulk` |
+| Which of these objects can the user access? | [Filter objects](#filterobjects) | Not available | `permit.filter_objects()` | `permit.FilterObjects()` | |
+| Which users can perform this action on this resource? | [Authorized users](#get-authorized-users) | Not available | `permit.authorized_users()` | Not available | `POST /authorized_users` |
+| What can this user do, across tenants and resources? | [User permissions](#get-user-permissions) | `permit.getUserPermissions()` | `permit.get_user_permissions()` | `permit.GetUserPermissions()` | `POST /user-permissions` |
 
-:::tip **The Challenge**
+## The example scenario
 
-**Alice** and **Bob** need to query the system to:
+Every query on this page uses the same blogging application. Alice and Bob are users, and each owns some blog posts.
 
-- Determine what permissions they have for specific blog posts.
-- Retrieve blog posts they are allowed to view or edit.
-- List the users who can perform actions on a given blog post.
+| User | Blog posts | Permissions |
+|---|---|---|
+| Alice | Blog Post 1, Blog Post 2 | `edit`, `read` (Alice's own posts) |
+| Bob | Blog Post 3 | `edit`, `read` (Bob's own post) |
+| Alice | Blog Post 3 | `read` |
+| Bob | Blog Post 1, Blog Post 2 | `read` |
 
-:::
+The code samples show the shape of each call. Some samples use other users and resource names, such as `repo` or `document`. Replace them with your own user keys and resource types, for example `blog_post`.
 
-## Bulk Check
+## Bulk check
 
-The `permit.bulkCheck` function checks multiple permissions in a single call. Use it when Alice or
-Bob needs permissions for several blog posts at once.
+A bulk check sends several permission checks to the PDP in one request and returns one decision per check, in the same order as the checks. Use it when you need decisions for several resources or users at once, for example to show or hide actions in a list.
 
-### Example: Alice Checks Read Permissions
+### Example: Alice checks which posts she can read \{#example-alice-checks-read-permissions}
 
-Alice wants to know which blog posts she can read.
+Alice needs to know which blog posts she can read. Send one check per post, each with Alice's user key, the action `read`, and the post.
 
 <CodeBlock folderPath="/bulk-check" />
 
-Alice can read Blog Post 1, Blog Post 2, and Blog Post 3. One call returns all three decisions, instead of one round trip per post.
+For Alice, the three decisions are `true`, `true`, and `true`: Alice can read Blog Post 1, Blog Post 2, and Blog Post 3. One request returns all three decisions, instead of one request per post.
 
-You can read more about the bulk check [here](/how-to/enforce-permissions/bulk-check/).
+See [Bulk check](/how-to/enforce-permissions/bulk-check/) for the full reference.
 
-## FilterObjects
+## Filter objects \{#filterobjects}
 
-Use the `permit.filterObjects` function to perform PDP-level filtering.
+Filtering objects removes the objects a user can't access from a list you already fetched. Fetch the records from your database, pass them to `FilterObjects()` (Go) or `filter_objects()` (Python), and get back the subset the policy allows, in the original order.
 
-You fetch the data from your database, then pass it to `filterObjects`, which returns the subset of objects
-the policy allows.
+### Example: Alice filters the posts she can edit \{#example-alice-filters-blog-posts}
 
-For example, fetch all posts from the database and use `permit.filterObjects` to display only the ones Alice or Bob is authorized to see.
-
-### Example: Alice Filters Blog Posts
-
-Alice wants to retrieve the blog posts she can edit.
+Alice wants the blog posts she can edit. Pass Alice as the user, `edit` as the action, and the three posts as the resources.
 
 <CodeBlock folderPath="/walkthroughs/authz-queries/filter" />
 
-The function returns Blog Post 1 and Blog Post 2, as Alice has edit permissions for these posts.
+The function returns Blog Post 1 and Blog Post 2, because Alice has `edit` on those two posts only.
 
-## Get Authorized Users
+See [Data filtering](/how-to/enforce-permissions/data-filtering) to compare filtering approaches.
 
-Use the `permit.authorized_users` function to retrieve a list of users authorized to perform a specific action on a resource.
-This function takes an action and resource as inputs and returns the authorized users along with their role assignments that
-granted access.
+## Get authorized users
 
-### Example: Retrieve Authorized Users
+The authorized users query lists the users who can perform an action on a resource type or a resource instance. It returns the users with the role assignments that grant the access.
 
-Bob wants to know who can read Blog Post 3.
+### Example: Bob lists who can read Blog Post 3 \{#example-retrieve-authorized-users}
+
+Bob wants to know who can read Blog Post 3. Pass the action `read` and the resource instance.
 
 <CodeBlock folderPath="/walkthroughs/authz-queries/getAuthorizedUsers" />
 
-The system responds with:
+The result lists two users:
 
-- Alice (has read permissions).
-- Bob (has edit and read permissions).
+- Alice, through her `read` permission.
+- Bob, through his ownership of the post, which grants `edit` and `read`.
 
-You can read more about getting resource authorized users [here](/how-to/enforce-permissions/authorized-users).
+See [Get resource authorized users](/how-to/enforce-permissions/authorized-users) for the arguments and the result format.
 
-## Get User Permissions
+## Get user permissions
 
-Use the `permit.GetUserPermissions` function to retrieve all user permissions across all registered resources and tenants.
-Pass a user, optionally filter by a list of tenants, and get back an object with the permissions
-and attributes for each tenant the user is assigned to.
+The user permissions query returns all of a user's permissions for every registered resource, in every tenant the user is assigned to. You can narrow the result to a list of tenants. The result maps each tenant or resource instance to the user's permissions and roles on it.
 
-### Example: Bob's Permissions
+### Example: Bob's permissions \{#example-bobs-permissions}
+
+Get Bob's permissions:
 
 <CodeBlock folderPath="/walkthroughs/authz-queries/getUserPermissions" />
 
-The system returns a list of Bob's permissions:
+The result lists Bob's permissions on the blog posts:
 
-- Blog Post 1: Read
-- Blog Post 2: Read
-- Blog Post 3: Read, Edit
+| Blog post | Bob's permissions |
+|---|---|
+| Blog Post 1 | `read` |
+| Blog Post 2 | `read` |
+| Blog Post 3 | `read`, `edit` |
 
-You can read more about getting user permissions [here](/how-to/enforce-permissions/user-permissions).
+See [Get user permissions](/how-to/enforce-permissions/user-permissions) for the full reference.
 
-## What did you learn?
+## Next steps \{#what-did-you-learn}
 
-<WhatsNext progress={90} customText="No Authorization Query stands a chance now!">
-  <h2>What's next? 🎉</h2>
+<WhatsNext progress={90} customText="Next: add access requests and approvals to your app.">
+  <h2>What's next?</h2>
   <ul>
-    <li>Implement bulk permission checks to optimize authorization workflows</li>
-    <li>Use policy-based filtering to retrieve only relevant data</li>
-    <li>Query and manage user permissions dynamically</li>
+    <li><a href="/overview/access-requests-and-approvals">Add access requests and approvals with Permit Elements</a></li>
+    <li><a href="/how-to/enforce-permissions/bulk-check/">Run bulk checks</a></li>
+    <li><a href="/how-to/enforce-permissions/data-filtering">Filter data by permission</a></li>
+    <li><a href="/how-to/enforce-permissions/user-permissions">Get a user's permissions</a></li>
   </ul>
 </WhatsNext>

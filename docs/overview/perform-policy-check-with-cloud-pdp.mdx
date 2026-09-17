@@ -2,156 +2,140 @@
 sidebar_position: 3
 title: Run your First Policy Check (Managed Cloud PDP)
 timeline: true
-description: "Call permit.check() against the managed Cloud PDP, watch it deny, change the policy, and watch the same check allow."
+description: "Call permit.check() against the managed Cloud PDP, see the check denied, change the policy, and see the same check allowed without a code change."
 ---
 
-Run your first **policy check** to confirm that the policy you configured works.
-The check goes to a policy decision point (PDP), which decides whether a user can perform an action on a resource.
-
-:::info Which PDP is this using?
-This guide uses the **Managed Cloud PDP** hosted by Permit.io at `https://cloudpdp.api.permit.io`.  
-It is **fully managed and eventually consistent**. Use it to try Permit and for production workloads that don't require strict read-your-own-writes guarantees.
-
-If you already know you need **ABAC policies**, **strict read-your-own-writes consistency**, or to keep all authorization traffic **inside your own VPC**, you can skip ahead to  
-**[Run Local Authorization Microservice (Edge PDP)](/overview/local-authorization-microservice)**.
-:::
-
 import CodeBlock from "../../src/components/code-block/CodeBlock";
-import WhatsNext from "../../src/components/whats-next/WhatsNext";
 import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
-import Video from "../../src/components/video/Video";
 
-## Before we start: Understanding the check function
+Run your first permission check with `permit.check()` against the managed Cloud PDP, then change the policy in the Permit dashboard and see the same check return a different decision. This tutorial is for developers new to Permit.io who have configured a role-based access control (RBAC) policy.
 
-The check function is the guard in your application's access control. It asks whether a user
-can **perform an action on a resource**, and your code proceeds only if the answer is yes. It takes
-the `user ID`, `action`, and `resource`, sends them to the PDP, and returns the decision.
+The check goes to a policy decision point (PDP), the service that decides whether a user can perform an action on a resource. This tutorial uses the Cloud PDP, which Permit hosts at `https://cloudpdp.api.permit.io`, so you don't run any infrastructure.
 
-> What exactly are the arguments passed into the `permit.check()` function?
+:::info When to use a container PDP instead
+The Cloud PDP does not support attribute-based access control (ABAC) policies. If you need ABAC, or you want checks to run inside your own network, follow [Run Local Authorization Microservice](/overview/local-authorization-microservice). For the full comparison, see [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+:::
 
-- **`user`**: a unique string id or object that identifies the user performing the action.
-- **`action`**: the action performed.
-- **`resource`**: the resource (object) the action is performed on. Can be a string or an object.
+## Prerequisites
+
+- An RBAC policy with a role, a resource, and a user assigned to the role. See [Configure your first RBAC policy](/overview/configure-your-first-rbac-policy).
+- The Node.js SDK (`permitio`) installed, imported, and initialized with your environment API key and the Cloud PDP URL. See [Use the Permit API and SDK](/overview/use-the-permit-api-and-sdk).
+
+## How permit.check() works \{#before-we-start-understanding-the-check-function}
+
+`permit.check()` asks the PDP whether a user can perform an action on a resource, and returns `true` or `false`. Your code proceeds only when the result is `true`. Place the check at each point in your application that enforces the policy.
+
+| Argument | Type | Description |
+|---|---|---|
+| `user` | string or object | The key of the user performing the action, or an object with the key and user attributes. |
+| `action` | string | The action the user performs, such as `read` or `update`. |
+| `resource` | string or object | The resource type key, such as `document`, or an object with the resource type, instance key, tenant, and attributes. |
+
+This example checks whether the user `john@permit.io` can `read` a `document`:
 
 <CodeBlock folderPath="/walkthroughs/first-policy-check/check-function" />
 
-> Place this guard wherever your application needs to enforce the policy you configured.
-
-:::note
-The check function can accept various arguments beyond the user and resource.
-:::
+For tenants, attributes, relationships, and the `context` argument, see [Check permissions with permit.check()](/how-to/enforce-permissions/check).
 
 <TimelineWrapper>
 <TimelineStep>
 
-## Understanding Your Policy Configuration
+## Review the policy in the Policy Editor \{#understanding-your-policy-configuration}
 
-Here is the policy for this example. The `Admin` role can `create`, `delete`, `publish`, and `read`, but it cannot `update`.
+In the Permit dashboard, open **Policy** > **Policy Editor**. In this example, the `Admin` role can `create`, `delete`, `publish`, and `read` a `Document`. The `Admin` role cannot `update` a `Document`.
 
 <img
   src="/img/updated/walkthroughs/first-policy-check/permissions-false.png"
-  alt="Admin role permissions"
+  alt="Policy Editor with the Admin role allowed to create, delete, publish, and read Document, and the update checkbox cleared"
   data-zoomable
 />
 
 </TimelineStep>
 <TimelineStep>
 
-## Reviewing User Assignments
+## Review the user role assignments \{#reviewing-user-assignments}
 
-There are two users, and only one has the Admin role. This example checks permissions for Macy Smith, who holds the Admin role.
+Open **Directory**. In this example there are two users. Macy Smith, with the user key `user|987654321`, has the `Admin` role in the `default` tenant. John Smith has no role. The checks in this tutorial use Macy Smith's user key.
 
 <img
   src="/img/updated/walkthroughs/first-policy-check/users-and-roles.png"
-  alt="User roles and assignments"
+  alt="Directory screen listing John Smith with no role and Macy Smith with the Admin role in the default tenant"
   data-zoomable
 />
 
 </TimelineStep>
 <TimelineStep>
 
-## Setting Up the Enforcement Point
+## Add the permission check to your code \{#setting-up-the-enforcement-point}
 
-The enforcement point in your code looks like this:
+Add a check that asks whether Macy Smith can `update` a `document`:
 
 <CodeBlock folderPath="/walkthroughs/first-policy-check/check-function-false" />
 
-This code snippet:
+The check passes three values to the Cloud PDP:
 
-- Identifies the user making the request
-- Specifies the action being attempted
-- Names the resource being accessed
-- Returns a boolean indicating whether the action is permitted
+- The user key, `user|987654321`
+- The action, `update`
+- The resource type, `document`
+
+The PDP returns `true` if the policy allows the action and `false` if it does not.
 
 </TimelineStep>
 <TimelineStep>
 
-## Testing Initial Permissions
+## Run the check and see it denied \{#testing-initial-permissions}
 
-Run the check with the current permissions:
+Run your code. The check returns `false`, because the `Admin` role doesn't have the `update` permission on `Document`.
+
+Open **Audit Log** in the Permit dashboard. The entry for `user|987654321`, action `update`, and resource `Document` shows the decision **DENIED**.
 
 <img
   src="/img/updated/walkthroughs/first-policy-check/audit-log-fail.png"
-  alt="Failed permission check"
+  alt="Audit Log entry for user|987654321 performing update on Document in the default tenant, with the decision DENIED"
   data-zoomable
 />
-
-The check is denied, because Macy doesn't have the `update` permission.
 
 </TimelineStep>
 <TimelineStep>
 
-## Updating Permissions
+## Allow the update action in the Policy Editor \{#updating-permissions}
 
-Change the permissions so the Admin role, and therefore Macy, can `update` the `Document`.
+In the **Policy Editor**, select the `update` checkbox for `Document` in the `Admin` row, and save the change. Every user with the `Admin` role, including Macy Smith, can update a `Document`.
 
 <img
   src="/img/updated/walkthroughs/first-policy-check/permissions-true.png"
-  alt="Updated permissions"
+  alt="Policy Editor with the Admin role allowed to create, delete, publish, read, and update Document"
   data-zoomable
 />
 
 </TimelineStep>
 <TimelineStep>
 
-## Testing Updated Permissions
+## Run the check again and see it allowed \{#testing-updated-permissions}
 
-Run the check again with the updated permissions:
+Run the same check again, without changing your code:
 
 <CodeBlock folderPath="/walkthroughs/first-policy-check/check-function-true" />
 
+The check returns `true`. In **Audit Log**, the latest entry for the same user, action, and resource shows the decision **PERMITTED**.
+
 <img
   src="/img/updated/walkthroughs/first-policy-check/audit-log-pass.png"
-  alt="Successful permission check"
+  alt="Audit Log entry for user|987654321 performing update on Document, with the decision PERMITTED"
   data-zoomable
 />
 
-The check is allowed. Macy can now perform every action, including `update`, and you didn't change any code.
-
-:::warning
-For latency-sensitive deployments, we recommend deploying a local PDP to minimize network latency and ensure high availability.
-Learn more in our [Local Authorization Microservice guide](/overview/local-authorization-microservice) and the
-[Cloud PDP Capabilities](/concepts/pdp/cloud-pdp-capabilities) page.
-:::
+The decision changed because the policy changed. Your application code stayed the same.
 
 </TimelineStep>
 </TimelineWrapper>
 
-## What did you learn?
+## Next steps \{#what-did-you-learn}
 
-By configuring the Cloud PDP for policy checks, you've learned how to:
+Checks to the Cloud PDP travel over the internet to Permit. If your checks are latency-sensitive, run a PDP container next to your application, so checks don't make a network round trip to Permit.
 
-- Import and initialize the Permit SDK in your project
-- Set up an enforcement point in your code using the check function
-- Validate user permissions against your configured policies in real time
-- Use the Cloud PDP for RBAC policy decisions
-
-<WhatsNext progress={40} customText="Amazing! You've mastered cloud policy checks.">
-  <h2>What's next? 🎉</h2>
-  <ul>
-    <li>Set up a local PDP for enhanced performance</li>
-    <li>Configure your application for local authorization</li>
-    <li>Learn about monitoring and debugging your PDP</li>
-  </ul>
-</WhatsNext>
+- [Run the PDP container on your machine](/overview/run-pdp)
+- [Perform a local policy check](/overview/perform-a-local-policy-check)
+- [Sync your first user with the SDK](/overview/sync-your-first-user-with-sdk)
+- [Check permissions with tenants, attributes, and relationships](/how-to/enforce-permissions/check)

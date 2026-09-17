@@ -1,11 +1,8 @@
 ---
 sidebar_position: 4
 title: Create an ABAC Policy
-description: "Build an attribute-based policy in Permit.io: define user and resource attributes, create user sets and resource sets, and write rules on them."
+description: "Build an attribute-based policy in the Permit.io dashboard: define user and resource attributes, create a user set and a resource set, and grant permissions on them."
 ---
-
-Attribute-Based Access Control (ABAC) decides access based on attributes of users, resources, and the environment.
-Use ABAC when roles alone can't express your rules, for example when access depends on a department, a training status, or a document's classification.
 
 import addUserAttributes from "/img/updated/walkthroughs/abac-guide/adding-user-attributes.mp4";
 import addResourceAttributes from "/img/updated/walkthroughs/abac-guide/adding-resource-attributes.mp4";
@@ -17,118 +14,142 @@ import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
 import Video from "../../src/components/video/Video";
 
-## Understanding the scenario
+Build an attribute-based access control (ABAC) policy in the Permit.io dashboard. This walkthrough is for developers who have built a role-based access control (RBAC) policy and need rules that roles alone can't express. You define attributes, group users and documents by those attributes, and grant permissions on the groups.
 
-Imagine you're managing a secure company network.
+ABAC decides access from attributes of the user, the resource, and the environment. Use ABAC when access depends on values such as a department, a training status, or a document's classification.
 
-> To protect intellectual property, you want to ensure that **only employees in the R&D department** who have **completed mandatory
-> cybersecurity training** can **access high-priority classified project documents**.
+## Prerequisites
 
-Roles alone can't express this rule, so you use ABAC, with conditions on user and resource attributes.
+- A `Document` resource with a `read` action, and an `Employee` role that can read documents ([Configure your first RBAC policy](/overview/configure-your-first-rbac-policy))
+- To test the policy from code: a container policy decision point (PDP). The Cloud PDP doesn't evaluate ABAC policies. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
 
-In this guide, you build that ABAC policy step by step.
+## The scenario \{#understanding-the-scenario}
+
+A company stores project documents. Only employees in the Engineering department who completed cybersecurity training can read high-priority classified documents.
+
+| Who | Standard documents | High-priority classified documents |
+|---|---|---|
+| Employee (role) | `read` | `read`, because a permission on `Document` covers every document |
+| R&D Certified Employee (user set: `department` is `Engineering` and `training_status` is `certified`) | `read` | `read` |
+| A user with no roles who doesn't match the user set | No access | No access |
+
+A role can't tell certified Engineering employees apart from other employees. ABAC conditions on user and resource attributes can.
+
+:::warning Permissions on a resource cover its resource sets
+Permit allows an action when any of the user's roles or user sets grants it. A role with `read` on `Document` can read every document, including documents in the High Priority Classified Document resource set. To keep a role away from classified documents, don't grant it the action on `Document`. Grant it on a resource set that excludes classified documents instead.
+:::
 
 <TimelineWrapper>
 <TimelineStep>
 
-## Create User Attributes
+## 1. Create user attributes \{#create-user-attributes}
 
-User attributes describe who the user is. Your policy conditions test them.
+User attributes describe the user. User set conditions test them. In production, the values usually come from your identity provider (for example Okta, Auth0, or Clerk) when the user signs in, and your application syncs them to Permit.
 
-- `Department`: Which department the user belongs to.
-- `Training Status`: Whether the user has completed cybersecurity training.
+| Attribute | Type | Example values |
+|---|---|---|
+| `department` | String | `Engineering`, `Sales` |
+| `training_status` | String | `certified`, `pending` |
 
-User attribute values usually come from your identity provider (for example Okta, Auth0, or Clerk),
-which stores details such as department or certification status and provides them when the user authenticates.
-
-- **Attribute 1**: `department` (e.g., "R&D", "Sales").
-- **Attribute 2**: `training_status` (e.g., "completed", "pending").
-
-To set user attributes, go to **`Directory` > `Settings` >
-`User Attributes` and then `Add Attribute`**.
+1. Open **Directory** and click **Settings**.
+2. Select **User Attributes** and click **Add Attribute**.
+3. Enter the **Attribute Name** `department`, select the **Value Type** **String**, and save.
+4. Repeat for `training_status`.
 
 <Video src={addUserAttributes} />
 
 </TimelineStep>
 <TimelineStep>
 
-## Create Resource Attributes
+## 2. Create resource attributes \{#create-resource-attributes}
 
-Resource attributes describe the resources you control access to.
-In this example, the resources are project documents, and the attributes record their priority and type.
+Resource attributes describe the resources you control access to. Here, they record each document's priority and classification.
 
-- `Priority Level`: Classifies documents as "high", "medium", or "low" priority.
-- `Document Type`: Specifies the document category (e.g., "classified", "public").
+| Attribute | Type | Example values |
+|---|---|---|
+| `priority_level` | String | `high`, `medium`, `low` |
+| `document_type` | String | `classified`, `public` |
 
-Navigate to the Resources Panel, select Resource Attributes, and add these:
-
-- **Attribute 1**: `priority_level` (e.g., "high", "medium").
-- **Attribute 2**: `document_type` (e.g., "classified").
-
-To set resource attributes, go to **`Policy`** > **`Edit Resource`** (if one exists) > **`ABAC Options`** and then
-**`Attributes`**.
+1. Open **Policy** and select the **Resources** tab.
+2. Open the three-dot menu of the **Document** resource and select **Edit**.
+3. Under **ABAC Options** > **Attributes**, click **Add attribute**. Add `priority_level` and `document_type`, both of type **String**.
+4. Click **Save**.
 
 <Video src={addResourceAttributes} />
 
 </TimelineStep>
 <TimelineStep>
 
-## Define a Dynamic Role (User Set)
+## 3. Create a user set \{#define-a-dynamic-role-user-set}
 
-A dynamic role (user set) groups users by their attributes, so a policy applies to every user who matches. For this example:
+A user set, also called a dynamic role, groups users by their attributes. A policy on the user set applies to every user who matches its conditions.
 
-> Create a User Set that includes employees from the R&D Department who have completed cybersecurity training.
+1. Open **Policy** > **Policy Editor**, click **Create**, and select **User Set**.
+2. In the name field, enter `R&D Certified Employee`. Permit fills in the key `RD_Certified_Employee`.
+3. Add two conditions, joined with **and**:
+   - `user.department` **equals** `Engineering`
+   - `user.training_status` **equals** `certified`
+4. Click **Save**.
 
-Navigate to User Sets and configure the conditions:
-
-- `department` equals `Engineering`.
-- `training_status` equals `certified`.
+The R&D Certified Employee user set appears as a row in the Policy Editor.
 
 <Video src={userSet} />
 
 </TimelineStep>
 <TimelineStep>
 
-## Define a Dynamic Resource (Resource Set)
+## 4. Create a resource set \{#define-a-dynamic-resource-resource-set}
 
-A dynamic resource (resource set) groups resources by their attributes. For this example:
+A resource set, also called a dynamic resource, groups resources by their attributes.
 
-> Define a Dynamic Resource for high-priority classified documents.
+1. In **Policy Editor**, click **Create** and select **Resource Set**.
+2. In the name field, enter `High Priority Classified Document`. Permit fills in the key `High_Priority_Classified_Document`.
+3. In **Resource Type**, select **Document**.
+4. Add two conditions, joined with **and**:
+   - `resource.document_type` **equals** `classified`
+   - `resource.priority_level` **equals** `high`
+5. Click **Save**.
 
-Navigate to Dynamic Resource and configure the conditions:
-
-- `priority_level` equals `high`.
-- `document_type` equals `classified`.
+The High Priority Classified Document resource set appears as a column next to Document in the Policy Editor.
 
 <Video src={resourceSet} />
 
 </TimelineStep>
 <TimelineStep>
 
-## Create your policy rules
+## 5. Grant permissions on the user set and resource set \{#create-your-policy-rules}
 
-Policy rules link user sets, resource sets, and actions to enforce access control.
+Policy rules connect roles and user sets to resources and resource sets through actions.
 
-> Define an **Engineering** user as someone permitted to `read` standard `documents` but restricted from accessing highly
-> classified documents. In contrast, an **R&D Certified Employee** is allowed to `read` both standard `documents` and `High Priority 
-Classified Documents`.
+1. In **Policy Editor**, find the **Employee** role. The video checks `read` under **Document** only.
+2. Find the **R&D Certified Employee** user set. Check `read` under **Document** and `read` under **High Priority Classified Document**.
+3. Click **Save Changes**.
 
 <Video src={settingPolicy} />
 
 </TimelineStep>
 </TimelineWrapper>
 
-## What did you learn?
+## Verify the policy
 
-You created an Attribute-Based Access Control (ABAC) policy step by step: attributes, a user set, a resource set, and the rules that connect them.
+Run permission checks against a container PDP. Pass the user and resource attributes in the check, as shown in [Check permissions with attributes](/how-to/enforce-permissions/check#attributes):
 
-When a user's or resource's attributes change, their access changes with them, without new role assignments.
+| User attributes | Resource attributes | Expected result of `permit.check(user, "read", resource)` |
+|---|---|---|
+| `department: "Engineering"`, `training_status: "certified"` | `priority_level: "high"`, `document_type: "classified"` | `true` |
+| `department: "Engineering"`, `training_status: "pending"` | `priority_level: "high"`, `document_type: "classified"` | `false` |
 
-<WhatsNext progress={60} customText="You are now a master of ABAC!">
-  <h2>What's next? 🎉</h2>
+Run the checks for a test user who has no role assignments, so that only the user set can grant access. Use `Document` as the resource `type`. Each decision also appears on the **Audit Log** screen of the Permit dashboard.
+
+## What you built \{#what-did-you-learn}
+
+You created an ABAC policy from attributes, a user set, a resource set, and the permissions that connect them. When a user's or a document's attributes change, access changes with them, without new role assignments.
+
+<WhatsNext progress={60} customText="Next: model access through relationships between resources.">
+  <h2>What's next?</h2>
   <ul>
-    <li>Define resource relations and parent-child structures</li>
-    <li>Configure role derivations to automate access</li>
-    <li>Set up permissions to enforce your policy rules</li>
+    <li><a href="/overview/create-a-rebac-policy">Create a ReBAC policy</a></li>
+    <li><a href="/overview/sync-applications-data">Sync user and resource attributes from your application</a></li>
+    <li><a href="/how-to/build-policies/abac/building-abac-policy">Build ABAC policies: conditions, tenant attributes, and attribute comparisons</a></li>
   </ul>
 </WhatsNext>

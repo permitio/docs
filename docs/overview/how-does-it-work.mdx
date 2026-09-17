@@ -5,66 +5,64 @@ sidebar_label: How Permit.io Works
 description: "How Permit.io decouples policy from code: a control plane in Permit's cloud, OPAL for live policy and data sync, and policy decision points in your network."
 ---
 
-Authorization has to evolve with your application. Requirements grow from a simple admin/non-admin check into roles, attributes, and relationships,
-and authorization logic scattered through your code becomes hard to keep consistent.
+Learn how Permit.io makes authorization decisions: where your policy lives, where decisions run, and how policy changes reach your application. This page is for developers and architects who want to understand the architecture before they integrate Permit.
 
-Permit solves this by separating policy from code.
+Authorization requirements grow from an admin or non-admin check into roles, attributes, and relationships. When that logic is spread through your code, every change needs a code release and is hard to keep consistent. Permit separates policy from code.
 
 ## Decoupling policy and code
 
 <DecisionFlowDiagram showExample={false} />
 
-Decoupling policy and code is a best practice: your application code asks an authorization microservice for decisions, and the policy lives in that microservice instead of in your code.
-Open-source **policy engines** such as [Open Policy Agent](https://github.com/open-policy-agent/opa) (OPA) and
-[AWS Cedar](https://github.com/cedar-policy) are a solid base for that microservice.
-Running it yourself still takes ongoing work: connecting it to your application, to its policy sources, and to the data it needs, and building the access-control interfaces on top.
+When you decouple policy and code, your application code asks an authorization microservice for each decision, and the policy lives in that microservice instead of in your code.
+Open-source **policy engines** such as [Open Policy Agent (OPA)](https://github.com/open-policy-agent/opa) and
+[AWS Cedar](https://github.com/cedar-policy) can evaluate the policy in that microservice.
+Running a policy engine yourself takes ongoing work: connecting it to your application, to its policy sources, and to the data it needs, and building the access control interfaces on top.
 
-**Permit handles that work.** It builds on these open-source projects and gives you:
+Permit builds on these open-source projects and provides:
 
 - An authorization microservice based on your **policy engine** of choice
-- [OPAL](https://github.com/permitio/opal), an administration layer that keeps the policy engine up to date with the latest policy and data
+- [Open Policy Administration Layer (OPAL)](https://github.com/permitio/opal), which keeps the policy engine up to date with the latest policy and data
 - **SDKs** for your language
-- A cloud service to manage it all
+- A cloud service, the control plane, where you manage policy in the dashboard or the API
 
-## Permit's Hybrid Architecture
+## Permit's hybrid architecture: control plane and data plane \{#permits-hybrid-architecture}
 
 The Permit architecture has two parts, a **control plane** and a **data plane**:
 
 - The **control plane** is where you manage your authorization layer, in the UI or the API. It runs in **Permit's cloud** and holds your policy and the identifiers it refers to (user keys, roles, attributes).
 
-- The **data plane** is where decisions are made. Policy decision points (PDPs) run **in your own VPC or network**, next to your services, and can use the data your policies need (names, emails, and other attributes) without sending it to Permit.
+- The **data plane** is where decisions are made. Policy decision points (PDPs), the services that evaluate policy, run **in your own VPC or network**, next to your services, and can use the data your policies need (names, emails, and other attributes) without sending it to Permit.
 
 <HybridDeploymentDiagram />
 
-With this split, you manage authorization in Permit **without exposing sensitive data to the cloud**:
+With this split, you manage authorization in Permit, and the data your policies evaluate can stay in your network:
 
 - Sensitive data can stay in your network, which helps with security and compliance requirements.
 
-- Authorization decisions are made on your side, without a network round trip to Permit. Run the PDP as a sidecar and checks go over the loopback interface, with no network latency at all.
+- Authorization decisions are made on your side, without a network round trip to Permit. When you run the PDP as a sidecar, checks go over the loopback interface, so there is no network latency.
 
-- Checks are answered by the PDP in your network, so they don't depend on Permit's availability.
+- The PDP in your network answers checks, so decisions don't depend on a request to Permit's cloud.
 
 Two components make the hybrid architecture work, **OPAL** and the **Permit PDP**:
 
-![Connectivity Map Diagram](/ui-videos/overview/connectivity.png)
+![Connectivity diagram: in Permit's cloud, the Permit app, embeddable UI, Permit API, and OPAL Server; in your network, your app calls the PDP, where the PDP API queries OPA and the OPAL Client receives policy and data events from the OPAL Server and fetches data from your data sources](/ui-videos/overview/connectivity.png)
 
-## OPAL
+## OPAL: policy and data sync \{#opal}
 
-[Open Policy Administration Layer (OPAL)](https://github.com/permitio/opal) is an open-source project developed and maintained by the
-Permit.io team. It is an administration layer for policy engines: it detects changes to policy and policy data in real time
-and pushes live updates to your agents.
+[Open Policy Administration Layer (OPAL)](https://github.com/permitio/opal) is an open-source project that the Permit.io team develops and maintains. OPAL is an administration layer for policy engines: OPAL detects changes to policy and policy data in real time
+and pushes live updates to the policy engines in your PDPs.
 
 OPAL has two parts, the **OPAL Server** and the **OPAL Client**.
 
-The **OPAL Server** runs in Permit's cloud service. It creates a pub/sub channel that OPAL clients subscribe to,
+The **OPAL Server** runs in Permit's cloud service. The OPAL Server creates a pub/sub channel that OPAL clients subscribe to,
 tracks a Git repository (by webhook or polling) for policy updates, and pushes those updates to clients
 as diffs, so only changes are sent.
 
-The **OPAL Client** runs inside the PDP.
+The **OPAL Client** runs inside each PDP and applies those updates to the policy engine.
 
-## The Policy Decision Point (PDP)
+## The policy decision point (PDP) \{#the-policy-decision-point-pdp}
 
-A PDP is a network node that answers authorization queries using policies and contextual data.
+A policy decision point (PDP) is a network node that answers authorization queries using policies and contextual data.
 The Permit PDP is your authorization microservice, and you deploy it beside your own services.
 
 The Permit PDP has two parts, a **policy engine** and the **OPAL Client**:
@@ -75,7 +73,7 @@ The Permit PDP has two parts, a **policy engine** and the **OPAL Client**:
 
   Permit is [policy engine agnostic](/integrations/policy-engines/overview)
   and supports [Open Policy Agent](https://github.com/open-policy-agent/opa) and [AWS Cedar](https://github.com/cedar-policy),
-  so you can choose the engine that fits your needs.
+  so you can choose the engine for your policies.
 
 - **The OPAL Client** runs alongside the policy engine and keeps it up to date with the latest policy and data.
   It subscribes to topic-based pub/sub updates for both data and policy,
@@ -83,7 +81,11 @@ The Permit PDP has two parts, a **policy engine** and the **OPAL Client**:
   (for example databases, APIs, and third-party services).
 
 Together, **Permit's cloud service**, **OPAL**, and the **PDP** let you change your authorization layer
-in Permit (in the UI or the API) and have those changes reach your application right away,
-without your data leaving your network.
+in Permit (in the UI or the API). OPAL pushes those changes to your PDPs, and the data your policies evaluate stays in your network.
 
-For more information, see the [PDP documentation](/concepts/pdp/overview).
+## Next steps
+
+- [Run the PDP](/overview/run-pdp)
+- [Read the PDP documentation](/concepts/pdp/overview)
+- [Compare the control plane and data plane](/concepts/control-plane-and-data-plane)
+- [Choose a policy engine](/integrations/policy-engines/overview)
