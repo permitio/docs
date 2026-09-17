@@ -1,26 +1,38 @@
 ---
 sidebar_position: 6
 title: ReBAC API Calls
-description: "Reference for managing ReBAC through the API: create resource roles, resource relations, and related objects."
+description: "Reference for the Permit.io API calls that build a ReBAC policy: resource roles, resource relations, resource instances, role assignments, relationship tuples, and role derivations."
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-Everything can can be done in the UI, can also be managed directly via the API. Here is a reference to all the ReBAC API calls
-current available.
+Every relationship-based access control (ReBAC) object you create in the Permit.io dashboard can also be created through the Permit API or an SDK. This page is a reference for developers who build a ReBAC policy from code: for each object, it lists the endpoint and an example request with curl and the SDKs. For the concepts behind each object, see [What is ReBAC?](/how-to/build-policies/rebac/overview).
 
-## Creating [resource roles](https://api.permit.io/v2/redoc#tag/Resource-Roles)
+## Before you call the API
 
-The Resource Roles API endpoint lets you manage and query roles associated with specific resources in your application or system.
+| Item | Value |
+| --- | --- |
+| Base URL | `https://api.permit.io` |
+| Authentication | `Authorization: Bearer <API key>` header with an environment API key. See [Get your API key](/api/api-with-cli#get-your-api-key). |
+| `{proj_id}`, `{env_id}` in paths | The key or ID of your project and environment. See [Get the project and environment](/api/examples/get-project-and-env). |
+| `{resource_id}`, `{role_id}` in paths | The key or ID of the resource type and role |
 
-### Base URL
+The curl examples read three shell variables: `$permit_project` (project key), `$permit_env` (environment key), and `$permit_sdk_api_key` (API key). The SDK examples assume an initialized `permit` client; see the [Node.js SDK quickstart](/sdk/nodejs/quickstart-nodejs) or the [Python SDK quickstart](/sdk/python/quickstart-python).
+
+Each create call returns HTTP 200 with the created object as JSON.
+
+## Create a resource role \{#creating-resource-roles}
+
+A resource role is a role defined on one resource type, with the actions it permits on that type.
+
+**Endpoint:** `POST` to this URL. See [Resource Roles in the API reference](https://api.permit.io/v2/redoc#tag/Resource-Roles).
 
 ```
 https://api.permit.io/v2/schema/{proj_id}/{env_id}/resources/{resource_id}/roles
 ```
 
-### Example
+This example creates a `maintainer` role on the `repo` resource that permits the `read` and `write` actions:
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -51,15 +63,17 @@ await permit.api.resourceRoles.create("repo", {
   </TabItem>
 </Tabs>
 
-## Creating [resource relations](https://api.permit.io/v2/redoc#tag/Resource-Relations)
+## Create a resource relation \{#creating-resource-relations}
 
-### Base URL
+A resource relation defines how instances of two resource types can relate, for example a folder that is the parent of a file.
+
+**Endpoint:** `POST` to this URL, where `{resource_id}` is the object resource type. See [Resource Relations in the API reference](https://api.permit.io/v2/redoc#tag/Resource-Relations).
 
 ```
 https://api.permit.io/v2/schema/{proj_id}/{env_id}/resources/{resource_id}/relations
 ```
 
-### Example
+This example creates a `parent` relation on the `file` resource, with `folder` as the subject resource:
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -104,15 +118,17 @@ await permit.api.resourceRelations.create("file", {
   </TabItem>
 </Tabs>
 
-## Creating [resource instances](https://api.permit.io/v2/redoc#tag/Resource-Instances)
+## Create a resource instance \{#creating-resource-instances}
 
-### Base URL
+A resource instance is one object of a resource type, in one tenant, such as the file `2023_report`. The `key`, `resource`, and `tenant` fields are required.
+
+**Endpoint:** `POST` to this URL. See [Resource Instances in the API reference](https://api.permit.io/v2/redoc#tag/Resource-Instances).
 
 ```
 https://api.permit.io/v2/facts/{proj_id}/{env_id}/resource_instances
 ```
 
-### Example
+This example creates the `2023_report` instance of the `file` resource in the `default` tenant:
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -143,11 +159,13 @@ await permit.api.resourceInstances.create({
   </TabItem>
 </Tabs>
 
-## Assigning roles to users
+## Assign a role to a user on a resource instance \{#assigning-roles-to-users}
 
-### Base URL
+A role assignment gives a user a role. With `resource_instance`, the role applies to that one instance, in the format `resource_type:instance_key`. The `user` and `role` fields are required.
 
-### Example
+**Endpoint:** `POST https://api.permit.io/v2/facts/{proj_id}/{env_id}/role_assignments`. See [Role Assignments in the API reference](https://api.permit.io/v2/redoc#tag/Role-Assignments).
+
+This example gives the user `john@acme.com` the `viewer` role on `file:2023_report`:
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -178,15 +196,17 @@ await permit.api.roleAssignments.assign({
   </TabItem>
 </Tabs>
 
-## Creating [relationship tuples](https://api.permit.io/v2/redoc#tag/Relationship-tuples)
+## Create a relationship tuple \{#creating-relationship-tuples}
 
-### Base URL
+A relationship tuple connects two resource instances through a relation: the subject instance has the relation to the object instance. Both instances must be in the same tenant. The `subject`, `relation`, and `object` fields are required.
+
+**Endpoint:** `POST` to this URL. See [Relationship tuples in the API reference](https://api.permit.io/v2/redoc#tag/Relationship-tuples).
 
 ```
 https://api.permit.io/v2/facts/{proj_id}/{env_id}/relationship_tuples
 ```
 
-### Example
+This example makes the `finance` folder the `parent` of the file `2023_report`:
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -217,15 +237,22 @@ await permit.api.relationshipTuples.create({
   </TabItem>
 </Tabs>
 
-## Creating [role derivation](https://api.permit.io/v2/redoc#tag/Implicit-Grants)
+## Create a role derivation \{#creating-role-derivation}
 
-### Base URL
+A role derivation grants a role on a resource instance to users who hold a role on a related instance. You can create a role derivation in two ways:
+
+| Method | Request | Use it to |
+| --- | --- | --- |
+| Update the resource role | `PATCH /v2/schema/{proj_id}/{env_id}/resources/{resource_id}/roles/{role_id}` with a `granted_to` object | Set derivations as part of a role update. The examples below use this method. |
+| Create an implicit grant | `POST /v2/schema/{proj_id}/{env_id}/resources/{resource_id}/roles/{role_id}/implicit_grants` with `role`, `on_resource`, and `linked_by_relation` | Add one derivation to a role. See [Implicit Grants in the API reference](https://api.permit.io/v2/redoc#tag/Implicit-Grants). |
+
+The implicit grants endpoint URL:
 
 ```
 https://api.permit.io/v2/schema/{proj_id}/{env_id}/resources/{resource_id}/roles/{role_id}/implicit_grants
 ```
 
-### Example
+This example updates the `editor` role on `file` so that a user with the `editor` role on a `folder` derives the `editor` role on every file whose `parent` is that folder:
 
 <Tabs groupId="language">
   <TabItem value="curl" label="cURL">
@@ -267,3 +294,11 @@ await permit.api.resourceRoles.update("file", "editor", {
 
   </TabItem>
 </Tabs>
+
+With the relationship tuple from the previous section, a user with the `editor` role on `folder:finance` derives the `editor` role on `file:2023_report`.
+
+## Related pages
+
+- [What is ReBAC?](/how-to/build-policies/rebac/overview)
+- [Groups API](/api/rebac/groups)
+- [Check permissions](/how-to/enforce-permissions/check)

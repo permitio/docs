@@ -1,43 +1,39 @@
 ---
-title: "On-Prem Installation"
+title: "Install Permit MCP Gateway on-premises"
 sidebar_label: On-Prem Installation
-description: "Step-by-step guide to deploy Permit MCP Gateway on-premises alongside your existing Permit Platform."
+description: "Install Permit MCP Gateway with Helm in your Kubernetes cluster next to your self-hosted Permit Platform, then verify that the gateway, consent service, and admin dashboard are running."
 sidebar_position: 11
 ---
 
-# On-Prem Installation
+Install Permit MCP Gateway with Helm in your own Kubernetes cluster, connected to your self-hosted Permit Platform for authentication and authorization. This page is for platform operators who run a fully on-premises deployment. When you finish, the gateway, the consent service, and the admin dashboard run in your cluster, and you can sign in to the admin dashboard on your own domain.
 
-Deploy Permit MCP Gateway within your own Kubernetes cluster, fully integrated with your existing Permit Platform.
-
-:::info Enterprise Only
-On-premises deployment is available on **Enterprise plans**. See [Enterprise Deployment](/permit-mcp-gateway/enterprise-deployment) for an overview of deployment models.
+:::info Enterprise plans
+On-premises deployment is available on **Enterprise plans**. To compare deployment models before you install, see [Enterprise deployment](/permit-mcp-gateway/enterprise-deployment).
 :::
 
 ## Prerequisites
 
-Before you begin, ensure you have:
-
 | Requirement | Details |
 | --- | --- |
-| **Permit Platform deployed** | Must be running before installing the MCP Gateway. Provides Keycloak (authentication) and the Permit backend (authorization). |
-| **Kubernetes cluster** (1.25+) | With an nginx-ingress controller installed. |
+| **Permit Platform deployed** | Install the Permit Platform first, with the [Permit Platform installation guide](/how-to/deploy/on-prem/installation). The Permit Platform provides Keycloak (authentication) and the Permit backend (authorization). |
+| **Kubernetes cluster** (1.25+) | With an NGINX ingress controller installed. Check the `README.md` in your installer package for the supported versions of your release. |
 | **Helm 3.x** and **kubectl** | Configured for your cluster. |
-| **Docker** | Installed on your local machine (for loading and pushing images to your registry). |
-| **Private container registry** | To host the MCP Gateway images (e.g., Google Artifact Registry, AWS ECR, Harbor). |
-| **TLS certificate** | For your MCP Gateway domain. Required for the authentication flow (HTTPS). |
-| **DNS** | Ability to create DNS records for your MCP Gateway domain (wildcard + platform UI). |
+| **Docker** | Installed on the machine where you load images and push them to your registry. |
+| **Private container registry** | Hosts the MCP Gateway images, such as Google Artifact Registry, Amazon ECR, or Harbor. |
+| **TLS certificate** | For your MCP Gateway domain. The sign-in flow requires HTTPS. |
+| **DNS** | You can create DNS records for your MCP Gateway domain: a wildcard record and a record for the admin dashboard. |
 
-### Information you'll need
+### Information you'll need \{#information-youll-need}
 
-All configuration derives from just three inputs:
+The installation uses three values:
 
 | Item | Example | Used for |
 | --- | --- | --- |
-| **Permit Platform URL** | `https://permit.yourcompany.com` | API URL + OIDC discovery URL |
-| **MCP Gateway domain** | `mcp.yourcompany.com` | Base domain + platform ingress host |
-| **Keycloak admin password** | _(retrieved from secret)_ | Automatic OIDC client creation |
+| **Permit Platform URL** | `https://permit.yourcompany.com` | Permit API URL and OpenID Connect (OIDC) discovery URL |
+| **MCP Gateway domain** | `mcp.yourcompany.com` | Base domain for host subdomains, and the admin dashboard host (`app.mcp.yourcompany.com`) |
+| **Keycloak admin password** | Retrieved from a Kubernetes secret | Automatic creation of the OIDC client in Keycloak |
 
-Retrieve the Keycloak admin password from your Permit Platform cluster:
+Retrieve the Keycloak admin password from your Permit Platform cluster. Replace `<permit-platform-namespace>` with the namespace where the Permit Platform runs:
 
 ```bash
 kubectl get secret global-infrastructure-secret \
@@ -45,25 +41,25 @@ kubectl get secret global-infrastructure-secret \
   -o jsonpath='{.data.KEYCLOAK_ADMIN_PASSWORD}' | base64 -d
 ```
 
-## Egress Requirements
+## Network egress requirements \{#egress-requirements}
 
-The MCP Gateway is designed to run fully on-premises. The following table lists every outbound connection the system may make:
+The gateway runs fully on-premises. This table lists each outbound connection the gateway components can make:
 
-| Destination | Required? | Purpose |
+| Destination | Required | Purpose |
 | --- | --- | --- |
-| Your Permit Platform URL | **Required** | Permit API for authorization, Keycloak for OIDC |
-| Your PDP URL (per-host, configured in Platform UI) | **Required** | Policy decision point for tool-level authorization |
-| Your container registry | Install-time only | Image pulls during deployment |
-| Your IdP / OIDC discovery URL | **Required** | Platform login (server-side token exchange) |
-| Upstream MCP servers (customer-configured) | **Required** | Gateway proxies tool calls to upstream MCP servers |
+| Your Permit Platform URL | **Required** | Permit API for authorization, and Keycloak for OIDC |
+| Your PDP URL (set per host in the admin dashboard) | **Required** | Policy decision point (PDP) for tool-level authorization |
+| Your container registry | Install time only | Image pulls during deployment |
+| Your identity provider (IdP) or OIDC discovery URL | **Required** | Admin dashboard sign-in (server-side token exchange) |
+| Upstream MCP servers that you configure | **Required** | The gateway proxies tool calls to upstream MCP servers |
 
-**Not required:** No connection to `api.permit.io`, `app.permit.io`, or any other external cloud service is required for normal operation. The on-prem configuration explicitly disables external analytics and telemetry integrations.
+Normal operation doesn't require a connection to `api.permit.io`, `app.permit.io`, or any other external cloud service. The on-premises values template turns off external analytics and telemetry integrations.
 
-## Installation
+## Install the gateway \{#installation}
 
-### Step 1 — Extract the installer package
+### 1. Extract the installer package \{#step-1--extract-the-installer-package}
 
-You'll receive a `.tar.gz` installer bundle from your Permit team.
+Your Permit team sends you a `.tar.gz` installer package. Extract the package:
 
 ```bash
 tar -xzf agent-security-on-prem-installer-*.tar.gz
@@ -72,7 +68,7 @@ cd agent-security-on-prem-installer-*
 
 The package contains:
 
-```
+```text
 agent-security-on-prem-installer-*/
 ├── charts/agent-security/     # Helm chart
 ├── images/all-images.tar.gz   # Docker images (bundled for air-gapped use)
@@ -83,9 +79,9 @@ agent-security-on-prem-installer-*/
 └── README.md                  # Quick reference
 ```
 
-### Step 2 — Push images to your registry
+### 2. Push the images to your registry \{#step-2--push-images-to-your-registry}
 
-Authenticate to your container registry, then run the image loader:
+Authenticate to your container registry, then run the image loader. Replace `<your-registry>` with your registry path:
 
 ```bash
 # Authenticate (example for GCP)
@@ -98,7 +94,7 @@ gcloud auth configure-docker us-central1-docker.pkg.dev
 ./scripts/load-images.sh --help
 ```
 
-Registry-specific examples:
+Examples for common registries:
 
 ```bash
 # Google Artifact Registry
@@ -112,21 +108,18 @@ aws ecr get-login-password --region us-east-1 | docker login --username AWS --pa
 ./scripts/load-images.sh --registry harbor.company.com/mcp-gateway
 ```
 
-This script:
-1. Loads images from the bundled tarball into your local Docker
-2. Retags all images with your registry prefix
-3. Pushes them to your registry
-4. Updates `values.yaml` — replaces the `REGISTRY` placeholder with your actual registry
+The `load-images.sh` script:
 
-### Step 3 — Configure Keycloak OIDC integration
+1. Loads the images from the bundled tarball into your local Docker.
+2. Retags each image with your registry prefix.
+3. Pushes the images to your registry.
+4. Replaces the `REGISTRY` placeholder in `values.yaml` with your registry.
 
-The Helm chart **automatically** creates the Keycloak OIDC client during installation via a post-install Job. No manual Keycloak setup is needed.
+### 3. Choose how to pass the Keycloak admin password \{#step-3--configure-keycloak-oidc-integration}
 
-You need the **Keycloak admin password** from your Permit Platform deployment (see [Prerequisites](#information-youll-need)).
+During installation, a Helm post-install Job creates the Keycloak OIDC client for the admin dashboard. You don't set up Keycloak by hand. The Job needs the Keycloak admin password from [Information you'll need](#information-youll-need). You add one of these two options to `my-values.yaml` in [step 6](#step-6--configure-values).
 
-You can provide it in one of two ways:
-
-**Option A — Reference existing secret (recommended):**
+**Option A: reference the existing secret (recommended)**
 
 ```yaml
 permitPlatform:
@@ -135,10 +128,10 @@ permitPlatform:
   keycloakAdminPasswordSecretKey: "KEYCLOAK_ADMIN_PASSWORD"
 ```
 
-**Option B — Plaintext value:**
+**Option B: plaintext value**
 
-:::caution
-Avoid storing passwords in plaintext in your values file. If you must use this option, ensure `my-values.yaml` is not committed to version control.
+:::warning Plaintext passwords in values files
+With Option B, the Keycloak admin password is stored in plain text in `my-values.yaml`. Anyone who can read that file can sign in to Keycloak as an admin. Use Option A, or keep `my-values.yaml` out of version control.
 :::
 
 ```yaml
@@ -147,24 +140,24 @@ permitPlatform:
   keycloakAdminPassword: "<password>"
 ```
 
-The setup Job is **idempotent** — safe to run on every `helm upgrade`. It never recreates an existing client.
+The Keycloak setup Job is idempotent, so it runs safely on each `helm upgrade`. The Job never recreates an existing OIDC client.
 
-:::note
-The platform pod may briefly show `CreateContainerConfigError` until the Keycloak setup Job completes (~30-60 seconds). This is expected — the pod recovers automatically once the Job creates the OIDC secret.
+:::note Admin dashboard pod waits for the Keycloak setup Job
+Until the Keycloak setup Job creates the OIDC secret, the admin dashboard (platform) pod shows `CreateContainerConfigError`. This lasts about 30 to 60 seconds, and the pod recovers without action.
 :::
 
-#### Manual alternative (for debugging only)
+#### Manual Keycloak setup (for debugging only) \{#manual-alternative-for-debugging-only}
 
-If the Helm hook cannot reach Keycloak (e.g., network policies blocking cross-namespace traffic), you can use the standalone setup script instead. **Only use this if the Helm Job fails** — do not run both.
+If the Helm Job can't reach Keycloak, for example because network policies block traffic between namespaces, run the standalone setup script instead. Run the script only if the Helm Job fails, and don't run both.
 
 ```bash
 ./scripts/setup-keycloak.sh --agent-security-domain mcp.yourcompany.com
 ./scripts/setup-keycloak.sh --help    # See all options
 ```
 
-### Step 4 — Deploy a PDP
+### 4. Deploy a PDP \{#step-4--deploy-a-pdp}
 
-The MCP Gateway requires a [Policy Decision Point (PDP)](/how-to/deploy/on-prem/pdp-deployment) for authorization checks. If you don't already have one deployed, install it using the Permit PDP Helm chart:
+The gateway sends each authorization check to a [policy decision point (PDP)](/how-to/deploy/on-prem/pdp-deployment). If you don't have a PDP deployed, install one with the Permit PDP Helm chart:
 
 ```bash
 helm repo add pdp https://permitio.github.io/pdp-helm
@@ -177,27 +170,34 @@ helm install pdp pdp/pdp \
   --namespace <permit-platform-namespace>
 ```
 
-- `<YOUR_PERMIT_API_KEY>` — your Permit environment API key from the Permit Platform dashboard (Settings → API Keys).
-- `<PERMIT_BACKEND_INTERNAL_URL>` — the Permit backend service URL inside your cluster (e.g., `http://permit-backend-v2.<namespace>.svc.cluster.local:8000`).
+Replace these placeholders:
 
-Note the PDP service URL — you'll enter it per-host in the Platform UI when [creating hosts](/permit-mcp-gateway/host-setup).
+| Placeholder | Replace with |
+| --- | --- |
+| `<YOUR_PERMIT_API_KEY>` | The environment API key from your Permit Platform dashboard. See [Get your API key](/overview/get-api-key). |
+| `<PERMIT_BACKEND_INTERNAL_URL>` | The Permit backend service URL inside your cluster, such as `http://permit-backend-v2.<namespace>.svc.cluster.local:8000` |
+| `<permit-platform-namespace>` | The namespace where the Permit Platform runs |
 
-#### PDP URL — configured per host in the Platform UI
+Note the PDP service URL. You enter the PDP URL for each host in the admin dashboard when you [create hosts](/permit-mcp-gateway/host-setup).
 
-The PDP URL is **not set globally** in the Helm values. Instead, each host is configured with its own PDP URL in the Platform UI, giving you flexibility to use different PDPs for different environments.
+#### PDP URL is set per host in the admin dashboard \{#pdp-url--configured-per-host-in-the-platform-ui}
+
+The Helm values don't set a global PDP URL. Each host has its own PDP URL in the admin dashboard, so different hosts can use different PDPs.
 
 | Option | URL | When to use |
 | --- | --- | --- |
-| **Internal K8s DNS** | `http://permitio-pdp.<namespace>.svc.cluster.local:7766` | PDP and MCP Gateway are in the same cluster (recommended) |
-| **External URL** | `https://pdp.yourcompany.com` | PDP is exposed via ingress or in a different cluster |
+| **Internal Kubernetes DNS** | `http://permitio-pdp.<namespace>.svc.cluster.local:7766` | The PDP and the gateway run in the same cluster (recommended) |
+| **External URL** | `https://pdp.yourcompany.com` | The PDP is exposed through an ingress or runs in a different cluster |
 
-:::tip
-You can deploy multiple PDPs (e.g., one per environment or per tenant) and assign different PDP URLs to different hosts. Each host uses its own PDP independently.
+The PDP Helm chart names its service `permitio-pdp` and listens on port `7766` by default.
+
+:::tip One PDP per environment or tenant
+You can deploy several PDPs, such as one per environment or per tenant, and give each host a different PDP URL. Each host uses its own PDP.
 :::
 
-### Step 5 — Create TLS secret
+### 5. Create the TLS secret \{#step-5--create-tls-secret}
 
-The authentication flow requires HTTPS (cookies use `secure: true`). Create a TLS secret from your certificate:
+The sign-in flow requires HTTPS because its cookies are set with `secure: true`. Create a TLS secret from your certificate and key files:
 
 ```bash
 kubectl create secret tls agent-security-tls \
@@ -206,28 +206,28 @@ kubectl create secret tls agent-security-tls \
   -n agent-security --create-namespace
 ```
 
-Alternatively, use [cert-manager](https://cert-manager.io/) with your ingress annotations for automatic certificate management.
+To manage certificates automatically instead, use [cert-manager](https://cert-manager.io/) with annotations on your ingresses.
 
-### Step 6 — Configure values
+### 6. Configure values \{#step-6--configure-values}
 
-The `values.yaml` file was already updated with your registry paths in Step 2. Copy and customize it:
+`values.yaml` already has your registry paths from [step 2](#step-2--push-images-to-your-registry). Copy `values.yaml` to a file for your settings:
 
 ```bash
 cp values.yaml my-values.yaml
 ```
 
-Open `my-values.yaml` and fill in the required values:
+Open `my-values.yaml` and set the required values:
 
 ```yaml
 global:
-  # Your MCP Gateway domain — tenants will be at <name>.mcp.yourcompany.com
+  # Your MCP Gateway domain: tenants will be at <name>.mcp.yourcompany.com
   baseDomain: "mcp.yourcompany.com"
   permit:
     # Your Permit Platform URL
     apiUrl: "https://permit.yourcompany.com"
     # PDP URL is set per-host in the Platform UI (not here)
 
-# Keycloak integration (automatic — just provide the password)
+# Keycloak integration (automatic: just provide the password)
 permitPlatform:
   namespace: "<permit-platform-namespace>"
   keycloakAdminPassword: "<keycloak-admin-password>"
@@ -249,16 +249,27 @@ platform:
     existingSecretKey: "OIDC_CLIENT_SECRET"
 ```
 
-:::note What's auto-configured
-You don't need to configure the following — they're handled automatically:
-- **Keycloak OIDC client** — created by a Helm Job during installation
-- **Database passwords** — auto-generated and preserved across upgrades
-- **Redis password** — auto-generated
-- **Admin tokens and session secrets** — auto-generated
-- **Email verification** — disabled by default for on-premises deployments
-:::
+Set these values for your installation:
 
-### Step 7 — Install
+| Key | Set to |
+| --- | --- |
+| `global.baseDomain` | Your MCP Gateway domain. Hosts get subdomains of this domain. |
+| `global.permit.apiUrl` | Your Permit Platform URL. |
+| `permitPlatform` | The Keycloak password option you chose in [step 3](#step-3--configure-keycloak-oidc-integration). The template shows Option B. For Option A, replace the `keycloakAdminPassword` line with the `keycloakAdminPasswordSecret` and `keycloakAdminPasswordSecretKey` lines. |
+| `platform.ingress.host` | `app.` followed by your MCP Gateway domain. |
+| `platform.oidc.discoveryUrl` | Your Permit Platform URL followed by `/auth/realms/permit-platform/.well-known/openid-configuration`. |
+
+Keep `nginx.enabled: true`. The gateway ingress routes traffic through the bundled OpenResty reverse proxy.
+
+The chart sets these values for you:
+
+- **Keycloak OIDC client:** created by the Helm Job during installation.
+- **Database passwords:** generated, and kept across upgrades.
+- **Redis password:** generated.
+- **Admin tokens and session secrets:** generated.
+- **Email verification:** off by default for on-premises deployments. To turn it on, see [Email notifications](#email-notifications).
+
+### 7. Install the Helm chart \{#step-7--install}
 
 ```bash
 helm install agent-security ./charts/agent-security \
@@ -267,29 +278,31 @@ helm install agent-security ./charts/agent-security \
   --create-namespace --wait --timeout=10m
 ```
 
-### Step 8 — Configure DNS
+The command returns when all resources are ready, or fails after 10 minutes. If it fails, see [Install failed](#install-failed).
 
-Create DNS records pointing to your nginx-ingress controller's external IP:
+### 8. Configure DNS \{#step-8--configure-dns}
+
+Get the external IP address of your ingress:
 
 ```bash
 # Get the ingress controller IP
 kubectl get ingress -n agent-security
 ```
 
-Add these DNS records with your DNS provider:
+Add these DNS records with your DNS provider, using the IP address from the `ADDRESS` column:
 
 | Record | Type | Value |
 | --- | --- | --- |
 | `*.mcp.yourcompany.com` | A | `<ingress-ip>` |
 | `app.mcp.yourcompany.com` | A | `<ingress-ip>` |
 
-:::note
-Some DNS providers do not resolve wildcard records for their own apex (e.g., `*.mcp.yourcompany.com` may not match `app.mcp.yourcompany.com`). If the Platform UI is unreachable but tenant subdomains work, add the explicit `app.mcp.yourcompany.com` record.
+:::note Add an explicit record for the admin dashboard
+With some DNS providers, the wildcard record doesn't resolve `app.mcp.yourcompany.com`. If host subdomains work but the admin dashboard is unreachable, check that the explicit `app.mcp.yourcompany.com` record exists.
 :::
 
-### Step 9 — Patch ingresses for TLS
+### 9. Attach the TLS secret to the ingresses \{#step-9--patch-ingresses-for-tls}
 
-If you're not using cert-manager, manually attach the TLS secret to the ingresses:
+If you don't use cert-manager, attach the TLS secret from [step 5](#step-5--create-tls-secret) to both ingresses. Replace `mcp.yourcompany.com` with your MCP Gateway domain:
 
 ```bash
 kubectl patch ingress agent-security-platform -n agent-security --type=json \
@@ -299,54 +312,58 @@ kubectl patch ingress agent-security-gateway -n agent-security --type=json \
   -p='[{"op":"add","path":"/spec/tls","value":[{"hosts":["*.mcp.yourcompany.com"],"secretName":"agent-security-tls"}]}]'
 ```
 
-### Step 10 — Verify
+Without TLS on the ingresses, admin dashboard sign-in fails and returns you to the sign-in page.
 
-Check that all pods are running:
+## Verify the installation \{#step-10--verify}
 
-```bash
-kubectl get pods -n agent-security
-```
+1. Check that the pods are running:
 
-You should see **10 pods**:
+   ```bash
+   kubectl get pods -n agent-security
+   ```
 
-| Component | Pods | Description |
-| --- | --- | --- |
-| Gateway | 2 | MCP proxy with auth enforcement |
-| Consent Service | 2 | OAuth 2.1 authorization server |
-| Platform | 2 | Admin dashboard |
-| Nginx | 2 | Reverse proxy for routing |
-| PostgreSQL | 1 | User and session storage |
-| Redis | 1 | Gateway state |
+   With the replica counts in the default on-premises values template, you see 10 pods, each `1/1 Running`:
 
-All pods should show `1/1 Running`. The gateway may show 1-2 restarts on first deploy — this is expected (Redis takes a few seconds to initialize).
+   | Component | Pods | What it does |
+   | --- | --- | --- |
+   | Gateway | 2 | MCP proxy that enforces authentication and authorization |
+   | Consent service | 2 | OAuth 2.1 authorization server |
+   | Platform | 2 | Admin dashboard |
+   | NGINX (OpenResty) | 2 | Reverse proxy that routes requests |
+   | PostgreSQL | 1 | User and session storage |
+   | Redis | 1 | Gateway state |
 
-Verify the ingresses:
+   If you changed replica counts in `my-values.yaml`, or use an external database, the pod count differs. On the first deploy, gateway pods can show 1 or 2 restarts while Redis starts. The gateway reconnects without action.
 
-```bash
-kubectl get ingress -n agent-security
-```
+2. Check the ingresses:
 
-You should see:
+   ```bash
+   kubectl get ingress -n agent-security
+   ```
 
-| Name | Host | Purpose |
-| --- | --- | --- |
-| `agent-security-gateway` | `*.mcp.yourcompany.com` | MCP tenant traffic |
-| `agent-security-platform` | `app.mcp.yourcompany.com` | Admin dashboard |
+   You see two ingresses:
 
-Open `https://app.mcp.yourcompany.com` in your browser — you should see the MCP Gateway Platform login page with a "Sign in with Keycloak" button.
+   | Name | Host | Purpose |
+   | --- | --- | --- |
+   | `agent-security-gateway` | `*.mcp.yourcompany.com` | Traffic to gateway hosts |
+   | `agent-security-platform` | `app.mcp.yourcompany.com` | Admin dashboard |
 
-Verify the gateway health endpoint:
+3. Check the admin dashboard health endpoint:
 
-```bash
-curl -s https://app.mcp.yourcompany.com/api/health
-# Expected: {"status":"healthy"}
-```
+   ```bash
+   curl -s https://app.mcp.yourcompany.com/api/health
+   # Expected: {"status":"healthy"}
+   ```
 
-## Configuration Options
+   The response is `{"status":"healthy"}`.
 
-### External Database
+4. Open `https://app.mcp.yourcompany.com` in your browser. The admin dashboard sign-in page shows a **Sign in with Keycloak** button.
 
-To use your own PostgreSQL and Redis instead of the bundled ones:
+## Configuration options
+
+### Use an external PostgreSQL and Redis \{#external-database}
+
+To use your own PostgreSQL and Redis instead of the bundled ones, add these values to `my-values.yaml`. Each `existingSecret` names a Kubernetes secret in the `agent-security` namespace, and `existingSecretKey` names the key that holds the connection URL:
 
 ```yaml
 postgres:
@@ -371,7 +388,7 @@ externalRedis:
 
 ### Storage
 
-Customize storage for the bundled PostgreSQL and Redis:
+To set the storage class and volume size for the bundled PostgreSQL and Redis:
 
 ```yaml
 postgres:
@@ -384,9 +401,9 @@ redis:
     size: 2Gi
 ```
 
-### Email Notifications
+### Email notifications
 
-Email verification is disabled by default. To enable it (for registration, password reset, OTP), configure an SMTP server:
+Email verification is off by default. To use email for registration, password reset, and one-time passcodes (OTP), configure an SMTP server. `existingSecret` names a Kubernetes secret that holds the SMTP password:
 
 ```yaml
 email:
@@ -401,13 +418,13 @@ email:
     existingSecretKey: "SMTP_PASSWORD"
 ```
 
-:::note
-The `mailgun` email provider is not available in on-premises mode to prevent accidental egress to external cloud services.
+:::note SMTP only in on-premises mode
+The `mailgun` email provider isn't available in on-premises mode, so email can't be sent through an external cloud service by mistake.
 :::
 
-### Cross-Cluster Deployment
+### Permit Platform in a different cluster \{#cross-cluster-deployment}
 
-If the Permit Platform runs in a different cluster, the Helm Job cannot discover Keycloak via Kubernetes DNS. Set the Keycloak URL explicitly:
+If the Permit Platform runs in a different cluster, the Keycloak setup Job can't find Keycloak through Kubernetes DNS. Set the Keycloak URL:
 
 ```yaml
 permitPlatform:
@@ -415,7 +432,9 @@ permitPlatform:
   keycloakAdminPassword: "<password>"   # or use keycloakAdminPasswordSecret (see Step 3)
 ```
 
-## Upgrading
+## Upgrade the gateway \{#upgrading}
+
+Run `helm upgrade` with the same values file:
 
 ```bash
 helm upgrade agent-security ./charts/agent-security \
@@ -424,9 +443,9 @@ helm upgrade agent-security ./charts/agent-security \
   --wait --timeout=10m
 ```
 
-All secrets and data are preserved across upgrades.
+Upgrades keep the generated secrets and the data in PostgreSQL and Redis. Run the [verification checks](#step-10--verify) after each upgrade.
 
-If an upgrade fails and pods are unhealthy, roll back to the previous working release:
+If an upgrade fails and pods are unhealthy, roll back to the previous release:
 
 ```bash
 helm rollback agent-security -n agent-security --wait --timeout=10m
@@ -434,16 +453,25 @@ helm rollback agent-security -n agent-security --wait --timeout=10m
 
 ## Troubleshooting
 
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `helm install` fails | A pod or Job failed to start | See [Install failed](#install-failed) |
+| Gateway pods restart on first deploy | Redis is still starting | No action. The gateway reconnects after 1 or 2 restarts. |
+| Admin dashboard sign-in returns to the sign-in page | No TLS on the ingresses, so the browser drops the secure cookies | [Attach the TLS secret](#step-9--patch-ingresses-for-tls) |
+| "Invalid credentials" when creating an organization | The Keycloak OIDC client is missing the audience mapper | See [Invalid credentials when creating an organization](#invalid-credentials-when-creating-an-organization) |
+| Pods stuck in `CreateContainerConfigError` | The Keycloak setup Job hasn't created the OIDC secret yet | Wait 30 to 60 seconds. If the state persists, [check the logs](#checking-logs) of the Keycloak setup Job. |
+| Consent service or platform pods fail to start with migration errors | PostgreSQL isn't ready yet | See [Database migration errors](#database-migration-errors) |
+
 ### Install failed
 
-If `helm install` fails, investigate the error, then uninstall and retry:
+If `helm install` fails, find the failed pod or Job, fix the cause, then uninstall and install again. Uninstalling keeps the persistent volume claims (PVCs), so your data stays.
 
 ```bash
 # Check what failed
 kubectl get pods -n agent-security
 kubectl get jobs -n agent-security
 
-# Uninstall (PVCs are retained — your data is safe)
+# Uninstall (PVCs are retained, your data is safe)
 helm uninstall agent-security -n agent-security
 
 # Re-run install after fixing the issue
@@ -454,29 +482,29 @@ helm install agent-security ./charts/agent-security \
 
 ### Gateway pods restarting
 
-Normal on first deploy — Redis takes a few seconds to initialize. The gateway reconnects automatically after 1-2 restarts.
+On the first deploy, Redis takes a few seconds to start. The gateway reconnects after 1 or 2 restarts, and no action is needed.
 
-### Platform login redirects back to login page
+### Platform login redirects back to login page \{#platform-login-redirects-back-to-login-page}
 
-TLS is not configured on the ingresses. The authentication flow sets secure cookies that require HTTPS. See [Step 9](#step-9--patch-ingresses-for-tls).
+The ingresses have no TLS. The sign-in flow sets secure cookies, and the browser sends secure cookies only over HTTPS. [Attach the TLS secret to the ingresses](#step-9--patch-ingresses-for-tls).
 
-### "Invalid credentials" when creating an organization
+### "Invalid credentials" when creating an organization \{#invalid-credentials-when-creating-an-organization}
 
-The Keycloak OIDC client may not have the required audience mapper. Check the setup Job:
+The Keycloak OIDC client might be missing the required audience mapper. Check the logs of the Keycloak setup Job:
 
 ```bash
 kubectl logs -n agent-security -l app.kubernetes.io/component=keycloak-setup
 ```
 
-If the Job failed, you can re-trigger it by running `helm upgrade` with the same values.
+If the Job failed, run `helm upgrade` with the same values to run the Job again.
 
 ### Pods stuck in CreateContainerConfigError
 
-The OIDC secret hasn't been created yet. The Keycloak setup Job runs after the main resources are deployed — the platform pod will recover automatically once the Job completes (usually within 30-60 seconds).
+The OIDC secret doesn't exist yet. The Keycloak setup Job runs after the main resources deploy. The platform pod recovers when the Job completes, usually within 30 to 60 seconds.
 
 ### Database migration errors
 
-Consent or platform pods may fail to start if PostgreSQL isn't ready yet. The migration init containers retry automatically. Check migration logs:
+Consent service or platform pods fail to start if PostgreSQL isn't ready yet. The migration init containers retry on their own. To check the migration logs:
 
 ```bash
 kubectl logs -n agent-security deployment/agent-security-consent-service -c db-migration
@@ -484,6 +512,8 @@ kubectl logs -n agent-security deployment/agent-security-platform -c db-migratio
 ```
 
 ### Checking logs
+
+To read recent logs for each component:
 
 ```bash
 # Gateway
@@ -499,8 +529,9 @@ kubectl logs -n agent-security deployment/agent-security-platform --tail=20
 kubectl logs -n agent-security -l app.kubernetes.io/component=keycloak-setup
 ```
 
-## Next Steps
+## Next steps
 
-- [Set up your first MCP host](/permit-mcp-gateway/host-setup) in the admin dashboard
-- [Configure authentication methods](/permit-mcp-gateway/authentication-methods) for your users
-- [Connect MCP clients](/permit-mcp-gateway/guide) to the gateway
+- [Set up hosts for your organization](/permit-mcp-gateway/host-setup): create your first host, set its PDP URL, and import MCP servers.
+- [Authentication methods](/permit-mcp-gateway/authentication-methods): choose how users sign in to the consent service.
+- [Getting started with Permit MCP Gateway](/permit-mcp-gateway/guide): connect MCP clients and test allowed and denied tool calls.
+- [Architecture](/permit-mcp-gateway/architecture): the components you installed and how requests flow between them.

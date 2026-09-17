@@ -1,64 +1,52 @@
 ---
 sidebar_position: 1
-title: Terraform Provider
-description: "Manage Permit.io authorization policies as code using Terraform"
+title: Manage Permit.io policies with Terraform
+sidebar_label: Terraform Provider
+description: "Define Permit.io resources, roles, condition sets, and relations as Terraform code with the Permit.io Terraform provider, and apply them to an environment."
 ---
 
-![terraform](/img/infra-as-code/tf-half.png)
+![Terraform logo next to the Permit.io logo](/img/infra-as-code/tf-half.png)
 
-# Permit.io Terraform Provider
+Define your Permit.io authorization model (resources, actions, roles, condition sets, and relations) as Terraform code, and apply it to a Permit environment with the Permit.io Terraform provider. This page is for developers and platform engineers who manage infrastructure with Terraform or OpenTofu and want the same review and version control for their authorization policy.
 
-The **Permit.io Terraform Provider** allows you to manage your authorization policies, resources, roles, and permissions as infrastructure code. This enables you to version control your authorization policies, automate deployments, and maintain consistency across environments.
+With the provider, a policy change is a change to a `.tf` file. You review it in a pull request, see the planned changes with `terraform plan`, and apply the same configuration to each environment.
 
-## What is Infrastructure as Code (IaC)?
-
-Infrastructure as Code is the practice of managing and provisioning computing infrastructure through machine-readable definition files rather than physical hardware configuration or interactive configuration tools. With Terraform, you can:
-
-- **Version Control**: Track changes to your authorization policies in Git
-- **Automation**: Deploy policies consistently across environments
-- **Collaboration**: Review and approve policy changes through pull requests
-- **Reproducibility**: Ensure identical environments across development, staging, and production
-
-:::tip
-The Permit CLI has the ability to [export environments to Terraform scripts](/how-to/permit-cli/permit-cli-envs/#terraform-and-iac)
+:::tip Export an existing environment
+If you already configured an environment in the Permit dashboard, the Permit CLI can [export the environment to a Terraform file](/how-to/permit-cli/permit-cli-envs#terraform-and-iac). Start from the exported file instead of writing the configuration by hand.
 :::
 
-## Quick Start
+## Prerequisites \{#quick-start}
 
-### Prerequisites
+- [Terraform](https://developer.hashicorp.com/terraform/downloads) 1.0 or later, or [OpenTofu](https://opentofu.org/docs/intro/install/) 1.0 or later.
+- A [Permit.io account](https://app.permit.io).
+- Basic knowledge of [Terraform configuration syntax](https://developer.hashicorp.com/terraform/language).
 
-Before you begin, ensure you have:
+## 1. Get your environment API key \{#1-get-your-api-key}
 
-- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.0 or [OpenTofu](https://opentofu.org/docs/intro/install/) >= 1.0 installed
-- A [Permit.io account](https://app.permit.io) with an API key
-- Basic understanding of [Terraform syntax](https://developer.hashicorp.com/terraform/language)
+The provider changes the policy of one environment: the environment that the API key belongs to. Copy the API key of the environment you want to manage. See [Get your API key](/overview/get-api-key).
 
-### 1. Get Your API Key
+Anyone with the environment API key can change that environment's policy through the Permit API. Don't commit the key to your repository.
 
-1. Go to [app.permit.io](https://app.permit.io)
-2. Navigate to **Settings** → **API Keys**
-3. Copy your environment-level API key
+## 2. Write your first configuration \{#2-create-your-first-terraform-configuration}
 
-### 2. Create Your First Terraform Configuration
+Create a directory for the Terraform project and add the following files.
 
-Create a new directory for your Terraform project and add the following files:
-
-**`main.tf`** - Main Terraform configuration:
+`main.tf` requires the Permit.io provider, configures it, and defines a `document` resource with three actions and three roles:
 
 ```hcl
 terraform {
   required_providers {
     permitio = {
       source  = "registry.terraform.io/permitio/permit-io"
-      version = "~> 0.0.14"  # Use the latest version
+      version = "~> 0.0.25"  # Use the latest version
     }
   }
 }
 
 # Configure the Permit.io provider
 provider "permitio" {
-  api_key = "YOUR_API_KEY"  # Replace with your actual API key
-  # api_url = "https://api.permit.io"  # Optional: defaults to https://api.permit.io
+  api_key = var.permit_api_key
+  api_url = var.permit_api_url
 }
 
 # Define a resource (e.g., documents in your application)
@@ -123,7 +111,12 @@ resource "permitio_role" "admin" {
 }
 ```
 
-**`variables.tf`** - Define variables for better configuration management:
+In `main.tf`:
+
+- `version = "~> 0.0.25"` accepts any `0.0.x` release from `0.0.25` on. For the latest release, see the [provider page in the Terraform Registry](https://registry.terraform.io/providers/permitio/permit-io/latest).
+- `api_key` and `api_url` read the `permit_api_key` and `permit_api_url` variables, which `variables.tf` declares and `terraform.tfvars` sets. To pass the API key in an environment variable instead, see [Pass the API key in environment variables](#environment-variables).
+
+`variables.tf` declares input variables for the API key and API URL. `sensitive = true` keeps Terraform from printing the key in plan output:
 
 ```hcl
 variable "permit_api_key" {
@@ -139,14 +132,16 @@ variable "permit_api_url" {
 }
 ```
 
-**`terraform.tfvars`** - Set your actual values (don't commit this file):
+`terraform.tfvars` sets the variable values. Add `terraform.tfvars` to `.gitignore`, because the file contains your API key:
 
 ```hcl
 permit_api_key = "your-actual-api-key-here"
 permit_api_url = "https://api.permit.io"
 ```
 
-### 3. Initialize and Apply
+## 3. Initialize and apply the configuration \{#3-initialize-and-apply}
+
+Download the provider, review the planned changes, and apply them:
 
 ```bash
 # Initialize Terraform
@@ -159,88 +154,21 @@ terraform plan
 terraform apply
 ```
 
-## Using with OpenTofu
+`terraform apply` asks you to confirm the plan. Type `yes`.
 
-[OpenTofu](https://opentofu.org/) is an open-source fork of Terraform that maintains compatibility with Terraform providers and configurations. You can use the Permit.io Terraform provider with OpenTofu without any modifications to your configuration files.
+## 4. Verify the policy in Permit \{#verify-the-policy-in-permit}
 
-### Installing OpenTofu
+1. Open the [Policy Editor](https://app.permit.io/policy-editor) of the environment that the API key belongs to.
+2. Confirm that the `Document` resource has the **Read**, **Write**, and **Delete** actions, and that the **Reader**, **Writer**, and **Administrator** roles have the permissions from `main.tf`.
+3. Run `terraform plan` again. Terraform reports that no changes are needed, because the environment matches the configuration.
 
-```bash
-# Using Homebrew (macOS/Linux)
-brew install opentofu
+## Provider resource reference \{#core-concepts}
 
-# Using the official installer
-curl -fsSL https://get.opentofu.org/install.sh | sh
+Each block type below maps to an object in the Permit policy model. For every argument and attribute, see the [provider documentation in the Terraform Registry](https://registry.terraform.io/providers/permitio/permit-io/latest/docs).
 
-# Using package managers
-# Ubuntu/Debian
-sudo apt-get install opentofu
+### Resources \{#resources}
 
-# CentOS/RHEL/Fedora
-sudo dnf install opentofu
-```
-
-### Using OpenTofu Commands
-
-Replace `terraform` commands with `tofu`:
-
-```bash
-# Initialize OpenTofu
-tofu init
-
-# Plan your changes
-tofu plan
-
-# Apply the configuration
-tofu apply
-
-# Show current state
-tofu show
-
-# Destroy resources
-tofu destroy
-```
-
-### Configuration Compatibility
-
-Your Terraform configuration files work exactly the same with OpenTofu:
-
-```hcl
-terraform {
-  required_providers {
-    permitio = {
-      source  = "registry.terraform.io/permitio/permit-io"
-      version = "~> 0.0.14"
-    }
-  }
-}
-
-provider "permitio" {
-  api_key = "YOUR_API_KEY"
-}
-
-# All your resources remain the same
-resource "permitio_resource" "document" {
-  key         = "document"
-  name        = "Document"
-  description = "A confidential document"
-  # ... rest of configuration
-}
-```
-
-### Benefits of Using OpenTofu
-
-- **Open Source**: Fully open-source with community-driven development
-- **Terraform Compatible**: Drop-in replacement for Terraform
-- **Enhanced Features**: Some additional features and improvements over Terraform
-- **Active Development**: Regular updates and community contributions
-- **Same Provider Ecosystem**: Uses the same Terraform Registry and providers
-
-## Core Concepts
-
-### Resources
-
-Resources in Permit.io represent the objects that users can access in your application (e.g., documents, users, projects).
+A `permitio_resource` is a type of object that users act on in your application, such as a document or a project. The `actions` map lists what users can do on the resource, and the optional `attributes` map lists typed attributes for attribute-based access control (ABAC):
 
 ```hcl
 resource "permitio_resource" "example" {
@@ -264,9 +192,9 @@ resource "permitio_resource" "example" {
 }
 ```
 
-### Roles
+### Roles \{#roles}
 
-Roles define what actions users can perform on resources.
+A `permitio_role` grants a set of permissions. For a top-level role, each permission has the format `resource_key:action_key`. Add `depends_on` so Terraform creates the resource before the role that references its actions:
 
 ```hcl
 resource "permitio_role" "example" {
@@ -279,9 +207,9 @@ resource "permitio_role" "example" {
 }
 ```
 
-### User Sets and Resource Sets
+### User sets and resource sets \{#user-sets-and-resource-sets}
 
-User Sets and Resource Sets allow you to group users and resources based on conditions.
+A `permitio_user_set` groups users, and a `permitio_resource_set` groups resource instances, by conditions on their attributes. `conditions` takes a JSON string, so wrap the conditions in `jsonencode()`. A resource set also needs the `resource` it applies to:
 
 ```hcl
 # Group users by email domain
@@ -316,9 +244,11 @@ resource "permitio_resource_set" "public_docs" {
 }
 ```
 
-### Condition Set Rules
+The `public_docs` condition uses a `visibility` attribute, which the `document` resource in `main.tf` doesn't define. Add `visibility` to the `attributes` map of the resource.
 
-Condition Set Rules define when specific permissions apply based on user and resource sets.
+### Condition set rules \{#condition-set-rules}
+
+A `permitio_condition_set_rule` grants a permission to the users in a user set on the resources in a resource set:
 
 ```hcl
 resource "permitio_condition_set_rule" "admin_access" {
@@ -328,11 +258,9 @@ resource "permitio_condition_set_rule" "admin_access" {
 }
 ```
 
-## Advanced Examples
+### Relationship-based access control (ReBAC) \{#rebac-relationship-based-access-control}
 
-### ReBAC (Relationship-Based Access Control)
-
-The Terraform provider supports ReBAC for complex hierarchical permissions:
+For relationship-based access control (ReBAC), define resource roles (roles with a `resource` argument), a `permitio_relation` between two resources, and a `permitio_role_derivation` that grants a role on one resource from a role on a related resource. In this example, an admin of a folder becomes an admin of each file in the folder:
 
 ```hcl
 # Define resources with relationships
@@ -366,14 +294,14 @@ resource "permitio_relation" "parent" {
 resource "permitio_role" "folder_admin" {
   key         = "admin"
   name        = "Folder Administrator"
-  permissions = ["folder:list", "folder:create"]
+  permissions = ["list", "create"]
   resource    = permitio_resource.folder.key
 }
 
 resource "permitio_role" "file_admin" {
   key         = "admin"
   name        = "File Administrator"
-  permissions = ["file:read", "file:write"]
+  permissions = ["read", "write"]
   resource    = permitio_resource.file.key
 }
 
@@ -387,9 +315,11 @@ resource "permitio_role_derivation" "folder_to_file" {
 }
 ```
 
-### User Attributes
+For the concepts, see [ReBAC policies](/how-to/build-policies/rebac/overview).
 
-Define custom attributes for users to enable attribute-based access control:
+### User attributes \{#user-attributes}
+
+A `permitio_user_attribute` defines a typed attribute on users, for use in user set conditions:
 
 ```hcl
 resource "permitio_user_attribute" "department" {
@@ -405,34 +335,23 @@ resource "permitio_user_attribute" "security_level" {
 }
 ```
 
-## Repository Examples
+### Examples in the provider repository \{#repository-examples}
 
-The [Permit.io Terraform Provider repository](https://github.com/permitio/terraform-provider-permit-io) contains comprehensive examples:
+The [Permit.io Terraform provider repository](https://github.com/permitio/terraform-provider-permit-io) has complete configurations:
 
-### Basic Example
-[View the basic example](https://github.com/permitio/terraform-provider-permit-io/tree/main/examples/basic-example) that demonstrates:
-- Resource creation with actions and attributes
-- Role definition with permissions
-- User sets and resource sets
-- Condition set rules
-- Basic proxy configuration
+- [Basic example](https://github.com/permitio/terraform-provider-permit-io/tree/main/examples/basic-example): resources with actions and attributes, roles, user sets, resource sets, condition set rules, and a proxy configuration.
+- [ReBAC example](https://github.com/permitio/terraform-provider-permit-io/tree/main/examples/rebac): relations between resources and role derivations.
 
-### ReBAC Example
-[View the ReBAC example](https://github.com/permitio/terraform-provider-permit-io/tree/main/examples/rebac) that shows:
-- Resource relationships
-- Role derivations
-- Hierarchical permission inheritance
+## Pass the API key in environment variables \{#environment-variables}
 
-## Environment Variables
-
-For better security, use environment variables instead of hardcoding API keys:
+When the `provider "permitio"` block doesn't set `api_key` or `api_url`, the provider reads the `PERMITIO_API_KEY` and `PERMITIO_API_URL` environment variables. Set them in your shell or CI job:
 
 ```bash
 export PERMITIO_API_KEY="your-api-key"
 export PERMITIO_API_URL="https://api.permit.io"  # Optional
 ```
 
-Then in your Terraform configuration:
+Then leave both arguments out of the provider block:
 
 ```hcl
 provider "permitio" {
@@ -440,9 +359,9 @@ provider "permitio" {
 }
 ```
 
-## Best Practices
+## Recommended practices \{#best-practices}
 
-### 1. Use Variables for Configuration
+### Use input variables for values that change per environment \{#1-use-variables-for-configuration}
 
 ```hcl
 variable "environment" {
@@ -458,7 +377,9 @@ resource "permitio_resource" "document" {
 }
 ```
 
-### 2. Use Data Sources for Existing Resources
+### Reference existing objects with data sources \{#2-use-data-sources-for-existing-resources}
+
+Use a data source to read an object that Terraform doesn't manage, such as a resource created in the dashboard.:
 
 ```hcl
 data "permitio_resource" "existing_document" {
@@ -466,11 +387,13 @@ data "permitio_resource" "existing_document" {
 }
 
 resource "permitio_role" "reader" {
+  key         = "reader"
+  name        = "Reader"
   permissions = ["${data.permitio_resource.existing_document.key}:read"]
 }
 ```
 
-### 3. Use Outputs for Important Information
+### Output values you need elsewhere \{#3-use-outputs-for-important-information}
 
 ```hcl
 output "resource_id" {
@@ -482,7 +405,9 @@ output "role_permissions" {
 }
 ```
 
-### 4. Use Workspaces for Environment Separation
+### Keep a separate state per environment \{#4-use-workspaces-for-environment-separation}
+
+Terraform workspaces keep a separate state for each workspace. Create one workspace per Permit environment:
 
 ```bash
 # Create separate workspaces for different environments
@@ -494,50 +419,104 @@ terraform workspace new prod
 terraform workspace select dev
 ```
 
-:::note
-**OpenTofu Users**: Replace `terraform` with `tofu` in all workspace commands:
+:::warning Use a different API key in each workspace
+A workspace doesn't change the API key. If every workspace uses the same `PERMITIO_API_KEY`, every workspace applies to the same Permit environment, and each state file tracks the same objects. Set the API key of the matching environment before you run `terraform plan` or `terraform apply` in a workspace.
+:::
+
+## Use the provider with OpenTofu \{#using-with-opentofu}
+
+[OpenTofu](https://opentofu.org/) is an open-source fork of Terraform. The Permit.io provider and the configuration files on this page work with OpenTofu without changes.
+
+### Install OpenTofu \{#installing-opentofu}
+
+Install OpenTofu with one of these methods. The `apt-get` and `dnf` commands need the OpenTofu package repository set up first. See the [OpenTofu installation guide](https://opentofu.org/docs/intro/install/).
+
+```bash
+# Using Homebrew (macOS/Linux)
+brew install opentofu
+
+# Using the official installer
+curl -fsSL https://get.opentofu.org/install.sh | sh
+
+# Using package managers
+# Ubuntu/Debian
+sudo apt-get install opentofu
+
+# CentOS/RHEL/Fedora
+sudo dnf install opentofu
+```
+
+### Run OpenTofu commands \{#using-opentofu-commands}
+
+Use `tofu` in place of `terraform`:
+
+```bash
+# Initialize OpenTofu
+tofu init
+
+# Plan your changes
+tofu plan
+
+# Apply the configuration
+tofu apply
+
+# Show current state
+tofu show
+
+# Destroy resources
+tofu destroy
+```
+
+`tofu destroy` (and `terraform destroy`) deletes every Permit object in the state from the environment. Check the plan it prints before you confirm.
+
+The workspace commands also use `tofu`:
+
 ```bash
 tofu workspace new dev
 tofu workspace select dev
 ```
-:::
 
-## Troubleshooting
+### Configuration compatibility \{#configuration-compatibility}
 
-### Common Issues
+The `terraform` block and provider source are the same for OpenTofu:
 
-1. **API Key Issues**
-   - Ensure you're using an environment-level API key, not a workspace-level key
-   - Verify the API key has the correct permissions
+```hcl
+terraform {
+  required_providers {
+    permitio = {
+      source  = "registry.terraform.io/permitio/permit-io"
+      version = "~> 0.0.25"
+    }
+  }
+}
 
-2. **Resource Dependencies**
-   - Use `depends_on` when resources reference each other
-   - Ensure resources are created before roles that reference them
+provider "permitio" {
+  api_key = "YOUR_API_KEY"
+}
 
-3. **Permission Format**
-   - Use the format `resource_key:action_key` for permissions
-   - Ensure the resource and action keys match exactly
+# All your resources remain the same
+resource "permitio_resource" "document" {
+  key         = "document"
+  name        = "Document"
+  description = "A confidential document"
+  # ... rest of configuration
+}
+```
 
-### Getting Help
+## Troubleshooting \{#troubleshooting}
 
-- [Terraform Provider Documentation](https://registry.terraform.io/providers/permitio/permit-io/latest/docs)
-- [GitHub Repository](https://github.com/permitio/terraform-provider-permit-io)
-- [Permit.io Documentation](https://docs.permit.io)
-- [Terraform Documentation](https://developer.hashicorp.com/terraform/docs)
-- [OpenTofu Documentation](https://opentofu.org/docs)
+| Problem | Cause | Fix |
+|---|---|---|
+| Authentication or permission errors on `plan` or `apply` | The API key isn't an environment API key, or belongs to a different environment. | Use the API key of the environment you manage. See [Get your API key](/overview/get-api-key). |
+| Creating a role fails because its resource or action isn't found | Terraform created the role before the resource it references. | Add `depends_on` with the resource to the role. |
+| A permission isn't found | The permission string doesn't match the resource and action keys. | Use `resource_key:action_key` for top-level roles, with keys that match exactly. |
 
-## Next Steps
+For provider bugs, open an issue in the [provider repository](https://github.com/permitio/terraform-provider-permit-io/issues). For questions, ask in the [Permit Slack community](https://io.permit.io/slack).
 
-Now that you have the basics, explore:
+## Next steps \{#next-steps}
 
-- [Advanced Authorization Patterns](/overview/advanced-authorization-queries)
-- [Attribute-Based Access Control (ABAC)](/how-to/build-policies/abac/overview)
-- [Relationship-Based Access Control (ReBAC)](/how-to/build-policies/rebac/overview)
-- [Policy as Code with GitOps](/integrations/gitops/overview)
-- [Permit CLI for Automation](/how-to/permit-cli/)
-
----
-
-:::info
-**Need Help?** Join our [Slack community](https://io.permit.io/slack) (channel #permit-saas), or (if you're in less of a hurry) check out our [GitHub issues](https://github.com/permitio/terraform-provider-permit-io/issues) for support.
-:::
+- [Export an environment to Terraform with the Permit CLI](/how-to/permit-cli/permit-cli-envs#terraform-and-iac)
+- [Install and use the Permit CLI](/how-to/permit-cli)
+- [ABAC policies](/how-to/build-policies/abac/overview)
+- [ReBAC policies](/how-to/build-policies/rebac/overview)
+- [Manage policy as code with GitOps](/integrations/gitops/overview)

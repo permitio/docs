@@ -1,37 +1,40 @@
 ---
 title: Quick Start
 sidebar_label: Quick Start
-description: Enable the HTTP Egress Proxy for a host, define an API workflow, store an upstream credential, mint a workflow-bound agent token, and route an agent through the proxy — end to end.
+description: Route an AI agent's outbound API calls through the HTTP Egress Proxy by enabling the proxy, storing a credential, creating an API workflow, minting an agent token, and verifying the allow-list.
 sidebar_position: 1
 ---
 
-# Quick Start
+This quick start is for operators setting up the HTTP Egress Proxy for the first time. By the end, an agent's call to the Stripe API goes through the proxy, which authenticates, authorizes, and logs the call, and a call to any other host is denied.
 
-This walkthrough takes you from zero to a governed outbound API call: you'll enable the proxy for a host, define a workflow that allows one upstream API, store its credential, and route an agent through the proxy so its calls are authenticated, authorized, and audited.
+You enable the proxy, store the Stripe credential, create an API workflow that allows `api.stripe.com`, mint an agent token bound to that workflow, and send test requests through the proxy. The last step turns on HTTPS interception so the proxy injects the credential into HTTPS requests.
 
-Enabling the proxy, storing credentials, and minting tokens can be done in the [dashboard](https://app.agent.security) or with the [`asg` CLI](./cli.mdx). **Workflows are authored in the dashboard** (there's no CLI for that yet), so this guide uses the dashboard for step 3 and the CLI — because it's copy-pasteable — for the rest.
+You can enable the proxy, store credentials, and mint tokens in the [dashboard](https://app.agent.security) or with the [`asg` CLI](/permit-mcp-gateway/http-egress-proxy/cli). You create API workflows in the dashboard, because the `asg` CLI has no workflow command. This guide uses the dashboard to create the workflow and the CLI for the other steps.
 
-:::note Prerequisites
-- A host (tenant) in your [Permit MCP Gateway dashboard](https://app.agent.security). If you don't have one, follow the [gateway Quick Start](/permit-mcp-gateway/quickstart) first.
-- The proxy enabled for your account (see the availability note on the [Overview](./index.mdx)).
-- The `asg` CLI installed (see [Install](./cli.mdx#install)) and pointed at your gateway with an admin token (see [Configure](./cli.mdx#configure)).
-:::
+## Prerequisites
 
-Throughout this guide, replace `acme` with your own host's subdomain.
+- A host (tenant) in your [Permit MCP Gateway dashboard](https://app.agent.security). To create one, follow the [Permit MCP Gateway quick start](/permit-mcp-gateway/quickstart).
+- The HTTP Egress Proxy enabled for your account. See the availability note in the [HTTP Egress Proxy overview](/permit-mcp-gateway/http-egress-proxy).
+- The `asg` CLI [installed](/permit-mcp-gateway/http-egress-proxy/cli#install) and [configured](/permit-mcp-gateway/http-egress-proxy/cli#configure) with your gateway URL and an admin token.
+- A Stripe secret key.
+
+In every command, replace `acme` with your host's subdomain.
 
 ## 1. Enable the proxy for your host
 
-The proxy is off by default for every host. Turn it on:
+Proxy mode is off by default for every host. Turn proxy mode on for your host:
 
 ```bash
 asg proxy config acme --enable
 ```
 
-**Dashboard:** go to **CLIs / APIs → Overview** and click **Enable proxy mode**.
+In the dashboard, go to **CLIs / APIs → Overview** and click **Enable proxy mode**.
 
 ## 2. Store the upstream credential
 
-Store the API key the proxy should inject, so your agent never holds it. Secrets are **write-only** — once stored, they can never be read back out, only overwritten. Put your Stripe secret key in `./stripe.key` first, then:
+Store the Stripe secret key in the gateway so the proxy can inject it and the agent never holds it. Stored secrets are write-only: you can overwrite or delete a secret, but no interface returns its value.
+
+Save your Stripe secret key to `./stripe.key`, then create a credential named `stripe`:
 
 ```bash
 asg proxy credentials create stripe acme \
@@ -42,31 +45,32 @@ asg proxy credentials create stripe acme \
   --secret-file ./stripe.key
 ```
 
-The proxy injects it on the way out and [scrubs it](./security.mdx#response-scrubbing) from responses on the way back. For OAuth providers like GitHub, Google, Notion, and Atlassian, use [`asg proxy connect`](./credentials.mdx#oauth-connections) instead of a static key.
+The proxy adds the `Authorization: Bearer` header to matching requests and [scrubs the secret](/permit-mcp-gateway/http-egress-proxy/security#response-scrubbing) from responses. For OAuth providers such as GitHub, Google, Notion, and Atlassian, use [`asg proxy connect`](/permit-mcp-gateway/http-egress-proxy/credentials#oauth-connections) instead of a static key.
 
-**Dashboard:** **CLIs / APIs → Credentials → Add credential**.
+In the dashboard, go to **CLIs / APIs → Credentials** and click **Add credential**.
 
-:::warning Storing production keys
-Encryption at rest for credentials is opt-in (the KMS vault). Before you store a live key, confirm the vault is enabled on your gateway — see [Security → Credential isolation](./security.mdx#credential-isolation).
+:::warning Enable the KMS vault before storing production keys
+Credential encryption at rest is off unless the gateway runs with the KMS vault enabled. Without the vault, the gateway writes credentials to its store in plaintext. Confirm the vault is enabled before you store a live key. See [Credential isolation](/permit-mcp-gateway/http-egress-proxy/security#credential-isolation).
 :::
 
 ## 3. Create an API workflow
 
-A workflow is the unit of access an agent token binds to — a set of allowed domains and rules. In the [dashboard](https://app.agent.security), go to **CLIs / APIs → Workflows** and click **Create workflow**. Creation happens across two pages:
+An API workflow is the unit of access an agent token binds to: a set of allowed domains and the rules for each domain. Create one in the [dashboard](https://app.agent.security):
 
-1. **Name** the workflow (e.g. *"Charge customers"*), note its **slug** (e.g. `charge_customers`), optionally add an **Intent**, and click **Create workflow**. You land on the workflow's own page.
-2. On that page, click **Add domain**: `api.stripe.com`.
-3. Inside that domain, click **Add rule** and create the **tunnel rule** that HTTPS requires — method class **All** and **no path** — attaching the **stripe** credential from step 2, at a required trust level (or leave **Auto**).
+1. Go to **CLIs / APIs → Workflows** and click **Create workflow**.
+2. Enter a name, for example *Charge customers*, and note the slug, for example `charge_customers`. Optionally add an **Intent**. Click **Create workflow**. The dashboard opens the workflow's page.
+3. On the workflow's page, click **Add domain** and enter `api.stripe.com`.
+4. Inside the `api.stripe.com` domain, click **Add rule**. Create the tunnel rule that HTTPS requires: set method class to **All**, leave the path empty, and attach the `stripe` credential. Set a required trust level, or leave **Auto**.
 
-:::note Why the "All, no path" rule
-HTTPS reaches the proxy as a `CONNECT` whose inner path and method aren't visible yet, so it can only match a rule with method class **All** and no path pattern. A `read` + `/v1/customers*` rule would deny every HTTPS call to the domain. You can add path- and method-scoped rules too — they apply to plain HTTP, and to HTTPS once you switch the rule to **intercept** (step 7). See [Workflows & Rules → HTTPS needs a tunnel rule](./egress-rules.mdx#https-needs-a-tunnel-rule).
+After these steps, the workflow allows HTTPS requests to `api.stripe.com` and denies every other destination. The `stripe` credential is attached to the tunnel rule, but the proxy injects it into HTTPS requests only after you turn on interception in [step 7](#7-inject-credentials-into-https-traffic).
+
+:::note Why HTTPS needs a rule with method class All and no path
+An HTTPS request reaches the proxy as a `CONNECT` request, and the proxy cannot see the path or method inside the encrypted tunnel. A `CONNECT` request can only match a rule with method class **All** and no path. If the domain has only a `read` rule for `/v1/customers*`, the proxy denies every HTTPS call to that domain. Path and method rules apply to plain HTTP, and to HTTPS once the tunnel rule uses intercept mode. See [HTTPS needs a tunnel rule](/permit-mcp-gateway/http-egress-proxy/egress-rules#https-needs-a-tunnel-rule).
 :::
-
-That's the allow-list: HTTPS requests to `api.stripe.com` are allowed (and, once intercepted, get the `stripe` credential injected); everything else is denied.
 
 ## 4. Mint a workflow-bound agent token
 
-The agent authenticates to the proxy with a short-lived token bound to one workflow. For an automated agent (no human in the loop), mint one directly — pass the slug from step 3:
+The agent authenticates to the proxy with a short-lived token bound to one workflow. For an automated agent with no human delegating access, mint the token directly. Pass the workflow slug from the dashboard:
 
 ```bash
 asg proxy token create acme \
@@ -75,21 +79,32 @@ asg proxy token create acme \
   --out ~/.agent-security/tokens/acme.token
 ```
 
-The `--out` path is the one [`asg proxy env`](./connecting-agents.mdx) expects, so the next step finds it automatically. The token only permits requests that match `charge_customers`. To instead let a **human** delegate access to an agent within a trust ceiling, use [`asg proxy authorize`](./authorization.mdx#human-consent) — that's the consent flow.
+The token permits only requests that match the `charge_customers` workflow. The `--out` path is the default token path that `asg proxy env` exports in the next step.
+
+To let a person delegate access to an agent within a trust ceiling instead, use the consent flow with [`asg proxy authorize`](/permit-mcp-gateway/http-egress-proxy/authorization#human-consent).
 
 ## 5. Point your agent at the proxy
 
-The proxy speaks the standard `HTTP_PROXY` / `HTTPS_PROXY` convention, so most HTTP libraries route through it once the environment is set:
+The proxy uses the standard `HTTP_PROXY` and `HTTPS_PROXY` environment variables, so most HTTP libraries send traffic through it once the variables are set:
 
 ```bash
 eval "$(asg proxy env acme)"
 ```
 
-This sets `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and exports `AGENT_SECURITY_PROXY_TOKEN_FILE`, pointing your tooling at the token file from step 4. It does **not** by itself authenticate requests: every outbound request must also carry `Proxy-Authorization: Bearer <token>`. Your agent's HTTP client should read the token from `$AGENT_SECURITY_PROXY_TOKEN_FILE` and send that header — or launch the agent with [`asg run`](./cli.mdx), which injects the token into the proxy URL for you. (Note: `curl` and `git` read only the lowercase `http_proxy` for plain HTTP.) For Docker and Kubernetes, see [Connecting Agents](./connecting-agents.mdx).
+The command sets `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY`, and exports `AGENT_SECURITY_PROXY_TOKEN_FILE` with the path of the token file from step 4.
+
+The environment variables do not authenticate requests. Every request must also carry the `Proxy-Authorization: Bearer <token>` header, or the proxy returns `407`. You have two options:
+
+- Configure your agent's HTTP client to read the token from `$AGENT_SECURITY_PROXY_TOKEN_FILE` and send the `Proxy-Authorization` header.
+- Launch the agent with [`asg run`](/permit-mcp-gateway/http-egress-proxy/cli#launch-an-agent-with-asg-run), which gets a token through browser consent and puts the token in the proxy URL for the agent process.
+
+`curl` and `git` read only the lowercase `http_proxy` variable for plain HTTP. For Docker and Kubernetes, see [Connecting agents](/permit-mcp-gateway/http-egress-proxy/connecting-agents).
 
 ## 6. Verify the allow-list
 
-Because `curl` doesn't read the token file, pass the credential explicitly. Use `curl -i` so you can see the status line:
+`curl` does not read the token file, so pass the token in the `--proxy-header` option. Use `curl -i` to see the status line.
+
+Send a request to the allowed host:
 
 ```bash
 curl -i --proxy-header "Proxy-Authorization: Bearer $(cat "$AGENT_SECURITY_PROXY_TOKEN_FILE")" \
@@ -97,24 +112,26 @@ curl -i --proxy-header "Proxy-Authorization: Bearer $(cat "$AGENT_SECURITY_PROXY
 # → HTTP/1.1 401 Unauthorized  (the response comes from Stripe)
 ```
 
-A `401` here is expected — and is exactly what proves the proxy let the request through. In the default HTTPS **passthrough** mode the proxy authorizes the tunnel but doesn't inject your credential (that happens in intercept mode, step 7), so Stripe itself rejects the un-credentialed call. The point is *where* the `401` comes from: the request reached Stripe.
+Expected result: `401 Unauthorized` from Stripe. The `401` shows that the proxy allowed the request and Stripe received it. In the default HTTPS passthrough mode, the proxy authorizes the tunnel but does not inject the `stripe` credential, so Stripe rejects the request.
 
-Now confirm a host your workflow does **not** include is denied:
+Send a request to a host the workflow does not include:
 
 ```bash
 curl -i --proxy-header "Proxy-Authorization: Bearer $(cat "$AGENT_SECURITY_PROXY_TOKEN_FILE")" \
   https://api.openai.com/v1/models
-# → 403 from the proxy (deny-by-default) — it never connects to OpenAI
+# → 403 from the proxy (deny-by-default); it never connects to OpenAI
 ```
 
-The contrast is what matters: an **allowed** host reaches the upstream (even if the upstream returns `401` without an injected credential), while a host **outside** your workflow is blocked at the proxy with a `403` and never connected to at all. (Omit the `Proxy-Authorization` header and you'll get a `407` from the proxy instead — it requires the token on every request.)
+Expected result: `403` from the proxy. The proxy denies the request and does not connect to `api.openai.com`.
+
+If you omit the `Proxy-Authorization` header, the proxy returns `407 Proxy Authentication Required`.
 
 ## 7. Inject credentials into HTTPS traffic
 
-To have the proxy inject the credential from step 2 — and apply path-level rules and response scrubbing — it needs to open the encrypted connection. Switch the rule to **intercept** mode:
+To inject the `stripe` credential into HTTPS requests, apply path-level rules, and scrub responses, the proxy must decrypt the connection. Switch the tunnel rule to intercept mode:
 
-1. **Enable intercept on the tunnel rule.** In the [dashboard](https://app.agent.security), open **CLIs / APIs → Workflows**, edit your `api.stripe.com` tunnel rule, and set **TLS mode** to **Intercept (decrypt + inject credential)**.
-2. **Provision and trust the certificate.** Intercept terminates TLS with your host's own certificate authority, so your client must trust it:
+1. **Set the tunnel rule to intercept.** In the [dashboard](https://app.agent.security), go to **CLIs / APIs → Workflows**, edit the `api.stripe.com` tunnel rule, and set **TLS mode** to **Intercept (decrypt + inject credential)**.
+2. **Provision and trust the certificate authority.** In intercept mode, the proxy terminates TLS with your host's certificate authority (CA), so your client must trust that CA:
 
    ```bash
    asg proxy ca rotate acme --yes                 # provisions the CA on first run (prompts without --yes)
@@ -122,7 +139,7 @@ To have the proxy inject the credential from step 2 — and apply path-level rul
    eval "$(asg proxy ca trust-shell acme)"         # points common TLS tools at the CA in this shell
    ```
 
-3. **Re-verify.** Make the same request again — this time the credential is injected for you (you never send the key), and it's scrubbed from the response:
+3. **Send the request again.** This time you do not send the Stripe key. The proxy injects it and scrubs it from the response:
 
    ```bash
    curl -i --cacert ./agent-security-ca.pem \
@@ -130,23 +147,32 @@ To have the proxy inject the credential from step 2 — and apply path-level rul
      https://api.stripe.com/v1/customers
    ```
 
-Use intercept where you need credential injection, path rules, or scrubbing on HTTPS; keep passthrough for domains where domain-level control is enough, or for very large uploads, downloads, and long-lived streams. See [HTTPS interception](./connecting-agents.mdx#https-interception) for the full picture. (Over plain HTTP, injection works with no intercept setup at all.)
+   Expected result: a Stripe response with a success status instead of `401`, because the proxy added your Stripe key to the request.
+
+Use intercept mode for domains where you need credential injection, path rules, or scrubbing on HTTPS. Use passthrough mode where domain-level control is enough, and for very large uploads, downloads, and long-lived streams. Over plain HTTP, the proxy injects credentials without any intercept setup. See [HTTPS interception](/permit-mcp-gateway/http-egress-proxy/connecting-agents#https-interception).
 
 ## Troubleshooting
 
-If something isn't working, run the built-in diagnostics:
+Run the built-in diagnostics:
 
 ```bash
 asg proxy doctor acme
 ```
 
-`doctor` checks gateway reachability, whether the proxy is enabled, your stored-credential count, your local environment variables, the interception CA's status, your token file's permissions and expiry, and — when [agent identity](./security.mdx#agent-identity-and-drift-protection) is enabled — the agent's session registration and drift-block state. Each check reports **pass**, **warn**, or **fail** with a suggested fix.
+`asg proxy doctor` checks:
 
----
+- Gateway reachability and whether proxy mode is enabled.
+- The number of stored credentials.
+- Your local proxy environment variables.
+- The interception CA's status.
+- The token file's permissions and the token's expiry.
+- When [agent identity](/permit-mcp-gateway/http-egress-proxy/security#agent-identity-and-drift-protection) is enabled, the agent's session registration and whether the session is drift-blocked.
 
-## What's next
+Each check reports **pass**, **warn**, or **fail**. A check that does not pass includes a suggested fix.
 
-- [**Workflows & Rules**](./egress-rules.mdx) — refine workflows with domains, paths, methods, and trust levels.
-- [**Credentials & Connections**](./credentials.mdx) — OAuth connections, injection methods, and AWS request signing.
-- [**Authorization & Trust**](./authorization.mdx) — delegate access to agents through human consent and trust ceilings.
-- [**Connecting Agents**](./connecting-agents.mdx) — Docker, Kubernetes, and HTTPS interception setup.
+## Next steps \{#whats-next}
+
+- [Workflows and rules](/permit-mcp-gateway/http-egress-proxy/egress-rules): refine workflows with domains, paths, methods, and trust levels.
+- [Credentials and connections](/permit-mcp-gateway/http-egress-proxy/credentials): OAuth connections, injection methods, and AWS request signing.
+- [Authorization and trust](/permit-mcp-gateway/http-egress-proxy/authorization): let people delegate access to agents with consent and trust ceilings.
+- [Connecting agents](/permit-mcp-gateway/http-egress-proxy/connecting-agents): Docker, Kubernetes, and HTTPS interception setup.

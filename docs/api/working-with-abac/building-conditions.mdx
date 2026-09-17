@@ -1,195 +1,219 @@
 ---
 sidebar_position: 3
-title: Building Conditions
-description: "Build ABAC condition groups with the allOf, anyOf, and not logical operators, made of attributes and comparison operators."
+title: Build ABAC conditions
+sidebar_label: Building Conditions
+description: "Structure the conditions object of an ABAC condition set with the allOf, anyOf, and not logical operators and comparison operators."
 ---
 
-Conditions for an ABAC Policy can be very complex. We can have **many conditions in one group**, and several groups
-working together to produce a rule. For both user sets and resource sets, conditions within a group are made
-up of **attributes**, **attribute types** and **comparison operators**. Multiples of these can be joined together by logical operators
-within each group. Groups can also be combined together with logical operators.
+Write the `conditions` object that defines which users or resources belong to an attribute-based access control (ABAC) condition set. This page is for developers who create condition sets through the Permit API. It shows the shape of a condition, how logical operators nest, and valid and invalid examples. For the full operator list, see [ABAC condition operators](/api/working-with-abac/operators).
 
-## Condition Outline
+## Structure of a condition \{#condition-outline}
 
-Writing the API call payload, we start a condition definition by creating a key called **conditions** with an object as it's value.
+A condition set's request body holds its conditions under the `conditions` key, and the value is an object:
 
 ```js
 "conditions": {}
 ```
 
-## Working with Logical Operators
+A condition is built from three parts:
 
-Any of the logical operators below can be defined within the conditions object, where each of these take an array as a value.
-Within the array we define sub-conditions that are made up of **attributes**, **attribute types** and **comparison operators**.
+- An **attribute reference** in the form `<object>.<attribute>`, for example `user.location` or `resource.owner`.
+- A **comparison operator** and its operand, for example `{"in": ["US", "Canada"]}`.
+- Optional **logical operators** (`allOf`, `anyOf`, `not`) that combine several conditions.
 
-### allOf
+The object in an attribute reference follows the type of the set. A user set (`"type": "userset"`) reads `user.<attribute>`, and a resource set (`"type": "resourceset"`) reads `resource.<attribute>`. The attribute must be defined in your environment before a condition can use it, and the value comes from the user or resource record in Permit, or from the attributes your application passes in the `permit.check()` call. See [Define attributes](/how-to/build-policies/abac/defining-attributes).
 
-The **allOf** operator only returns **true** if **condition A _AND_ B are true**.
+## Combine conditions with logical operators \{#working-with-logical-operators}
 
-:::info example
-Only employees that are **located in the US** _**AND**_ have a **role of editor** can have access to resource X.
+Place a logical operator inside the `conditions` object. The `allOf` and `anyOf` operators take an array of sub-conditions. Each sub-condition is an attribute with a comparison operator, or another logical operator.
+
+### allOf: every condition must be true \{#allof}
+
+The `allOf` operator returns `true` only when condition A **and** condition B are true.
+
+:::info allOf example
+To match only the users who are **located in the US** **and** hold the **editor** role, put both conditions in `allOf`. `user.roles` holds the keys of the roles the user has, so the condition on it uses `array_contains`.
 :::
 
 ```javascript
 "conditions": {
     "allOf": [
-        ...
+        {"user.location": {"in": ["US"]}},
+        {"user.roles": {"array_contains": "editor"}}
     ]
 }
 ```
 
-### anyOf
+### anyOf: at least one condition must be true \{#anyof}
 
-The **anyOf** operator only returns **true** if **condition A _OR_ condition B** is true.
+The `anyOf` operator returns `true` when condition A **or** condition B is true.
 
-:::info example
-Only students with a **maths score higher than 80%** _**OR**_ students with an **average of 60% from all subjects** can participate.
+:::info anyOf example
+To match a student who has a **math score higher than 80** **or** an **average of 60 or more across all subjects**, put both conditions in `anyOf`.
 :::
 
 ```javascript
 "conditions": {
     "anyOf": [
-        ...
+        {"user.math_score": {"greater-than": 80}},
+        {"user.average_score": {"greater-than-equals": 60}}
     ]
 }
 ```
 
-### not
+### not: invert a condition \{#not}
 
-The **not** operator returns the inverted result. If **condition A** is **false**, it will return true.
+The `not` operator inverts the result of the condition nested inside it. When the nested condition is `false`, `not` returns `true`.
 
-:::info example
-If we go ahead and make a statement that says:
-
-**"A user with the Editor role can only request changed to the document."**
-
-will be reflected as:
-
-**"An Editor can request changes to the document and any other available resources."**
-
+:::info not example
+To match every user outside the US, wrap the condition "`user.location` is in `["US"]`" in `not`.
 :::
+
+The value of `not` is a single nested condition or logical operator object. It doesn't accept a primitive value such as a string or a number.
 
 ```javascript
 "conditions": {
-    "not": [
-        ...
-    ]
+    "not": {
+        "user.location": {"in": ["US"]}
+    }
 }
 ```
 
-:::tip
-It is **important to note** that when writing your conditions, you can **either** use the **alias versions** of the
-logical operators **(allOf, anyOf)**, or the **normal verbose** version **(and, or)**.
+:::tip Alternative operator keys
+You can write the AND and OR operators as `allOf` and `anyOf`, or as `and` and `or`. Both forms produce the same condition.
 :::
 
-## Working with Comparison Operators
+## Valid and invalid condition examples \{#working-with-comparison-operators}
 
-There are many ways to go about defining conditions within groups. Let's look at some examples, ones that are valid, and
-others that are not. This will give you a good understanding of how conditions can be built and how complex they might get.
+You can nest operators in two ways: start with a logical operator and put attributes inside it (logical-first), or start with an attribute and put logical operators inside its comparison (attribute-first). The examples below show both forms, with the reason each invalid example fails.
 
-### Logical-First Conditions
+### Logical-first conditions
 
-#### VALID
+#### Valid: nested allOf and anyOf \{#valid}
+
+The following condition is true for paying users who have the `editor` role or belong to the `marketing` department, in the US or Canada:
 
 ```js
 {
     "allOf": [
-        {"subject.paying": {"equals": True}},
+        {"user.paying": {"equals": true}},
         {
             "anyOf": [
-                {"subject.role": {"equals": "editor"}},
-                {"subject.department": {"equals": "marketing"}},
+                {"user.roles": {"array_contains": "editor"}},
+                {"user.department": {"equals": "marketing"}}
             ]
         },
-        {"environment.location": {"in": ["US", "Canada"]}},
+        {"user.location": {"in": ["US", "Canada"]}}
     ]
 }
 ```
 
-#### INVALID
+#### Invalid: unknown logical operator names \{#invalid}
 
-This version is invalid because the logical operator is invalid.
+The following condition is invalid because `all_of` and `any_of` are not logical operators. Use `allOf` and `anyOf` (or `and` and `or`).
 
 ```js
 {
     "all_of": [
-        {"subject.paying": {"equals": True}},
+        {"user.paying": {"equals": true}},
         {
             "any_of": [
-                {"subject.role": {"equals": "editor"}},
-                {"subject.department": {"equals": "marketing"}},
+                {"user.roles": {"array_contains": "editor"}},
+                {"user.department": {"equals": "marketing"}}
             ]
         },
-        {"environment.location": {"in": ["US", "Canada"]}},
+        {"user.location": {"in": ["US", "Canada"]}}
     ]
 }
 ```
 
-#### VALID
+#### Valid: logical operators inside an attribute \{#valid-1}
+
+The following user set condition is true when the check passes an hour between 9 and 12 or between 13 and 18, on any weekday other than Saturday and Sunday. Your application sends `current_hour` and `current_weekday` as user attributes in each `permit.check()` call, the same way the [time-based role example](/how-to/build-policies/abac/time-based-role) sends `current_time`:
 
 ```js
 {
     "allOf": [
         {
-            "subject.time": {
+            "user.current_hour": {
                 "anyOf": [{"between": [9, 12]}, {"between": [13, 18]}]
             }
         },
         {
-            "resource.weekday": {
+            "user.current_weekday": {
                 "not": {"anyOf": [{"equals": "saturday"}, {"equals": "sunday"}]}
             }
-        },
+        }
     ]
 }
 ```
 
-#### INVALID
+#### Valid: two conditions on the same attribute \{#invalid-1}
 
-This example is invalid because we specify the **user.age** to be between 15 and 18, but then set
-another condition to test for the age being greater than 48. This will throw an **Unbound Error**.
+The following condition is true when `user.age` is between 15 and 18, or greater than 40. Each item of the `or` array is a separate attribute condition:
 
 ```js
 {
     "or": [
         {"user.age": {"between": [15, 18]}},
-        {"user.age": {"greater-than": 40}},
+        {"user.age": {"greater-than": 40}}
     ]
 }
 ```
 
-### Attribute-First Conditions
+### Attribute-first conditions
 
-#### VALID
+#### Valid: and inside an attribute \{#valid-2}
 
-```js
-{"subject.time": {"and": [{"between": [9, 12]}, {"equals": "13:00"}]}}
-```
-
-#### INVALID
-
-This example is invalid because the conditional operator is invalid.
+The following condition is true when `user.current_hour` is between 9 and 12 and is not 10. Both comparisons inside `and` must hold for the same attribute value, so two comparisons that can't both be true, such as `{"between": [9, 12]}` and `{"equals": 13}`, make the condition impossible to satisfy.
 
 ```js
-{
-    "user.age": {
-        "or": [
-            {"between": [15, 18]},
-            {"greater-than-unsupported": 40},
-        ]
-    }
-}
+{"user.current_hour": {"and": [{"between": [9, 12]}, {"not-equals": 10}]}}
 ```
 
-#### VALID
+#### Invalid: unsupported comparison operator \{#invalid-2}
+
+The following condition is invalid because `greater-than-unsupported` is not a comparison operator. The API rejects a condition set whose operator key is not in the [comparison operator list](/api/working-with-abac/operators#comparison-operators).
 
 ```js
 {
     "user.age": {
         "or": [
             {"between": [15, 18]},
-            {"greater-than": 40},
+            {"greater-than-unsupported": 40}
         ]
     }
 }
 ```
+
+#### Valid: or inside an attribute \{#valid-3}
+
+The following condition is the attribute-first form of the same-attribute example: `user.age` is between 15 and 18, or greater than 40.
+
+```js
+{
+    "user.age": {
+        "or": [
+            {"between": [15, 18]},
+            {"greater-than": 40}
+        ]
+    }
+}
+```
+
+## Test a condition \{#test-a-condition}
+
+The API validates the shape of a condition when you create the set, and the policy decision point (PDP) evaluates it on each check. Test both:
+
+1. Create a condition set with the condition, with a `POST` request to `https://api.permit.io/v2/schema/{proj_id}/{env_id}/condition_sets`. See [Create condition sets with the API](/api/working-with-abac/condition-sets). An HTTP 422 response means the condition has an unknown operator or the wrong shape, and the response body names the field that failed.
+2. Read the set back with `GET /v2/schema/{proj_id}/{env_id}/condition_sets/{condition_set_id}`, and confirm that `conditions` holds what you sent.
+3. Grant a permission to the set with a [condition set rule](/api/working-with-abac/condition-set-rules), so a check can return `true` through it. Without a rule, a check returns `false` however well the condition matches.
+4. Run `permit.check()` for a user and resource whose attributes make the condition true, and confirm the check returns `true`. Then change one attribute so the condition is false, and confirm the check returns `false`. See [Check permissions](/how-to/enforce-permissions/check).
+
+If a check returns `false` when you expect `true`, open the decision log for that check: the `no_matching_usersets` and `no_matching_resourcesets` codes say which side of the rule didn't match. See [Denial codes in decision logs](/how-to/use-audit-logs/types-and-filtering#denial-codes-in-decision-logs).
+
+## Next steps
+
+- [Create condition sets](/api/working-with-abac/condition-sets) with these conditions.
+- [Review the full operator reference](/api/working-with-abac/operators).
+- [Walk through a complete ABAC example](/api/working-with-abac/examples) with a user set, a resource set, and a rule.

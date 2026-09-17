@@ -1,96 +1,107 @@
 ---
 sidebar_position: 2
-title: Use External Data Source
-description: "Load data from an external source into your PDPs with the OPAL Scope Config API and use it in custom Rego attributes."
+title: Use an external data source
+sidebar_label: Use External Data Source
+description: "Load data from an external source into your PDPs with the OPAL Scope Configurations API, and turn the data into custom attributes for Permit's generated Rego policies."
 ---
 
-Using the OPAL Scope Config API, you can set your own data sources to be fetched and loaded into your PDPs using OPAL.
-This allows using data without needing to share it with Permit's control plane.
+Load data from your own data source into the policy decision points (PDPs) of an environment, and use the data as attributes in your policies. This page is for developers who build attribute-based access control (ABAC) policies with data that stays in their own systems. The Open Policy Administration Layer (OPAL) in each PDP fetches the data directly from your source, so the data isn't sent to the Permit control plane.
 
-To make changes to the OPAL Scope, use the
-[OPAL Scope API](https://api.permit.io/v2/redoc#tag/Scope-Configurations). Simply include the
-project and environment IDs in the API endpoint URL - don't worry, our guide can show you where to find them.
+The example on this page loads country data from the [REST Countries API](https://restcountries.com) and adds a `region` attribute to each user, based on the user's `country` attribute.
 
-Out of the box, Permit automatically pulls in details about users, roles, and more from its cloud database to the PDP's policy engine,
-setting a solid foundation for your policy.<br />
+## Prerequisites
 
-To view the data structure loaded into PDPs used by default check out the API reference and the example [here](<https://api.permit.io/v2/redoc#tag/OPAL-Data-(-EAP-)>).
+- An environment API key ([Get your API key](/overview/get-api-key)), and the project ID or key and environment ID or key ([Get the project ID and environment ID](/api/examples/get-project-and-env))
+- [GitOps](/integrations/gitops/overview) connected to your project, so you can add custom Rego code to the policy repository
+- A user attribute named `country` on your users ([Define attributes](/how-to/build-policies/abac/defining-attributes))
+- A PDP container that runs with the `OPAL_SPLIT_ROOT_DATA` flag, as described in the next section
 
-## How to use External Data Sources in Permit
+## Run the PDP with OPAL_SPLIT_ROOT_DATA \{#run-the-pdp}
 
-To manage attributes from an external data-source and use them with Permit's Auto-Generated Rego Policies, you will need
-to set up small bindings beside the Scope configuration, this guide will also show you how to do that.<br/>
-_Any attributes in following rules will be merged with the attributes you store in Permit & the attributes you provide in the input._
-_The merge is done with the following rules input > custom > stored._<br/>
-The currently supported external attributes are:<br/>
+Pull the latest PDP image:
 
-1. `custom_user_attributes` - User attributes to be merged with the stored & input attributes.
-2. `custom_tenant_attributes` - Tenant attributes to be merged with the stored & input attributes.
-3. `custom_resource_attributes` - Resource attributes to be merged with the stored & input attributes.
-4. `custom_context_attributes` - Context attributes to be merged with the input attributes.
+```bash
+docker pull permitio/pdp-v2:latest
+```
 
-For instance, in this guide, we'll show you how to add information from around the world using data
-from [https://restcountries.com](https://restcountries.com).
+Run the container with `OPAL_SPLIT_ROOT_DATA=1`. Replace `<YOUR-PERMIT-API-KEY>` with your environment API key:
 
-We will get the data from the [Rest Countries API](https://restcountries.com) and set it as a
-under `countries` key in the data object using custom data source in the OPAL Scope.
-This will allow us to use the data in our Rego policies.
+```bash
+docker run -it \
+  -p 7766:7000 \
+  -p 8181:8181 \
+  --env PDP_API_KEY=<YOUR-PERMIT-API-KEY> \
+  --env OPAL_SPLIT_ROOT_DATA=1 \
+  permitio/pdp-v2:latest
+```
 
-1. Configure custom data sources using Permit API
-   You can specify the path in the json in which the fetched data will be stored using the `dst_path` attribute.
+The two port mappings do different jobs. `-p 7766:7000` publishes the PDP API, which your application queries for permission checks. `-p 8181:8181` publishes the bundled Open Policy Agent (OPA) API, which [Verify the data in the PDP](#verify-the-data) reads at `http://localhost:8181`. Without `-p 8181:8181`, OPA listens only inside the container and that verification request fails to connect. For the other OPA settings, see [Expose OPA from the PDP container](/how-to/deploy/deploy-to-production#exposing-opa-within-the-pdp).
 
-   ```
+## How external attributes merge with Permit attributes \{#how-to-use-external-data-sources-in-permit}
+
+The Rego policies that Permit generates read custom attributes from rules in the `permit.custom` package. Define any of these rules in the `custom` directory of your policy repository:
+
+| Rule | Merged with |
+|---|---|
+| `custom_user_attributes` | Stored user attributes and input user attributes |
+| `custom_tenant_attributes` | Stored tenant attributes and input tenant attributes |
+| `custom_resource_attributes` | Stored resource attributes and input resource attributes |
+| `custom_context_attributes` | Input context attributes |
+
+When the same attribute comes from more than one source, the check input takes precedence over the custom rule, and the custom rule takes precedence over the attributes stored in Permit.
+
+## 1. Add the data source to the OPAL scope \{#add-the-data-source}
+
+Send a `PUT` request to the [Set Scope Config API](https://api.permit.io/v2/redoc#tag/Scope-Configurations) at `https://api.permit.io/v2/projects/{project_id}/{env_id}/opal_scope`. Each entry in `data.entries` is a data source:
+
+| Field | Description |
+|---|---|
+| `url` | The URL OPAL fetches the data from |
+| `dst_path` | The path in the policy engine data where OPAL stores the fetched data |
+| `config` | Fetch options, such as request `headers` |
+
+The following request stores the name and region of every country under `/countries`. Replace `{project_id}`, `{env_id}`, and `permit_key_***` with your values:
+
+   ```bash
    curl --location --request PUT 'https://api.permit.io/v2/projects/{project_id}/{env_id}/opal_scope' \
-
    --header 'Content-Type: application/json' \
-
    --header 'Accept: application/json' \
-
    --header 'Authorization: Bearer permit_key_***' \
-
    --data '{
-
      "data": {
-
-          "entries": [
-
-               {
-
-                    "url": "https://restcountries.com/v3.1/all?fields=name,region",
-
-                    "dst_path": "/countries",
-
-                    "config": {
-
-                         "headers": {
-
-                              "Accept": "application/json"
-
-                         }
-
-                    }
-
-               }
-
-          ]
-
+       "entries": [
+         {
+           "url": "https://restcountries.com/v3.1/all?fields=name,region",
+           "dst_path": "/countries",
+           "config": {
+             "headers": {
+               "Accept": "application/json"
+             }
+           }
+         }
+       ]
      }
-
    }'
    ```
 
-   :::note
-   You can see the data stored inside OPA by running the following command:
+For all the options of a data source entry, see [OPAL data sources](https://docs.opal.ac/getting-started/running-opal/run-opal-server/data-sources).
+
+To see the scope configuration of the environment, send a `GET` request to the same URL ([Get Scope Config API](https://api.permit.io/v2/redoc#tag/Scope-Configurations/operation/get_scope_config)).
+
+### Verify the data in the PDP \{#verify-the-data}
+
+Read the data stored in OPA. The request needs the `-p 8181:8181` mapping from [Run the PDP with OPAL_SPLIT_ROOT_DATA](#run-the-pdp). OPA in the PDP requires a bearer token, so replace `<YOUR_API_KEY>` with the same environment API key you passed as `PDP_API_KEY`:
 
    ```bash
     curl --location --request GET 'http://localhost:8181/v1/data' \
-    --header 'Authorization: Bearer permit*key* {{secret}}'
+    --header 'Authorization: Bearer <YOUR_API_KEY>'
    ```
 
-   :::
+The response contains a `countries` key with the fetched data.
 
-2. You can define custom attributes in your rego policies,
-   to do so we need to add something similar to the following code in the `custom` directory in your [gitops](/integrations/gitops/overview) repo:
+## 2. Define a custom attribute in Rego \{#define-a-custom-attribute}
+
+Add Rego code to the `custom` directory of your [GitOps](/integrations/gitops/overview) policy repository. The following code builds a map from country name to region, and sets the `region` user attribute from the `country` attribute stored on the user:
 
    ```rego
    package permit.custom
@@ -105,45 +116,30 @@ This will allow us to use the data in our Rego policies.
    custom_user_attributes["region"] := region_by_common_name[data.users[input.user.key].attributes.country]
    ```
 
-   By adding this we can now know the region of the user based on the country they are in using the attributes we've loaded
-   from the external data source.
-   Similar to this you can add any custom attributes you want to use in your policies from any external data source.
-   For example, you can load data from stripe and add billing attributes for your users to use in your policies.
+Push the change to the branch of your environment. You can load other data the same way, for example billing data from your payment provider, and turn the data into attributes.
 
-3. Define ABAC conditions using by following this [guide](/how-to/build-policies/abac/building-abac-policy#step-3-defining-dynamic-role-user-set).
-4. That's it! The custom attributes are now used in your policies.
+To use the data directly in a custom Rego rule, reference the `data.countries` path. For example:
 
-[API Docs](https://api.permit.io/v2/redoc#tag/Scope-Configurations) for Scope Request (API still in beta):
-
-![](/img/features/projects-and-env/scope-api.png)
-
-You can view the full OPAL Scope documentation **[here](https://docs.opal.ac/getting-started/running-opal/run-opal-server/data-sources)**.
-
-:::info
-**Custom scopes are supported from PDP v0.2.15**
-:::
-
-Make sure you have pulled the latest PDP container.
-
-```bash
-docker pull permitio/pdp-v2:latest
+```rego
+data.countries[0].region == "Americas"
 ```
 
-Make sure you have enabled the _`OPAL_SPLIT_ROOT_DATA`_ flag when running the container.
+## 3. Use the custom attribute in ABAC conditions \{#use-the-custom-attribute}
 
-```bash
-OPAL_SPLIT_ROOT_DATA=1
-```
+Define a user set with a condition on the `region` attribute. See [Define a dynamic role (user set)](/how-to/build-policies/abac/building-abac-policy#step-3-defining-dynamic-role-user-set).
 
-For example, if you are running it with docker, it will look like the example below:
+## Verify the policy
 
-```bash
-docker run -e PDP_API_KEY=<YOUR-PERMIT-API-KEY> -e OPAL_SPLIT_ROOT_DATA=1 permitio/pdp-v2:latest
-```
+Run `permit.check()` for a user whose `country` maps to the region in your condition. The check returns `true` when the user set grants the action. For a user in another region with no other role that allows the action, the check returns `false`. See [Check permissions with permit.check()](/how-to/enforce-permissions/check).
 
-If the GitOps feature is activated in your account, you can enhance your Rego policies by integrating data from the custom
-data source as illustrated below:
+## Scope Configurations API reference \{#scope-api-reference}
 
-```json
-data.countries[0].capital == "Bridgetown"
-```
+The [Scope Configurations API](https://api.permit.io/v2/redoc#tag/Scope-Configurations) has `GET`, `PUT`, and `DELETE` operations on `/v2/projects/{proj_id}/{env_id}/opal_scope`. The `PUT` request body has a `data` object with the data source entries:
+
+![Set Scope Config API reference: path parameters proj_id and env_id, a request body with a data object of data source entries, and a 200 response with data, id, organization_id, project_id, environment_id, created_at, and updated_at](/img/features/projects-and-env/scope-api.png)
+
+## Next steps
+
+- [Load custom data for policy decisions](/how-to/manage-data/loading-data)
+- [Build an ABAC policy](/how-to/build-policies/abac/building-abac-policy)
+- [Write custom Rego policies](/integrations/gitops/custom_policy)

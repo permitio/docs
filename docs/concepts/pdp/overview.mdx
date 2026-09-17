@@ -1,65 +1,56 @@
 ---
 sidebar_position: 1
-title: Overview
-description: "What the Permit.io policy decision point (PDP) is, how the managed Cloud PDP, self-hosted Edge PDPs, and Nexus PDP differ, and how to deploy and run them."
+title: PDP overview
+description: "Compare the Permit.io policy decision point (PDP) types (managed Cloud PDP, self-hosted Edge PDP, and Permit Nexus PDP), connect an SDK to one, and find the PDP deployment, caching, and AuthZen references."
 ---
-
-# Permit's PDP (Policy Decision Point)
-
-A policy decision point (PDP) is a network node that answers authorization queries using policies and contextual data.
-Every permission check your application makes goes to a PDP, so PDPs need to be highly available and close to the services that query them.
-
-The Permit PDP is your authorization microservice. It bundles OPA, the OPAL client, and an API server.
-
-You run the PDP as a Docker container. Deployed next to your services, it answers checks locally, without a network round trip to Permit. As a sidecar on the same host, checks go over the loopback interface, so they carry no network latency and stay in the sub-millisecond range.
-Like all of Permit's customer-deployed components, the [Permit PDP is open source](https://github.com/permitio/PDP) and available from [Docker Hub](https://hub.docker.com/r/permitio/pdp-v2).
-
-## Use the PDP
-You can use the PDP for testing and enforcement in several ways:
-
-### PDP deployment types: Cloud, Edge, and Nexus \{#pdp-deployment-types-cloud-vs-edge}
-
-When we talk about PDP deployment, we distinguish between:
-
-- **Managed Cloud PDP** – A fully managed, multi-tenant PDP hosted by Permit.io at `https://cloudpdp.api.permit.io`.  
-  Ideal for **fast onboarding**, **low-ops production workloads**, and **standard RBAC/ReBAC** authorization at scale.
-- **Edge PDP (self-hosted PDP)** – PDP containers you run as a **sidecar**, **centralized service**, or **cluster** inside your own VPC, Kubernetes cluster, or VMs.  
-  Ideal when you need **tight latency within your own network**, **ABAC**, **custom data sources**, **read-your-own-writes**, or **PDP-level callbacks and healthchecks**.
-
-- **[Nexus PDP](#nexus-pdp)** – A self-hosted PDP (`permitio/pdp-v3`) with an embedded on-disk database, kept in sync over a durable event stream.  
-  Ideal for **large data sets**, **relationship-heavy ReBAC**, and decisions that **never depend on reaching Permit**.
-
-Most teams **start** with the Managed Cloud PDP to get value quickly, and then **introduce Edge PDPs** for latency-sensitive or advanced scenarios.
-
-### Nexus PDP
-
-The [**Permit Nexus PDP**](/concepts/pdp/nexus-pdp) is a ground-up rewrite of the PDP runtime. You run one container per Permit environment in your own network. It keeps a local, on-disk copy of that environment's policy and authorization data and answers checks with no network call in the decision path. [Product overview](https://www.permit.io/nexus-pdp)
-
-**How it differs from the container PDP:**
-
-- **Data on disk, not in memory.** The container PDP holds your data inside OPA's in-memory JSON document, so a large environment needs a large PDP. Nexus PDP stores the data in an embedded database on disk and keeps a bounded, configurable cache in memory.
-- **Built for relationship queries.** Relationship data lives in a store built for graph traversal, which OPA queries over loopback while it evaluates policy.
-- **Sync that survives disconnection.** Updates arrive already containing the change, and the control plane retains each PDP's unacknowledged changes until that PDP applies them. There is no re-fetch after a reconnect.
-- **Availability over freshness.** If the control plane is unreachable, the PDP keeps answering from its local copy and reports how stale it is.
-
-**What it supports today:** RBAC, ReBAC with role derivation, and multi-tenancy, through the same check, bulk check, user permissions, authorized users, and AuthZen endpoints as the container PDP. Its capability envelope matches the managed Cloud PDP, deployed in your network. ABAC, policy as code, local facts, URL-based enforcement, and custom data sources are container PDP capabilities today.
-
-**When to choose it:** use Nexus PDP for large data sets and relationship-heavy authorization that you want to run in your own network. Use the container PDP when you need ABAC, custom Rego, read-your-own-writes, or the other capabilities listed on the [feature parity page](/concepts/pdp/nexus-pdp-feature-parity). Both connect to the same Permit environment and enforce the same policies, so you can run them side by side.
-
-:::info Early access, with parity in progress
-Nexus PDP is in early access and enabled per account; [contact us](mailto:support@permit.io) to turn it on. Feature parity with the Classic PDP (the container PDP) is in progress and ships continually.
-:::
-
-Read more: [Architecture](/concepts/pdp/nexus-pdp-architecture) · [How it works](/concepts/pdp/nexus-pdp-how-it-works) · [Feature parity](/concepts/pdp/nexus-pdp-feature-parity) · [Deployment](/concepts/pdp/nexus-pdp-deployment) · [Configuration](/concepts/pdp/nexus-pdp-configuration)
-
-### Managed Cloud PDP
-
-Permit.io provides a managed, production-ready Cloud PDP at `https://cloudpdp.api.permit.io` which is available globally.
-
-You can connect quickly with the Cloud PDP when first trying out Permit, and you can also continue using it in production for many workloads.
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+
+A policy decision point (PDP) is the Permit.io service that answers authorization queries from your application, using your policies and data. This page is for developers who choose a PDP type, connect an SDK to it, and look up PDP caching and AuthZen API behavior.
+
+The page has three parts: a comparison of the [PDP deployment types](#pdp-deployment-types-cloud-vs-edge) and the SDK setup for each, the [production deployment models](#production-deployment-models) for self-hosted PDPs, and reference sections for [decision caching](#pdp-caching-mechanism) and [AuthZen compatibility](#authzen-compatibility).
+
+Every permission check your application makes goes to a PDP, so a PDP needs to be available and close to the services that query it. When a self-hosted PDP runs as a sidecar on the same host as your service, checks travel over the loopback interface, so they carry no network latency and stay in the sub-millisecond range. The self-hosted [Edge PDP is open source](https://github.com/permitio/PDP) and available on [Docker Hub](https://hub.docker.com/r/permitio/pdp-v2).
+
+## PDP deployment types: Cloud, Edge, and Nexus \{#pdp-deployment-types-cloud-vs-edge}
+
+Permit offers three PDP types. All three answer the same permission checks for the policies you define in Permit.
+
+| PDP type | Where it runs | Choose it when you need |
+| --- | --- | --- |
+| **Managed Cloud PDP** | Hosted by Permit at `https://cloudpdp.api.permit.io` | Fast onboarding and production role-based access control (RBAC) or relationship-based access control (ReBAC) without running infrastructure |
+| **Edge PDP** (container PDP, `permitio/pdp-v2`) | Your VPC, Kubernetes cluster, or VMs, as a sidecar, a centralized service, or a cluster | Attribute-based access control (ABAC), custom data sources, read-your-own-writes, PDP-level callbacks and health checks, or low latency inside your own network |
+| **Permit Nexus PDP** (`permitio/pdp-v3`) | Your network, one container per Permit environment | Large data sets, relationship-heavy ReBAC, and decisions that never depend on reaching Permit |
+
+Most teams start with the managed Cloud PDP, then add Edge PDPs for latency-sensitive workloads or for capabilities the Cloud PDP does not support.
+
+The Edge PDP bundles three components in one container: Open Policy Agent (OPA), the Open Policy Administration Layer (OPAL) client, and an API server.
+
+## Nexus PDP
+
+[Permit Nexus PDP](/concepts/pdp/nexus-pdp) is a self-hosted PDP with an embedded on-disk database. It is an additional deployment option, not a replacement for the Edge PDP. You run one Nexus PDP container per Permit environment in your own network. Nexus PDP keeps a local copy of that environment's policy and data on disk and answers checks with no network call in the decision path. See the [Nexus PDP product overview](https://www.permit.io/nexus-pdp).
+
+Nexus PDP differs from the Edge PDP in four ways:
+
+- **Data on disk, not in memory.** The Edge PDP holds your data in OPA's in-memory JSON document, so a large environment needs a large PDP. Nexus PDP stores the data in an embedded database on disk and keeps a cache of configurable size in memory.
+- **A store built for relationship queries.** Nexus PDP keeps relationship data in a database built for graph traversal, which OPA queries over loopback while it evaluates policy.
+- **Sync that resumes after disconnection.** Each update contains the changed data, and the control plane keeps each Nexus PDP's unacknowledged changes until that PDP applies them. A reconnecting Nexus PDP does not fetch its data again.
+- **Decisions during control-plane outages.** If the control plane is unreachable, Nexus PDP keeps answering from its local copy and reports how stale the copy is.
+
+Nexus PDP supports RBAC, ReBAC with role derivation, and multi-tenancy through the same check, bulk check, user permissions, authorized users, and AuthZen endpoints as the Edge PDP. Its capabilities match the managed Cloud PDP, running in your network. ABAC, policy as code, local facts, URL-based enforcement, and custom data sources require the Edge PDP. Both PDP types connect to the same Permit environment, so you can run them side by side. For the full comparison, see [Nexus PDP feature parity](/concepts/pdp/nexus-pdp-feature-parity).
+
+:::info Nexus PDP availability
+As of September 2026, Nexus PDP is in early access and Permit enables it per account. To request access, [book a call with Permit](https://www.permit.io/demo).
+:::
+
+Read more about Nexus PDP: [architecture](/concepts/pdp/nexus-pdp-architecture), [how Nexus PDP syncs data](/concepts/pdp/nexus-pdp-how-it-works), [deployment](/concepts/pdp/nexus-pdp-deployment), and [configuration](/concepts/pdp/nexus-pdp-configuration).
+
+## Managed Cloud PDP
+
+Permit runs a managed Cloud PDP at `https://cloudpdp.api.permit.io`. You can use the Cloud PDP to try Permit, and you can keep using it in production for RBAC and ReBAC workloads.
+
+To connect an SDK to the Cloud PDP, set the PDP URL to `https://cloudpdp.api.permit.io` and replace `[your-api-key]` with your environment API key ([Get your API key](/overview/get-api-key)):
 
 <Tabs groupId="language">
 <TabItem value="python" label="Python">
@@ -77,7 +68,7 @@ permit = Permit(
 <TabItem value="nodejs" label="Node.js">
 
 ```typescript
-import { Permit } from "permit";
+import { Permit } from "permitio";
 
 const permit = new Permit({
   token: "[your-api-key]",
@@ -90,14 +81,15 @@ const permit = new Permit({
 ```go
 package main
 
-import "github.com/permitio/permit-golang/pkg/permit"
 import "github.com/permitio/permit-golang/pkg/config"
+import "github.com/permitio/permit-golang/pkg/permit"
 
 func main() {
-    PermitConfig := config.NewConfigBuilder("[your-api-key]")
-        .WithPdpUrl("https://cloudpdp.api.permit.io")
-        .Build()
-    Permit := permit.New(PermitConfig)
+	permitConfig := config.NewConfigBuilder("[your-api-key]").
+		WithPdpUrl("https://cloudpdp.api.permit.io").
+		Build()
+	permitClient := permit.NewPermit(permitConfig)
+	_ = permitClient
 }
 ```
 
@@ -119,7 +111,7 @@ Permit permit = new Permit(
 <TabItem value="dotnet" label="DotNet">
 
 ```csharp
-using Permit;
+using PermitSDK;
 
 Permit permit = new Permit(
   "[your-api-key]",
@@ -142,28 +134,36 @@ permit = Permit.new(
 </TabItem>
 </Tabs>
 
-:::note
-Cloud PDP supports **RBAC and ReBAC** policy models. **ABAC is not supported** on Cloud PDP.
+:::note Cloud PDP supports RBAC and ReBAC, not ABAC
+The Cloud PDP evaluates RBAC and ReBAC policies. The Cloud PDP does not evaluate ABAC policies. For capabilities and limits, see [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
 
-For detailed capabilities and limits, see [Cloud PDP Capabilities](/concepts/pdp/cloud-pdp-capabilities).
-
-We recommend deploying an **Edge PDP (self-hosted PDP)** inside your network for **ABAC** policies, **read-your-own-writes** semantics, and specialized or latency-sensitive production deployments.
+For ABAC policies, read-your-own-writes, or latency-sensitive production deployments, deploy an Edge PDP inside your network.
 :::
 
-### Run an Edge PDP With Docker
-You can run an **Edge PDP** on your local machine as a container on [Docker Desktop](https://docs.docker.com/get-docker/). You will need this to use **ABAC** / advanced policies, custom data sources, and consistency features such as **Send Consistent Updates (read-your-own-writes)**.
+## Run an Edge PDP with Docker \{#run-an-edge-pdp-with-docker}
 
-To run the PDP use the following command:
+Run an Edge PDP as a container on your machine when you need ABAC policies, custom data sources, or read-your-own-writes with [Send Consistent Updates](/how-to/manage-data/local-facts-uploader).
 
-```bash
-docker run -it \
-  -p 7766:7000 \
-  --env PDP_API_KEY=<your-permit-api-key> \
-  --env PDP_DEBUG=True \
-  permitio/pdp-v2:latest
-```
+Prerequisites:
 
-In your application code, use the following PDP address in the `Permit` client to perform authorization queries.
+- [Docker Desktop](https://docs.docker.com/get-docker/) or another Docker runtime
+- Your environment API key ([Get your API key](/overview/get-api-key))
+
+1. Start the Edge PDP. Replace `<your-permit-api-key>` with your environment API key. The command maps the PDP's port `7000` to port `7766` on your machine:
+
+   ```bash
+   docker run -it \
+     -p 7766:7000 \
+     --env PDP_API_KEY=<your-permit-api-key> \
+     --env PDP_DEBUG=True \
+     permitio/pdp-v2:latest
+   ```
+
+   The `:latest` tag resolves to whichever image Permit published last, so a container restart can pull a different PDP version than the one you tested. For a production deployment, replace `:latest` with a released tag from [PDP releases on GitHub](https://github.com/permitio/PDP/releases), and change that tag as a deliberate upgrade.
+
+2. Confirm the Edge PDP is running: run `curl -i http://localhost:7766/healthy`. A healthy PDP returns HTTP `200` and a body whose top-level `status` field is `ok`, with a per-component status for the PDP's Horizon and OPA processes. A PDP with a component that is not up returns HTTP `503` and `status` set to `error`.
+
+3. In your application code, set the PDP URL of the `Permit` client to `http://localhost:7766`, and replace `[your-api-key]` with your environment API key:
 
 <Tabs groupId="language">
 <TabItem value="python" label="Python">
@@ -181,7 +181,7 @@ permit = Permit(
 <TabItem value="nodejs" label="Node.js">
 
 ```typescript
-import { Permit } from "permit";
+import { Permit } from "permitio";
 
 const permit = new Permit({
   token: "[your-api-key]",
@@ -194,14 +194,15 @@ const permit = new Permit({
 ```go
 package main
 
-import "github.com/permitio/permit-golang/pkg/permit"
 import "github.com/permitio/permit-golang/pkg/config"
+import "github.com/permitio/permit-golang/pkg/permit"
 
 func main() {
-    PermitConfig := config.NewConfigBuilder("[your-api-key]")
-        .WithPdpUrl("http://localhost:7766")
-        .Build()
-    Permit := permit.New(PermitConfig)
+	permitConfig := config.NewConfigBuilder("[your-api-key]").
+		WithPdpUrl("http://localhost:7766").
+		Build()
+	permitClient := permit.NewPermit(permitConfig)
+	_ = permitClient
 }
 ```
 
@@ -223,7 +224,7 @@ Permit permit = new Permit(
 <TabItem value="dotnet" label="DotNet">
 
 ```csharp
-using Permit;
+using PermitSDK;
 
 Permit permit = new Permit(
   "[your-api-key]",
@@ -246,45 +247,37 @@ permit = Permit.new(
 </TabItem>
 </Tabs>
 
+For health checks, ports, and decision-log settings of a local Edge PDP, see [Run a local authorization microservice](/overview/local-authorization-microservice).
 
-## Production Deployment Models
+## Production deployment models for Edge PDPs \{#production-deployment-models}
 
-Permit.io supports all **Edge PDP** layouts and provides the missing layers on-top of open-source PDP solutions (such as OpenPolicyAgent).  
-These layouts describe **self-hosted PDPs that you run inside your own infrastructure**.  
-These layers include policy delivery and updating, supporting data collection, application level SDKs, application level instrumentation and more.
+Edge PDPs run inside your own infrastructure. Permit adds the layers that open-source PDPs such as Open Policy Agent lack: policy delivery and updates, data collection, application SDKs, and application instrumentation. To compare layouts and pick one for production, see [Choose a PDP deployment model](/how-to/deploy/overview).
 
 :::info New to PDPs?
-If you're new to Permit, follow this path:
+Follow this path:
 
-- **Step 1** – [Run your First Policy Check (Managed Cloud PDP)](/overview/perform-policy-check-with-cloud-pdp) to see Permit in action with the Managed Cloud PDP.
-- **Step 2** – [Run Local Authorization Microservice (Edge PDP)](/overview/local-authorization-microservice) to deploy an Edge PDP in your own environment.
+1. [Run your first policy check with the managed Cloud PDP](/overview/perform-policy-check-with-cloud-pdp).
+2. [Run a local authorization microservice](/overview/local-authorization-microservice) to deploy an Edge PDP in your own environment.
 :::
 
-:::warning Cloud PDP – when not to use it
-The Managed Cloud PDP is production-ready for many RBAC/ReBAC workloads, but you should **prefer an Edge PDP** when you need:
+:::warning When to use an Edge PDP instead of the Cloud PDP
+The managed Cloud PDP serves many RBAC and ReBAC production workloads. Use an Edge PDP instead when you need any of these:
 
-- **ABAC** policies or custom external data sources
-- **Read-your-own-writes** guarantees using [Send Consistent Updates](/how-to/manage-data/local-facts-uploader)
-- **PDP-level callbacks / health-based consistency hooks** into your infrastructure
-- **Hard latency SLOs strictly within your own VPC or on-prem network**
+- ABAC policies or custom external data sources
+- Read-your-own-writes guarantees using [Send Consistent Updates](/how-to/manage-data/local-facts-uploader)
+- PDP-level callbacks or health-based consistency hooks into your infrastructure
+- Latency targets that you must meet inside your own VPC or on-premises network
 
-For these cases, deploy an **Edge PDP (self-hosted PDP)** as a sidecar, centralized service, or cluster close to your applications.
+For these cases, deploy an Edge PDP as a sidecar, a centralized service, or a cluster close to your applications.
 :::
 
-:::info
-Custom cloud PDP deployments are available to enterprise tier customers.
-Those can include different regions, cloud providers, custom SSL/TLS configurations or other specifications.
-
-Please reach out to us at [support@permit.io](mailto:support@permit.io), or schedule a call via this link: [https://calendly.com/permitio/](https://calendly.com/permitio/)
+:::info Custom Cloud PDP deployments
+To discuss a Cloud PDP deployment in a different region or cloud provider, or with a custom TLS configuration, [book a call with Permit](https://www.permit.io/demo) or write to [support@permit.io](mailto:support@permit.io).
 :::
 
+### Hosted as an Edge PDP sidecar \{#hosted-as-an-edge-pdp-sidecar}
 
-### Hosted as an Edge PDP Sidecar
-
-The simplest way to integrate PDPs into a microservices architecture is as sidecars;
-meaning each microservice has a sidecar container next to it which it can query for policy.
-
-For more information, see the [sidecar deployment guide](/how-to/deploy/overview#sidecar-edge-pdp).
+In a sidecar layout, each microservice has its own PDP container next to it and sends policy queries to that PDP. For setup, see the [sidecar deployment guide](/how-to/deploy/overview#sidecar-edge-pdp).
 
 ```mermaid
 flowchart LR
@@ -301,11 +294,9 @@ flowchart LR
     style pdp fill:#ff8841,color:#1a1a1f;
 ```
 
-### Centralized Edge PDP
+### Centralized Edge PDP \{#centralized-edge-pdp}
 
-You can deploy a centralized PDP to handle authorization queries from multiple services.
-
-This way is simple to set up and manage, but as the number of services grows, the PDP can become a bottleneck.
+A centralized Edge PDP answers authorization queries from multiple services. A centralized PDP is quick to set up and manage. As the number of services grows, the single PDP can become a bottleneck.
 
 ```mermaid
 flowchart LR
@@ -324,12 +315,9 @@ flowchart LR
     style pdp fill:#ff8841,color:#1a1a1f;
 ```
 
-### Cluster of Edge PDPs
+### Cluster of Edge PDPs \{#cluster-of-edge-pdps}
 
-For high availability and scalability, you can deploy a cluster of PDPs behind a load balancer.
-
-You can use our PDP Helm chart to create a Kubernetes deployment with multiple PDPs.
-For more information, see the [Deploying using Helm guide](/how-to/deploy/cloud-hosts/helm).
+For high availability and scale, run several Edge PDPs behind a load balancer. The PDP Helm chart creates a Kubernetes deployment with multiple PDPs. See [Deploy the PDP with Helm](/how-to/deploy/cloud-hosts/helm).
 
 ```mermaid
 flowchart LR
@@ -355,42 +343,57 @@ flowchart LR
     style lb fill:#55525e,color:#fff;
 ```
 
-### Sharded Edge PDPs
+### Sharded Edge PDPs \{#sharded-edge-pdps}
 
-For truly massive data sets needed in the PDP, you can apply sharding to split the data between multiple PDPs within the same cluster.
+When one Edge PDP cannot hold all the data it needs, split the data between multiple PDPs in the same cluster with sharding. See [Split data across PDPs with sharding or chaining](/how-to/deploy/overview#deploy-as-a-cluster-with-sharding--chaining).
 
-## PDP Caching Mechanism
+## PDP caching mechanism \{#pdp-caching-mechanism}
 
-The PDP server includes a configurable caching mechanism that significantly improves performance by reducing redundant policy evaluations. 
-When enabled, the cache stores results of policy decisions with a configurable time-to-live (TTL), providing performance benefits for frequently evaluated permissions.
+The Edge PDP can cache policy decisions for a configurable time to live (TTL), so repeated checks skip policy evaluation. Caching is off by default.
 
-You can configure the cache to use either an in-memory store for single instance deployments or Redis for distributed caching across multiple PDP instances. 
+| Cache store | Use it for |
+| --- | --- |
+| In-memory | A single PDP instance |
+| Redis | Sharing cached decisions across multiple PDP instances |
 
-For the `/allowed/bulk` endpoint, the cache is applied to each individual query within the bulk request. 
-The cache is shared with the `/allowed` endpoint, meaning individual permission checks within a bulk request can benefit from previously cached results from single `/allowed` calls and vice versa.
+The cache applies to these endpoints:
 
-Note that while caching significantly improves performance, it may lead to temporarily inaccurate results if permissions change during the cache TTL period.
+| Endpoint | Cache behavior |
+| --- | --- |
+| `/allowed` | Caches each check |
+| `/allowed/bulk` | Caches each check in the bulk request, and shares cache entries with `/allowed` |
+| `/user-permissions` | Caches each query |
+| `/authorized_users` | Caches each query |
 
-**Supported APIs:**
-- ✅ `/allowed`
-- ✅ `/allowed/bulk`
-- ✅ `/user-permissions`
-- ✅ `/authorized_users`
+:::warning Cached decisions can be stale
+If a permission changes while a decision for it is cached, the PDP returns the old decision until the cache entry's TTL expires.
+:::
 
+To turn on caching and set the TTL, see [Cache configuration](/concepts/pdp/configuration#pdp_cache_store).
 
-For detailed configuration options, see the [Cache Configuration](/concepts/pdp/configuration#pdp_cache_store) section.
+## AuthZen compatibility \{#authzen-compatibility}
 
-## AuthZen Compatibility
+The PDP implements the [OpenID AuthZen Authorization API 1.0](https://openid.github.io/authzen/), a standard API between policy enforcement points (PEPs) and PDPs. Any AuthZen client can send authorization requests to a Permit PDP.
 
-Permit's PDP is compatible with the [OpenID AuthZen Authorization API 1.0](https://openid.github.io/authzen/) specification, providing a standardized way for Policy Enforcement Points (PEPs) to communicate with Policy Decision Points (PDPs). 
-The AuthZen protocol enables interoperability between different authorization systems by defining a common API interface.
+Every AuthZen endpoint requires the header `Authorization: Bearer <API key>`. Each AuthZen example uses two placeholders: replace `YOUR_API_KEY` with your environment API key, and `http://localhost:7766` with your PDP URL.
 
-### Access Evaluation
+A request that omits a required field, or that carries invalid JSON such as a trailing comma before a closing brace, gets HTTP `400` with the AuthZen error code `invalid_request`. A request with a missing or wrong bearer token gets HTTP `401` with the code `unauthorized`.
 
-Check if a subject can perform an action on a resource.
+| AuthZen operation | Method and path | Required body fields |
+| --- | --- | --- |
+| Access evaluation | `POST /access/v1/evaluation` | `subject`, `action`, `resource` |
+| Access evaluations | `POST /access/v1/evaluations` | `evaluations`, with `subject`, `action`, and `resource` set at the top level or in each item |
+| Subject search | `POST /access/v1/search/subject` | `subject` (with `type`), `action`, `resource` |
+| Resource search | `POST /access/v1/search/resource` | `subject`, `action`, `resource` (with `type`) |
+| Action search | `POST /access/v1/search/action` | `subject`, `resource` |
+| Discovery | `GET /.well-known/authzen-configuration` | None |
+
+### AuthZen access evaluation \{#access-evaluation}
+
+Check whether a subject can perform an action on a resource:
 
 ```bash
-curl -X POST http://localhost:7766/v1/access/evaluation \
+curl -X POST http://localhost:7766/access/v1/evaluation \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
@@ -400,22 +403,22 @@ curl -X POST http://localhost:7766/v1/access/evaluation \
       "type": "document",
       "id": "doc123",
       "properties": { "tenant": "default", "is_public": true }
-    },
+    }
   }'
 ```
 
 Response: `{"decision": true}`
 
-:::info
-Notice that we pass the `tenant` property along with inline ABAC attributes via the `properties` field.
+:::info Tenant and attributes in AuthZen requests
+The PDP reads the `tenant` key from `resource.properties` as the tenant of the check. The PDP passes the other keys in `properties` to the policy as resource attributes for ABAC.
 :::
 
-### Bulk Access Evaluations
+### AuthZen bulk access evaluations \{#bulk-access-evaluations}
 
-Evaluate multiple access requests with top-level attributes.
+Evaluate several access requests in one call. Fields set at the top level, such as `subject`, apply to every item in `evaluations`:
 
 ```bash
-curl -X POST http://localhost:7766/v1/access/evaluations \
+curl -X POST http://localhost:7766/access/v1/evaluations \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
@@ -439,48 +442,50 @@ curl -X POST http://localhost:7766/v1/access/evaluations \
 
 Response: `{"evaluations": [{"decision": true}, {"decision": false}]}`
 
-### Subject Search
+### AuthZen subject search \{#subject-search}
 
-Find subjects that can perform an action on a resource.
+Find the subjects that can perform an action on a resource:
 
 ```bash
-curl -X POST http://localhost:7766/v1/subjects \
+curl -X POST http://localhost:7766/access/v1/search/subject \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
+    "subject": {"type": "user"},
     "action": {"name": "read"},
     "resource": {
       "type": "document",
       "id": "doc123",
       "properties": {"tenant": "default"}
-    },
+    }
   }'
 ```
 
-Response: `{"subjects": [{"type": "user", "id": "alice@example.com"}]}`
+The PDP returns the matching subjects in a `results` array, for example `{"results": [{"type": "user", "id": "alice@example.com"}], "page": {}}`.
 
-### Resource Search
+### AuthZen resource search \{#resource-search}
 
-Find resources a subject can access for a given action.
+Find the resources a subject can access with a given action:
 
 ```bash
-curl -X POST http://localhost:7766/v1/resources \
+curl -X POST http://localhost:7766/access/v1/search/resource \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
     "subject": { "type": "user", "id": "alice@example.com" },
     "action": {"name": "read"},
+    "resource": {"type": "document"}
   }'
 ```
 
-Response: `{"resources": [{"type": "document", "id": "doc123"}]}`
+The PDP returns the matching resources in a `results` array, for example `{"results": [{"type": "document", "id": "doc123"}], "page": {}}`.
 
-### Action Search
+### AuthZen action search \{#action-search}
 
-Find actions a subject can perform on a resource.
+Find the actions a subject can perform on a resource:
 
 ```bash
-curl -X POST http://localhost:7766/v1/actions \
+curl -X POST http://localhost:7766/access/v1/search/action \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
@@ -489,32 +494,34 @@ curl -X POST http://localhost:7766/v1/actions \
       "type": "document",
       "id": "doc123",
       "properties": {"tenant": "default"}
-    },
+    }
   }'
 ```
 
-Response: `{"actions": [{"name": "read"}, {"name": "write"}]}`
+The PDP returns the permitted actions in a `results` array, for example `{"results": [{"name": "read"}, {"name": "write"}], "page": {}}`.
 
-:::info
-The AuthZen protocol is fully compatible with Permit's existing policy models. 
-All policy changes made through the Permit dashboard or API are immediately available through the AuthZen endpoints.
-:::
+AuthZen endpoints evaluate the same policies as the other PDP endpoints. A policy change you make in the Permit dashboard or API applies to AuthZen requests after the change reaches the PDP.
 
-## Powered by OPA+OPAL
+## OPA and OPAL in the Edge PDP \{#powered-by-opaopal}
 
-Permit.io's PDP orchestration is powered by [OPAL](https://opal.ac) - an open source project - developed by the team at Permit.io and supported by a large community of developers and users.
-Check out this talk with the primary authors of OPAL to learn more about the unique realtime architecture:
+The Edge PDP receives policy and data updates through [OPAL](https://opal.ac), an open-source project that Permit develops with its community. In the talk below, the primary authors of OPAL explain its real-time update architecture.
 
 <iframe
 	width="560"
 	height="315"
 	src="https://www.youtube.com/embed/A5adHlkmdC0"
-	title="YouTube video player"
+	title="OPAL architecture talk by the primary authors of OPAL"
 	frameborder="0"
 	allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
 	allowfullscreen
 ></iframe>
 
-OPAL's built-in [separation of the data plane from the control plane](/concepts/control-plane-and-data-plane), enables Permit.io users to enjoy the benefits of a fully distributed PDP solution, without having to be dependant on the availability of the Permit.io cloud, or sharing any data with it.
+OPAL separates the [control plane from the data plane](/concepts/control-plane-and-data-plane). The control plane runs in Permit's cloud, and your PDPs run in your network. Your PDPs answer authorization queries from their local policy and data, so decisions don't depend on reaching Permit's cloud at request time.
 
+## Next steps
 
+- [Run your first policy check with the managed Cloud PDP](/overview/perform-policy-check-with-cloud-pdp)
+- [Choose a PDP deployment model](/how-to/deploy/overview)
+- [Container PDP configuration reference](/concepts/pdp/configuration)
+- [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities)
+- [Permit Nexus PDP](/concepts/pdp/nexus-pdp)

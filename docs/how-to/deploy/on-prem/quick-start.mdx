@@ -1,41 +1,37 @@
 ---
-title: "Quick Start Guide"
-description: "Get Permit Platform running in 5-10 minutes"
+title: "On-premises quick start"
+sidebar_label: "Quick Start Guide"
+description: "Install the self-hosted Permit Platform with default settings: set three values, push the images, run the installer, and sign in."
 ---
 
-:::info Enterprise Only
-This section is only relevant to Enterprise customers who acquired an on-prem license.
+Install the self-hosted Permit Platform with default settings. This page is for operators who have a prepared cluster and want the shortest path to a running platform. The [installation guide](/how-to/deploy/on-prem/installation) covers every option and explains each step.
+
+:::info Enterprise on-premises license required
+The on-premises installer is available to Enterprise customers with an on-premises license. To get a license, [contact Permit.io](https://www.permit.io/demo).
 :::
 
-# Quick Start Guide
+## Prerequisites \{#what-you-need}
 
-Get your Permit Platform up and running in just a few minutes.
+Complete the [on-premises prerequisites](/how-to/deploy/on-prem/prerequisites) first. You need:
 
-## What You Need
+- A Kubernetes or OpenShift cluster with at least 8 CPU cores, 32 GB of RAM, and 100 GB of storage.
+- A Git repository for policies (GitHub, GitLab, or Bitbucket) with an SSH deploy key that has write access.
+- `kubectl` and `helm` on your workstation, plus `docker` to push images to a registry.
+- A container registry that the cluster can pull from, unless you use the OpenShift internal registry.
+- The installer package from the download link Permit.io sends you.
 
-:::info Important
-Complete the [prerequisites setup](/how-to/deploy/on-prem/prerequisites) before starting installation.
-:::
+## 1. Extract the installer package \{#step-1-download--extract}
 
-### Quick Checklist
-- ✅ Kubernetes cluster (8+ CPU, 32GB+ RAM, 100GB+ storage)
-- ✅ Git repository for policies (GitHub/GitLab/Bitbucket) - **REQUIRED**
-- ✅ SSH key pair for Git access - **REQUIRED**
-- ✅ kubectl and helm installed
-- ✅ Docker installed
-
-## Installation in 3 Steps
-
-### Step 1: Download & Extract
 ```bash
 # Download the package (using your provided link)
 tar -xzf permit-platform-on-prem-installer.tar.gz
 cd permit-platform-on-prem-installer
 ```
 
-### Step 2: Configure & Install
+## 2. Set the required values \{#step-2-configure--install}
 
-**Required Configuration:**
+Open `charts/permit-platform/values.yaml` and replace the three placeholders:
+
 ```bash
 # Edit configuration file (REQUIRED)
 vi charts/permit-platform/values.yaml
@@ -46,15 +42,14 @@ vi charts/permit-platform/values.yaml
 # 3. CHANGEME_SSH_PRIVATE_KEY → your SSH private key content
 ```
 
-:::danger Critical
-The installer will fail if any placeholders remain unchanged. You must replace:
+| Placeholder | Replace with |
+|---|---|
+| `CHANGEME_FRONTEND_DOMAIN` | The domain users open in a browser, for example `app.company.com` |
+| `CHANGEME_GIT_REPO_URL` | The SSH URL of your policy repository |
+| `CHANGEME_SSH_PRIVATE_KEY` | The private key of the repository's deploy key |
 
-- `CHANGEME_FRONTEND_DOMAIN` with your actual domain
-- `CHANGEME_GIT_REPO_URL` with your Git repository SSH URL
-- `CHANGEME_SSH_PRIVATE_KEY` with your SSH private key content
-:::
+After the change, the values look like this:
 
-**Example configuration:**
 ```yaml
 global:
   frontendDomain: "app.company.com"  # Replace CHANGEME_FRONTEND_DOMAIN
@@ -68,36 +63,16 @@ permitServices:
       -----END OPENSSH PRIVATE KEY-----
 ```
 
-**Choose Your Deployment Target:**
-
-:::tip
-The installer automatically detects your environment and configures accordingly. Choose the option that matches your cluster type.
+:::warning The installer stops on unreplaced placeholders
+If `values.yaml` still contains `CHANGEME_FRONTEND_DOMAIN`, `CHANGEME_GIT_REPO_URL`, or `CHANGEME_SSH_PRIVATE_KEY`, the installer exits before it deploys anything. Keep the `|` after `sshPrivateKey:`. Without it, the Helm install fails because the key is no longer multi-line.
 :::
 
-```bash
-# Standard Kubernetes (EKS, GKE, AKS, on-premise) - Most common
-./scripts/install-permit-platform.sh
+## 3. Push the images to your registry
 
-# Red Hat OpenShift (ROSA, OCP, OpenShift Dedicated)
-./scripts/install-permit-platform.sh --openshift
+Skip this step on OpenShift when you use the OpenShift internal registry.
 
-# Local development with Kind cluster (testing only)
-./scripts/install-permit-platform.sh --kind
+On other targets, the installer exits when `global.imageRegistry` in `values.yaml` is empty. Push the images from the package to your registry. The push script also sets `imageRegistry` to the registry path:
 
-# Auto-generate TLS certificates (for custom domains)
-./scripts/install-permit-platform.sh --generate-tls
-
-# See all available options and help
-./scripts/install-permit-platform.sh --help
-```
-
-**Using Private Container Registry? (GKE/Artifactory/Harbor)**
-
-:::info Private registry setup
-If you're using Google GKE with Artifact Registry, JFrog Artifactory, Harbor, or another private registry, follow these additional steps before installation.
-:::
-
-**Step 1: Push images to your private registry**
 ```bash
 # Push all images to your registry (run from installer directory)
 ./scripts/push-images-to-registry.sh us-central1-docker.pkg.dev/project/repo  # GKE/GAR
@@ -105,52 +80,40 @@ If you're using Google GKE with Artifact Registry, JFrog Artifactory, Harbor, or
 ./scripts/push-images-to-registry.sh artifactory.company.com/permit         # Artifactory
 ```
 
-**Step 2: Configure authentication (Artifactory/Harbor only - skip for GKE/EKS/AKS)**
+For a registry that needs a username and password, such as Artifactory or Harbor, create an image pull secret before you install. See [Add credentials for a registry that requires authentication](/how-to/deploy/on-prem/installation#important-registry-authentication-for-kubernetes).
 
-GKE, EKS, and AKS authenticate automatically. For Artifactory/Harbor:
-```bash
-# Create Kubernetes secret for registry authentication
-kubectl create secret docker-registry registry-credentials \
-  --docker-server=artifactory.company.com \
-  --docker-username=YOUR_USERNAME \
-  --docker-password=YOUR_TOKEN \
-  --namespace=permit-platform
+## 4. Run the installer
 
-# Then add to values.yaml:
-# global:
-#   imagePullSecrets:
-#     - registry-credentials
-```
+If you pushed the images in step 3, run the installer with `--skip-images` and the flag for your cluster:
 
-**Step 3: Run installer with --skip-images flag**
 ```bash
 # IMPORTANT: Use --skip-images since images are already in your registry!
 
-# For GKE:
+# For GKE, EKS, AKS, or other Kubernetes with private registry:
 ./scripts/install-permit-platform.sh --gke --skip-images
 
-# For other Kubernetes with private registry:
-./scripts/install-permit-platform.sh --skip-images
-
 # For OpenShift with private registry:
-./scripts/install-permit-platform.sh --openshift --skip-images
+./scripts/install-permit-platform.sh --openshift --skip-openshift-registry --skip-images
 ```
 
-:::warning Important
-The `--skip-images` flag tells the installer to skip loading images from tar files since they're already in your registry. Without this flag, the installer will try to load images from local tar files, which will cause version mismatches.
-:::
+If you use the OpenShift internal registry, or Kind for local testing, run the installer without `--skip-images`:
 
-For complete private registry setup instructions, see [Installation Guide Step 3.5](/how-to/deploy/on-prem/installation#step-35-push-images-to-private-registry-gke-example).
+```bash
+# Red Hat OpenShift (ROSA, OCP, OpenShift Dedicated) with the internal registry
+./scripts/install-permit-platform.sh --openshift
 
-:::note
-**Installation time:** 10-15 minutes
+# Local development with Kind cluster (testing only)
+./scripts/install-permit-platform.sh --kind
 
-**What you'll see:** Progress updates, image loading, and service deployment status
-:::
+# See all available options and help
+./scripts/install-permit-platform.sh --help
+```
 
-### Step 3: Access Platform
+The [installation guide](/how-to/deploy/on-prem/installation#step-4-run-installation) describes every flag.
 
-After installation completes, you'll see:
+## 5. Verify the installation \{#step-3-access-platform}
+
+When the installer finishes, it prints the frontend URL and the admin credentials:
 
 ```bash
 [SUCCESS] 🎉 Permit Platform On-Prem deployed successfully!
@@ -158,22 +121,24 @@ After installation completes, you'll see:
 [INFO] Access your Permit Platform at:
 [INFO]   • Frontend: https://your-configured-domain.com
 [INFO]     - Admin user: admin/[Generated Password]
-[INFO]   
-[INFO] For .local domains, add to your /etc/hosts file:
-[INFO]   127.0.0.1 your-configured-domain.local
-[INFO]   
-[INFO] Services deployed: 35 total
-[INFO] Installation time: ~10-15 minutes
+[INFO]     - Or register a new account
+
+[INFO] Additional services:
+[INFO]   • OpenSearch Dashboard: https://your-configured-domain.com/opensearch/ (no authentication required)
+[INFO]   • RabbitMQ Dashboard: https://your-configured-domain.com/rabbitmq/ (permit/[Generated Password])
+[INFO]   • Keycloak Admin: https://your-configured-domain.com/auth (admin/[Generated Password])
+[INFO]   • SCIM Service: https://your-configured-domain.com/scim
+
+[INFO] Important:
+[INFO]   • For Kind clusters (development), add to /etc/hosts:
+[INFO]     127.0.0.1 your-configured-domain.com
 ```
 
-## Next Steps
+Check that every pod in the namespace shows `Running`, then open `https://<your-frontend-domain>` and sign in as `admin` with the password from the output. The platform prompts you to create your first organization and project.
 
-1. **Open the platform** in your web browser
-2. **Complete the setup wizard** - create your organization
-3. **Create admin users** and configure initial policies
-4. **Test the integration** with your applications
+On a Kind cluster, add the domain to `/etc/hosts` as the output shows.
 
-## Essential Commands
+## Commands for checking the deployment \{#essential-commands}
 
 ```bash
 # Check all services status
@@ -191,25 +156,19 @@ kubectl logs -f deployment/keycloak -n permit-platform
 kubectl get svc,ingress -n permit-platform
 
 # Uninstall platform (if needed)
-helm uninstall permit-platform -n permit-platform
+helm uninstall permit-platform third-party-services migrations -n permit-platform
 kubectl delete namespace permit-platform
 ```
 
-## Need More Control?
+:::danger Deleting the namespace deletes the platform data
+`kubectl delete namespace permit-platform` removes the PostgreSQL, OpenSearch, and Keycloak persistent volume claims in the namespace. Depending on your storage class reclaim policy, the policies, users, and decision logs are deleted with them. Back up first. See the [on-premises management guide](/how-to/deploy/on-prem/management).
+:::
 
-For advanced installation options including multi-server setup, custom configurations, and automated deployment, see the [detailed installation guide](/how-to/deploy/on-prem/installation).
+## Next steps
 
-## Something Not Working?
+- [Install with custom options](/how-to/deploy/on-prem/installation): TLS certificates, namespaces, DNS, and registry credentials.
+- [Deploy PDPs in your cluster](/how-to/deploy/on-prem/pdp-deployment): connect policy decision points (PDPs) to the platform.
+- [Manage the on-premises platform](/how-to/deploy/on-prem/management): day-to-day operations and upgrades.
+- [Troubleshoot the on-premises platform](/how-to/deploy/on-prem/troubleshooting).
 
-Check the [troubleshooting guide](/how-to/deploy/on-prem/troubleshooting) for common issues and solutions.
-
----
-
-**Ready for production?** Continue to [Management Guide](/how-to/deploy/on-prem/management) to learn about day-to-day operations.
-
-## Support
-
-Need help with installation?
-
-- 📧 **Email**: support@permit.io
-- 💬 **Slack**: [Join our community](https://io.permit.io/slack)
+For installation help, email support@permit.io or ask in the [Permit community on Slack](https://io.permit.io/slack).

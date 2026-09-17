@@ -1,96 +1,123 @@
 ---
-description: "Test policies from the CLI by replaying audit logs against a PDP or generating end-to-end test configurations."
+title: "Policy testing commands in the Permit CLI"
+sidebar_label: "Policy Testing"
+description: "Reference for the Permit CLI commands that compare a PDP's decisions with your audit logs and generate end-to-end policy tests."
 ---
 
-# Policy Testing
+Test your policy from the terminal with the `permit test` commands. This reference is for developers who change a policy or deploy a new policy decision point (PDP) and want to confirm that permission decisions stay correct.
 
-This collection of commands helps you test and validate your authorization policies.
+Before you use these commands, install the Permit CLI and sign in with `permit login`. See [Install and use the Permit CLI](/how-to/permit-cli). Each command also accepts `--api-key` instead of the stored credentials.
 
+## `permit test run audit`
 
-### `permit test run audit`
+`permit test run audit` reads recent decisions from your environment's audit logs, sends the same permission checks to a PDP, and compares the results. Use it to confirm that a policy change or a new PDP makes the same decisions as the PDP that wrote the audit logs.
 
-This command reads your recent authorization decision logs from the Permit API and runs the same checks against a PDP instance to verify consistency between environments.
+| Flag | Alias | Default | Description |
+|---|---|---|---|
+| `--pdp-url <string>` | `-p` | `http://localhost:7766` | The URL of the PDP to run the checks against. |
+| `--time-frame <number>` | `-t` | `24` | The number of hours of audit logs to read, from `6` to `72`. |
+| `--source-pdp <string>` | `-s` | All PDPs | The ID of the PDP whose audit logs to read. |
+| `--users <string...>` | `-u` | All users | The user keys to read audit logs for. Accepts several values. |
+| `--resources <string...>` | `-r` | All resources | The resources to read audit logs for. Accepts several values. |
+| `--tenant <string>` | | All tenants | The tenant to read audit logs for. |
+| `--action <string>` | `-a` | All actions | The action to read audit logs for. |
+| `--decision <allow \| deny>` | `-d` | Both | The decision to read audit logs for. |
+| `--max-logs <number>` | `-m` | `1000` | The maximum number of audit log entries to process. |
+| `--api-key <string>` | | Stored credentials | The API key of the environment. |
 
-The command is particularly useful for validating that policy changes don't break existing authorization behavior and for testing a new PDP instance against production decisions.
+The command prints the number of matches and differences. For each difference, the command lists the check and both decisions. When every decision matches, the command prints `All decisions match!`.
 
-**Arguments (Optional)**
+Compare the last 24 hours of decisions with a PDP on your machine:
 
-- `--api-key <string>` - API Key to be used for test generation.
-- `--pdp-url <string>` - URL of the PDP to verify against (default: `http://localhost:7766`)
-- `--time-frame <number>` - Number of hours to fetch audit logs for (Between 6 and 72, `default: 24`)
-- `--source-pdp <string>` - ID of the PDP to filter audit logs from
-- `--users <string[]>` - Filter logs by specific users (can provide multiple)
-- `--resources <string[]>` - Filter logs by specific resources (can provide multiple)
-- `--tenant <string>` - Filter logs by specific tenant
-- `--action <string>` - Filter logs by specific action
-- `--decision <allow | deny>` - Filter logs by decision outcome
-- `--max-logs <number>` - Maximum number of logs to process (useful for limiting large audit operations)
-
-**Examples:**
-
-Basic test against local PDP using the last 24 hours of audit logs:
-
-```
-$ permit test run audit --pdp-url <http://localhost:7766>
+```bash
+$ permit test run audit --pdp-url http://localhost:7766
 ```
 
-Testing against custom PDP URL with filters:
+Compare 48 hours of allowed `read` decisions with a PDP at a custom URL:
 
-```
-$ permit test run audit --pdpUrl <http://my-pdp.example.com:7766> --timeFrame 48 --action read --decision allow
+```bash
+$ permit test run audit --pdp-url http://my-pdp.example.com:7766 --time-frame 48 --action read --decision allow
 ```
 
-Testing with multiple users and resources:
+Compare the decisions of two users on two resources:
 
 ```
 $ permit test run audit --users john@example.com alice@example.com --resources document:123 folder:456
 ```
 
-Testing with a limit on the number of logs processed:
+Compare at most 500 decisions:
 
 ```
 $ permit test run audit --max-logs 500
 ```
 
-## Execute E2E tests
+To load test a PDP with the traffic from your audit logs instead of comparing decisions, use the [Audit Log Replay API](/how-to/use-audit-logs/audit-log-replay).
 
-Simulate real-world user interactions and business flows to see how policies affect overall application behavior.
+## Generate end-to-end tests \{#execute-e2e-tests}
+
+The `permit test generate` commands create test cases from your policy, and a test file that runs them in your test framework.
 
 ### `permit test generate e2e`
 
-Generate end‑to‑end test configurations (and optionally test data) for your policy.
+`permit test generate e2e` generates end-to-end test cases for your policy. The test cases are permission checks with the decision the policy should return. Without `--dry-run`, the command also creates the test users and data in your Permit environment.
 
-**Arguments (Optional):**
+:::warning Use `--dry-run` outside a test environment
+Without `--dry-run`, `permit test generate e2e` creates users and data in the environment you signed in to. Run the command without `--dry-run` only in an environment that holds test data.
+:::
 
-- `--api-key <string>` - API Key to be used for test generation.
-- `--dry-run <boolean>` - If set, generates test cases and mock data **without** making any changes in Permit.
-- `--models <string_array>` - List of model names to generate tests for. `default: RBAC`.
-- `--path <string>` - Filesystem path where the generated JSON config should be saved (recommended).
+| Flag | Default | Description |
+|---|---|---|
+| `--models <string...>` | `RBAC` | The policy models to generate test cases for. |
+| `--path <string>` | None | The path of the JSON file to save the test configuration to. Saving the file is recommended. |
+| `--dry-run` | `false` | Generates the test cases without creating data in Permit. |
+| `--snippet <jest \| pytest \| vitest>` | None | Also generates a test file for this framework that runs the test cases. |
+| `--api-key <string>` | Stored credentials | The API key of the environment. |
 
-> Note: All flags are optional. If you omit `--models`, only the default RBAC model will be processed. If you omit `--dry-run`, real data and users will be created in Permit.
-
-**Examples:**
-
-Generate tests for the default RBAC model, and save the config to disk. Creates end‑to‑end tests for the `RBAC` model and writes the generated JSON config to `logb.json`
+Generate test cases for the role-based access control (RBAC) model, create the test data, and save the configuration to `logb.json`:
 
 ```bash
   $ permit test generate e2e --models=RBAC --path=logb.json
 ```
 
-Generate tests for RBAC, save the config, but don't apply changes (dry run). This is the same as above, but in dry‑run mode, so no changes are made in Permit.
+Generate the same test cases and configuration file without creating data in Permit:
 
 ```bash
   $ permit test generate e2e --models=RBAC --path=logb.json --dry-run
 ```
 
-Generate tests for the RBAC model without saving the config (dry run). This function generates test cases and mock data for `RBAC`, does not save a config file or apply changes, and prints to the terminal.
+Generate test cases without creating data or saving a file. The command prints the test cases to the terminal:
 
 ```bash
   $ permit test generate e2e --models=RBAC --dry-run
 ```
 
-Generate and apply tests for the RBAC model with default settings. Runs end‑to‑end test generation for `RBAC` using real data (no dry run) and without writing a config file, and prints to the terminal.
+Generate test cases and create the test data without saving a file:
 
 ```bash
   $ permit test generate e2e --models=RBAC
 ```
+
+### `permit test generate code-sample`
+
+`permit test generate code-sample` generates a test file that reads a saved test configuration, runs each check against a PDP, and asserts the expected decision.
+
+| Flag | Required | Default | Description |
+|---|---|---|---|
+| `--framework <jest \| pytest \| vitest>` | Yes | | The test framework of the generated file. |
+| `--config-path <string>` | No | `authz-test.json` | The path of the test configuration that `permit test generate e2e --path` saved. |
+| `--path <string>` | No | None | The path to save the generated test file to. |
+| `--pdp-url <string>` | No | `http://localhost:7766` | The PDP that the tests send checks to. |
+| `--api-key <string>` | No | Stored credentials | The API key of the environment. |
+
+Without `--path`, the command prints the test file to the terminal.
+
+:::warning The generated test file contains your API key
+The command writes the environment API key into the test file as a string. Anyone who reads the file can change that environment's policy through the Permit API. Replace the key with an environment variable before you commit the file.
+:::
+
+## Related pages
+
+- [Replay audit logs against a PDP](/how-to/use-audit-logs/audit-log-replay)
+- [Run a PDP container with the Permit CLI](/how-to/permit-cli/permit-cli-pdp#permit-pdp-run)
+- [View and filter audit logs](/how-to/use-audit-logs/types-and-filtering)
+- [Permit CLI command index](/how-to/permit-cli#full-command-list)

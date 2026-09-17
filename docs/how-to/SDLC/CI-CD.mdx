@@ -1,47 +1,43 @@
 ---
 sidebar_position: 1
-title: Manage Policy Life Cycle - CI/CD
-description: "Set up CI/CD for policy changes using Permit environments, GitOps branches, and OPAL syncing before merging into production."
+title: Manage the policy life cycle with CI/CD
+description: "Promote policy changes through Permit environments in a CI/CD pipeline with the create environment and copy environment APIs, GitOps branches, and PDPs bound by API key."
 sidebar_label: CI/CD
 ---
 
-Continuous integration and deployment ensure that your authorization system can adapt quickly to software changes and user requirements.
-This practice helps automate the update and deployment processes, which minimizes the risk of errors and maximizes operational efficiency.
+Promote authorization policy changes from development to production the way a continuous integration and continuous deployment (CI/CD) pipeline promotes code. This page is for platform engineers and developers who design the pipeline. It explains how Permit environments map to pipeline stages, and which API calls and Permit CLI commands run each stage.
 
-Enhancing policy management with Continuous Integration and Continuous Deployment (CI/CD) processes allows us
-to maintain a consistent and secure authorization layer. Managing and merging policies into various environments while ensuring
-consistency and compliance, syncing them to Git and deployments, and utilizing the power of policy as code allows us to
-handle authorization swiftly and effectively.
+## How CI/CD works in Permit \{#cicd-in-permit}
 
-### CI/CD in Permit
+Permit models the policy life cycle with [projects and environments](/manage-your-account/projects-and-env):
 
-Automating updates and deployments through CI/CD ensures that changes are applied consistently and without human error across all environments.
-This automation speeds up the deployment process and enhances security by reducing the risk of misconfigurations.
-We primarily manage the policy life cycle as part of a CI process by
-using [projects and environments](/manage-your-account/projects-and-env)
-together with the [Environment API.](https://api.permit.io/v2/redoc#tag/Environments)
-By working with Permit environments for CI, CD is automatically achieved using [OPAL](https://github.com/permitio/opal),
-as every environment is automatically deployed to PDPs mapped to them
-(via their [API secret key](/manage-your-account/projects-and-env#fetching-and-rotating-the-api-key)).
+- **Continuous integration (CI):** each pipeline stage works in its own environment. You create and copy environments with the [Environments API](https://api.permit.io/v2/redoc#tag/Environments) or the [`permit env` commands](/how-to/permit-cli/permit-cli-envs).
+- **Continuous deployment (CD):** each policy decision point (PDP) uses the API key of one environment. The PDP syncs the policy and data of that environment through the Open Policy Administration Layer ([OPAL](https://github.com/permitio/opal)). When the environment changes, the PDPs that use its API key receive the change without a redeploy. To find the API key of an environment, see [Copy and rotate the environment API key](/manage-your-account/projects-and-env#fetching-and-rotating-the-api-key).
 
-### Version Control and Consistency with GitOps
+## Pipeline stages and the calls that run them
 
-Maintaining version control and ensuring consistency across environments is essential when managing complex systems.
-Using a Git-like model for environments, where each environment corresponds to a branch, helps teams manage development,
-staging, and production configurations separately yet consistently. This approach allows for editing, reviewing,
-and merging policies as code within a Git repository, ensuring transparency and collaboration.
+| Stage | Permit API | Permit CLI |
+|---|---|---|
+| Create a preview or staging environment | `POST /v2/projects/{proj_id}/envs` ([Create Environment](https://api.permit.io/v2/redoc#tag/Environments/operation/create_environment)) | [`permit env create`](/how-to/permit-cli/permit-cli-envs#permit-env-create) |
+| Copy the source environment into the preview environment | `POST /v2/projects/{proj_id}/envs/{env_id}/copy` with `target_env.existing` set to the preview environment, or `target_env.new` to create and copy in one call ([Copy Environment](https://api.permit.io/v2/redoc#tag/Environments/operation/copy_environment)) | [`permit env copy`](/how-to/permit-cli/permit-cli-envs#permit-env-copy) |
+| Test the policy in the preview environment | Run permission checks against a PDP that uses the preview environment API key | [`permit test run audit`](/how-to/permit-cli/permit-cli-test#permit-test-run-audit) |
+| Merge the preview environment into the target environment | `POST /v2/projects/{proj_id}/envs/{env_id}/copy` with `target_env.existing` and `conflict_strategy` | [`permit env copy`](/how-to/permit-cli/permit-cli-envs#permit-env-copy) with `--conflict-strategy` |
+| Remove the preview environment | `DELETE /v2/projects/{proj_id}/envs/{env_id}` | [`permit env delete`](/how-to/permit-cli/permit-cli-envs#permit-env-delete) |
 
-We achieve this by allowing you to automatically map branches when you [connect your Permit Project to a repository](/integrations/gitops/github),
-facilitating efficient lifecycle management and leveraging Git's robust version control system.
+For request bodies, the objects a copy includes, and conflict strategies, see [Copy and merge environments](/manage-your-account/creating-environments#coping--merging-environments). For how to test a policy before a merge, see [Test authorization policies](/how-to/SDLC/authz-testing).
 
-:::info
-Note that usually you maintain **two lines of branches** -
+## Version control with GitOps \{#version-control-and-consistency-with-gitops}
 
-- your application branches
-- your policy branches (Permit Environments).
+When you [connect a Permit project to a Git repository](/integrations/gitops/github), each environment maps to a branch of the repository. You edit, review, and merge policy as code in Git, and you keep a Git history of every change to development, staging, and production policy.
 
-These are connected together by the PDP and PEPs (e.g. SDKs, gateways) deployed into your application,
-which **use the environment API-secret-keys to sync to a specific env**.
+You maintain two lines of branches:
+
+- Your application branches, with your application code.
+- Your policy branches, which are Permit environments.
+
+The PDP and the policy enforcement points (PEPs) in your application, such as SDKs and API gateways, connect the two lines. The PDP uses the API key of one environment, so the PDP enforces the policy branch of that environment.
+
+:::info Application and policy branches
 
 ```mermaid
 flowchart TD
@@ -55,8 +51,11 @@ flowchart TD
 
 :::
 
-:::note
-You can migrate an application to a new policy by simply pointing its PDP to a new environment.
+### Move an application to a new policy
+
+To move an application to a new policy, copy the current environment into a new environment, and configure the PDP of the application with the API key of the new environment. The PDP then syncs the new environment instead of the old one.
+
+:::note Move a PDP to a new environment
 
 ```mermaid
 flowchart LR
@@ -68,10 +67,9 @@ flowchart LR
 
 :::
 
-### CI Flows
+## CI flows \{#ci-flows}
 
-Every CI flow should start with the source environment, which would be copied to a staging or preview environment,
-tested, reviewed, approved, then merged into the target environment (e.g. production).
+Every CI flow starts from a source environment. The flow copies the source environment to a staging or preview environment, where you change, test, review, and approve the policy. The flow then merges the staging or preview environment into the target environment, such as production.
 
 ```mermaid
     gitGraph LR:
@@ -88,13 +86,18 @@ tested, reviewed, approved, then merged into the target environment (e.g. produc
         commit id:"ongoing changes"
 ```
 
-There are two types of CI flows to consider:
+Choose one of two CI flows:
 
-- **Staging flow** - where you have one environment in which you apply policy changes/test before merging into the target environment (e.g. Production).
-  This is simply achieved by using the `copy-env` API.
-- **Preview Branches flow [Recommended]** - where you dynamically create an environment for each policy "pull-request".
-  This is achieved by using both the `create-env` API (to create the Permit Preview Environment) and the `copy-env`
-  API (Once to copy from the source environment to the newly created preview environment and once after testing to merge into the target environment (e.g., Production)).
+| Flow | How it works | Calls |
+|---|---|---|
+| Staging flow | One long-lived staging environment. You apply and test policy changes in staging, then merge staging into the target environment. | Copy environment |
+| Preview environment flow (recommended) | Your pipeline creates a preview environment for each policy pull request, copies the source environment into it, tests it, and merges it into the target environment. | Create environment, then copy environment twice: once from the source environment and once into the target environment |
 
-When using these staging or preview environments, you can use each environment's access control to gate who can affect the policy at each stage.
-For example, you can give only the developer who triggered the creation of the CI flow access to the preview environment.
+Use environment access control to limit who can change the policy at each stage. For example, give only the developer who started the CI flow access to the preview environment. See [Manage access to an environment](/manage-your-account/projects-and-env#managing-access-to-an-environment).
+
+## Next steps
+
+- [Copy and merge environments](/manage-your-account/creating-environments#coping--merging-environments)
+- [Test authorization policies](/how-to/SDLC/authz-testing)
+- [Environment commands in the Permit CLI](/how-to/permit-cli/permit-cli-envs)
+- [Set up GitOps with GitHub](/integrations/gitops/github)

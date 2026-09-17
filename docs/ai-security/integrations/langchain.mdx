@@ -1,223 +1,249 @@
 ---
-title: LangChain Integration
+title: Secure a LangChain app with Permit.io
 sidebar_label: LangChain
-description: A step-by-step implementation guide for securing LangChain-based AI applications using Permit.io. This tutorial walks through a real-world healthcare assistant, enforcing access control across prompts, documents, actions, and responses using Permit's ABAC policies and LangChain components.
+description: "Build a Python healthcare assistant with LangChain and langchain-permit that checks Permit.io policies on prompts, retrieved documents, external actions, and responses."
 ---
 
-import TimelineWrapper from "../../../src/components/timeline/TimelineWrapper";
-import TimelineStep from "../../../src/components/timeline/TimelineStep";
+Build a Python healthcare assistant with LangChain that checks Permit.io policies at each of the four perimeters of the [Four-Perimeter Framework](/ai-security/framework). This tutorial is for AI agent builders who already use LangChain and want to add authorization to a chain. It uses the [`langchain-permit`](https://github.com/permitio/langchain-permit) package for JSON Web Token (JWT) validation and permission checks, and the Permit Python SDK `filter_objects` method for document filtering.
 
-# LangChain Integration
+The finished app does four things in order:
 
-**LangChain** has changed how developers build AI applications, offering powerful abstractions for chaining LLMs, tools, and memory. However, as soon as an app touches sensitive data, like patient records, private business documents, or support workflows, it needs access control.
+| Perimeter | What the app enforces | Component |
+| --- | --- | --- |
+| Prompt filtering | Only users who are 18 or older, opted in to AI, and have daily quota left can send a prompt | `LangchainJWTValidationTool`, `LangchainPermissionsCheckTool` |
+| Retrieval-augmented generation (RAG) data protection | The LLM only receives documents the user can `view` | `Permit.filter_objects` |
+| Secure external access | Only users who are 18 or older with `can_schedule` set can book an appointment | `LangchainPermissionsCheckTool` |
+| Response enforcement | The phrase "high blood pressure" is redacted from the answer | A custom LangChain output parser |
 
-In this guide, we'll show how to wrap LangChain workflows with **Permit.io** to enforce policy-based controls at every level using Permit's Four Perimeter Model. 
+## Prerequisites and tech stack \{#prerequisites-and-tech-stack}
 
-:::info
-This guide uses Permit's [Four Perimeter Model for AI Access Control](/ai-security/framework). 
-These perimeters help ensure:
+- A [Permit.io account](https://app.permit.io/) and your environment API key. See [Get your API key](/overview/get-api-key).
+- A running Edge policy decision point (PDP). The policies in this tutorial use attribute-based access control (ABAC) user sets, and the Cloud PDP doesn't evaluate ABAC. See [Run an Edge PDP with Docker](/concepts/pdp/overview#run-an-edge-pdp-with-docker) and [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+- A JSON Web Key Set (JWKS) endpoint and a signed test JWT whose claims include `key` and an `attributes` object. [Create a test JWKS and signed JWT](#create-a-test-jwks-and-signed-jwt) shows how to generate both locally.
+- An [OpenAI API key](https://platform.openai.com/docs) for the chat model and embeddings.
+- Python 3.9 or later and [Poetry](https://python-poetry.org/docs/).
 
-- Only eligible users can interact with your AI agent
-- Sensitive data is protected based on user roles
-- External actions are never triggered without authorization
-- Outputs are policy-compliant before reaching the user
+### Tools and services \{#tools--services}
 
-:::
-
-By the end of this tutorial, you'll have a fully functional, policy-aware LangChain app ready for production.
-
-## Prerequisites and Tech Stack
-### Tools & Services
-
-| Tool | Purpose |
+| Tool | Role in this tutorial |
 | --- | --- |
-| [LangChain](https://www.langchain.com/) | LLM chaining framework |
-| [Permit.io](https://app.permit.io/) | Policy-as-code access control |
-| [OpenAI](https://platform.openai.com/docs) | LLM + embeddings for RAG |
-| [FAISS](https://github.com/facebookresearch/faiss) | Vector store for document retrieval |
-| [Langchain-Permit](https://github.com/permitio/langchain-permit) | Permit-LangChain integration SDK |
-| [Poetry](https://python-poetry.org/docs/) | Python dependency management | 
+| [LangChain](https://www.langchain.com/) | Chains the prompt, the retrieved context, and the LLM |
+| [Permit.io](https://app.permit.io/) | Stores the policy and evaluates checks on the PDP |
+| [OpenAI](https://platform.openai.com/docs) | Chat model and embeddings |
+| [FAISS](https://github.com/facebookresearch/faiss) | In-memory vector store for the sample documents |
+| [langchain-permit](https://github.com/permitio/langchain-permit) | LangChain tools that validate JWTs and call `permit.check()` |
+| [Poetry](https://python-poetry.org/docs/) | Python dependency management |
 
-### Python Dependencies
+### Python dependencies
 
-Install these via `pyproject.toml` using [Poetry](https://python-poetry.org/):
+Add these dependencies to your `pyproject.toml`:
 
 ```toml
 [tool.poetry.dependencies]
 python = "^3.9"
-langchain = "^0.1.0"
-langchain-openai = "^0.0.2"
-langchain-permit = "^0.1.2"
+langchain = "^0.3.18"
+langchain-community = "^0.3.17"
+langchain-openai = "^0.3.5"
+langchain-permit = "^0.1.4"
 permit = "^2.7.2"
 pydantic-settings = "^2.7.1"
+faiss-cpu = "^1.8.0"
+pyjwt = { version = "^2.10.1", extras = ["crypto"] }
 ```
 
-### Required Environment Variables
+:::warning Check the LangChain versions
+This tutorial was written for `langchain-permit` 0.1.4, which requires `langchain`, `langchain-community`, and `langchain-openai` 0.3.x. Check the current requirements on the [langchain-permit PyPI page](https://pypi.org/project/langchain-permit/) before you install.
+:::
 
-Add the following to your `.env` file:
+### Required environment variables
+
+Add these variables to a `.env` file in your project root:
 
 ```bash
 PERMIT_API_KEY=your_api_key
-PERMIT_PDP_URL=http://localhost:7766  # Or your cloud PDP
+PERMIT_PDP_URL=http://localhost:7766  # Your Edge PDP
 JWKS_URL=http://localhost:3458/.well-known/jwks.json  # For JWT validation
+JWT_ISSUER=your_jwt_issuer
+JWT_AUDIENCE=your_jwt_audience
+TEST_JWT_TOKEN=your_signed_test_jwt
+VECTOR_STORE_PATH=./data/vectorstore
 OPENAI_API_KEY=sk-...  # From OpenAI
 ```
-:::tip
-For a [PDP setup guide](/concepts/pdp/overview/), see Permit PDP Overview
-:::
 
-:::info
-Your PERMIT_API_KEY is available [in the Permit.io dashboard](https://app.permit.io/settings/api-keys)
-::: 
+| Variable | Value |
+| --- | --- |
+| `PERMIT_API_KEY` | Your environment API key from [Get your API key](/overview/get-api-key) |
+| `PERMIT_PDP_URL` | The URL of your Edge PDP, for example `http://localhost:7766` |
+| `JWKS_URL` | The JWKS endpoint that holds the public key for your test JWT |
+| `JWT_ISSUER` | Any string. `Settings` requires the variable, and `LangchainJWTValidationTool` doesn't check the issuer. |
+| `JWT_AUDIENCE` | Any string. `Settings` requires the variable, and `LangchainJWTValidationTool` doesn't check the audience. |
+| `TEST_JWT_TOKEN` | Your signed test JWT |
+| `VECTOR_STORE_PATH` | The folder for the FAISS vector store |
+| `OPENAI_API_KEY` | Your OpenAI API key |
 
-## Planning our Policies
+The `Settings` class in [Configuration settings](#configuration-settings) requires all of these variables. If one is missing, `Settings()` raises a validation error when the app starts.
 
-Before jumping into implementation, it's essential to define **what we're protecting**, **who needs access**, and **under what conditions**.
+### Create a test JWKS and signed JWT \{#create-a-test-jwks-and-signed-jwt}
 
-We'll use a healthcare AI assistant as our example. It allows patients to ask health-related questions, doctors to retrieve medical documents, and eligible users to schedule appointments. 
+`LangchainJWTValidationTool` reads the `kid` header of the token, fetches the matching public key from `JWKS_URL`, and verifies an RS256 signature. The tool doesn't validate `aud`: PyJWT rejects a token that has an `aud` claim when no audience is passed, so leave `aud` out of the test token.
 
-Here's what our access model looks like from a real-world perspective:
+Create `scripts/make_test_jwt.py`. The script creates an RSA key pair on the first run, writes the public key to `jwks/public/.well-known/jwks.json`, and prints a signed token for the `eligible` (`user-123`) or `ineligible` (`user-456`) test user:
 
-**Prompting the AI**
-> Only users who are at least 18 years old, have opted into AI use, and have remaining daily quota may interact with the assistant.
-> 
-**Viewing Documents**
-> All users can view public medical documents. Only authorized users can view restricted documents.
-> 
-**Scheduling Appointments**
-> Users must be at least 18 and have the `can_schedule` attribute set to true.
-> 
-**AI Output Redaction**
-> Responses containing sensitive terms (e.g., “high blood pressure”) must be redacted unless the user has elevated privileges.
-> 
+```python
+# scripts/make_test_jwt.py
+import json
+import sys
+from pathlib import Path
 
-### Policy Model: Resources, Roles & Rules:
+import jwt
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from jwt.algorithms import RSAAlgorithm
 
-**Resources:**
-- `healthcare_prompt`: The AI entry point
-- `healthcare_document`: Individual medical documents
-- `healthcare_appointment`: External appointment resource
+KEY_ID = "test-key"
+PRIVATE_KEY_PATH = Path("jwks/private_key.pem")
+JWKS_PATH = Path("jwks/public/.well-known/jwks.json")
 
-**User Attributes:**
-- `age`: Integer, used in ABAC rules
-- `ai_opt_in`: Boolean flag
-- `daily_quota_remaining`: Integer count
-- `can_schedule`: Boolean flag
+USERS = {
+    "eligible": {
+        "key": "user-123",
+        "attributes": {"age": 25, "ai_opt_in": True, "daily_quota_remaining": 10, "can_schedule": True},
+    },
+    "ineligible": {
+        "key": "user-456",
+        "attributes": {"age": 16, "ai_opt_in": False, "daily_quota_remaining": 0, "can_schedule": False},
+    },
+}
 
-**Document Attributes:**
-- `public`: Boolean flag to denote visibility
 
-**User Sets:**
-- Eligible AI Users: Must meet age, opt-in, and quota conditions
-- Scheduling Eligible Users: Must meet age and `can_schedule` conditions
-- Everyone: Used for public document access
+def load_or_create_key():
+    if PRIVATE_KEY_PATH.exists():
+        return serialization.load_pem_private_key(PRIVATE_KEY_PATH.read_bytes(), password=None)
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    PRIVATE_KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PRIVATE_KEY_PATH.write_bytes(
+        private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    return private_key
 
-**Document Sets:**
-- Public Docs: `public == true` documents only
 
-**Actions:**
-- `ask`: Used on `healthcare_prompt`
-- `view`: Used on `healthcare_document`
-- `schedule`: Used on `healthcare_appointment`
+def main():
+    user = USERS[sys.argv[1] if len(sys.argv) > 1 else "eligible"]
+    private_key = load_or_create_key()
 
-{/* Policy Flow Diagram: could be useful here */}
+    public_jwk = json.loads(RSAAlgorithm.to_jwk(private_key.public_key()))
+    public_jwk.update({"kid": KEY_ID, "alg": "RS256", "use": "sig"})
+    JWKS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    JWKS_PATH.write_text(json.dumps({"keys": [public_jwk]}, indent=2))
 
-## Permit Schema Setup
+    token = jwt.encode(user, private_key, algorithm="RS256", headers={"kid": KEY_ID})
+    print(token)
 
-With our perimeters and policies mapped out, it's time to configure our **authorization schema** in the [Permit.io dashboard](https://app.permit.io/). This includes defining **resources**, **actions**, **user and resource sets**, and **ABAC rules**.
 
-We'll use the **Policy** tab for everything in this section.
+if __name__ == "__main__":
+    main()
+```
 
-### Define Resources
-<br/>
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Create <code>healthcare_prompt</code> Resource** <br/>
-    This represents the AI entry point (i.e., submitting a prompt).
-    <ul>
-      <li><b>Name:</b> <code>healthcare_prompt</code></li>
-      <li><b>Action:</b> <code>ask</code></li>
-    </ul>
-    <br/>
-    ![Create healthcare_prompt resource](/img/ai-security/integrations/langchain/1.png)
-    <br/>
-    You'll see the resource type of <b>healthcare_prompt</b> created for you in the <b>Resource</b> section:
-    <br/>
-    ![Resource created confirmation](/img/ai-security/integrations/langchain/2.png)
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Create <code>healthcare_document</code> Resource** <br/>
-    This represents documents in the knowledge base (e.g., test results, diagnoses).
-    <ul>
-      <li><b>Name:</b> <code>healthcare_document</code></li>
-      <li><b>Action:</b> <code>view</code></li>
-    </ul>
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Create <code>healthcare_appointment</code> Resource** <br/>
-    Represents the scheduling system or appointment entity.
-    <ul>
-      <li><b>Name:</b> <code>healthcare_appointment</code></li>
-      <li><b>Action:</b> <code>schedule</code></li>
-    </ul>
-  </TimelineStep>
-</TimelineWrapper>
+Generate a token for the eligible user, then serve the JWKS on port 3458 in a second terminal:
 
-### Define ABAC User and Resource Sets
-<br/>
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Define <code>Eligible AI Users</code> ABAC Set** <br/>
-    Navigate to the <b>ABAC Rules</b> section and define an ABAC User Set for controlling access to the AI itself (<code>ask</code> action on <code>healthcare_prompt</code>).
-    <ul>
-      <li><b>Conditions:</b></li>
-      <ul>
-        <li><code>user.age &gt;= 18</code></li>
-        <li><code>user.ai_opt_in == true</code></li>
-        <li><code>user.daily_quota_remaining &gt; 0</code></li>
-      </ul>
-    </ul>
-    <br/>
-    ![Create Eligible AI Users ABAC set](/img/ai-security/integrations/langchain/3.png)
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Define <code>PublicDocs</code> Resource Set** <br/>
-    Used to group documents with <code>public: true</code> metadata.
-    <ul>
-      <li><b>Set name:</b> <code>PublicDocs</code></li>
-      <li><b>Conditions:</b> <code>resource.public == true</code></li>
-    </ul>
-    <br/>
-    ![Create PublicDocs resource set](/img/ai-security/integrations/langchain/4.png)
-  </TimelineStep>
-</TimelineWrapper>
+```bash
+poetry run python scripts/make_test_jwt.py eligible
+python3 -m http.server 3458 --directory jwks/public
+```
 
-### Grant Access with Policy Rules
+Set `TEST_JWT_TOKEN` in `.env` to the printed token. To check the JWKS endpoint, open `http://localhost:3458/.well-known/jwks.json`. The response is a JSON object with a `keys` array that holds one RSA key with `"kid": "test-key"`. Keep `jwks/private_key.pem` out of version control.
 
-In the **Policy Editor**, define who can do what:
+## Plan the access model \{#planning-our-policies}
 
-- `Eligible AI Users` → `ask` on `healthcare_prompt`
-- `Everyone` → `view` on `PublicDocs`
-- `Scheduling Eligible Users` → `schedule` on `healthcare_appointment`
+The healthcare assistant lets users ask health questions, retrieves medical documents as context, and books appointments. Each perimeter maps to one rule:
 
-![Policy rules configuration](/img/ai-security/integrations/langchain/5.png)
+| Perimeter | Rule |
+| --- | --- |
+| Prompt filtering | A user can prompt the assistant only if they are at least 18, opted in to AI use, and have daily quota left. |
+| RAG data protection | Users who can prompt the assistant can view public documents. |
+| Secure external access | A user can schedule an appointment only if they are at least 18 and `can_schedule` is `true`. |
+| Response enforcement | The app redacts "high blood pressure" from every answer. |
 
-![Policy rules saved](/img/ai-security/integrations/langchain/6.png)
+### Policy model: resources, attributes, and sets \{#policy-model-resources-roles--rules}
 
-## Permit Data Setup
+| Resource | Action | Represents |
+| --- | --- | --- |
+| `healthcare_prompt` | `ask` | Sending a prompt to the assistant |
+| `healthcare_document` | `view` | A medical document in the knowledge base |
+| `healthcare_appointment` | `schedule` | Booking an appointment in an external system |
 
-With your schema modeled, the next step is to assign actual data to your users and resources. This happens in the **Directory** tab of the Permit dashboard, where you'll define:
+| Attribute | Type | Used by |
+| --- | --- | --- |
+| `user.age` | Number | Eligible AI Users, Scheduling Eligible Users |
+| `user.ai_opt_in` | Boolean | Eligible AI Users |
+| `user.daily_quota_remaining` | Number | Eligible AI Users |
+| `user.can_schedule` | Boolean | Scheduling Eligible Users |
+| `resource.public` | Boolean | PublicDocs |
 
-- **Users** and their attributes
-- **Resources** (documents) and their metadata
+| Set | Type | Condition |
+| --- | --- | --- |
+| Eligible AI Users | ABAC user set | `user.age >= 18`, `user.ai_opt_in == true`, `user.daily_quota_remaining > 0` |
+| Scheduling Eligible Users | ABAC user set | `user.age >= 18`, `user.can_schedule == true` |
+| PublicDocs | ABAC resource set on `healthcare_document` | `resource.public == true` |
 
-This real-world data is what your policies will evaluate against at runtime.
+## Configure the policy in Permit \{#permit-schema-setup}
 
-### Create Example Users
+Create the resources, sets, and rules in the **Policy** screen of the [Permit dashboard](https://app.permit.io/).
 
-Go to the **Users** section and add test users that match or fail the policies. Here are two examples based on the JWTs shown in the blog:
+### 1. Create the resources \{#define-resources}
 
-**Valid User: `user-123`**
+1. Create a resource named `healthcare_prompt` with the action `ask`. This resource represents submitting a prompt.
+
+   ![Create Resource form for healthcare_prompt with the ask action](/img/ai-security/integrations/langchain/1.png)
+
+   The `healthcare_prompt` resource appears in the resources list:
+
+   ![Resources list showing the healthcare_prompt resource](/img/ai-security/integrations/langchain/2.png)
+
+2. Create a resource named `healthcare_document` with the action `view`. This resource represents documents in the knowledge base, such as test results.
+3. Create a resource named `healthcare_appointment` with the action `schedule`. This resource represents the scheduling system.
+
+### 2. Create the ABAC user sets and resource set \{#define-abac-user-and-resource-sets}
+
+The conditions use the attributes from [Policy model: resources, attributes, and sets](#policy-model-resources-roles--rules). Create the user attributes (`age`, `ai_opt_in`, `daily_quota_remaining`, `can_schedule`) and the `public` resource attribute on `healthcare_document` before you create the sets. See [Create user attributes](/how-to/build-policies/abac/building-abac-policy#step-1-creating-user-attributes).
+
+1. Open **ABAC Rules** and create an ABAC user set named `Eligible AI Users` with these conditions:
+   - `user.age >= 18`
+   - `user.ai_opt_in == true`
+   - `user.daily_quota_remaining > 0`
+
+   ![ABAC user set form for Eligible AI Users with age, opt-in, and quota conditions](/img/ai-security/integrations/langchain/3.png)
+
+2. Create an ABAC user set named `Scheduling Eligible Users` with these conditions:
+   - `user.age >= 18`
+   - `user.can_schedule == true`
+3. Create an ABAC resource set named `PublicDocs` on `healthcare_document` with the condition `resource.public == true`.
+
+   ![ABAC resource set form for PublicDocs with the resource.public condition](/img/ai-security/integrations/langchain/4.png)
+
+### 3. Grant access in the Policy Editor \{#grant-access-with-policy-rules}
+
+In the **Policy Editor**, check these boxes and save:
+
+| Who | Action | On |
+| --- | --- | --- |
+| `Eligible AI Users` | `ask` | `healthcare_prompt` |
+| `Eligible AI Users` | `view` | `PublicDocs` |
+| `Scheduling Eligible Users` | `schedule` | `healthcare_appointment` |
+
+![Policy Editor row for the Eligible AI Users set with the ask permission on Healthcare Prompt checked](/img/ai-security/integrations/langchain/5.png)
+
+## Add test users \{#permit-data-setup}
+
+Add two test users in the **Directory** screen. See [Sync users](/how-to/sync-users) for the steps. The app passes the attributes from the JWT to each check, so the user attributes in the JWT decide the result. The attributes below match the tokens that `scripts/make_test_jwt.py` signs.
+
+### Create example users
+
+**Eligible user `user-123`:**
 
 ```json
 {
@@ -226,21 +252,14 @@ Go to the **Users** section and add test users that match or fail the policies. 
     "age": 25,
     "ai_opt_in": true,
     "daily_quota_remaining": 10,
-    "can_schedule": true}
+    "can_schedule": true
+  }
 }
 ```
 
-This user:
+`user-123` is 25, opted in to AI, has quota left, and can schedule appointments. The PDP allows `user-123` to prompt, view public documents, and schedule.
 
-- Is 25 years old
-- Has opted into AI
-- Has quota left
-- Can schedule appointments
-
-→ Thus, they should be allowed through all perimeters.
-    
-
-**Invalid User: `user-456`**
+**Ineligible user `user-456`:**
 
 ```json
 {
@@ -249,35 +268,20 @@ This user:
     "age": 16,
     "ai_opt_in": false,
     "daily_quota_remaining": 0,
-    "can_schedule": false}
+    "can_schedule": false
+  }
 }
 ```
 
-This user:
+`user-456` is under 18, hasn't opted in, and has no quota left. The PDP denies `user-456` at prompt filtering, so the app never retrieves documents for `user-456`.
 
-- Is underage
-- Hasn't opted in
-- Quota is 0
+## Perimeter 1: Filter prompts with JWT validation and permission checks \{#prompt-protection-jwt--permission-checks}
 
-→ Thus, prompt access will be denied at perimeter #1.
-    
+Prompt filtering blocks a user before the LLM receives the prompt. The app validates the user's JWT with `LangchainJWTValidationTool`, then checks `ask` on `healthcare_prompt` with `LangchainPermissionsCheckTool`.
 
-## Prompt Protection (JWT + Permission Checks)
+### File structure
 
-The first layer of defense in our healthcare AI assistant is **Prompt Protection**. This ensures that only eligible users (those who are old enough, opted in, and within their usage quota) can interact with the LLM.
-
-This perimeter uses:
-
-- `LangchainJWTValidationTool` for JWT validation
-- `LangchainPermissionsCheckTool` for runtime policy evaluation
-
-Together, they block unauthorized users before the AI ever sees a prompt.
-
-### Setup Components
-
-Your project should include the following modules to enforce prompt protection.
-
-### File Structure
+Create these modules for prompt filtering:
 
 ```graphql
 src/
@@ -290,9 +294,9 @@ src/
     └── prompt_guard.py      # Combines all checks before LLM access
 ```
 
-### Configuration Settings
+### Configuration settings
 
-Create a file `src/config/settings.py` to manage your API keys and environment variables using `pydantic-settings`.
+Create `src/config/settings.py`. The `Settings` class loads the variables from `.env` with `pydantic-settings`:
 
 ```python
 # src/config/settings.py
@@ -318,9 +322,9 @@ def get_settings():
     return Settings()
 ```
 
-### JWT Validation
+### JWT validation
 
-Use `LangchainJWTValidationTool` to validate and extract user claims.
+Create `src/core/security.py`. `LangchainJWTValidationTool` verifies the token signature against `JWKS_URL` and returns the claims. `SecurityManager` raises `ValueError` when the claims don't include `age`, `ai_opt_in`, and `daily_quota_remaining` in `attributes`:
 
 ```python
 # src/core/security.py
@@ -348,9 +352,9 @@ class SecurityManager:
 security_manager = SecurityManager()
 ```
 
-### Prompt Permission Check
+### Prompt permission check
 
-Use `LangchainPermissionsCheckTool` to check whether the user is allowed to use the AI.
+Create `src/core/permissions.py`. `LangchainPermissionsCheckTool` calls `permit.check()` with the user's claims, the `ask` action, and the `healthcare_prompt` resource, and returns `{"allowed": True}` or `{"allowed": False}`:
 
 ```python
 # src/core/permissions.py
@@ -376,9 +380,9 @@ class PermissionsManager:
 permissions_manager = PermissionsManager()
 ```
 
-### Wrap LLM Access with Prompt Guard
+### Wrap LLM access in the prompt guard \{#wrap-llm-access-with-prompt-guard}
 
-Tie everything together in `prompt_guard.py` and only allow the AI to run if both checks pass.
+Create `src/perimeters/prompt_guard.py`. `PromptGuard` runs the LLM chain only if the JWT is valid and the permission check returns `allowed`:
 
 ```python
 # src/perimeters/prompt_guard.py
@@ -408,7 +412,9 @@ class PromptGuard:
 prompt_guard = PromptGuard()
 ```
 
-### Example Entry Point
+### Example entry point
+
+Create `src/main.py`. The script sends one question with the JWT from `TEST_JWT_TOKEN`. [Call the scheduler from the main script](#update-your-main-script) replaces this file with the final version.
 
 ```python
 # src/main.py
@@ -428,37 +434,29 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### Expected Results
+### Expected prompt filtering results \{#expected-results}
 
-| **User Type** | **Result** |
+Run `poetry run python -m src.main` with each token:
+
+| Test JWT | Result |
 | --- | --- |
-| Valid JWT with all attributes | ✅ Allowed to prompt |
-| JWT missing attributes (e.g., `age`) | ❌ Blocked before prompt |
-| Underage / not opted in / no quota | ❌ Rejected via permission check |
+| Valid signature with `age`, `ai_opt_in`, and `daily_quota_remaining` that match `Eligible AI Users` | The script prints the LLM response |
+| `attributes` is missing `age`, `ai_opt_in`, or `daily_quota_remaining` | `ValueError: Missing required attributes` before the permission check |
+| Under 18, not opted in, or no quota left | `ValueError: User does not have permission to use the AI` |
 
-## Secure Document Retrieval (RAG Filtering)
+## Perimeter 2: Filter retrieved documents \{#secure-document-retrieval-rag-filtering}
 
-Once a user passes **Prompt Protection**, the next step is ensuring they only receive documents they're allowed to see. 
-In LangChain-based RAG, this means enforcing policies before documents are selected and passed into the LLM.
+Retrieval-augmented generation (RAG) data protection removes documents the user can't `view` before the documents reach the LLM prompt. The app stores sample documents in FAISS, retrieves candidates with the FAISS retriever, and passes the candidates to `filter_objects` from the Permit Python SDK. `filter_objects` sends one bulk check to the PDP with the user's JWT attributes, the `view` action, and each document's key and attributes, and returns only the documents the PDP allows.
 
-We'll use:
-- `FAISS` as our vector store for storing medical documents
-- `PermitEnsembleRetriever` from `langchain-permit` to filter documents based on Permit's ABAC policies
+This perimeter uses:
 
-### Use Case: Public vs. Restricted Documents
+- The `public` attribute on each document
+- The `PublicDocs` resource set
+- The `view` action on `healthcare_document`
 
-> Some documents (like general health info) should be available to all users.
-> Others (like patient diagnoses) should only be seen by specific users or roles.
+### Add sample documents
 
-We enforce this with:
-
-- A `public` attribute on each document
-- A `PublicDocs` resource set in Permit
-- A `view` action on the `healthcare_document` resource
-
-### Add Sample Documents
-
-Create `src/perimeters/rag_security.py` and populate it with sample documents. Each document is annotated with metadata and stored in a FAISS index.
+Create `src/perimeters/rag_security.py`. Each document stores its key (`id`), resource type, and ABAC attributes in its metadata. `get_relevant_documents` passes the key and attributes to `filter_objects` and keeps the documents whose keys come back:
 
 ```python
 # src/perimeters/rag_security.py
@@ -466,10 +464,8 @@ from typing import List, Dict, Any
 from langchain.schema import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain_permit.retrievers import PermitEnsembleRetriever
-from src.config.settings import get_settings
+from src.core.permissions import permissions_manager
 
-settings = get_settings()
 
 class RAGSecurityManager:
     def __init__(self):
@@ -491,27 +487,47 @@ class RAGSecurityManager:
         self.vectorstore = FAISS.from_documents(self.sample_docs, self.embeddings)
 
     async def get_relevant_documents(self, query: str, user: Dict[str, Any]) -> List[Document]:
-        vector_retriever = self.vectorstore.as_retriever(search_kwargs={"k": 2})
-        secure_retriever = PermitEnsembleRetriever(
-            retrievers=[vector_retriever],
-            permit_api_key=settings.permit_api_key,
-            permit_pdp_url=settings.permit_pdp_url,
-            user=user['key'],
+        retriever = self.vectorstore.as_retriever(search_kwargs={"k": 3})
+        docs = await retriever.ainvoke(query)
+
+        resources = [
+            {
+                "key": doc.metadata["id"],
+                "type": doc.metadata["type"],
+                "tenant": "default",
+                "attributes": doc.metadata["attributes"],
+            }
+            for doc in docs
+        ]
+        allowed = await permissions_manager.permit_client.filter_objects(
+            user={"key": user["key"], "attributes": user["attributes"]},
             action="view",
-            resource_type="healthcare_document"
+            context={},
+            resources=resources,
         )
-        return await secure_retriever.ainvoke(query)
+        allowed_keys = {resource["key"] for resource in allowed}
+        return [doc for doc in docs if doc.metadata["id"] in allowed_keys]
+
 
 rag_security_manager = RAGSecurityManager()
 ```
 
-### Integrate into `prompt_guard.py`
-Update `prompt_guard.py` to retrieve filtered documents before generating the final LLM prompt.
-    
+:::note Why this tutorial doesn't use PermitEnsembleRetriever
+`langchain-permit` 0.1.4 includes `PermitEnsembleRetriever`, which also calls `filter_objects`. The retriever sends the user as a key without attributes and each document as `{"id": ..., "type": ...}`. The Permit Python SDK reads `key`, not `id`, so the PDP receives a check on the resource type with no key and no attributes. The `PublicDocs` resource set and the `Eligible AI Users` user set can't match that check, and the retriever returns no documents. See [`retrievers.py`](https://github.com/permitio/langchain-permit/blob/main/langchain_permit/retrievers.py).
+:::
+
+### Add document filtering to the prompt guard \{#integrate-into-prompt_guardpy}
+
+Replace `src/perimeters/prompt_guard.py` with the following version. `process_medical_query` retrieves the allowed documents, prints their keys, and adds their content to the prompt as context:
 
 ```python
-# src/perimeters/prompt_guard.py (continued)
+# src/perimeters/prompt_guard.py
+from langchain_openai import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from src.core.security import security_manager
+from src.core.permissions import permissions_manager
 from src.perimeters.rag_security import rag_security_manager
+
 
 class PromptGuard:
     def __init__(self):
@@ -526,55 +542,50 @@ class PromptGuard:
         if not allowed:
             raise ValueError("User does not have permission to use the AI.")
 
-        # 🔒 Secure RAG filtering
         context_docs = await rag_security_manager.get_relevant_documents(query=question, user=user)
+        print("Documents in context:", [doc.metadata["id"] for doc in context_docs])
         context_text = "\n".join(doc.page_content for doc in context_docs)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", self.system_prompt),
-            ("system", f"Context:\n{context_text}"),
+            ("system", "Context:\n{context}"),
             ("human", "{question}")
         ])
 
         chain = prompt | self.llm
-        response = await chain.ainvoke({"question": question})
+        response = await chain.ainvoke({"context": context_text, "question": question})
         return response.content
 
+
+prompt_guard = PromptGuard()
 ```
 
-### Expected Behavior
+### Expected document filtering behavior \{#expected-behavior}
 
-| **User Type** | **Visible Docs** |
+| User | Documents in the LLM context |
 | --- | --- |
-| Valid user | All documents (public + private) |
-| Public-only user | Only `doc1` (`public: true`) |
-| Unauthorized user | Blocked at prompt level |
+| Passes prompt filtering (`user-123`) | Only documents that match `PublicDocs` (`doc1`) |
+| Fails prompt filtering (`user-456`) | None. `process_medical_query` raises before retrieval. |
 
-### Run Example Query
+The policy in this tutorial has no rule that grants `view` on `doc2` or `doc3`. To give some users access to non-public documents, add a user set or role with `view` on `healthcare_document` in the Policy Editor.
+
+### Run an example query
+
+Run the app with the eligible user's token in `TEST_JWT_TOKEN`:
 
 ```bash
 poetry run python -m src.main
 ```
-Set a test query like:
 
-```python
-query = "What treatments are available for high blood pressure?"
-```
+The output starts with `Documents in context: ['doc1']`. FAISS returns all three documents, and the PDP allows only `doc1`, the document with `public` set to `true`. The LLM answers without the treatment guidelines from `doc2` in its context.
 
-If the user can't access private docs, only `doc1` will be shown to the LLM, resulting in a more limited response.
+## Perimeter 3: Authorize external actions \{#secure-external-access-action-controls}
 
-## Secure External Access (Action Controls)
+Secure external access checks permission before the app calls an external system on the user's behalf. In this app, the external action is scheduling an appointment. The PDP allows `schedule` on `healthcare_appointment` only for users in `Scheduling Eligible Users`.
 
-AI systems aren't just answering questions—they're often **performing actions** on behalf of users. For example: booking an appointment, modifying data, or triggering workflows.
-This perimeter ensures that:
+### Implement the external access manager \{#implement-external-access-manager}
 
-> Only users who are allowed by policy can trigger external operations.
-
-In our case, the external action is **Scheduling a healthcare appointment**
-Only users who are 18+ and have `can_schedule: true` should be allowed.
-
-### Implement External Access Manager
-Create a new file `src/perimeters/external_access.py` to encapsulate secure access logic:
+Create `src/perimeters/external_access.py`. `schedule_appointment` validates the JWT, checks `schedule`, and returns a mocked booking confirmation only when the check allows it:
 
 ```python
 # src/perimeters/external_access.py
@@ -600,7 +611,7 @@ class ExternalAccessManager:
             # Step 3: (Mocked) external call
             date = appointment_details.get("date", "N/A")
             time = appointment_details.get("time", "N/A")
-            return f"✅ Appointment successfully booked for {date} at {time}."
+            return f"Appointment successfully booked for {date} at {time}."
 
         except Exception as e:
             raise ValueError(f"Scheduling failed: {str(e)}")
@@ -608,67 +619,63 @@ class ExternalAccessManager:
 external_access_manager = ExternalAccessManager()
 ```
 
-### Update Your Main Script
-Simulate a user accepting an AI recommendation to schedule an appointment.
+### Call the scheduler from the main script \{#update-your-main-script}
+
+Replace `src/main.py` with the following version. After the assistant answers, `main()` simulates a user who accepts the suggestion to book a follow-up and books an appointment seven days from today:
 
 ```python
-# src/main.py (continued)
+# src/main.py
+import asyncio
+from datetime import date, timedelta
+from src.perimeters.prompt_guard import prompt_guard
 from src.perimeters.external_access import external_access_manager
+from src.config.settings import get_settings
 
-# Run PromptGuard as before...
-response = await prompt_guard.process_medical_query(
-    token=settings.test_jwt_token,
-    question="Should I follow up with a doctor?"
-)
-print("AI Response:", response)
 
-# Simulated user follow-up
-user_input = "Yes"  # Imagine this comes from a UI click
-if user_input.strip().lower() == "yes":
-    schedule_response = await external_access_manager.schedule_appointment(
+async def main():
+    settings = get_settings()
+    response = await prompt_guard.process_medical_query(
         token=settings.test_jwt_token,
-        appointment_details={"date": "2025-12-10", "time": "10:00 AM"}
+        question="Should I follow up with a doctor about high blood pressure?"
     )
-    print("Scheduling Response:", schedule_response)
+    print("AI Response:", response)
+
+    # Simulate a user who accepts the suggestion to book a follow-up
+    user_input = "Yes"
+    if user_input.strip().lower() == "yes":
+        follow_up = date.today() + timedelta(days=7)
+        schedule_response = await external_access_manager.schedule_appointment(
+            token=settings.test_jwt_token,
+            appointment_details={"date": follow_up.isoformat(), "time": "10:00 AM"}
+        )
+        print("Scheduling Response:", schedule_response)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-### Test Scenarios
+### Expected scheduling results \{#test-scenarios}
 
-| **User Attributes** | **Result** |
+To test the rows other than the first, edit the attributes in `USERS` in `scripts/make_test_jwt.py` and generate a new token.
+
+| User attributes in the JWT | Result |
 | --- | --- |
-| `age=25`, `can_schedule=true` | ✅ Appointment booked |
-| `age=25`, `can_schedule=false` | ❌ Rejected |
-| `age=16`, `can_schedule=true` | ❌ Rejected (underage) |
+| `age=25`, `can_schedule=true` | The script prints the booking confirmation |
+| `age=25`, `can_schedule=false` | `ValueError: Scheduling failed: User does not have permission to schedule an appointment.` |
+| `age=16`, `can_schedule=true` | `ValueError: User does not have permission to use the AI.` Prompt filtering fails before scheduling, because `Eligible AI Users` also requires `age >= 18`. Called on its own, `schedule_appointment` raises `ValueError: Scheduling failed: ...` for this user. |
 
-You can also view full decision logs in the **Audit Logs tab** of the Permit dashboard.
+Every check also appears in the Permit [audit logs](/how-to/use-audit-logs/types-and-filtering).
 
-## Response Enforcement (Output Sanitization)
+## Perimeter 4: Enforce the response \{#response-enforcement-output-sanitization}
 
-Even with secure prompts, document access, and external action controls, there's still a risk:
+Response enforcement changes the LLM output before the user sees it. The LLM can include sensitive terms in its answer even when the prompt and context passed the earlier perimeters. In this app, a custom LangChain output parser replaces every "high blood pressure" with `[REDACTED]`.
 
-> What if the LLM "hallucinates" sensitive information or oversteps access boundaries in its final output?
-> 
+You can extend the parser to detect other content, such as patient names, medical record IDs, or personal data that matches a regular expression.
 
-To mitigate this, we add a **custom output parser** that:
+### Create a custom output parser
 
-- Scans AI output for sensitive terms
-- Redacts or transforms the output before it's returned to the user
-- Optionally varies redaction based on user role or permissions
-
-### Use Case
-
-In our healthcare assistant:
-
-> Any instance of the term "high blood pressure" will be redacted unless the user has elevated permissions.
-
-This is a basic example, but you can expand this to scan for:
-
-- Patient names or medical IDs
-- HIPAA-regulated phrases
-- Regex-detected PII
-
-### Create a Custom Output Parser
-Create `src/perimeters/output_parser.py` and define a `SensitiveDataParser`.
+Create `src/perimeters/output_parser.py` with a `SensitiveDataParser` class:
 
 ```python
 # src/perimeters/output_parser.py
@@ -687,12 +694,21 @@ class SensitiveDataParser(BaseOutputParser):
         return "Return the text with any sensitive data redacted."
 ```
 
-### Attach the Parser to Your LLM Chain
-Update `prompt_guard.py` to run the AI output through your parser:
+`str.replace` is case-sensitive, so the parser doesn't redact "High blood pressure" at the start of a sentence. Use a case-insensitive regular expression if your terms can appear in other cases.
+
+### Attach the parser to the LLM chain
+
+Update `PromptGuard` in `src/perimeters/prompt_guard.py` to pass the LLM output through `SensitiveDataParser`:
 
 ```python
-# src/perimeters/prompt_guard.py (continued)
+# src/perimeters/prompt_guard.py
+from langchain_openai import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from src.core.security import security_manager
+from src.core.permissions import permissions_manager
+from src.perimeters.rag_security import rag_security_manager
 from src.perimeters.output_parser import SensitiveDataParser
+
 
 class PromptGuard:
     def __init__(self):
@@ -709,104 +725,98 @@ class PromptGuard:
             raise ValueError("User does not have permission to use the AI.")
 
         context_docs = await rag_security_manager.get_relevant_documents(query=question, user=user)
+        print("Documents in context:", [doc.metadata["id"] for doc in context_docs])
         context_text = "\n".join(doc.page_content for doc in context_docs)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", self.system_prompt),
-            ("system", f"Context:\n{context_text}"),
+            ("system", "Context:\n{context}"),
             ("human", "{question}")
         ])
 
         chain = prompt | self.llm
-        raw_response = await chain.ainvoke({"question": question})
+        raw_response = await chain.ainvoke({"context": context_text, "question": question})
 
-        # 🔐 Parse the final response
-        safe_response = self.sensitive_parser.parse(raw_response.content)
-        return safe_response
+        # Redact sensitive phrases before returning the answer
+        return self.sensitive_parser.parse(raw_response.content)
 
+
+prompt_guard = PromptGuard()
 ```
 
-### Optional: Permission-Aware Redaction
+### Redact based on permissions \{#optional-permission-aware-redaction}
 
-Want to only redact for certain users (e.g., patients)? You could:
+`SensitiveDataParser` redacts for every user. To skip redaction for some users, such as doctors, pass the `user` claims into `SensitiveDataParser` and call `permit.check()` on a resource that represents unredacted output. Add that resource and a rule for it in the Policy Editor first.
 
-- Pass the `user` object into `SensitiveDataParser`
-- Skip redaction if user has a role like `doctor` or a clearance flag
+## Run the app and verify each perimeter \{#final-result--how-to-run-the-demo}
 
-This enables **dynamic response filtering** based on Permit policies.
+### Run the app \{#running-the-app}
 
-## Final Result & How to Run the Demo
-
-With all four security perimeters implemented, you now have a fully secure, policy-driven LangChain application. Let's run the final demo, observe the interactions, and verify policy enforcement in action.
-
-### Running the App
-
-Make sure your `.env` is set, and dependencies are installed. Then run the app via:
+Check that `.env` has every variable from [Required environment variables](#required-environment-variables) and that your Edge PDP is running. Install the dependencies and run the app:
 
 ```bash
 poetry install
 poetry run python -m src.main
 ```
 
-Your `main.py` script will:
+`src/main.py` runs these steps:
 
-1. Validate a JWT token
-2. Check prompt permissions
-3. Retrieve permitted documents using secure RAG
-4. Generate an LLM response based on that context
-5. Redact any sensitive terms from the output
-6. Simulate an appointment scheduling request (if applicable)
+1. Validates the JWT.
+2. Checks `ask` on `healthcare_prompt`.
+3. Retrieves documents from FAISS and filters them with `filter_objects`.
+4. Generates an LLM response from the allowed documents.
+5. Redacts sensitive terms from the response.
+6. Checks `schedule` on `healthcare_appointment` and returns a mocked booking.
 
-### Example JWT Payloads
+### Example JWT payloads
 
-### Ineligible User
+Pass a token for each test user in `TEST_JWT_TOKEN`. An environment variable overrides the value in `.env`. Keep the JWKS server from [Create a test JWKS and signed JWT](#create-a-test-jwks-and-signed-jwt) running.
 
-```json
-{
-  "key": "user-123",
-  "attributes": {
-    "age": 16,
-    "ai_opt_in": false,
-    "daily_quota_remaining": 0,
-    "can_schedule": false}
-}
+#### Ineligible user \{#ineligible-user}
+
+`user-456` is 16, hasn't opted in, and has no quota left:
+
+```bash
+TEST_JWT_TOKEN=$(poetry run python scripts/make_test_jwt.py ineligible) poetry run python -m src.main
 ```
 
-**Result**: Rejected during prompt validation (fails ABAC rules) 
+The script exits with a traceback that ends with this line:
 
-### Fully Eligible User
-
-```json
-{
-  "key": "user-123",
-  "attributes": {
-    "age": 25,
-    "ai_opt_in": true,
-    "daily_quota_remaining": 10,
-    "can_schedule": true}
-}
+```text
+ValueError: User does not have permission to use the AI.
 ```
 
-**Result**: Prompt allowed, Private docs retrieved, Appointment scheduled, Sensitive response redacted (if applicable)
+#### Fully eligible user \{#fully-eligible-user}
 
-### What You Should See
+`user-123` is 25, opted in, has quota left, and can schedule:
 
-If everything is working correctly, you'll observe:
+```bash
+TEST_JWT_TOKEN=$(poetry run python scripts/make_test_jwt.py eligible) poetry run python -m src.main
+```
 
-- Unauthorized users are stopped early via prompt protection
-- Only documents the user can view are included in the context
-- The AI answers based on filtered knowledge
-- Responses with restricted terms are sanitized
-- Scheduling is blocked or allowed based on user attributes
+```text
+Documents in context: ['doc1']
+AI Response: ...
+Scheduling Response: Appointment successfully booked for <date seven days from today> at 10:00 AM.
+```
 
-### Where to View Permissions & Logs
+The `AI Response` text depends on the model.
 
-[**Audit Logs**](/how-to/use-audit-logs/types-and-filtering) in the Permit dashboard let you trace each check and see why a user was allowed or denied. You can use the Policy Editor to tweak conditions and immediately affect runtime behavior.
+### What you should see
 
-## Further Reading & Resources
+- Ineligible users stop at prompt filtering.
+- The LLM context includes only documents that `filter_objects` allows.
+- The answer never contains the lowercase phrase "high blood pressure".
+- Scheduling succeeds or fails based on `age` and `can_schedule`.
 
-- [Langchain-permit SDK (GitHub)](https://github.com/permitio/langchain-permit)
-- [Permit.io Docs – PDP Overview](/concepts/pdp/overview)
-- [Data Filtering with Permit](/how-to/enforce-permissions/data-filtering)
-- [Permit Blog – LangChain Four Perimeter Guide](https://www.permit.io/blog/langchain-four-perimeter-access-control)
-- Got Questions? Join the [Permit.io Slack Community](https://io.permit.io/blog-slack)
+### View decisions in the audit logs \{#where-to-view-permissions--logs}
+
+Open [audit logs](/how-to/use-audit-logs/types-and-filtering) in the Permit dashboard to see each check and why the PDP allowed or denied it. When you change a condition in the Policy Editor, the PDP receives the updated policy and the next check uses it.
+
+## Next steps \{#further-reading--resources}
+
+- Read how the four perimeters fit together in the [Four-Perimeter Framework](/ai-security/framework).
+- Filter data at the database level with [data filtering](/how-to/enforce-permissions/data-filtering).
+- Choose where to run your PDP in the [PDP overview](/concepts/pdp/overview).
+- Browse the tools and retrievers in the [langchain-permit repository](https://github.com/permitio/langchain-permit).
+- Ask questions in the [Permit Slack community](https://io.permit.io/slack).

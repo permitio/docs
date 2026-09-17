@@ -1,120 +1,443 @@
 ---
 sidebar_position: 8
 title: Advanced Authorization Queries
-description: "Go beyond a single permit.check(): run bulk checks, filter objects by policy, list authorized users, and get a user's permissions."
+description: "Go beyond a single permit.check(): run bulk checks, filter a list of objects, list the users authorized on a resource, and get all of a user's permissions."
 ---
-
-A single `permit.check()` answers one question about one user, action, and resource. Advanced queries answer broader ones:
-which resources a user can access, which users can act on a resource, and what a user can do across tenants.
 
 import WhatsNext from "../../src/components/whats-next/WhatsNext";
-import TimelineStep from "../../src/components/timeline/TimelineStep";
-import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
-import Video from "../../src/components/video/Video";
-import CodeBlock from "../../src/components/code-block/CodeBlock";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
----
+Answer authorization questions that a single `permit.check()` can't: which of many resources a user can access, which users can act on a resource, and what a user can do across tenants. This walkthrough is for developers who already run permission checks and need to query permissions in bulk. Each section names the query, the SDK function that runs it, a runnable sample, and the result the sample prints.
 
-Every query below uses the same example.
+## Prerequisites
 
-:::info
-**Alice** and **Bob** are users in a blogging application. Here's how they interact with the blog posts:
+- A policy with users and role assignments ([Sync attributes, tenants, roles, and relationships](/overview/sync-applications-data))
+- A Permit SDK connected to a policy decision point (PDP) at `http://localhost:7766` ([Run the PDP](/overview/run-pdp))
+- Your environment API key ([Get your API key](/overview/get-api-key))
 
-| **User** | **Blog Post(s)**         | **Permissions**                                     |
-| -------- | ------------------------ | --------------------------------------------------- |
-| Alice    | Blog Post 1, Blog Post 2 | **Edit**, **Read** (Full permissions for her posts) |
-| Bob      | Blog Post 3              | **Edit**, **Read** (Full permissions for his post)  |
-| Alice    | Blog Post 3              | **Read** (View only)                                |
-| Bob      | Blog Post 1, Blog Post 2 | **Read** (View only)                                |
+## Choose a query
 
-:::
+| Question | Query | Node.js | Python | Go | Java | PDP endpoint |
+|---|---|---|---|---|---|---|
+| Can the user perform each of these actions on these resources? | [Bulk check](#bulk-check) | `permit.bulkCheck()` | `permit.bulk_check()` | `permit.BulkCheck()` | `permit.bulkCheck()` | `POST /allowed/bulk` |
+| Which of these objects can the user access? | [Filter objects](#filterobjects) | Not available | `permit.filter_objects()` | `permit.FilterObjects()` | Not available | |
+| Which users can perform this action on this resource? | [Authorized users](#get-authorized-users) | Not available | `permit.authorized_users()` | Not available | Not available | `POST /authorized_users` |
+| What can this user do, across tenants and resources? | [User permissions](#get-user-permissions) | `permit.getUserPermissions()` | `permit.get_user_permissions()` | `permit.GetUserPermissions()` | `permit.getUserPermissions()` | `POST /user-permissions` |
 
-:::tip **The Challenge**
+`filter_objects()` and `FilterObjects()` have no PDP endpoint of their own. Both send one bulk check to `POST /allowed/bulk` and drop the denied objects in the SDK.
 
-**Alice** and **Bob** need to query the system to:
+## The example scenario
 
-- Determine what permissions they have for specific blog posts.
-- Retrieve blog posts they are allowed to view or edit.
-- List the users who can perform actions on a given blog post.
+Every sample on this page uses the same blogging application, in the `default` tenant. The resource type is `blog_post`, with the instances `1`, `2`, and `3`. The actions are `read` and `edit`. Each post's owner can `read` and `edit` it, and every user can `read` every post.
 
-:::
+| User | Can read | Can edit |
+|---|---|---|
+| `alice@permit.io` (owns posts 1 and 2) | `blog_post:1`, `blog_post:2`, `blog_post:3` | `blog_post:1`, `blog_post:2` |
+| `bob@permit.io` (owns post 3) | `blog_post:1`, `blog_post:2`, `blog_post:3` | `blog_post:3` |
 
-## Bulk Check
+In every sample, replace `<YOUR_API_KEY>` with your environment API key. To run the samples against your own policy, replace the user keys, the `blog_post` resource type, and the instance keys with your own.
 
-The `permit.bulkCheck` function checks multiple permissions in a single call. Use it when Alice or
-Bob needs permissions for several blog posts at once.
+## Bulk check
 
-### Example: Alice Checks Read Permissions
+A bulk check sends several permission checks to the PDP in one request and returns one decision per check, in the same order as the checks. Use it when you need decisions for several resources or users at once, for example to show or hide actions in a list.
 
-Alice wants to know which blog posts she can read.
+### Example: Alice checks which posts she can read \{#example-alice-checks-read-permissions}
 
-<CodeBlock folderPath="/bulk-check" />
+Alice needs to know which blog posts she can read. Send one check per post, each with Alice's user key, the action `read`, and the post.
 
-Alice can read Blog Post 1, Blog Post 2, and Blog Post 3. One call returns all three decisions, instead of one round trip per post.
+<Tabs groupId="code-snippets">
+<TabItem value="example.js" label="Node.js">
 
-You can read more about the bulk check [here](/how-to/enforce-permissions/bulk-check/).
+```js
+const { Permit } = require("permitio");
 
-## FilterObjects
+const permit = new Permit({
+  token: "<YOUR_API_KEY>",
+  pdp: "http://localhost:7766",
+});
 
-Use the `permit.filterObjects` function to perform PDP-level filtering.
+const decisions = await permit.bulkCheck([
+  { user: "alice@permit.io", action: "read", resource: { type: "blog_post", key: "1" } },
+  { user: "alice@permit.io", action: "read", resource: { type: "blog_post", key: "2" } },
+  { user: "alice@permit.io", action: "read", resource: { type: "blog_post", key: "3" } },
+]);
 
-You fetch the data from your database, then pass it to `filterObjects`, which returns the subset of objects
-the policy allows.
+console.log(decisions);
+```
 
-For example, fetch all posts from the database and use `permit.filterObjects` to display only the ones Alice or Bob is authorized to see.
+</TabItem>
+<TabItem value="example.py" label="Python">
 
-### Example: Alice Filters Blog Posts
+```python
+import asyncio
+from permit import Permit
 
-Alice wants to retrieve the blog posts she can edit.
+permit = Permit(
+    token="<YOUR_API_KEY>",
+    pdp="http://localhost:7766",
+)
 
-<CodeBlock folderPath="/walkthroughs/authz-queries/filter" />
 
-The function returns Blog Post 1 and Blog Post 2, as Alice has edit permissions for these posts.
+async def main():
+    decisions = await permit.bulk_check(
+        [
+            {"user": "alice@permit.io", "action": "read", "resource": {"type": "blog_post", "key": "1"}},
+            {"user": "alice@permit.io", "action": "read", "resource": {"type": "blog_post", "key": "2"}},
+            {"user": "alice@permit.io", "action": "read", "resource": {"type": "blog_post", "key": "3"}},
+        ]
+    )
+    print(decisions)
 
-## Get Authorized Users
 
-Use the `permit.authorized_users` function to retrieve a list of users authorized to perform a specific action on a resource.
-This function takes an action and resource as inputs and returns the authorized users along with their role assignments that
-granted access.
+asyncio.run(main())
+```
 
-### Example: Retrieve Authorized Users
+</TabItem>
+<TabItem value="example.go" label="Go">
 
-Bob wants to know who can read Blog Post 3.
+```go
+package main
 
-<CodeBlock folderPath="/walkthroughs/authz-queries/getAuthorizedUsers" />
+import (
+	"fmt"
 
-The system responds with:
+	"github.com/permitio/permit-golang/pkg/config"
+	"github.com/permitio/permit-golang/pkg/enforcement"
+	"github.com/permitio/permit-golang/pkg/permit"
+)
 
-- Alice (has read permissions).
-- Bob (has edit and read permissions).
+func main() {
+	permitClient := permit.NewPermit(
+		config.NewConfigBuilder("<YOUR_API_KEY>").
+			WithPdpUrl("http://localhost:7766").
+			Build(),
+	)
 
-You can read more about getting resource authorized users [here](/how-to/enforce-permissions/authorized-users).
+	alice := enforcement.UserBuilder("alice@permit.io").Build()
+	requestContext := map[string]string{}
 
-## Get User Permissions
+	var checkRequests []enforcement.CheckRequest
+	for _, postID := range []string{"1", "2", "3"} {
+		post := enforcement.ResourceBuilder("blog_post").WithID(postID).Build()
+		checkRequests = append(checkRequests, *enforcement.NewCheckRequest(alice, "read", post, requestContext))
+	}
 
-Use the `permit.GetUserPermissions` function to retrieve all user permissions across all registered resources and tenants.
-Pass a user, optionally filter by a list of tenants, and get back an object with the permissions
-and attributes for each tenant the user is assigned to.
+	// results[i] is the decision for checkRequests[i]
+	results, err := permitClient.BulkCheck(checkRequests...)
+	if err != nil {
+		fmt.Printf("Error enforcing permissions: %s\n", err)
+		return
+	}
+	for i, request := range checkRequests {
+		fmt.Printf("%d. blog_post:%s read = %v\n", i, request.Resource.ID, results[i])
+	}
+}
+```
 
-### Example: Bob's Permissions
+</TabItem>
+<TabItem value="example.java" label="Java">
 
-<CodeBlock folderPath="/walkthroughs/authz-queries/getUserPermissions" />
+```java
+import io.permit.sdk.Permit;
+import io.permit.sdk.PermitConfig;
+import io.permit.sdk.enforcement.CheckQuery;
+import io.permit.sdk.enforcement.Resource;
+import io.permit.sdk.enforcement.User;
+import java.util.Arrays;
 
-The system returns a list of Bob's permissions:
+Permit permit = new Permit(
+    new PermitConfig.Builder("<YOUR_API_KEY>")
+        .withPdpAddress("http://localhost:7766")
+        .build()
+);
 
-- Blog Post 1: Read
-- Blog Post 2: Read
-- Blog Post 3: Read, Edit
+User alice = User.fromString("alice@permit.io");
 
-You can read more about getting user permissions [here](/how-to/enforce-permissions/user-permissions).
+boolean[] decisions = permit.bulkCheck(Arrays.asList(
+    new CheckQuery(alice, "read", new Resource.Builder("blog_post").withKey("1").withTenant("default").build()),
+    new CheckQuery(alice, "read", new Resource.Builder("blog_post").withKey("2").withTenant("default").build()),
+    new CheckQuery(alice, "read", new Resource.Builder("blog_post").withKey("3").withTenant("default").build())
+));
 
-## What did you learn?
+System.out.println(Arrays.toString(decisions));
+```
 
-<WhatsNext progress={90} customText="No Authorization Query stands a chance now!">
-  <h2>What's next? 🎉</h2>
+</TabItem>
+</Tabs>
+
+With the policy in [The example scenario](#the-example-scenario), all three decisions are `true`: Alice can read all three posts. The Node.js sample prints `[ true, true, true ]`, the Python sample prints `[True, True, True]`, the Java sample prints `[true, true, true]`, and the Go sample prints one line per post:
+
+```text
+0. blog_post:1 read = true
+1. blog_post:2 read = true
+2. blog_post:3 read = true
+```
+
+One request returns all three decisions, instead of one request per post. If a decision is `false` where you expect `true`, confirm that the instance exists in the tenant you passed and that the policy grants `read` on it.
+
+See [Bulk check](/how-to/enforce-permissions/bulk-check/) for the full reference.
+
+## Filter objects \{#filterobjects}
+
+Filtering objects removes the objects a user can't access from a list you already fetched. Fetch the records from your database, pass them to `FilterObjects()` (Go) or `filter_objects()` (Python), and get back the subset the policy allows, in the original order. The Node.js and Java SDKs have no equivalent function: send a bulk check and keep the records whose decision is `true`.
+
+### Example: Alice filters the posts she can edit \{#example-alice-filters-blog-posts}
+
+Alice wants the blog posts she can edit. Pass Alice as the user, `edit` as the action, and the three posts as the resources.
+
+<Tabs groupId="code-snippets">
+<TabItem value="example.py" label="Python">
+
+```python
+import asyncio
+from permit import Permit
+
+permit = Permit(
+    token="<YOUR_API_KEY>",
+    pdp="http://localhost:7766",
+)
+
+
+async def main():
+    posts = [
+        {"type": "blog_post", "key": "1", "tenant": "default"},
+        {"type": "blog_post", "key": "2", "tenant": "default"},
+        {"type": "blog_post", "key": "3", "tenant": "default"},
+    ]
+
+    allowed = await permit.filter_objects(
+        user={"key": "alice@permit.io"},
+        action="edit",
+        context={},
+        resources=posts,
+    )
+
+    for post in allowed:
+        print(f"alice@permit.io can edit blog_post:{post['key']}")
+
+
+asyncio.run(main())
+```
+
+</TabItem>
+<TabItem value="example.go" label="Go">
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/permitio/permit-golang/pkg/config"
+	"github.com/permitio/permit-golang/pkg/enforcement"
+	"github.com/permitio/permit-golang/pkg/permit"
+)
+
+func main() {
+	permitClient := permit.NewPermit(
+		config.NewConfigBuilder("<YOUR_API_KEY>").
+			WithPdpUrl("http://localhost:7766").
+			Build(),
+	)
+
+	alice := enforcement.UserBuilder("alice@permit.io").Build()
+	requestContext := map[string]string{}
+	posts := []enforcement.ResourceI{
+		enforcement.ResourceBuilder("blog_post").WithID("1").WithTenant(enforcement.DefaultTenant),
+		enforcement.ResourceBuilder("blog_post").WithID("2").WithTenant(enforcement.DefaultTenant),
+		enforcement.ResourceBuilder("blog_post").WithID("3").WithTenant(enforcement.DefaultTenant),
+	}
+
+	allowed, err := permitClient.FilterObjects(alice, "edit", requestContext, posts...)
+	if err != nil {
+		fmt.Printf("Error enforcing permissions: %s\n", err)
+		return
+	}
+	for _, post := range allowed {
+		fmt.Printf("alice@permit.io can edit blog_post:%s\n", post.GetID())
+	}
+}
+```
+
+</TabItem>
+</Tabs>
+
+Both samples print two lines, because Alice can edit posts 1 and 2 but not post 3:
+
+```text
+alice@permit.io can edit blog_post:1
+alice@permit.io can edit blog_post:2
+```
+
+The denied post is left out of the returned list, so the returned list is shorter than the list you passed.
+
+See [Filter data by permission](/how-to/enforce-permissions/data-filtering) to compare filtering approaches.
+
+## Get authorized users
+
+The authorized users query lists the users who can perform an action on a resource type or a resource instance. It returns the users with the role assignments that grant the access. The Python SDK exposes it as `permit.authorized_users()`. In the other SDKs, call the PDP endpoint directly.
+
+### Example: Bob lists who can read Blog Post 3 \{#example-retrieve-authorized-users}
+
+Bob wants to know who can read Blog Post 3. Pass the action `read` and the resource instance.
+
+<Tabs groupId="code-snippets">
+<TabItem value="example.py" label="Python">
+
+```python
+import asyncio
+from permit import Permit
+
+permit = Permit(
+    token="<YOUR_API_KEY>",
+    pdp="http://localhost:7766",
+)
+
+
+async def main():
+    result = await permit.authorized_users("read", "blog_post:3")
+    print(result.resource, result.tenant)
+    for user_key in result.users:
+        print(user_key)
+
+
+asyncio.run(main())
+```
+
+</TabItem>
+<TabItem value="example.bash" label="cURL">
+
+```bash
+curl http://localhost:7766/authorized_users \
+  --request POST \
+  --header "Authorization: Bearer <YOUR_API_KEY>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "action": "read",
+    "resource": {
+      "type": "blog_post",
+      "key": "3",
+      "tenant": "default"
+    },
+    "context": {},
+    "sdk": "curl"
+  }'
+```
+
+</TabItem>
+</Tabs>
+
+Both users can read Blog Post 3, so the `users` map has two keys, `alice@permit.io` and `bob@permit.io`. The Python sample prints `blog_post:3 default` and then one line per user key:
+
+```text
+blog_post:3 default
+alice@permit.io
+bob@permit.io
+```
+
+The value behind each user key is the list of role assignments that grant `read`, each with the assignment's `user`, `tenant`, `resource`, and `role`. Alice is listed through the `read` permission every user has, and Bob is listed through his ownership of the post, which grants `edit` and `read`. An empty `users` map means no user in the tenant can `read` that post.
+
+See [Get resource authorized users](/how-to/enforce-permissions/authorized-users) for the arguments and the result format.
+
+## Get user permissions
+
+The user permissions query returns all of a user's permissions for every registered resource, in every tenant the user is assigned to. You can narrow the result to a list of tenants, resource instances, or resource types. The result maps each tenant or resource instance to the user's permissions and roles on it.
+
+### Example: Bob's permissions \{#example-bobs-permissions}
+
+Get Bob's permissions on the `blog_post` resource type:
+
+<Tabs groupId="code-snippets">
+<TabItem value="example.js" label="Node.js">
+
+```js
+const { Permit } = require("permitio");
+
+const permit = new Permit({
+  token: "<YOUR_API_KEY>",
+  pdp: "http://localhost:7766",
+});
+
+const permissions = await permit.getUserPermissions(
+  "bob@permit.io",
+  ["default"], // tenants filter
+  undefined, // no resource instance filter
+  ["blog_post"], // resource types filter
+);
+
+for (const [object, details] of Object.entries(permissions)) {
+  console.log(object, details.permissions);
+}
+```
+
+</TabItem>
+<TabItem value="example.py" label="Python">
+
+```python
+import asyncio
+from permit import Permit
+
+permit = Permit(
+    token="<YOUR_API_KEY>",
+    pdp="http://localhost:7766",
+)
+
+
+async def main():
+    permissions = await permit.get_user_permissions(
+        user={"key": "bob@permit.io"},
+        tenants=["default"],
+        resource_types=["blog_post"],
+    )
+    for object_key, details in permissions.items():
+        print(object_key, details["permissions"])
+
+
+asyncio.run(main())
+```
+
+</TabItem>
+<TabItem value="example.bash" label="cURL">
+
+```bash
+curl http://localhost:7766/user-permissions \
+  --request POST \
+  --header "Authorization: Bearer <YOUR_API_KEY>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "user": {
+      "key": "bob@permit.io"
+    },
+    "tenants": ["default"],
+    "resource_types": ["blog_post"],
+    "context": {}
+  }'
+```
+
+</TabItem>
+</Tabs>
+
+The result has one entry per blog post, keyed by `blog_post:<key>`, and each entry lists the actions Bob can perform on that post:
+
+| Result key | Bob's permissions |
+|---|---|
+| `blog_post:1` | `blog_post:read` |
+| `blog_post:2` | `blog_post:read` |
+| `blog_post:3` | `blog_post:read`, `blog_post:edit` |
+
+Each permission is a `resource_type:action` string. An empty result means Bob has no role assignment in the `default` tenant on any `blog_post` instance.
+
+See [Get user permissions](/how-to/enforce-permissions/user-permissions) for the full reference.
+
+## Next steps \{#what-did-you-learn}
+
+<WhatsNext progress={90} customText="Next: add access requests and approvals to your app.">
+  <h2>What's next?</h2>
   <ul>
-    <li>Implement bulk permission checks to optimize authorization workflows</li>
-    <li>Use policy-based filtering to retrieve only relevant data</li>
-    <li>Query and manage user permissions dynamically</li>
+    <li><a href="/overview/access-requests-and-approvals">Add access requests and approvals with Permit Elements</a></li>
+    <li><a href="/how-to/enforce-permissions/bulk-check/">Run bulk checks</a></li>
+    <li><a href="/how-to/enforce-permissions/data-filtering">Filter data by permission</a></li>
+    <li><a href="/how-to/enforce-permissions/user-permissions">Get a user's permissions</a></li>
   </ul>
 </WhatsNext>

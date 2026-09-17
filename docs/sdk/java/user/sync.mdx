@@ -1,44 +1,52 @@
 ---
-description: "Sync a user's identity and attributes to Permit.io on creation with the Java SDK."
+title: Sync a user with the Java SDK
+sidebar_label: permit.api.users.sync()
+description: "Reference for permit.api.users.sync() in the Java SDK: create or update a user by key, with signatures, fields, example, return value, and exceptions."
 ---
 
-# permit.api.users.sync()
-
-This function is used to sync (save) a user's information to the Permit.io cloud and PDP (Policy Decision Point) upon user creation.
+`permit.api.users.sync()` creates a user in your Permit environment, or updates the user if a user with the same key already exists. Call `sync()` when a user signs up or signs in to your application, so the policy decision point (PDP) can evaluate permission checks for that user. This reference is for Java developers who connect their authentication system to Permit. The examples assume an initialized `Permit` client named `permit`, as set up in [Check permissions with the Java SDK](/sdk/java/quickstart-java).
 
 :::note
-This function **should be** used for the initial creation of the user. This means that when you need to have the user synced between your authentication
-solution and Permit, this is the function you need to use.
-
-Once the user has been synced with Permit, you **should not** use this sdk call to update the user's _role_.
-
-Instead, you should use the **[assignRole](/sdk/java/role/assign-role)** function.
-
+Don't use `sync()` to change a user's roles after the first sync. To add or remove a role, call [`permit.api.users.assignRole()`](/sdk/java/role/assign-role) or [`permit.api.users.unassignRole()`](/sdk/java/role/unassign-role).
 :::
 
-### Parameters
+## Signature
 
-`user` - An object that contains the information about the user. The payload is defined below.<br/>
+| Overload | Behavior |
+|---|---|
+| `CreateOrUpdateResult<UserRead> sync(User user)` | Takes the same `User` object (`io.permit.sdk.enforcement.User`) that `permit.check()` takes. The SDK copies the key, email, first name, last name, and attributes into a `UserCreate` object. Role assignments set with `withRoleAssignments()` on the builder are not sent. |
+| `CreateOrUpdateResult<UserRead> sync(UserCreate userData)` | Takes a `UserCreate` object (`io.permit.sdk.openapi.models.UserCreate`), the same type that [`permit.api.users.create()`](/sdk/java/user/create#payload) takes. |
 
-### Payload
+Both overloads throw `IOException`, `PermitApiError`, and `PermitContextError`. The SDK sends the user as an HTTP `PUT` request to the user's key.
 
-`key` - A unique id by which Permit will identify the user for permission checks.
+## Parameters
 
-You will later pass this ID to the `permit.check()` API.
-You can use anything for this ID - the user email, a UUID or anything else as long as it's unique on your end.
-The user key must be url-friendly (slugified).<br/><br/>
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `user` | `User` | Yes, for the `User` overload | The user to sync. Build the object with `new User.Builder(key)` and the fields in [User fields](#payload). |
+| `userData` | `UserCreate` | Yes, for the `UserCreate` overload | The user to sync. The fields are listed in [Create a user with the Java SDK](/sdk/java/user/create#payload). |
 
-`email` - **optional** - The email of the user. If synced, will be unique inside the environment.<br/>
-`firstName` - **optional** - First name of the user.<br/>
-`lastName` - **optional** - Last name of the user.<br/>
-`attributes` - **optional** - Arbitrary user attributes that will be used to enforce attribute-based access control policies.<br/>
+## User fields \{#payload}
 
-### Implementation
+The `User.Builder(key)` constructor sets the required key. Set the optional fields with the `with...()` builder methods, then call `build()`.
+
+| Field | Builder method | Type | Required | Description |
+|---|---|---|---|---|
+| `key` | `User.Builder(key)` | `String` | Yes | A unique ID by which Permit identifies the user in permission checks. Pass the same key to `permit.check()`. Use any value that is unique in your system, such as an email address or a UUID. |
+| `email` | `withEmail()` | `String` | No | The email address of the user. Unique within the environment. |
+| `firstName` | `withFirstName()` | `String` | No | The first name of the user. |
+| `lastName` | `withLastName()` | `String` | No | The last name of the user. |
+| `attributes` | `withAttributes()` | `HashMap<String, Object>` | No | User attributes for attribute-based access control (ABAC) policies. |
+
+## Example \{#implementation}
+
+The example syncs a user with a key, an email address, a first and last name, and attributes, then reads the result. The attributes map is a `java.util.HashMap`.
 
 ```java
 import io.permit.sdk.api.models.CreateOrUpdateResult;
 import io.permit.sdk.openapi.models.UserRead;
 import io.permit.sdk.enforcement.User;
+import java.util.HashMap;
 
 // optional attributes for attribute-based access control
 HashMap<String, Object> userAttributes = new HashMap<>();
@@ -47,13 +55,39 @@ userAttributes.put("fav_color", "red");
 
 // this is how you sync the user
 CreateOrUpdateResult<UserRead> result = permit.api.users.sync(
-    (new User.Builder("auth0|elon"))
-        .withEmail("elonmusk@tesla.com")
-        .withFirstName("Elon")
-        .withLastName("Musk")
+    (new User.Builder("auth0|john"))
+        .withEmail("john@permit.io")
+        .withFirstName("John")
+        .withLastName("Smith")
         .withAttributes(userAttributes)
         .build()
 );
 UserRead user = result.getResult();
 boolean wasCreated = result.wasCreated();
 ```
+
+## Return value
+
+`sync()` returns a `CreateOrUpdateResult<UserRead>` object (`io.permit.sdk.api.models.CreateOrUpdateResult`):
+
+| Method | Returns |
+|---|---|
+| `getResult()` | The synced user as a `UserRead` object. |
+| `wasCreated()` | `true` if the call created the user (HTTP status 201). `false` if the call updated an existing user. |
+
+## Exceptions
+
+All exception classes except `IOException` are in the `io.permit.sdk.api` package.
+
+| Exception | Thrown when |
+|---|---|
+| `IOException` | The HTTP request to the Permit API fails, for example because of a network error. |
+| `PermitApiError` | The Permit API returns an error status code. If the `UserCreate` key is `null`, the SDK throws `PermitApiError` with response code 406 before calling the API. `getResponseCode()` returns the HTTP status code and `getRawResponse()` returns the response body. |
+| `PermitContextError` | The SDK context does not include an environment, for example because the API key is scoped to an organization or project. |
+
+## Related methods
+
+- [Create a user with the Java SDK](/sdk/java/user/create)
+- [Assign a role to a user with the Java SDK](/sdk/java/role/assign-role)
+- [Delete a user with the Java SDK](/sdk/java/user/delete)
+- [Sync users](/how-to/sync-users)

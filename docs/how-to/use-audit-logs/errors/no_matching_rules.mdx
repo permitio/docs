@@ -1,20 +1,65 @@
 ---
-title: No permission found for user to this action on this resource
-description: "Fix the no permission found error by granting the missing action to the user's role in the Policy Editor or API."
+title: No ABAC rule grants the permission (no_matching_rules)
+description: "Fix a no_matching_rules decision, where the user matches a user set and the resource matches a resource set, but no ABAC rule grants the action."
 ---
 
-This error occurred because your user lacks the necessary role to execute this action, or you need to assign the appropriate permissions to
-the role associated with your user.
+A denied decision with the code `no_matching_rules` means the user matched at least one user set and the resource matched at least one resource set, but no attribute-based access control (ABAC) rule grants the checked action between them. This page is for developers who find this code in a decision log and need to fix the ABAC policy or the check.
 
-## A solution to the issue
+## What the no_matching_rules reason means
 
-### Granting permissions to a User Roles / User Sets with Permit web application
+The policy decision point (PDP) writes this code in the ABAC part of the decision log's debug details (`debug.abac`). The debug details appear when [Debug Mode](/how-to/use-audit-logs/debug-mode) is on.
 
-You can allocate this permission to a user role via the [Policy Management](https://app.permit.io/policy-editor) page
-on the Permit web application. Simply select the appropriate action for the relevant resource and click 'Save' to implement the
-changes in the PDP.
+| Field | Value |
+|---|---|
+| `code` | `no_matching_rules` |
+| `reason` | `user '<user-key>' does not match any rule that grants him the '<action>' permission on the given resource of type '<resource-type>'` |
+| `matching_usersets` | The user sets the user matched |
+| `matching_resourcesets` | The resource sets the resource matched |
+| `support_link` | A link to `/errors/no_matching_rules` on docs.permit.io |
 
-### Granting permissions to User Roles through the API
+The PDP runs its ABAC checks in a fixed order and reports the first one that fails. When you see `no_matching_rules`, the earlier checks passed:
 
-You can [utilize the API](https://api.permit.io/v2/redoc#tag/Condition-Set-Rules/operation/assign_set_permissions) to grant the
-necessary permissions to the user role.
+1. The user matched at least one user set. Otherwise the code is [no_matching_usersets](/how-to/use-audit-logs/errors/no_matching_usersets).
+2. The resource matched at least one resource set. Otherwise the code is [no_matching_resourcesets](/how-to/use-audit-logs/errors/no_matching_resourcesets).
+
+Only the last step failed: no rule grants the action from any of the `matching_usersets` on any of the `matching_resourcesets`.
+
+A role-based access control (RBAC) denial has a different code. For a user whose roles don't grant the action, see [No role grants the permission (no_permission)](/how-to/use-audit-logs/errors/no_permission).
+
+## Causes of no_matching_rules
+
+| Cause | How to confirm | Fix |
+|---|---|---|
+| No rule connects the matched user set and resource set for this action. | In the **Policy Editor**, the checkbox for the action is clear where the user set row meets the resource set column. | [Grant the action to the user set](#granting-permissions-to-a-user-roles--user-sets-with-permit-web-application). |
+| The rule grants the action on a different resource set than the one the resource matched. | The granted resource set is missing from `matching_resourcesets`. | Grant the action on a resource set in `matching_resourcesets`, or change the resource attributes so the resource matches the granted resource set. |
+| The rule grants the action to a different user set than the one the user matched. | The granted user set is missing from `matching_usersets`. | Grant the action to a user set in `matching_usersets`, or change the user attributes so the user matches the granted user set. |
+| The check uses a different action key than the one the rule grants. | The action in the `reason` differs from the action you granted. | Send the action key the rule grants in `permit.check()`. |
+
+## Fix no_matching_rules \{#a-solution-to-the-issue}
+
+### Grant the action to the user set in the Policy Editor \{#granting-permissions-to-a-user-roles--user-sets-with-permit-web-application}
+
+1. Open the [Policy Editor](https://app.permit.io/policy-editor) in the Permit dashboard.
+2. Find the row for a user set from `matching_usersets`.
+3. In the column of a resource set from `matching_resourcesets`, select the action from the `reason`.
+4. Click **Save**.
+
+For a full walkthrough, see [Grant permissions in Building your first ABAC policy](/how-to/build-policies/abac/building-abac-policy#step-6-applying-permissions).
+
+### Grant the action to the user set with the API \{#granting-permissions-to-user-roles-through-the-api}
+
+Create a condition set rule with the [Assign set permissions](https://api.permit.io/v2/redoc#tag/Condition-Set-Rules/operation/assign_set_permissions) endpoint. The body names the `user_set`, the `permission` in the `<resource-type>:<action>` form, and the `resource_set`. For a complete request, see [Assign condition set rules with the API](/api/working-with-abac/condition-set-rules).
+
+## Confirm the fix
+
+1. Run the same `permit.check()` call again with the same user, attributes, action, and resource. To run the check from a terminal, use [`permit pdp check`](/how-to/permit-cli/permit-cli-pdp#permit-pdp-check).
+2. Open the [Audit Log](https://app.permit.io/audit-log) and select the new decision.
+
+The decision is allowed, and `debug.abac` has the code `allow`.
+
+## Related pages
+
+- [Audit log types and decision logs](/how-to/use-audit-logs/types-and-filtering#decision-logs)
+- [Check an ABAC permission with attributes](/how-to/enforce-permissions/check#attributes)
+- [No matching user sets (no_matching_usersets)](/how-to/use-audit-logs/errors/no_matching_usersets)
+- [No matching resource sets (no_matching_resourcesets)](/how-to/use-audit-logs/errors/no_matching_resourcesets)

@@ -1,81 +1,122 @@
 ---
 sidebar_position: 6
-title: Condition Set Rule Examples
-description: "Walk through an example ABAC policy: create a user set and a resource set through the API for a bike rental rule."
+title: Condition set rule example
+sidebar_label: Condition Set Rule Examples
+description: "Build one ABAC policy end to end with the Permit API: a user set of full-time students, a resource set of bicycles, and the rule that connects them."
 ---
 
-### Example
+Build a complete attribute-based access control (ABAC) policy with the Permit API: one user set, one resource set, and one condition set rule. This page is for developers who have read [Create condition sets with the API](/api/working-with-abac/condition-sets) and want a worked example to adapt.
 
-#### Students that study at Stanford University and are not part of the part-time study scheme can rent University bicycles after 5pm.
+Every command replaces `<YOUR_API_KEY>` with your environment API key, and `{proj_id}` and `{env_id}` with your project and environment keys or IDs.
 
-First, lets define our conditions and actions.
+## Example policy: full-time students rent bicycles after 5 PM \{#example}
 
-**User Set** - Students who study at Stanford and are not part-time.<br/>
-**Action** - Renting Bicycles.<br/>
-**Resource Set** - All resources that are of type bicycle and can be rented after 5pm.
+### Policy statement \{#students-that-study-at-stanford-university-and-are-not-part-of-the-part-time-study-scheme-can-rent-university-bicycles-after-5pm}
 
-Now let's create a User Set and Resource Set through the API.
+Full-time students of Stanford University, a fictional university in this example, can rent the university's bicycles after 5 PM.
 
-#### User Set
+The policy breaks down into three parts:
 
-```javascript title="full_time_stanford_students"
-{
-    "key": "full_time_stanford_students",
-    "name": "Full-time Stanford Students",
+| Part | Definition | Key |
+|---|---|---|
+| **User set** | Users whose `university` attribute is `Stanford`, whose `is_full_time` attribute is `true`, and whose `current_hour` is 17 (5 PM) or later | `full_time_students_after_5` |
+| **Action** | Rent a bicycle | `bicycle:rent` |
+| **Resource set** | Bicycles whose `owner` attribute is `university` | `university_bicycles` |
+
+The time of the request belongs in the user set, not in the resource set: 5 PM is a property of the request, not of a bicycle. Your application reads the clock and sends the hour as the `current_hour` user attribute in each `permit.check()` call, the way the [time-based role example](/how-to/build-policies/abac/time-based-role) sends `current_time`. A resource attribute would hold whatever value was last written to the bicycle, so it could not express "after 5 PM".
+
+## Prerequisites
+
+- An environment API key. See [Get your API key](/overview/get-api-key).
+- A `bicycle` resource with a `rent` action and an `owner` resource attribute of type string.
+- Three user attributes: `university` (string), `is_full_time` (boolean), and `current_hour` (number). See [Define attributes](/how-to/build-policies/abac/defining-attributes).
+
+## 1. Create the user set \{#user-set}
+
+Create the user set with a `POST` request to the condition sets endpoint. The `allOf` operator requires all three conditions: the user studies at Stanford, studies full time, and sends a `current_hour` of 17 or later with the check.
+
+```bash title="full_time_students_after_5"
+curl 'https://api.permit.io/v2/schema/{proj_id}/{env_id}/condition_sets' \
+  -X POST \
+  -H 'Authorization: Bearer <YOUR_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "key": "full_time_students_after_5",
+    "name": "Full-time Stanford students after 5 PM",
     "type": "userset",
     "conditions": {
         "allOf": [
-            {
-                "user.role": {
-                    "equals": "student"
-                }
-            },
-            {
-                "user.education": {
-                    "not": [
-                        "part-time"
-                    ]
-                }
-            }
+            {"user.university": {"equals": "Stanford"}},
+            {"user.is_full_time": {"equals": true}},
+            {"user.current_hour": {"greater-than-equals": 17}}
         ]
     }
-}
+}'
 ```
 
-#### Resource Set
+## 2. Create the resource set \{#resource-set}
 
-```javascript title="rent_bicycle_after_5"
-{
-    "key": "rent_bicycle_after_5",
-    "name": "Rent Bicycles After 5PM",
+Create the resource set with a `POST` request to the same endpoint. `resource_id` ties the set to the `bicycle` resource, and the condition narrows it to the bicycles the university owns.
+
+```bash title="university_bicycles"
+curl 'https://api.permit.io/v2/schema/{proj_id}/{env_id}/condition_sets' \
+  -X POST \
+  -H 'Authorization: Bearer <YOUR_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "key": "university_bicycles",
+    "name": "University bicycles",
     "type": "resourceset",
+    "resource_id": "bicycle",
     "conditions": {
         "allOf": [
-            {
-                "resource.type": {
-                    "equals": "bicycle"
-                }
-            },
-            {
-                "resource.availability": {
-                    "greater-than-equals": [
-                        "17"
-                    ]
-                }
-            }
+            {"resource.owner": {"equals": "university"}}
         ]
     }
-}
+}'
 ```
 
-Finally, let's define our condition rule:
+## 3. Create the condition set rule
 
-```javascript
-{
-    "user_set": "full_time_stanford_students",
-    "permissions": [
-        "bicycle:rent"
-    ],
-    "resource_set": "rent_bicycle_after_5"
-}
+The rule grants `bicycle:rent` to the user set on the resource set. It references both sets by key, so create the sets first.
+
+```bash title="bicycle:rent set rule"
+curl 'https://api.permit.io/v2/facts/{proj_id}/{env_id}/set_rules' \
+  -X POST \
+  -H 'Authorization: Bearer <YOUR_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "user_set": "full_time_students_after_5",
+    "permission": "bicycle:rent",
+    "resource_set": "university_bicycles"
+}'
 ```
+
+## 4. Verify the policy
+
+List the rules of the user set:
+
+```bash
+curl -G 'https://api.permit.io/v2/facts/{proj_id}/{env_id}/set_rules' \
+  -H 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data-urlencode 'user_set=full_time_students_after_5'
+```
+
+The response is an array with one rule. Each rule also carries the `id`, `key`, `organization_id`, `project_id`, `environment_id`, `created_at`, and `updated_at` fields that Permit assigns:
+
+```json
+[
+  {
+    "user_set": "full_time_students_after_5",
+    "permission": "bicycle:rent",
+    "resource_set": "university_bicycles"
+  }
+]
+```
+
+To test the policy with real users and resources, run a permission check that passes the attributes the sets use. The check returns `true` for a full-time Stanford student, a `current_hour` of 17 or later, and a bicycle whose `owner` is `university`, and `false` when any of the three doesn't hold. For the call in each language, see [Check permissions](/how-to/enforce-permissions/check).
+
+## Next steps
+
+- [Review all comparison operators](/api/working-with-abac/operators) to write other conditions.
+- [Build ABAC policies in the Policy Editor](/how-to/build-policies/abac/building-abac-policy) to see the same sets and rule in the dashboard.

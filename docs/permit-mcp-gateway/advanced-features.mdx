@@ -1,144 +1,117 @@
 ---
 title: Advanced Features
 sidebar_label: Advanced Features
-description: Explore Permit MCP Gateway's enterprise capabilities — human-in-the-loop approvals, time-limited consent, agent verification, and additional security controls.
+description: Learn what the Enterprise security controls in Permit MCP Gateway do, including agent interrogation, human-in-the-loop approvals, time-limited consent, and permission receipts.
 sidebar_position: 9
 ---
 
-# Advanced Features
+This page is for admins and security leads who evaluate Permit MCP Gateway beyond authentication and trust levels. It explains what each advanced security control does and links to the page that documents its setup.
 
-Permit MCP Gateway's Enterprise plan includes additional security controls for organizations that need to go beyond standard authentication and trust levels.
-
-:::note Enterprise Plan
-The features on this page are available on **Enterprise** plans. Some features described below may be in early access or under active development. [Schedule a demo](https://calendly.com/permit-io/demo) to discuss availability, maturity, and fit for your use case.
+:::note Enterprise plan
+The features on this page are for **Enterprise** plans, and availability differs by feature. See the [feature availability table](#feature-maturity-summary), and [schedule a demo](https://www.permit.io/demo) to confirm availability for your deployment.
 :::
 
 ## Agent Interrogation
 
-Traditional identity systems were built for humans and static services. Agents are different — they are non-deterministic, their prompts and toolchains can change between sessions, and a single MCP client connection may multiplex multiple contexts. Standard OAuth client IDs identify *the tool*, not *the agent's actual identity and intent*.
+An OAuth client ID identifies the MCP client software, such as Cursor. The client ID doesn't identify what the agent running in that client is doing. An agent's prompts and tools can change between sessions, and one MCP client connection can carry several contexts.
 
-Agent Interrogation is an agentic-native identity mechanism built into the gateway. Before any tools are unlocked, the gateway directly engages the connecting agent through the MCP protocol itself — requiring it to identify itself and its purpose. This produces a **persistent, composite agent identity** that goes beyond client credentials to capture *who the agent is, who it acts for, and what it intends to do*.
+Agent Interrogation identifies the agent itself. Before the gateway unlocks tools, the connecting agent identifies itself and states its purpose through the MCP protocol. The gateway uses the answers to build a **composite agent identity** that records who the agent is, who it acts for, and what it intends to do.
 
-### How It Works
+### How Agent Interrogation works \{#how-it-works}
 
-When an agent connects to the gateway, it initially sees only a single tool: `identify_self`. All other tools are gated behind this step. The agent must complete an interrogation exchange before the full tool catalog is unlocked. This approach is agentic-native — it uses the same MCP protocol the agent already speaks, requiring no additional SDKs, side channels, or client modifications.
+When an agent connects, the gateway exposes one tool: `identify_self`. The gateway unlocks the rest of the tool catalog after the agent completes the interrogation exchange. The exchange runs over MCP, so the agent doesn't need an extra SDK, a side channel, or a client change.
 
-The interrogation produces a **composite agent identity** that binds three dimensions:
+The composite agent identity combines three parts:
 
-- **The delegating human** — the authenticated user accountable for the agent's actions
-- **The workflow context** — the operational frame in which the agent acts (e.g., "code review assistant for the platform team" vs. "personal research assistant")
-- **The agent fingerprint** — a stable, probabilistic identity signature derived from the agent's own responses, representing its behavioral characteristics and intent
+| Part | What it records |
+| --- | --- |
+| **Delegating human** | The authenticated user who is accountable for the agent's actions. |
+| **Workflow context** | The task the agent performs, such as "code review assistant for the platform team" or "personal research assistant". |
+| **Agent fingerprint** | An identity signature derived from the agent's own responses, used to compare the agent's later behavior with its baseline. |
 
-This composite identity becomes the subject used for all subsequent policy evaluation, audit logging, and drift detection.
+The gateway uses the composite identity as the subject of policy evaluation, audit logging, and drift detection.
 
-### Value for Policy Enforcement
+### Policy enforcement with Agent Interrogation \{#value-for-policy-enforcement}
 
-Agent Interrogation gives the policy engine a richer identity to reason about than a bare client ID:
+- **Tool access gate:** no tool is available until the agent identifies itself, so every tool call is tied to an identified agent.
+- **Per-workflow policy:** because the identity includes the workflow context, admins can give the same MCP client different trust levels and tools in different workflows.
+- **Drift reactions:** when an agent's fingerprint moves away from its baseline, for example after a changed system prompt, a model swap, or a prompt injection, policy can downgrade trust, require re-consent, block execution, or require human approval.
+- **Step-up consent:** when an agent declares destructive or sensitive capabilities during interrogation, policy can require human approval before granting access.
 
-- **Hard-gate tool access** — no tools are accessible until the agent has identified itself. This ensures that every tool call in the system is tied to a verified agent identity.
-- **Per-workflow policy** — because the interrogation captures the agent's operational context, admins can define different trust levels and tool access for the same MCP client operating in different workflows.
-- **Drift-triggered policy reactions** — if an agent's fingerprint deviates meaningfully from its established baseline (indicating a changed system prompt, model swap, or prompt injection), the gateway can automatically respond: downgrade trust, require re-consent, block execution, or route to human approval. These reactions are policy-driven and configurable per workflow.
-- **Step-up consent on intent mismatch** — when an agent declares destructive or sensitive capabilities during interrogation, policy can require additional human approval before granting access.
+### Auditing and governance with Agent Interrogation \{#value-for-auditing-and-governance}
 
-### Value for Auditing and Governance
+Each agent session starts with a record of who the agent is and what it intends to do:
 
-Every agent session begins with a declarative record of who the agent is and what it intends to do:
+- **Identity across sessions:** the fingerprint lets security teams follow one agent's behavior across client restarts and reconnections.
+- **Declared intent and observed behavior:** the agent declares the tools and data it expects to use. The gateway logs the declaration, which reviewers can compare with the tool calls the agent makes.
+- **Identity chain in audit logs:** each tool call is attributed to the delegating human, the workflow context, the agent fingerprint, and the session.
+- **Drift history:** admins can see when and how an agent's fingerprint changed.
 
-- **Persistent identity across sessions** — the fingerprint provides continuity. Security teams can track a specific agent's behavior over time, even across client restarts and re-connections.
-- **Declared intent vs. observed behavior** — during interrogation, the agent declares what tools it expects to call and what data it expects to access. This declared intent is logged and can be compared against actual tool call patterns during the session, surfacing unexpected deviations for review.
-- **Full identity chain in audit logs** — every tool call is attributed to the composite identity: the human who delegated, the workflow context, the verified agent fingerprint, and the session. This gives compliance and security teams the full chain of accountability.
-- **Drift history** — fingerprint changes over time are tracked, giving admins visibility into when and how agent behavior shifts.
+### Prompt injection detection with Agent Interrogation \{#value-for-prompt-injection-protection}
 
-### Value for Prompt Injection Protection
+- **Baseline fingerprint:** a prompt injection that changes an agent's system prompt or behavior can change the agent's fingerprint, and a change from the baseline raises a drift alert.
+- **Several dimensions:** the fingerprint covers agent intent, delegator context, and operational environment, so an attack that changes one dimension, such as instructions to act as a different workflow, can change the fingerprint even when the other dimensions stay the same.
+- **Context-bound identity:** identity is tied to the agent's context, not only the client connection. On an MCP client connection that carries several contexts, binding identity to context reduces the risk that a compromised context uses permissions granted to a different context.
 
-Agent Interrogation provides a detection layer against prompt injection and agent manipulation:
+Agent Interrogation doesn't prevent prompt injection. It adds detection and enforcement at the gateway, alongside the other defenses in your agent stack.
 
-- **Baseline fingerprinting** — a legitimate agent produces a consistent identity signature across sessions. If a prompt injection alters the agent's system prompt or behavioral context, the resulting fingerprint will diverge from the established baseline, triggering a drift alert.
-- **Multi-dimensional drift detection** — the fingerprint captures multiple independent dimensions (agent intent, delegator context, operational environment). An attack that manipulates one dimension — for example, injecting instructions to impersonate a different workflow — is likely to cause measurable drift even if other dimensions remain stable.
-- **Session isolation** — by binding identity to the specific agent context rather than just the client connection, interrogation reduces the risk of session confusion in multiplexed MCP client connections, where a compromised context could otherwise access permissions granted to a different context on the same connection.
+For the drift protection that the HTTP egress proxy provides, see [Agent identity and drift protection](/permit-mcp-gateway/http-egress-proxy/security#agent-identity-and-drift-protection).
 
-Agent Interrogation does not fully prevent prompt injection — that remains a defense-in-depth challenge across the agent stack. It provides an additional detection and enforcement layer at the gateway boundary that is particularly valuable because it operates on the agent's own self-reported identity, making it sensitive to the kinds of behavioral shifts that prompt injections cause.
+## Human-in-the-Loop Approvals (HITL) \{#human-in-the-loop-approvals-hitl}
 
-:::note Maturity
-Agent Interrogation is under active development as an Enterprise capability. The interrogation protocol, fingerprinting methodology, and drift detection thresholds are being refined. [Contact us](mailto:support@permit.io) for current status, early access, and roadmap details.
-:::
+Human-in-the-loop approvals pause a sensitive agent tool call, such as deleting records or changing production data, until an admin approves or rejects it. Tool calls that don't require approval run without a pause.
 
----
+HITL includes per-tool, per-server, and per-trust-level approval policies, an approval queue with batch actions, approval history, a trusted agent bypass for automation, and email and Slack notifications.
 
-## Human-in-the-Loop Approvals (HITL)
-
-Require human approval for high-risk agent actions. When an agent requests a sensitive operation — such as deleting records, modifying production data, or accessing restricted resources — the gateway pauses execution and routes an approval request to a designated reviewer. Routine operations continue without interruption.
-
-HITL includes per-tool, per-server, and per-trust-level approval policies, a real-time approval queue with batch actions, approval history, trusted agent bypass for automation, and email/Slack notifications.
-
-See the dedicated **[Human-in-the-Loop Approvals](/permit-mcp-gateway/human-in-the-loop)** guide for full documentation.
+For setup, see [Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop).
 
 ## Time-Limited Consent
 
-Set custom consent windows that automatically expire. For example, grant a contractor's agent two-week access — when the window closes, access is revoked automatically. If the engagement extends, the user re-consents through the standard flow.
+Time-limited consent sets a consent window that expires. For example, you can give a contractor's agent two weeks of access. When the window closes, the gateway revokes access. If the engagement continues, the user consents again through the standard [consent flow](/permit-mcp-gateway/consent-service).
 
 :::info
-All plans include built-in session expiry (90-day hard / 30-day inactivity). Enterprise adds fully configurable consent windows for fine-grained control over access duration.
+Every plan includes session expiry: a session ends 90 days after the last tool call, and each tool call resets that timer. Enterprise plans add configurable consent windows. See [Session expiry](/permit-mcp-gateway/consent-service#session-expiry).
 :::
 
 ## Agent Verification
 
-Verify that connecting agents match expected behavioral and identity characteristics. Agent verification builds a profile when an agent connects, which can be used to detect unexpected changes in agent identity or behavior over time.
+Agent verification checks that a connecting agent matches its expected identity and behavior. The gateway builds a profile when the agent connects and uses it to detect changes in the agent's identity or behavior over time.
 
-[Agent Interrogation](#agent-interrogation) provides the underlying mechanism for agent verification — the fingerprint generated during interrogation serves as the persistent identity baseline against which subsequent connections are compared.
-
-:::note Maturity
-Agent verification capabilities (including behavioral profiling and drift detection) are under active development. Specific detection capabilities and accuracy characteristics may vary. [Contact us](mailto:support@permit.io) for current status and roadmap details.
-:::
+[Agent Interrogation](#agent-interrogation) provides the mechanism. The fingerprint from interrogation is the baseline that later connections are compared against.
 
 ## Session Monitoring
 
-Gain visibility into what agents do during a session, not just at the gateway boundary. Session monitoring tracks tool call patterns within a session, providing additional context for security review and incident investigation.
+Session monitoring tracks the pattern of tool calls within a session, which gives security reviewers and incident investigators context beyond single calls at the gateway.
 
-When combined with [Agent Interrogation](#agent-interrogation), session monitoring can compare an agent's declared intent (captured during interrogation) against its actual tool call behavior, surfacing deviations for review.
-
-:::note Maturity
-Session monitoring capabilities (including anomaly detection and behavioral analysis) are under active development. [Contact us](mailto:support@permit.io) for current status and availability.
-:::
+With [Agent Interrogation](#agent-interrogation), session monitoring compares the intent the agent declared during interrogation with the tool calls it makes, and flags differences for review.
 
 ## Permission Receipts
 
-Get auditable records of every permission grant — who approved it, which agent, which MCP server, which tools, the trust level, and when it expires. Receipts provide an audit trail for compliance and governance, and can be exported for external review.
+A permission receipt is an audit record of a permission grant. It lists who approved the grant, the agent, the MCP server, the tools, the trust level, and when the grant expires. You can export receipts for compliance and governance reviews.
 
 ## Intent-Based Access Control
 
-Define what each agent is allowed to do by declaring its intended purpose up front. The gateway can evaluate the agent's declared intent against policy before execution begins — enabling access checks that consider the overall workflow, not just individual tool calls.
+Intent-based access control evaluates an agent's declared purpose against policy before the agent starts work, so access checks can consider the whole workflow instead of single tool calls.
 
-[Agent Interrogation](#agent-interrogation) is the mechanism through which intent is captured — during the interrogation exchange, the agent declares its purpose and expected tool usage, which policy can then use for access decisions.
+[Agent Interrogation](#agent-interrogation) captures the intent. During the interrogation exchange, the agent declares its purpose and the tools it expects to use, and policy uses the declaration for access decisions.
 
-:::note Maturity
-Intent-based access control is an emerging capability. [Contact us](mailto:support@permit.io) for current status and roadmap.
-:::
+## Feature availability \{#feature-maturity-summary}
 
----
-
-## Feature Maturity Summary
-
-| Feature | Status | Notes |
+| Feature | Availability | What it covers |
 | --- | --- | --- |
-| **Agent Interrogation** | Enterprise, active development | Agentic-native identity, fingerprinting, drift detection, and prompt injection defense |
-| **[Human-in-the-Loop Approvals](/permit-mcp-gateway/human-in-the-loop)** | Enterprise | Per-tool, per-server, and per-trust-level approval policies with email/Slack notifications |
-| **Time-Limited Consent** | Enterprise | Available for enterprise plans |
-| **Agent Verification** | Enterprise, early access | Behavioral profiling and drift detection, powered by Agent Interrogation |
-| **Session Monitoring** | Enterprise, early access | Anomaly detection capabilities under active development |
-| **Permission Receipts** | Enterprise | Available for enterprise plans |
-| **Intent-Based Access Control** | Enterprise, roadmap | Declared intent captured via Agent Interrogation, policy evaluation emerging |
+| **Agent Interrogation** | Contact Permit | Composite agent identity, fingerprinting, and drift detection |
+| **[Human-in-the-Loop Approvals](/permit-mcp-gateway/human-in-the-loop)** | Enterprise | Per-tool, per-server, and per-trust-level approval policies with email and Slack notifications |
+| **Time-Limited Consent** | Enterprise | Configurable consent windows |
+| **Agent Verification** | Contact Permit | Identity and behavior checks based on Agent Interrogation |
+| **Session Monitoring** | Contact Permit | Tool call patterns within a session |
+| **Permission Receipts** | Contact Permit | Exportable records of permission grants |
+| **Intent-Based Access Control** | Contact Permit | Policy decisions based on declared intent |
 
-:::info Items flagged on the marketing site but not yet detailed in documentation
-The following capabilities have been referenced in marketing materials but are not yet fully documented. Contact us for current status:
+For features marked "Contact Permit", [schedule a demo](https://www.permit.io/demo) or email [support@permit.io](mailto:support@permit.io) to confirm availability. You can also ask in the [Permit Slack community](https://io.permit.io/slack).
 
-- **Sub-millisecond authorization decisions** — performance characteristics depend on deployment model and policy complexity. Contact us for benchmark details.
-- **Anomaly detection** — behavioral anomaly detection for agent sessions is under development as part of session monitoring.
-- **Shadow agent detection** — detection of unauthorized agents connecting outside the gateway is an area of active research. Availability and detection methodology details are available on request.
-:::
+## Next steps
 
----
-
-**Interested in Enterprise features?** [Schedule a demo](https://calendly.com/permit-io/demo) or reach out at [support@permit.io](mailto:support@permit.io). You can also find us on [Slack](https://io.permit.io/slack).
-
-**Need the gateway in your own infrastructure?** See [Enterprise Deployment](/permit-mcp-gateway/enterprise-deployment) for customer-controlled deployment options, including local PDP, private MCP servers, and data residency compliance.
+- [Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop): set up approval policies and notifications.
+- [Consent Service](/permit-mcp-gateway/consent-service): how users grant trust and how sessions expire.
+- [Enterprise deployment](/permit-mcp-gateway/enterprise-deployment): run the gateway in your own infrastructure, with a local PDP, private MCP servers, and data residency.
+- [Audit logs](/permit-mcp-gateway/audit-logs): review agent activity.

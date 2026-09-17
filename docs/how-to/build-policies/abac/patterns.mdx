@@ -1,82 +1,139 @@
 ---
 sidebar_position: 5
 title: ABAC Design Patterns
-description: "Implement common ABAC design patterns in Permit, including ownership, group membership, and custom Rego attributes."
+description: "Implement common attribute-based access control (ABAC) patterns in Permit.io: ownership, group membership, attribute-to-attribute comparisons, condition groups, and dynamic attributes computed with custom Rego code."
 ---
 
-Below you'd find common authorization design-patterns implemented in ABAC, and guides on how to implement them.
+Implement common authorization patterns with attribute-based access control (ABAC) in Permit.io: ownership, group membership, comparisons between two attributes, several condition groups in one set, and dynamic attributes computed with custom Rego code. This page is for developers who know how to create user sets and resource sets, and want a recommended way to model a specific rule. To create user sets and resource sets, see [Building your first ABAC policy](/how-to/build-policies/abac/building-abac-policy).
 
 ## Ownership
 
-Ownership is one of the more common authorization patterns - in which a user can perform actions only on resources they own.
-There are three easy ways (in addition to writing policy directly as code) to implement ownership in Permit.io - all are equally valid and it's mostly a matter of taste.
+With ownership, a user can perform actions only on the resources they own. You can implement ownership in Permit in three ways with the Policy Editor, or write the policy as code. The three ways are equally valid:
 
-- ### Ownership via tenants
+| Approach | Where ownership is stored | Use when |
+|---|---|---|
+| [Ownership via tenants](#ownership-via-tenants) | The tenant of the user and of the resource | Each owner already maps to a tenant |
+| [Ownership via a list on the resource](#ownership-via-list-on-resource) | A resource attribute that lists the owner keys | Your application knows a resource's owners when it runs the check |
+| [Ownership via a list on the user profile](#ownership-via-list-on-user-profile) | A user attribute that lists the resource keys the user owns | Your application stores ownership on the user |
 
-  Ownership is defined by having the user and resource belong to the same tenant.
-  While implemented as an ABAC policy behind the scenes - you don't need to actually do so yourself - and you can enjoy the simplified API which treats tenants as a first class citizen.
+To model ownership with relationship-based access control (ReBAC) instead, see [Model ownership](/how-to/ownership).
 
-  [Read here](/overview/connecting-your-app#select-your-language) on creating and checking permissions based on tenancy.
+### Ownership via tenants
 
-- ### Ownership via list on resource
+A user owns a resource when the user and the resource belong to the same tenant. This pattern needs no ABAC condition set: Permit scopes every role assignment to a tenant, so a role-based access control (RBAC) role grants its permissions only inside the tenant it was assigned in. Pass the tenant in `permit.check()`, and the check allows the action only when the user holds a role that permits the action in that tenant.
 
-  The resource has an attribute listing all the user ids that own it.
-  Use a [dynamic resource (resource-set)](/how-to/build-policies/abac/building-abac-policy#step-5-defining-dynamic-resource-resource-set) to check against the list.
+To learn how tenants isolate users and resources, see [Multi-tenant authorization](/concepts/multi-tenant-authorization). To assign a role in one tenant, see [Create a user and assign the Admin role](/how-to/build-policies/rbac/building-rbac-policy#creating-a-user--assigning-a-role).
 
-  It would look something like this:
-  <img src="/img/resource_ownership.png" style={{ maxHeight: "45vh" }} />
+### Ownership via list on resource
 
-  And the permission check (assuming loading the attribute as part of the check) would look something like this:
+The resource has an attribute that lists the keys of the users who own it. A resource set checks whether the list contains the key of the user who makes the request.
 
-  ```javascript
-  const permitted = await permit.check(userKey, "read", {
-    type: "file", // The resource name
-    attributes: {
-      owners: [
-        "d08c85a349994aeb89a3f02c08bdb340", // user-1
-        "48fb889360604253a5189580b48694cf", // user-2
-      ],
-    },
-  });
-  ```
+1. Add an array attribute to the resource, for example `owner`.
+2. Create a resource set with the condition `resource.owner` `array contains (ref)` `user.key`.
+3. Grant the resource set its actions in the Policy Editor.
 
-- ### Ownership via list on user profile
-  The user profile has an attribute listing all the resource ids that it owns.
-  Use a [user-set](/how-to/build-policies/abac/building-abac-policy#step-3-defining-dynamic-role-user-set) to check against the list.
+![Dynamic Resource (Resource Set) form named owned_file for the file resource type, with the condition resource.owner array contains (ref) user.key](/img/resource_ownership.png)
+
+To check permissions, pass the owner list as a resource attribute in `permit.check()`. In the following example, `userKey` is the key of the user who makes the request:
+
+```javascript
+const permitted = await permit.check(userKey, "read", {
+  type: "file", // The resource name
+  attributes: {
+    owner: [
+      "d08c85a349994aeb89a3f02c08bdb340", // user-1
+      "48fb889360604253a5189580b48694cf", // user-2
+    ],
+  },
+});
+```
+
+The check returns `true` when `userKey` is one of the keys in `owner`.
+
+### Ownership via list on user profile
+
+The user has an attribute that lists the keys of the resources the user owns. A [user set](/how-to/build-policies/abac/building-abac-policy#step-3-defining-dynamic-role-user-set) checks whether that list contains the key of the requested resource, which your application passes as a resource attribute.
+
+1. Add an array attribute to the user, for example `owned_files`, and store the keys of the resources the user owns.
+2. Add an attribute to the resource, for example `id`, that your application fills with the key of the resource it checks.
+3. Create a user set with the condition `user.owned_files` `array contains (ref)` `resource.id`.
+4. Grant the user set its actions in the Policy Editor.
+
+To check permissions, pass both attributes in `permit.check()`:
+
+```javascript
+const permitted = await permit.check(
+  {
+    key: "john@permit.io",
+    attributes: { owned_files: ["readme", "budget"] },
+  },
+  "read",
+  {
+    type: "file",
+    attributes: { id: "readme" },
+  }
+);
+```
+
+The check returns `true`, because `owned_files` contains `readme`. With `id: "roadmap"`, the same check returns `false`.
+
+A user set matches a user in every tenant. To keep this pattern inside one tenant, add the conditions described in the tenant boundary warning of [Create the Full-time Stanford Student user set](/how-to/build-policies/abac/building-abac-policy#step-3-defining-dynamic-role-user-set).
 
 ## Belonging to a group
 
-Groups are a classic ReBAC concept; but ReBAC is a subset of ABAC, and we can often use it to implement group affiliation.
-The group can be represented as a resource by itself, a tenant, or an attribute of users or resources.
+Permit supports groups natively with ReBAC. To assign roles to a group instead of to each member, use the [Groups API](/api/rebac/groups) or read the [ReBAC overview](/how-to/build-policies/rebac/overview#organizations).
 
-- ### Group by tenants
+You can also represent a group with ABAC, as a tenant or as an attribute of users and resources.
 
-  You can use tenants as groups - having several tenants together form the actual higher level tenant.
-  Those can then be grouped by [tenant attributes](/how-to/build-policies/abac/defining-attributes#define-stored-tenant-attributes).
+### Group by tenants
 
-- ### Group by attributes
-  You can assign users and resources to a group using an attribute like `group_id` or `group_name` -
-  Implementation here is very similar to the ownership design pattern.
+Use tenants as groups, so several tenants together form a higher-level group. Group the tenants with [tenant attributes](/how-to/build-policies/abac/defining-attributes#define-stored-tenant-attributes).
 
-:::info
-Once we add ReBAC and groups natively to Permit.io - those would be the default recommended way to implement groups.
-:::
+### Group by attributes
+
+Assign users and resources to a group with an attribute such as `group_id` or `group_name`. The implementation follows the [ownership via a list on the resource](#ownership-via-list-on-resource) pattern: compare the group attribute of the resource with the group attribute of the user.
+
+## Compare a resource attribute with a user attribute
+
+A condition can compare an attribute with another attribute instead of with a fixed value. The Policy Editor marks these operators with `(ref)`, and the policy decision point (PDP) resolves the referenced attribute when it evaluates the check.
+
+For example, to allow an action only when the risk level of the resource is at or below the risk level the user is cleared for:
+
+1. Add a `risk` attribute of type Number to the resource, and a `risk` attribute of type Number to the user.
+2. Create a resource set on that resource type with the condition `resource.risk` `less-than-equals (ref)` `user.risk`.
+3. Grant the resource set its actions in the Policy Editor.
+
+![Dynamic Resource (Resource Set) form named Risk for the Route resource type, with the condition resource.risk less-than-equals (ref) user.risk](/img/abac/resource-user-condition.png)
+
+Give both attributes a value of the type the operator accepts. [Comparison operators](/api/working-with-abac/operators#comparison-operators) lists the operand type of each operator, and [Compare two attributes with a reference](/api/working-with-abac/operators#compare-two-attributes-with-a-reference) lists the operators that accept a reference.
+
+## Combine several condition groups
+
+A condition set can hold several condition groups. Conditions inside a group are joined by the operator you select on each row (`and` or `or`), and the groups are joined by the operator you select between them.
+
+1. In the user set or resource set form, add the conditions of the first group, and select `and` or `or` on each row after the first.
+2. Click **Add Condition Group** to add another group.
+3. Select the operator between the groups.
+
+![Condition set form with three condition groups, each holding three conditions joined by and or or, the groups joined by or, and an Add Condition Group button](/img/abac-updated/advanced-conditions.png)
+
+For the JSON that the API stores for these groups, see [Build ABAC conditions](/api/working-with-abac/building-conditions).
 
 ## Combining your own OPA Rego code with Permit.io generated ABAC code
 
-Permit.io allows you to **extend its ABAC capabilities** by writing custom Rego code. This enables you to create **dynamic attributes** that can be used in your ABAC policies.
+Add custom Open Policy Agent (OPA) Rego code to compute **dynamic attributes** that your ABAC policies use like any other attribute.
 
 ### How it works
 
-1. Write **custom Rego code** that generates attributes
-2. Use these attributes in your ABAC policies just like static attributes
-3. The custom code runs alongside Permit.io's generated ABAC code
+1. You write **custom Rego code** that generates attributes.
+2. You use the generated attributes in user set and resource set conditions, as you use stored attributes.
+3. The policy decision point (PDP) runs your custom code with the ABAC code that Permit generates.
 
-### Example: Creating a Dynamic Intersection Attribute
+### Example: Creating a dynamic intersection attribute \{#example-creating-a-dynamic-intersection-attribute}
 
-Let's say you want to check if there's an intersection between user and resource attributes. Instead of using static values, you can create a dynamic attribute using Rego.
+The following example computes a `has_intersection` user attribute that is `true` when a list attribute on the user and a list attribute on the resource share at least one value.
 
-Add this code to your [gitops](/integrations/gitops/overview) repository in the `custom/` directory:
+Add the code to the `custom/` directory of your [GitOps](/integrations/gitops/overview) repository:
 
 ```rego
 package permit.custom
@@ -95,16 +152,18 @@ custom_user_attributes["has_intersection"] := true {
 }
 ```
 
-:::info Important Requirements
+The code reads `attr_in_user` from the stored attributes of the user, and `attr_in_resource` from the resource attributes in the check input.
 
-- The package name **must** be `permit.custom`
-- The rule name **must** be `custom_user_attributes`
-- These are the **only requirements** - you can write any Rego logic you need
+:::info Requirements for custom attribute code
+
+- The package name **must** be `permit.custom`.
+- The rule name **must** be `custom_user_attributes`.
+- There are no other requirements. The rule body can contain any Rego logic.
 :::
 
-### Using the Custom Attribute
+### Using the custom attribute
 
-Once defined, you can use this attribute in your ABAC policies just like any other attribute:
+Use `user.has_intersection` in a user set condition, and pass the resource attribute in the check:
 
 ```javascript
 const permitted = await permit.check(userKey, "read", {
@@ -115,28 +174,33 @@ const permitted = await permit.check(userKey, "read", {
 });
 ```
 
-### Testing Your Custom Code
+The check returns `true` when the user's `attr_in_user` list contains `tag1` or `tag2`, and the user set with the `has_intersection` condition has `read` permission on `document`.
 
-1. **Using the OPA Playground**
+### Testing your custom code \{#testing-your-custom-code}
 
-   - [Try this example in the OPA Playground](https://play.openpolicyagent.org/p/115vpZj3ow)
-   - Great for initial development and testing
+1. **Test in the OPA Playground.** [Open this example in the OPA Playground](https://play.openpolicyagent.org/p/115vpZj3ow) to iterate on the Rego logic without a PDP.
 
-2. **Testing with Local PDP**
+2. **Test with a local PDP.** Run a PDP container. Replace `permit_key_XXXXX` with your environment API key. The command maps the PDP API to port `7767` on your machine, and the OPA API to port `8181`.
 
    ```bash
    docker run -it -p 7767:7000 -p 8181:8181 -e PDP_API_KEY=permit_key_XXXXX permitio/pdp-v2:latest
    ```
 
-   Then you can:
+   With the PDP running, you can:
 
-   - Send **POST requests** to `http://localhost:8181/v1/data/permit` with your input data
-   - Get raw outputs including **policy debug data**
-   - **Update custom policies directly** at `http://localhost:8181/v1/policies/custom/example.rego`
+   - Send **POST requests** with your input data to `http://localhost:8181/v1/data/permit`, and read the raw output, including **policy debug data**.
+   - **Update a custom policy directly** at `http://localhost:8181/v1/policies/custom/example.rego`.
 
-:::tip Development Workflow
+:::tip Development workflow
 
-1. Start with the **OPA Playground** for quick iterations
-2. Move to **local PDP** for more realistic testing
-3. Once satisfied, **commit to your gitops repository**
-   :::
+1. Iterate on the Rego logic in the **OPA Playground**.
+2. Test with a **local PDP** and your real policy data.
+3. **Commit the code to your GitOps repository**.
+:::
+
+## Next steps
+
+- [Defining attributes](/how-to/build-policies/abac/defining-attributes): store attribute values or pass them in the check.
+- [ABAC condition operators](/api/working-with-abac/operators): every operator a condition can use, including the reference operands.
+- [Write custom policies](/integrations/gitops/custom_policy): add your own Rego code to the policy repository.
+- [Model ownership](/how-to/ownership): compare ABAC and ReBAC approaches to resource ownership.

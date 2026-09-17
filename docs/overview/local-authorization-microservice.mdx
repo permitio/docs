@@ -2,95 +2,58 @@
 sidebar_position: 4
 title: Run Local Authorization Microservice
 timeline: true
-description: "Run the Permit.io PDP container next to your application, configure logging and ports, and monitor its health and metrics."
+description: "Configure decision logging and ports for the Permit.io PDP container running next to your application, and check its health, metrics, and API docs."
 ---
 
-Run the **authorization microservice**, the policy decision point ([PDP](/overview/glossary#pdp)), as a container next to your application. This guide explains why you would run it locally, then walks through running, configuring, and monitoring it.
+Configure the policy decision point (PDP) container that runs next to your application, then check its health, metrics, and API documentation. This page is for developers who run the PDP as a local authorization microservice instead of using the managed Cloud PDP.
 
-import CodeBlock from "../../src/components/code-block/CodeBlock";
-import WhatsNext from "../../src/components/whats-next/WhatsNext";
-import TimelineStep from "../../src/components/timeline/TimelineStep";
-import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
-import Video from "../../src/components/video/Video";
+## Why run the PDP locally \{#why-run-authorization-locally}
 
-import pullPDP from "/img/updated/walkthroughs/local-policy-check/pulling-pdp.mp4";
-import runPDP from "/img/updated/walkthroughs/local-policy-check/running-pdp.mp4";
+A local PDP evaluates permission checks inside your infrastructure instead of in Permit's cloud. The control plane in Permit's cloud still stores your policy, and Open Policy Administration Layer (OPAL) pushes policy and data changes to the PDP.
 
-## Why Run Authorization Locally?
+### Performance \{#1-lightning-fast-performance}
 
-A local **Policy Decision Point** (PDP) changes where decisions happen: inside your infrastructure instead of in Permit's cloud.
+The PDP evaluates every decision next to your application, so checks don't make a network round trip to Permit. When you run the PDP as a sidecar on the same host, the check goes over the loopback interface, so there is no network latency.
 
-### 1. Performance \{#1-lightning-fast-performance}
-The PDP evaluates every decision **locally**, next to your application, so checks never make a network round trip to the Permit cloud. Run it as a sidecar on the same host and the check goes over the loopback interface, so there is **no network latency at all**: the request never reaches a network.
+A well-configured local PDP answers thousands of checks per second with sub-millisecond latency, and under 10ms at p95 end to end from your application. Some customers serve millions of decisions a day from a single PDP instance. Your figures depend on policy complexity, the amount of data the PDP holds, and the host it runs on.
 
-A well-configured local PDP answers **thousands of checks per second** with **sub-millisecond latency**, and **under 10ms at p95** end to end from your application. Some customers serve **millions of decisions a day** from a single PDP instance. Your own figures depend on policy complexity, the amount of data the PDP holds, and the host it runs on.
+### Security and data residency \{#2-enhanced-security}
 
-### 2. Security and data residency \{#2-enhanced-security}
-The data your policies evaluate can **stay in your infrastructure**, which helps you meet **data residency requirements**. You control where the PDP runs and who can reach it.
+The data your policies evaluate can stay in your infrastructure, which helps you meet data residency requirements. You control where the PDP runs and who can reach it.
 
-### 3. Reliability \{#3-improved-reliability}
-Checks are answered by the PDP in your network, so decisions don't depend on Permit's availability. You run and scale the PDP like any other service in your infrastructure.
+### Reliability \{#3-improved-reliability}
 
-### 4. Full policy support \{#4-advanced-policy-support}
-A local PDP supports every policy model: **[RBAC](/how-to/build-policies/rbac/overview)**, **[ABAC](/how-to/build-policies/abac/overview)**, and **[ReBAC](/how-to/build-policies/rebac/overview)**. OPAL pushes policy changes to it as you make them.
+The PDP in your network answers the checks, so decisions don't depend on a request to Permit's cloud. You run and scale the PDP like any other service in your infrastructure.
 
-# Running the Authorization Microservice
+### Full policy model support \{#4-advanced-policy-support}
 
-<TimelineWrapper>
-<TimelineStep>
+A local PDP supports every policy model: [role-based access control (RBAC)](/how-to/build-policies/rbac/overview), [attribute-based access control (ABAC)](/how-to/build-policies/abac/overview), and [relationship-based access control (ReBAC)](/how-to/build-policies/rebac/overview). The Cloud PDP does not support ABAC. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
 
-## Pull the Docker Container
+## Prerequisites
 
-Pull the latest **PDP container** from Docker Hub:
+- Your environment API key. See [Get your API key](/overview/get-api-key).
+- Docker. See [Install Docker](https://docs.docker.com/get-started/get-docker/).
 
-```bash
-docker pull permitio/pdp-v2:latest
-```
+## Start the PDP container \{#running-the-authorization-microservice}
 
-<Video src={pullPDP} controls />
+Pull and run the `permitio/pdp-v2` image with the steps in [Run the PDP](/overview/run-pdp). The container PDP listens on port `7000` inside the container. The `docker run` commands on this page map that port to `localhost:7766` on your machine, so your application and the SDK send checks to `http://localhost:7766`.
 
-:::note
-If you haven't installed Docker yet, [get it here](https://docs.docker.com/get-started/get-docker/).
-:::
-
-</TimelineStep>
-<TimelineStep>
-
-## Run the Container
-
-Launch the PDP container with your [API key](/overview/use-the-permit-api-and-sdk):
-
-```bash
-docker run -it -p 7766:7000 \
-  --env PDP_DEBUG=True \
-  --env PDP_API_KEY=<YOUR_API_KEY> \
-  permitio/pdp-v2:latest
-```
-
-<Video src={runPDP} controls />
-
-<br />
-
-The PDP now listens on `localhost:7766` for authorization requests.
-
-:::tip
-Check that the container is running:
+To find the container ID and read the PDP output, run:
 
 ```bash
 docker ps
 docker logs <container_id>
 ```
 
-:::
+Each `docker run` command below replaces the basic command from [Run the PDP](/overview/run-pdp). Stop the running container first (`docker stop <container_id>`), or port `7766` is already in use and Docker fails to start the second container.
 
-</TimelineStep>
-<TimelineStep>
+## Configure the PDP container \{#advanced-configuration-options}
 
-## Advanced Configuration Options
+The PDP reads its configuration from environment variables that you pass with `--env`. This section covers the most common options. For every variable, see [PDP configuration](/concepts/pdp/configuration).
 
-### Debug Mode
+### Print decisions to the console \{#debug-mode}
 
-Enable detailed **logging** for troubleshooting:
+Add `PDP_OPA_DECISION_LOG_CONSOLE` to print every authorization decision to the container output, and `PDP_DEBUG` for debug-level logs:
 
 ```bash
 docker run -it -p 7766:7000 \
@@ -100,15 +63,14 @@ docker run -it -p 7766:7000 \
   permitio/pdp-v2:latest
 ```
 
-With these settings, the PDP:
+| Variable | Default | Effect |
+|---|---|---|
+| `PDP_DEBUG` | not set | Adds debug detail to the logs, including how the PDP evaluates policies. |
+| `PDP_OPA_DECISION_LOG_CONSOLE` | `False` | Prints each decision and its result to the console. Applies only while `PDP_OPA_DECISION_LOG_ENABLED` is `True`. |
 
-**Logs decisions to the console**: every authorization decision and its outcome (`PDP_OPA_DECISION_LOG_CONSOLE`).
+### Expose the OPA port \{#custom-port-configuration}
 
-**Logs in debug detail**: more detail about errors and about how policies are evaluated (`PDP_DEBUG`).
-
-### Custom Port Configuration
-
-Map the PDP ports to match your infrastructure:
+The PDP container runs Open Policy Agent (OPA), the policy engine, on port `8181`. Add a second port mapping to reach the OPA API directly for policy queries and debugging:
 
 ```bash
 docker run -it -p 7766:7000 -p 8181:8181 \
@@ -116,18 +78,16 @@ docker run -it -p 7766:7000 -p 8181:8181 \
   permitio/pdp-v2:latest
 ```
 
-The container exposes two ports:
+| Host port | Container port | Serves |
+|---|---|---|
+| `7766` | `7000` | The PDP API. Your application and SDK send checks here. |
+| `8181` | `8181` | The OPA API. |
 
-- `7766`: The main PDP API port
-- `8181`: The OPA API port for direct policy queries
+The OPA API rejects requests without an `Authorization: Bearer <YOUR_API_KEY>` header, except for OPA's `/health` endpoint. Don't expose port `8181` outside your network.
 
-:::tip
-You can interact directly with the OPA API on port 8181 for advanced policy queries and debugging.
-:::
+### Tune decision log uploads \{#decision-log-settings}
 
-### Decision Log Settings
-
-Tune decision logging:
+The PDP uploads decision logs to Permit, where they appear in the **Audit Log** screen. Control the uploads with these variables:
 
 ```bash
 docker run -it -p 7766:7000 \
@@ -137,67 +97,47 @@ docker run -it -p 7766:7000 \
   permitio/pdp-v2:latest
 ```
 
-</TimelineStep>
-</TimelineWrapper>
+| Variable | Default | Effect |
+|---|---|---|
+| `PDP_OPA_DECISION_LOG_ENABLED` | `True` | Uploads decision logs to Permit. Set to `False` and the Audit Log screen shows no decisions from this PDP. |
+| `PDP_OPA_DECISION_LOG_MIN_DELAY` | `1` | Minimum number of seconds between uploads. |
+| `PDP_OPA_DECISION_LOG_MAX_DELAY` | `10` | Maximum number of seconds between uploads. |
 
-## Monitoring and Debugging
+## Monitor the PDP \{#monitoring-and-debugging}
 
-<TimelineWrapper>
-<TimelineStep>
+### Check PDP health \{#health-checks}
 
-### Health Checks
+The PDP serves a health endpoint on the PDP API port:
 
-Monitor your PDP's **health status** through the health endpoint:
-
-```
+```text
 http://localhost:7766/health
 ```
 
-Use it for container **liveness and readiness checks**.
+A healthy PDP returns HTTP `200` with `"status": "ok"`. If a component inside the PDP is not healthy, the endpoint returns HTTP `503` with `"status": "error"`. The endpoint needs no API key, so you can use it for container liveness and readiness probes. The PDP also answers the same check at `/ready` and `/healthy`.
 
-</TimelineStep>
-<TimelineStep>
+### Collect PDP metrics \{#metrics}
 
-### Metrics
+OPA inside the PDP serves Prometheus metrics at `/metrics` on port `8181`:
 
-Read **metrics** from the metrics endpoint:
-
-```
-http://localhost:7766/metrics
+```text
+http://localhost:8181/metrics
 ```
 
-Scrape it with your monitoring stack to track request latency, decision counts, and errors. See [Monitoring PDPs](/how-to/monitoring-pdps).
+To read the metrics, map port `8181` as shown in [Expose the OPA port](#custom-port-configuration). Send your API key as a bearer token, or set `PDP_ALLOW_METRICS_UNAUTHENTICATED=True` so your monitoring stack can scrape the endpoint without a token. For PDP connection status in the Permit dashboard, see [Monitoring PDPs](/how-to/monitoring-pdps).
 
-</TimelineStep>
-<TimelineStep>
+### Browse the PDP API documentation \{#api-documentation}
 
-### API Documentation
+The PDP serves ReDoc documentation for its own API:
 
-View the complete PDP API documentation through the ReDoc interface:
-
-```
+```text
 http://localhost:7766/redoc
 ```
 
-It lists every **endpoint** with its **request and response format**.
+The page lists every PDP endpoint with its request and response format. For a hosted copy, see the [PDP API reference](/api/pdp-api-reference).
 
-</TimelineStep>
-</TimelineWrapper>
+## Next steps \{#what-did-you-learn}
 
-## What did you learn?
-
-In this walkthrough, you learned how to:
-
-- Set up and run a local **authorization microservice**
-- Configure **PDP options** for your needs
-- Monitor and debug your **authorization layer**
-- Access detailed **metrics** and health information
-
-<WhatsNext progress={50} customText="Great job! You're now running local authorization.">
-  <h2>What's next? 🎉</h2>
-  <ul>
-    <li>Create user and resource attributes</li>
-    <li>Define your first User and Resource Sets</li>
-    <li>Create your ABAC policy rules</li>
-  </ul>
-</WhatsNext>
+- [Check permissions with permit.check()](/how-to/enforce-permissions/check)
+- [Create an ABAC policy](/overview/setup-attribute-based-access-control)
+- [Review all PDP configuration variables](/concepts/pdp/configuration)
+- [Deploy the PDP to production](/how-to/deploy/deploy-to-production)

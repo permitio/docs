@@ -1,110 +1,127 @@
 ---
 sidebar_position: 2
-title: Permit Strength Points
-description: "A checklist of Permit.io capabilities to compare against a homegrown or alternative authorization system, with links to the docs for each."
+title: Permit Capabilities Checklist
+description: "Check Permit.io capability by capability against a homegrown authorization service, with the mechanism and the documentation link for each item."
 ---
 
-Use this checklist to compare Permit with a homegrown or alternative authorization system. Each item links to the docs that describe how it works.
+Work through this checklist when you compare Permit.io with a homegrown authorization service or with another authorization vendor. Each row names the capability, what a homegrown service has to build for it, and the mechanism Permit uses. This page is for technical decision makers and architects who evaluate Permit.
 
-## Policy Builder (UI/API/SDK/IaC/PaC)
+Two terms appear throughout. A **policy decision point (PDP)** is the service that answers a permission check. An **Edge PDP** is a PDP you run yourself, as the container image `permitio/pdp-v2` or as [Permit Nexus PDP](/concepts/pdp/nexus-pdp). The **managed Cloud PDP** is the PDP that Permit hosts. Some capabilities in this checklist require an Edge PDP, and the rows below say which. See [PDP overview](/concepts/pdp/overview).
 
-The Permit Policy Builder lets you define authorization rules in the UI, the API, an SDK, or Terraform. Every policy you create in the UI
-is generated as code (Rego or Cedar), so you can manage it with GitOps: version control, review, and automation.
+## Checklist: Permit.io against a homegrown authorization service \{#checklist-against-homegrown}
 
-- **RBAC (Role-Based Access Control)**: grant permissions through user roles.
-- **ReBAC (Relationship-Based Access Control)**: grant permissions through relationships between users and resources.
-- **ABAC (Attribute-Based Access Control)**: grant permissions based on user, resource, and environment attributes.
+| Capability | What a homegrown service has to build | How Permit provides it |
+|---|---|---|
+| Policy modeling | A UI or config format, plus the code that turns it into enforcement logic | Policy Editor, API, SDKs, and Terraform, which generate Rego or Cedar. See [Policy modeling](#policy-builder-uiapisdkiacpac). |
+| RBAC, ReBAC, ABAC in one model | Three separate implementations, and the code that combines them per check | One policy model that covers all three. See [Authorization models](#support-for-multiple-authorization-models). |
+| Policy rollout without a deployment | A config service, a cache invalidation path, and a reload mechanism in every service | OPAL pushes policy changes to every PDP. See [Dynamic policy updates](#dynamic-policy-updates). |
+| Authorization data sync | An ETL job or a shared database read on every check | OPAL pushes data updates to every PDP. See [Event-driven data updates](#fully-event-driven-data-updates). |
+| Decisions that survive a control-plane outage | A local cache per service and a fallback policy | PDPs hold policy and data locally. See [Control plane and data plane](#data-plane-segregation-from-control-plane). |
+| Read-your-own-writes on a permission change | A write-through path from the permission write to every check path | Send Consistent Updates through an Edge PDP. See [Data consistency and latency](#unmatched-data-consistency--low-latency). |
+| Queries beyond allow and deny | A query per question, written against your own schema | Endpoints for user permissions, authorized users, bulk check, and data filtering. See [Authorization queries](#advanced-authorization-queries). |
+| Decision and configuration audit trail | A log schema, a writer on every decision path, and a retention policy | Decision logs, activity logs, and API logs. See [Compliance and audit](#enterprise-grade-compliance--security). |
+| Control over who may change policy | A second authorization model for your own admin tooling | Workspace roles scoped to a workspace, project, or environment. See [Policy administration control](#authorization-for-authorization). |
+| An exit path | A rewrite | Open-source PDP, SDKs, and OPAL, with policy in your Git repository. See [Open source and licensing](#open-source--licensing). |
 
-## Dynamic Policy Updates
+The sections below give the mechanism behind each row.
 
-Permit pushes policy updates to your PDPs through [OPAL](https://github.com/permitio/opal), its open-source policy administration layer. OPAL is event-driven, so policy changes reach every PDP without application restarts or manual steps.
+## Policy modeling in the UI, API, SDKs, and infrastructure as code \{#policy-builder-uiapisdkiacpac}
 
-## Fully Event-Driven Data Updates
+You define authorization rules in the Permit Policy Editor, the Permit API, an SDK, or the [Terraform provider](/integrations/infra-as-code/terraform-provider). Permit generates policy code from that configuration, in Rego for Open Policy Agent (OPA) or in Cedar for Cedar-agent. See [Policy engines in Permit](/integrations/policy-engines/overview) for the two engines and their agents, and [policy code generated by Permit](/how-to/build-policies/policy-basics#permit--cedar-policies) for an example of the generated Rego.
 
-OPAL also syncs the data your policies need. You define data sources centrally, and OPAL pushes updates to every
-policy decision point (PDP), so each PDP evaluates checks locally against current data.
+With [GitOps](/integrations/gitops/overview), the generated policy lives in your Git repository, so you can version, review, and automate policy changes.
 
-### Stateful or Stateless Flexibility
+## Support for multiple authorization models \{#support-for-multiple-authorization-models}
+
+| Model | How Permit grants access |
+|---|---|
+| Role-based access control (RBAC) | Through the roles assigned to a user |
+| Relationship-based access control (ReBAC) | Through relationships between users and resource instances |
+| Attribute-based access control (ABAC) | Through user, resource, and environment attributes. Requires an Edge PDP, because the managed Cloud PDP doesn't evaluate ABAC. See [Build an ABAC policy](/how-to/build-policies/abac/building-abac-policy) and [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities). |
+| Custom policy as code | Through Rego or Cedar code you write and manage in Git. See [Write custom policy with GitOps](/integrations/gitops/custom_policy). |
+
+## Dynamic policy updates \{#dynamic-policy-updates}
+
+Permit pushes policy updates to your PDPs through the Open Policy Administration Layer ([OPAL](https://github.com/permitio/opal)), an open-source project maintained by Permit. OPAL is event-driven: a policy change reaches every PDP without an application restart or a manual step.
+
+## Event-driven data updates \{#fully-event-driven-data-updates}
+
+OPAL also syncs the data your policies need. You define data sources centrally, and OPAL pushes updates to every PDP. Each PDP then evaluates checks locally against that data.
+
+### Stateful or stateless data \{#stateful-or-stateless-flexibility}
 
 Choose how your PDPs get authorization data:
 
-- **Stateless mode**: pass the data as part of the check input.
-- **Stateful mode**: sync data from one or more sources into Permit ahead of time, so decisions use preloaded context.
+- **Stateless:** pass the data as part of the permission check input.
+- **Stateful:** sync data into Permit ahead of time, so the PDP evaluates checks against preloaded data. See [Load data into Permit](/how-to/manage-data/loading-data).
 
-## Data Plane Segregation from Control Plane
+## Data plane separated from the control plane \{#data-plane-segregation-from-control-plane}
 
-Permit separates the centralized **control plane**, where you manage policy, from the distributed
-**data plane**, where PDPs make decisions inside your network. Your data can stay on your side, and PDPs scale with your services.
+Permit separates the control plane, where you manage policy in Permit's cloud, from the data plane, where PDPs make decisions inside your network. Your data can stay in your network, and you scale PDPs with your services. See [Control & Data planes](/concepts/control-plane-and-data-plane).
 
-- More details: [Control Plane & Data Plane](/concepts/control-plane-and-data-plane)
-
-## Custom Data Modelling & Schema
+## Custom data model and schema \{#custom-data-modelling--schema}
 
 Define your own authorization data model:
 
-- **Hierarchical and custom attributes**.
-- **Data synced from identity providers and databases**.
-- **More info:** [Managing Data](/how-to/manage-data/loading-data) and [Building ABAC Policies](/how-to/build-policies/abac/building-abac-policy)
+- Resources, roles, and custom attributes, including resource hierarchies.
+- Data synced from identity providers and databases.
 
-## Data Consistency & Low Latency \{#unmatched-data-consistency--low-latency}
+See [Load data into Permit](/how-to/manage-data/loading-data) and [Build an ABAC policy](/how-to/build-policies/abac/building-abac-policy).
+
+## Data consistency and low latency \{#unmatched-data-consistency--low-latency}
+
 The hybrid architecture gives you local decisions and a choice of consistency guarantees:
 
-- **Local decisions**: PDPs run next to your services and evaluate checks without a round trip to the Permit cloud. As a sidecar on the same host, checks travel over the loopback interface, so there is no network latency: thousands of checks per second at sub-millisecond latency, and under 10ms at p95 from your application.
-- **Hybrid model**: centralized policy management with local enforcement.
-- **Consistency options** on an [Edge PDP](/concepts/pdp/overview):
-  - **Eventual consistency** through OPAL's event-driven updates
-  - **Read-your-own-writes** with [Send Consistent Updates](/how-to/manage-data/local-facts-uploader)
-  - **Data update callbacks** that notify your infrastructure when PDP data changes ([configuration](/concepts/pdp/configuration#pdp_data_update_callbacks))
+- **Local decisions:** PDPs run next to your services and evaluate checks without a round trip to Permit's cloud. A sidecar Edge PDP on the same host receives checks over the loopback interface, so there is no network latency. A PDP handles thousands of checks per second at sub-millisecond latency, and responds in under 10 ms at p95 from your application.
+- **Eventual consistency:** OPAL pushes data updates to every Edge PDP as events occur.
+- **Read-your-own-writes:** [Send Consistent Updates](/how-to/manage-data/local-facts-uploader) through an Edge PDP, and the PDP waits for the update to apply before it responds.
+- **Data update callbacks:** an Edge PDP calls your endpoints when its data changes. See [`PDP_DATA_UPDATE_CALLBACKS`](/concepts/pdp/configuration#pdp_data_update_callbacks).
 
-## Support for Multiple Authorization Models
+## Advanced authorization queries \{#advanced-authorization-queries}
 
-Permit supports these models out of the box:
+Permit answers more than yes or no:
 
-- **RBAC** (Role-Based Access Control)
-- **ReBAC** (Relationship-Based Access Control)
-- **ABAC** (Attribute-Based Access Control)
-- **PBAC** (Policy-Based Access Control): write custom policy as code in Rego or Cedar, and manage it with GitOps or Terraform
+| Question | Page |
+|---|---|
+| Can this user perform this action on this resource? | [Check permissions](/how-to/enforce-permissions/check) |
+| Which features can this user see in the frontend? | [Feature flagging with CASL](/integrations/feature-flagging/casl) |
+| Which resources can this user access? | [Get user permissions](/how-to/enforce-permissions/user-permissions) |
+| Which of several actions can this user perform? | [Bulk check](/how-to/enforce-permissions/bulk-check) |
+| Which records should a query return for this user? | [Data filtering](/how-to/enforce-permissions/data-filtering) |
 
-## Advanced Authorization Queries
+## Open source and licensing \{#open-source--licensing}
 
-Permit answers more than yes/no checks:
+- The PDP, the Permit SDKs, and OPAL are open-source projects you can inspect and self-host.
+- With GitOps, your policy lives in your own Git repository.
+- See [Open-source fallback](/concepts/oss-fallback) for how to move to a self-managed stack.
 
-- **Basic Enforcement**: [Check authorization decisions](/how-to/enforce-permissions/check)
-- **Feature Flagging**: [Enable conditional access with CASL](/integrations/feature-flagging/casl)
-- **Resource Visibility**: [List all resources a user can access](/how-to/enforce-permissions/user-permissions)
-- **Action-Specific Checks**: [Determine all actions a user can perform on a resource](/how-to/enforce-permissions/bulk-check)
-- **Filtering & Fine-Grained Access Control**: [Identify deletable resources](/how-to/enforce-permissions/data-filtering)
+## Compliance, audit, and security \{#enterprise-grade-compliance--security}
 
-## Open Source & Licensing
-
-The components you deploy are open source:
-
-- The **PDP, SDKs, and OPAL** are open-source projects you can inspect and self-host.
-- You keep control of your authorization logic, and your policy lives in your own Git repository.
-- More details: [Open-Source Fallback](/concepts/oss-fallback/)
-
-## Compliance, Audit & Security \{#enterprise-grade-compliance--security}
 Permit records who changed what, and why each decision was made:
 
-- **Decision Logs**: human- and machine-readable logs of every authorization decision, with the metadata that explains it.
-- **Two Types of Audit Logs**:
-  - **Permit Audit Logs**: track changes to your authorization configuration.
-  - **API Logs**: track calls to the Permit API.
-- **Authorization for Authorization (AuthZ for AuthZ)**: control who can change policies.
-- **SOC 2 Type II attested**: Permit.io holds a SOC 2 Type II attestation covering security, availability, and confidentiality. The report is available under NDA.
-- **HIPAA compliant**: Permit.io meets HIPAA requirements. You can also keep protected health information out of the control plane entirely by running PDPs in your own network and passing opaque identifiers.
+- **Decision logs:** a log entry for every authorization decision, with the data that explains the decision. See [Audit log types and filtering](/how-to/use-audit-logs/types-and-filtering).
+- **Activity logs:** changes to your authorization configuration. See [Permit logs](/manage-your-account/permit-logs).
+- **API logs:** calls to the Permit API. See [Permit logs](/manage-your-account/permit-logs).
+- **SOC 2 Type II attested:** Permit.io holds a SOC 2 Type II attestation covering security, availability, and confidentiality. The report is available under NDA.
+- **HIPAA compliant:** Permit.io meets HIPAA requirements. You can also keep protected health information out of the control plane by running PDPs in your own network and passing opaque identifiers.
 
-## Telemetry & Observability
+### Authorization for authorization \{#authorization-for-authorization}
 
-Monitor and debug your PDPs:
+Changing a policy is itself a privileged action, so Permit applies authorization to policy administration. Each member of your Permit workspace holds a workspace role (Workspace Owner, Workspace Editor, or Workspace Viewer), or a role scoped to one project or one environment, which decides whether that member can read or change policy there. See [Member management](/manage-your-account/workspace-settings#member-management).
 
-- **Datadog APM tracing** for the PDP ([configuration](/concepts/pdp/configuration))
-- **PDP monitoring**: see [Monitoring PDPs](/how-to/monitoring-pdps)
+To delegate a narrower slice of policy administration to people outside your Permit workspace, such as your customers' own admins, embed [Permit Elements](/embeddable-uis/overview) instead of granting workspace roles.
 
-## Backup & Versioning
+## Telemetry and observability \{#telemetry--observability}
 
-- **Git-backed policies**: with [GitOps](/integrations/gitops/overview), every policy change is versioned in your Git repository, so you can audit and roll back policy.
+- **Datadog APM tracing** for the Edge PDP: set [`PDP_ENABLE_MONITORING`](/concepts/pdp/configuration#pdp_enable_monitoring).
+- **PDP monitoring:** see [Monitoring PDPs](/how-to/monitoring-pdps).
 
----
+## Backup and versioning \{#backup--versioning}
 
-For the product view, see [Permit.io](https://www.permit.io).
+- **Git-backed policies:** with [GitOps](/integrations/gitops/overview), every policy change is a commit in your Git repository, so you can audit and roll back policy.
+
+## Next steps
+
+- [PDP overview](/concepts/pdp/overview) to choose between the managed Cloud PDP, an Edge PDP, and Nexus PDP
+- [Control & Data planes](/concepts/control-plane-and-data-plane) for the architecture behind local decisions
+- [Open-source fallback](/concepts/oss-fallback) for the exit path to a self-managed stack

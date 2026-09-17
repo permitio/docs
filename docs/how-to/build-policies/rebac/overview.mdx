@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: What is ReBAC?
-description: "Learn what relationship-based access control (ReBAC) is, including resource roles, role derivation, and relationship tuples."
+description: "Learn what relationship-based access control (ReBAC) is and how Permit.io models it with resource roles, role assignments, role derivations, and relationship tuples."
 sidebar_label: Overview
 ---
 
@@ -9,144 +9,141 @@ import ProductOverviewLink from "@site/src/components/ProductOverviewLink";
 
 <ProductOverviewLink href="https://www.permit.io/rebac" label="ReBAC" />
 
-Relationship Based Access Control (ReBAC) is a policy model focused on the way resources and identities (aka users) are connected to each other and between themselves.
+Learn what relationship-based access control (ReBAC) is and the terms Permit.io uses to model it: resource roles, role assignments, role derivations, and relationship tuples. This page is for developers deciding whether their application needs ReBAC before they build a ReBAC policy.
 
-## Policy as Graph
+ReBAC is a policy model that grants access based on how users and resources are connected, such as a user who owns a folder, or a file that sits in that folder.
 
-Extending on [RBAC](/how-to/build-policies/rbac/overview), ReBAC considers the relationships between identities and resources,
-allowing us to create authorization policies for **hierarchical structures**.
-It is easiest to visualize ReBAC as a graph, with each node on the graph representing a resource or identity,
-and each edge representing a relationship.
+## Policy as a graph \{#policy-as-graph}
 
-Graph-based authorization systems are perfect for mapping **hierarchies and nested relationships**.
-Given their ability to manage high volumes of data while maintaining consistency,
-these systems prove effective in large-scale environments.
+ReBAC extends [role-based access control (RBAC)](/how-to/build-policies/rbac/overview). RBAC grants a role on a whole resource type. ReBAC also considers the relationships between users and specific resource instances, so you can write policies for **hierarchical structures** such as folders and files.
+
+You can draw a ReBAC model as a graph. Each node is a user or a resource instance, and each edge is a relationship. Graphs map **hierarchies and nested relationships**, such as nested folders, organizations, and teams.
 
 :::tip Example
-The simplest example for ReBAC is a shared file system (e.g. [Google Drive](/modeling/google-drive)).
-![Google Drive](/ui-videos/rebac/1.png)
-This graph displays a folder titled `Bob’s Files`. Within that folder, there are two additional folders - `Bob’s Docs` and `Bob’s Pics`. Inside each of these folders are several files.
+A shared file system such as [Google Drive](/modeling/google-drive) is a common ReBAC use case.
+![Graph of a folder named Bob's Files that contains the folders Bob's Docs and Bob's Pics, each containing files](/ui-videos/rebac/1.png)
+The graph shows a folder named `Bob's Files`. The folder contains two folders, `Bob's Docs` and `Bob's Pics`, and each of those folders contains files.
 :::
 
-To understand how ReBAC helps us manage access to these files, we need to understand a couple of basic terms:
+The following sections define the terms you use to control access to these files.
 
-### Resource Roles
+## Resource roles
 
-To create ReBAC policies, we need to create roles **specific to a given resource**. This means that the role and the permissions it carries are only relevant in the context of that specific resource.
-A resource role is formatted as `Resource#Role`.
+A resource role is a role that applies to a specific resource type. The role and its permissions apply only to instances of that resource.
 
-The combination of **Resource Roles** and **Role Derivations** allows us to derive much more complex and granular roles that are perfectly tailored to handle hierarchies.
+Permit writes resource roles, instances, and roles on instances with the keys of the objects, in these three forms:
+
+| Form | Means | Example |
+|---|---|---|
+| `resource:instance` | One instance of a resource type | `folder:bobs_files` |
+| `resource#role` | A role on a resource type | `folder#owner` |
+| `resource:instance#role` | A role on one instance | `folder:bobs_files#owner` |
+
+The dashboard shows the display names you entered, such as `Folder#Owner` for the role `owner` on the resource `folder`. This page uses the keys.
+
+Resource roles combined with [role derivations](#role-derivation) let a role on one instance grant roles on related instances in a hierarchy.
 
 :::tip Example
-In the context of our previous example,
+In the file system example, a user assigned the `owner` role on the folder `bobs_files` holds `folder:bobs_files#owner`.
 
-```
-A `user` who is assigned the role of an `Owner` on a `folder`
-```
-
-It will look like this: `Folder#Owner`.
-![Resource Roles](/ui-videos/rebac/2.png)
+![Graph of the user Bob connected to the Bob's Files folder by an Owner relationship](/ui-videos/rebac/2.png)
 :::
 
-### Role Assignment
+## Role assignment
 
-Role Assignment refers to designating specific roles for individual users or entities, effectively granting them the permissions associated with those roles.
-Roles represent a collection of permissions. By assigning a user a particular role, you're essentially giving them access to all the permissions bundled within that role.
-This mechanism simplifies access management, especially in large systems or organizations, as administrators only need to manage roles rather than each specific permission for every user.
+A role assignment grants a user a role, and with it all the permissions of that role. You manage the permissions of a role once, instead of granting each permission to each user.
 
-ReBAC role assignment is different from RBAC role assignment because it is assigned to a specific instance and not to the whole resource type scope.
+A ReBAC role assignment differs from an RBAC role assignment in scope. An RBAC role assignment applies across the tenant, to every instance of the resource types the role has permissions on. A ReBAC role assignment applies to one resource instance, such as `folder:bobs_files#owner`.
 
-### Role Derivation
-The ReBAC role derivation functionality allows a user to be granted implicit permissions without an explicit role assignment to an instance.
+## Role derivation
 
-There are two steps to achieve such an implicit grant of permissions:
-1. Configure a derivation between two roles in our system.
-    
+A role derivation grants a user a role on a resource instance without a direct role assignment on that instance. The user gets the role from a role they hold on a related instance.
+
+A role derivation needs two parts:
+
+1. **A derivation rule between two resource roles.**
+
     :::tip Example
-    A user with a role `Admin` on a `Folder` resource will also get an implicit assignment of an `Editor` to all the `File` resource instances related to that folder.
-    :::
-2. When a relationship tuple is created between resources, a user with an explicit grant to one resource will implicitly gain permissions to any resources it has a relationship with.
-    
-    :::tip Example
-    A user with an assignment of an `Admin` role to a `Documents` folder will implicitly get the role `Editor` on file `finance.doc` if the `Documents` instance of a resource `Folder` has a relationship with the instance `finance.doc` of type `File`
+    A rule that derives `file#editor` from `folder#admin`: a user with the `admin` role on a folder also gets the `editor` role on every file related to that folder.
     :::
 
-With role derivations, implicit permission is granted to users based on the relationship data in the system without an explicit condition for every object on the system.
+2. **A relationship tuple between two resource instances.** When the tuple exists, a user with a role on one instance gets the derived role on the related instance.
 
-Role derivation is the building block of ReBAC that leverages the relationships between instances to define relationship-based permissions.
+    :::tip Example
+    A user who holds `folder:documents#admin` gets `file:finance_doc#editor` once a relationship tuple connects `folder:documents` and `file:finance_doc`.
+    :::
 
-### Relationship Tuples
+Role derivations use the relationship data you sync to Permit, so you don't write a condition for every object.
 
-Relationship Tuples are structured sets that detail the relationships between resources and, potentially, users in the system.
-They represent the relationships between two specific instances of resources, providing a clear way to express and evaluate relationships in access control decisions.
+## Relationship tuples
 
-:::tip Example
-Using a healthcare example, a Relationship Tuple might be represented as:
-
-```
-`Patient` `John Smith` `Medical Record` **treated by** `Doctor` `Jane Doe`
-```
-
-This tuple indicates that `Doctor Jane Doe` has a `treated by` relationship with `John Smith's medical record`. Whenever Jane tries to access the record, the system would evaluate such tuples to determine if she has the necessary relationship-based permissions.
-:::
-
-Relationships are at the core of ReBAC. Here are some of the most common relationship types and how they can be leveraged by ReBAC -
-
-## Common Relationship Types
-
-### Parent-Child Hierarchies
-
-A parent-child hierarchy describes the nesting of resources under other resources. This scenario is similar to what we know from computer file systems, with files being categorized under folders. Parent-child hierarchies are not limited in their number of hierarchy levels.
+A relationship tuple records a relationship between two specific resource instances. A tuple has three parts: a subject instance, a relation, and an object instance. The policy decision point (PDP) evaluates relationship tuples to decide whether a derived role applies.
 
 :::tip Example
-Such a relationship allows us to derive roles based on the relationship between two resources, like in the previous example:
-![Parent-Child](/ui-videos/rebac/3.png)
-The ReBAC policy for this graph will look like this:
+In a healthcare application, a relationship tuple could look like this:
 
+```text
+subject:  department:cardiology
+relation: parent
+object:   medical_record:john_smith
 ```
-A `user` assigned the role `Folder#Owner` will also be assigned the `File#Owner` when the `Folder instance` is `Parent` of `File instance`.
-```
+
+The tuple states that the `cardiology` instance of the `department` resource is the parent of the `john_smith` instance of the `medical_record` resource. With a role derivation from `department#doctor` to `medical_record#viewer`, every user who holds `department:cardiology#doctor` can view `medical_record:john_smith`, without an assignment on the record itself. When a doctor requests the record, the PDP reads the tuple and the derivation to decide.
+:::
+
+## Common relationship types
+
+### Parent-child hierarchies
+
+A parent-child hierarchy nests resources under other resources, as files sit in folders in a file system. A hierarchy can have any number of levels.
+
+:::tip Example
+A parent-child relationship lets you derive roles between a folder and its files:
+![Graph of Bob as Owner of the Bob's Files folder, with Parent relationships from that folder to its subfolders and from each subfolder to its files](/ui-videos/rebac/3.png)
+The ReBAC policy for this graph is:
+
+A user with the `folder#owner` role on a folder instance gets the `file#owner` role on a file instance when the relationship tuple `folder:<folder_key>` `parent` `file:<file_key>` exists.
 
 :::
-:::info Creating Hierarchies
-In simpler words, if a file resides inside a folder (That's the Parent-Child relationship), and a user is assigned the owner of that folder, they will also be the owner of the files.
+:::info Creating hierarchies
+If a file is in a folder (a parent-child relationship), and a user is the owner of the folder, the user is also the owner of the files in the folder.
 :::
 
 ### Organizations
 
-An organizational relationship allows us to create policies based on groups of users. Putting several users in one group allows us to derive policies based on their group membership instead of per individual user.
+An organization relationship grants permissions based on group membership. You add users to a group, and derive their permissions from the group instead of granting permissions to each user.
 
 :::tip Example
-Take a look at this example:
-![Organizations](/ui-videos/rebac/4.png)
-`Bob`, `Sam`, and `Linda` are all part of the `HR team`. We want to grant them editing access to all files the employee data files. Instead of assigning each of them direct editor access to each file,
-we group them all under the `HR Team`. This is done via a policy like -
+![Graph of the users Bob, Sam, and Linda as Members of the HR Group, which has an Editor relationship with the Legal Docs and Employee Data resources](/ui-videos/rebac/4.png)
+`Bob`, `Sam`, and `Linda` are members of the `HR Group`. To give all three edit access to the legal documents, you don't assign each of them an editor role on each document. You make them members of the `HR Group`, and use this policy:
 
-```
-A `user` assigned the role `HR_Group#Member` will also be assigned the `Legal_Docs#Editor` when `HR_Group` is `Parent` of `Legal_Docs`.
-```
+A user with the `group#member` role on the `group:hr` instance gets the `document#editor` role on a document instance when the relationship tuple `group:hr` `parent` `document:<document_key>` exists.
 
 :::
 
-:::info The benefit of organizational relationships
-Using organizational relationships allows us to give every user editing permissions for every file without setting an explicit direct relationship between each user and each file.
-If we decide to add members or resources to the group, the policy's logic remains valid, and we don't have to update it for every change.
+:::info Benefit of organization relationships
+With an organization relationship, every group member gets edit access to every document the group is a parent of, without a direct relationship between each user and each document. When you add members to the group or documents under the group, the policy stays the same.
 :::
 
 ## Implementing ReBAC
 
-Permit allows you to implement a ReBAC model into any application by using a **simple SDK** and a **low-code UI**.
-You can see a working example of this healthcare demo application modeled using Permit [in this GitHub repo](https://github.com/permitio/Galactic-Health-Corporation).
+In Permit, you define ReBAC policies in the Policy Editor and sync relationship data with the Permit API or SDKs. For a working example, see the healthcare demo application in the [Galactic Health Corporation GitHub repository](https://github.com/permitio/Galactic-Health-Corporation).
 
-:::tip Where to start?
-The first step to understanding how ReBAC should be implemented into your application is to visually map out the resources you want to manage access to via relationships.
-This can be done by putting all of your resources (as nodes) and the relationships between them (as edges) on a graph. This should allow you to visualize the policies you need to create better.
+:::tip Where to start
+Draw your resources as nodes and the relationships between them as edges on a graph. The graph shows which relations, resource roles, and role derivations your policy needs.
 :::
 
-To learn how to map out and implement ReBAC using Permit, head on to this section on **[Building ReBAC policies](/how-to/build-policies/rebac/building-rebac-policies)**
+To define the policy in Permit, follow [Building ReBAC policies](/how-to/build-policies/rebac/building-rebac-policies).
 
 :::tip Fun fact
 
 Google's Zanzibar system, which models permissions as a graph of relationships, was described in the paper "Zanzibar: Google's Consistent, Global Authorization System" at the 2019 USENIX Annual Technical Conference. Read the [paper on USENIX's site](https://www.usenix.org/conference/atc19/presentation/pang).
 
 :::
+
+## Next steps
+
+- [Building ReBAC policies](/how-to/build-policies/rebac/building-rebac-policies): define resources, relations, role derivations, and instance relationships.
+- [Model ownership](/how-to/ownership): compare ABAC and ReBAC approaches to resource ownership.
+- [Google Drive (Zanzibar)](/modeling/google-drive): model a file-sharing permission system with ReBAC.
+- [Mix and Match Policies](/how-to/build-policies/overview): combine ReBAC with RBAC and ABAC.

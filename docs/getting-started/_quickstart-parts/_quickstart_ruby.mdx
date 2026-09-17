@@ -1,42 +1,50 @@
-## Add the SDK to your Ruby code
+### Install and initialize the Ruby SDK
 
-Initialise the **Ruby SDK** and check for permissions.
+Install the `permit-sdk` gem, load the SDK, and create a `Permit` client that connects to your PDP.
 
-1. Install the Permit.io SDK for Ruby
+1. Install the Permit.io Ruby SDK:
 
-```bash
-gem install permit-sdk
-```
+   ```bash
+   gem install permit-sdk
+   ```
 
-2. Import the SDK into your code
+2. Load the SDK in your code:
 
-```ruby
-require 'permit-sdk'
-```
+   ```ruby
+   require 'permit'
+   ```
 
-3. Create a new instance of the SDK. <br/>
-   You can find instructions on getting a secret API key in the previous section.
+3. Create a `Permit` client with `Permit.new(token, pdp_url)`. Replace `<YOUR_API_KEY>` with your environment API key. The second argument is the PDP URL, and defaults to `http://localhost:7766`, the address of a container PDP on your machine:
 
-```ruby
-require 'permit-sdk'
-permit = Permit.new("TOKEN", "localhost:7766") # the PDP url is optional
-```
+   ```ruby
+   require 'permit'
+   permit = Permit.new("<YOUR_API_KEY>", "http://localhost:7766") # the PDP url is optional
+   ```
 
-## Check for permissions using the SDK
-
-You can run a permission check with `permit.check()`. You need to pass 3 arguments to the function:
-
-- `user`: a unique user that identifies the user doing the action - this can be created using hash or a string.
-- `action`: the action performed, as string.
-- `resource`: the resource the action is performed on - this can be created using a hash or a string.
-
-In the following examples we are checking that a user with the unique key `john@permit.io` can `create` a `document` resource.
-
-Here is an example using strings:
+To send checks to the managed Cloud PDP instead of a container PDP, pass the Cloud PDP URL:
 
 ```ruby
-require 'permit-sdk'
-permit = Permit.new("TOKEN", "localhost:7766") # the PDP url is optional
+require 'permit'
+permit = Permit.new("<YOUR_API_KEY>", "https://cloudpdp.api.permit.io")
+```
+
+The Cloud PDP supports RBAC (role-based access control) and ReBAC (relationship-based access control) policies. ABAC (attribute-based access control) checks need a container PDP. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+
+### Check permissions with the Ruby SDK
+
+Call `permit.check()` with three arguments. `permit.check()` returns `true` when the policy allows the action, and `false` otherwise.
+
+| Argument | Description |
+|---|---|
+| `user` | The user key as a string, or a hash with `key` and optional `first_name`, `last_name`, `email`, and `attributes`. The user key is typically the user ID from your authentication provider. |
+| `action` | The action key as a string, for example `"create"`. |
+| `resource` | The resource type key as a string, for example `"document"`, or a hash with `type`, `tenant`, and `attributes`. A string resource uses the `default` tenant. |
+
+The following examples check whether the user `john@permit.io` can `create` a `document`. This example passes the user and the resource as strings:
+
+```ruby
+require 'permit'
+permit = Permit.new("<YOUR_API_KEY>", "http://localhost:7766") # the PDP url is optional
 
 permitted = permit.check("john@permit.io", "create" , "document")
 if permitted
@@ -46,11 +54,11 @@ else
 end
 ```
 
-And here is an example using Hash objects:
+This example passes the user and the resource as hashes:
 
 ```ruby
-require 'permit-sdk'
-permit = Permit.new("TOKEN", "localhost:7766") # the PDP url is optional
+require 'permit'
+permit = Permit.new("<YOUR_API_KEY>", "http://localhost:7766") # the PDP url is optional
 
 user_hash = {"key": "john@permit.io", "first_name": "john", "last_name": "doe", "email": "john@permit.io"}
 resource_hash = {"type": "document", "tenant": "default"}
@@ -62,85 +70,91 @@ else
 end
 ```
 
-:::info
-Usually instead of an email you'd use the unique identifier provided by your chosen authentication solution.
-You can also pass the entire decoded JWT, to include attributes about the user.
+If `john@permit.io` exists in your environment and has a role that grants `create` on `document`, both examples print `john@permit.io is permitted to create a document`. Otherwise, the examples print `john@permit.io is not permitted to create a document`. To add users and assign roles, see [Sync users](/how-to/sync-users).
+
+:::warning A PDP error raises an exception instead of returning false
+When the PDP answers with a status code other than `200`, for example because the PDP URL is wrong or the API key belongs to another environment, `permit.check()` raises a `RuntimeError` that names the status code. Handle the exception in request code, or the request fails with a server error instead of a deny.
 :::
 
-:::tip REMEMBER
+#### Check a permission in a specific tenant
 
-In cases where you are dealing with more than one tenant in your application, `Permit.check()` can pass the **tenant** as part of the **resource** like we showed before in the Hash objects example.
-
-The tenant passed in needs to be either the **tenant id** or the **tenant key**.
-
-You can use the **[list_tenants API](https://api.permit.io/v2/redoc#tag/Tenants/operation/list_tenants)** to **get the ids and keys set for your tenants**.
-
-`tenant`: a unique tenant id or tenant key that you have defined within Permit.
-
-:::
+In a multi-tenant application, pass the tenant key in the `tenant` field of the resource hash, as `resource_hash` does in the hash example. To look up the keys of your tenants, call the [list tenants API](https://api.permit.io/v2/redoc#tag/Tenants/operation/list_tenants). In this example, replace `user`, `action`, `resource`, and `tenant` with a user key, action key, resource key, and tenant key from your environment:
 
 ```ruby
-if permit.check("user", "action", { "key": "resource", "tenant": "tenant" })
-  # Allow to close document
+if permit.check("user", "action", { "type": "resource", "tenant": "tenant" })
+  # the policy allows the action in that tenant
 end
 ```
 
-## Check permissions against ABAC policies
-
-Above we have checked for permissions against an RBAC policy - but what if we have an **ABAC policy** we want to run a permission check for?
-An ABAC policy is made up of **User Sets** and **Resource Sets**, which you can read more about [here](/how-to/build-policies/abac/components#subject--subject-attributes).
-
-With ABAC we define conditions based on **pre-configured attributes**.
-
-If we are running a `permit.check()` for an ABAC policy, we replace the `userId` and the `resource` with objects, containing attributes.
-
-```ruby
-if permit.check(user, 'close', { "key": "resource", "attributes": {"hasApproval": "true"} })
-  # Allow to close document
-end
-```
-
-:::note REMEMBER
-
-Permission checks are being run against the PDP container that's running locally on your machine - offering
-minimal latency and without leaving your network.
-
-This means that your user data **never** goes outside your system, **keeping security high**.
-
+:::note Where checks run and where user data is stored
+`permit.check()` sends each check to the PDP URL you configure. A container PDP evaluates checks on your machine, using policy and data that the PDP loads from Permit. Users, roles, and attributes that you create in the dashboard or sync through the Permit API are stored in the Permit control plane.
 :::
 
-## Full app example
+### Run a full Ruby example app
 
-Assuming a Ruby app made up of a single file, with the `permit-sdk` and `webrick` gem packages installed with the following command :
+This single-file WEBrick app listens on port `4000` and runs a permission check on each request. The app uses the default PDP URL, `http://localhost:7766`. The app loads the `json` library, because the response bodies call `to_json` on a hash.
 
-```bash
-gem install permit-sdk webrick
+1. Install the `permit-sdk` and `webrick` gems:
+
+   ```bash
+   gem install permit-sdk webrick
+   ```
+
+2. Save the following code as `app.rb`. Replace `<YOUR_API_KEY>` with your environment API key, and `john@permit.io` with the key of a user in your environment:
+
+   ```ruby
+   require 'json'
+   require 'webrick'
+   require 'permit'
+
+   permit = Permit.new("<YOUR_API_KEY>")
+
+   server = WEBrick::HTTPServer.new(Port: 4000)
+
+   server.mount_proc '/' do |_, res|
+     res['Content-Type'] = 'application/json'
+
+     permitted = permit.check("john@permit.io", "read", "document")
+     if permitted
+       res.status = 200
+       res.body = { result: "john@permit.io is PERMITTED to read document!" }.to_json
+       next
+     end
+     res.status = 403
+     res.body = { result: "john@permit.io is NOT PERMITTED to read document" }.to_json
+   end
+
+   trap 'INT' do server.shutdown end
+
+   server.start
+   ```
+
+3. Run the app:
+
+   ```bash
+   ruby app.rb
+   ```
+
+4. Open `http://localhost:4000` in a browser.
+
+If the user's role grants `read` on `document`, the page returns HTTP `200` with this body:
+
+```json
+{"result":"john@permit.io is PERMITTED to read document!"}
 ```
 
-Here is a full example of a Ruby app that uses the Permit.io SDK to check for permissions:
+Otherwise, the page returns HTTP `403` with `john@permit.io is NOT PERMITTED to read document`. If the page returns `is NOT PERMITTED` and you expect an allow, check that the user has a role that grants `read` on `document`, and that the container PDP runs with an API key from the same environment.
+
+### Check ABAC permissions with the Ruby SDK
+
+An attribute-based access control (ABAC) policy grants permissions based on user and resource attributes, grouped into user sets and resource sets. See [ABAC policy components](/how-to/build-policies/abac/components). ABAC checks need a container PDP.
+
+To check an ABAC policy, pass a resource hash with an `attributes` hash. In this example, `user` is a user key or user hash, and `close` and `resource` stand for an action key and a resource key from your environment:
 
 ```ruby
-require 'webrick'
-require 'permit-sdk'
-
-permit = Permit.new("<YOUR_API_KEY>")
-
-server = WEBrick::HTTPServer.new(Port: 4000)
-
-server.mount_proc '/' do |_, res|
-  res['Content-Type'] = 'application/json'
-
-  permitted = permit.check("user@mail.com", "read", "document")
-  if permitted
-    res.status = 200
-    res.body = { result: "user@mail.com is PERMITTED to read document!" }.to_json
-    next
-  end
-  res.status = 403
-  res.body = { result: "user@mail.com is NOT PERMITTED to read document" }.to_json
+if permit.check(user, 'close', { "type": "resource", "attributes": {"hasApproval": "true"}, "tenant": "default" })
+  # the policy allows the action on a resource that has the attribute values
 end
-
-trap 'INT' do server.shutdown end
-
-server.start
 ```
+
+For more check options, see [Check permissions with permit.check()](/how-to/enforce-permissions/check).

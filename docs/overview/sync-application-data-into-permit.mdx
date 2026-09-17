@@ -1,164 +1,163 @@
 ---
 sidebar_position: 6
-title: Sync your Application Data
+title: Plan your User Sync Strategy
 timeline: true
-description: "Sync users into Permit.io at the authentication handoff point, in bulk, or with SCIM, and understand users versus members."
+description: "Decide where and how your application syncs users into Permit.io: at the sign-in handoff point, with a bulk import, or with SCIM."
 ---
 
-Sync your users and their roles and tenants into **Permit.io**. This walkthrough covers where to sync (the JWT handoff point),
-how to sync (UI, SDK, or API), bulk syncing, and SCIM.
-
 import handoffPoint from "/static/ui-videos/authentication/user-sync-handoff-point.mp4";
-import CodeBlock from "../../src/components/code-block/CodeBlock";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
-## Before we start: Understanding Users vs. Members
+Decide where and how your application keeps Permit.io's list of users current. This page is for developers and architects who design the user sync before they write it. It explains the handoff point after sign-in, the choice between a bulk import and incremental sync, and when SCIM fits. For the steps and parameters of a sync call, see [Sync users](/how-to/sync-users).
 
-**Permit.io** has two kinds of identities: **Users** and **Members**.
+## Users and members \{#before-we-start-understanding-users-vs-members}
 
-:::tip
-**Users** are the people using your app. **Members** are your team, managing Permit.
-:::
+Permit has two kinds of identities. You sync **users**. You invite **members**.
 
 ### Users
 
-Users are the identities (human or automated) whose access to your application you control. A user
-can belong to multiple tenants and hold roles in each.
+Users are the identities, human or automated, whose access to your application you control. A user can belong to several tenants and hold different roles in each one.
 
-Example:
-
-> Sarah uses your app and belongs to the "Marketing" tenant. To create content, she needs the "Editor" role in that tenant.
+For example, Sarah uses your app and belongs to the Marketing tenant. To create content, Sarah needs the Editor role in the Marketing tenant.
 
 ### Members
 
-Members are your team members working within the Permit app, governed by Permit's own access control (Authorization for Authorization).
-By default, only members can access Permit and author or edit policies.
+Members are your team members who work in the Permit dashboard. Permit's own access control governs what members can do ([AuthZ for AuthZ](/overview/glossary#authz-for-authz-aka---meta-authorization)). By default, only members can access Permit and create or edit policies.
 
-## Before we start: When to sync your users?
+## When to sync users \{#before-we-start-when-to-sync-your-users}
 
-Sync users into Permit during sign-in or sign-up, right after your authentication
-provider verifies the user's identity. At that point, map their organizational role (for example Head of Marketing,
-Customer, Consultant, or Patient) and the relevant claims in their JSON Web Token (JWT) to application-level roles,
-attributes, and relationships.
+Sync a user during sign-up or sign-in, right after your authentication provider verifies the user's identity. At that point, map the user's organizational role (for example Head of Marketing, Customer, Consultant, or Patient) and the relevant claims in the JSON Web Token (JWT) to application-level roles, attributes, and relationships.
 
-Syncing at this point means a user's permissions match their role from their first request.
+When you sync at sign-in, the user has the right roles in Permit before the application makes its first permission check for that user.
 
-## timeline-start
+## The handoff point \{#what-is-the-handoff-point}
 
-## Syncing Users into Permit
+The handoff point is the middleware step that runs after authentication succeeds and before your application serves the user.
 
-There are three ways to add users to Permit:
-
-1. **User Management Screen**: add and manage users in the Permit dashboard.
-
-2. **`syncUser` Function in SDKs**: call `syncUser` from your code during application
-   workflows such as sign-up or profile updates.
-
-3. **API**: call the Permit API from your own workflows or backend processes.
-
-<CodeBlock folderPath="/walkthroughs/sync-first-user/sync-sdk-request" />
-
-> Below is an example of adding a user via the Permit UI.
-
-<img
-  src="/img/updated/walkthroughs/sync-users/user-creation.png"
-  alt="Copy secret key from user menu"
-  data-zoomable
-/>
-
-## timeline-stop
-
-# Further Reading
-
-## Bulk User Synchronization
-
-To move an existing user database into Permit, use one of two approaches.
-
-### Script-Based Bulk Syncing
-
-Write a script that uses the Permit API or SDK to iterate over your users and push them all into Permit. Every user
-is available in Permit right away, but you write and run the script, and you handle errors and data inconsistencies
-yourself.
-
-### Incremental Syncing at Login (Recommended)
-
-Sync each user at the handoff point instead: during login, as soon as the user's identity is verified.
-
-You don't preload the whole dataset, and only active users are synced.
-As users log in over time, your active user base ends up in Permit.
-
-:::tip KEY ADVANTAGE
-Incremental syncing keeps Permit current and skips inactive or outdated users.
-:::
-
-### What is the handoff point?
-
-<video controls>
+<video controls aria-label="Video of the handoff point: authentication, JWT issuance, user sync to Permit, and role assignment">
   <source src={handoffPoint} type="video/mp4" />
 </video>
 
-The handoff point is the middleware step between authentication and authorization:
+The handoff point runs four steps in order:
 
----
+| Step | What happens |
+|---|---|
+| Authentication confirmation | The authentication provider verifies the user's identity. |
+| Session and JWT issuance | The application creates a session, and the provider issues a JWT with the user's unique identifier. |
+| User synchronization | Your middleware syncs the user from the JWT into Permit, with the identifier as the user key. |
+| Role assignment | Your middleware assigns the user's roles in Permit, based on the claims and your application's rules. |
 
-#### Authentication Confirmation
+For middleware code per authentication provider, see [Connect your authentication provider](/authentication/your-authentication).
 
-> The authentication provider verifies the user's identity.
+## Sync methods \{#syncing-users-into-permit}
 
-#### Session and JWT Issuance
+You can add users to Permit in three ways. [Sync users](/how-to/sync-users) has the steps for each one.
 
-> A session is created, and a JWT containing the user's unique identifier is issued.
+| Method | Fits |
+|---|---|
+| Permit dashboard (Directory screen) | Adding a few users by hand, for example test users. |
+| SDK (`permit.api.users.sync()`) | Syncing users from your backend at sign-up, sign-in, or profile updates. |
+| Permit API | Syncing users from a backend process or a language without an SDK. |
 
-#### User Synchronization
+The SDK call and the equivalent API request look like this. Replace `{proj_id}` and `{env_id}` with your project and environment IDs, and `YOUR_API_KEY` with your environment API key:
 
-> The user's identity, derived from the JWT, is synced into Permit.io as a new user entity.
+<Tabs groupId="code-snippets">
+<TabItem value="example.js" label="Node.js">
 
-#### Role Assignment
+```js
+import { Permit } from "permitio";
 
-> The system assigns an appropriate role to the user based on the application's policies.
+const permit = new Permit({
+  token: process.env.PERMIT_API_KEY,
+  pdp: "https://cloudpdp.api.permit.io",
+});
 
----
+const { user, created } = await permit.api.users.sync({
+  key: "user|123456789",
+  email: "john@permit.io",
+  first_name: "John",
+  last_name: "Smith",
+});
+console.log("User synced:", user.key, "created:", created);
+```
 
-## SCIM for automation
+</TabItem>
+<TabItem value="example.bash" label="cURL">
 
-SCIM (System for Cross-domain Identity Management) automates user management at scale.
+```bash
+curl 'https://api.permit.io/v2/facts/{proj_id}/{env_id}/users/user%7C123456789' \
+  --request PUT \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "key": "user|123456789",
+  "email": "john@permit.io",
+  "first_name": "John",
+  "last_name": "Smith"
+}'
+```
 
-### Why Use SCIM?
+</TabItem>
+</Tabs>
 
-- **Efficiency**: Automates user provisioning and updates.
-- **Consistency**: Ensures uniform user data across systems.
-- **Security**: Minimizes manual interventions.
+`permit.api.users.sync()` creates the user when the key is new and replaces the user when the key exists. The Node.js sample prints `User synced: user|123456789 created: true` the first time you run it, and `created: false` after that.
 
-### How SCIM Works
+In the dashboard, you add a user from the Directory screen:
 
-SCIM (System for Cross-domain Identity Management) connects identity providers (IdPs) like Okta to service providers
-(SPs) such as Permit.io, and transfers user identity data between them automatically. When something changes
-in the IdP, such as a new hire, a role change, or an account deactivation, the change is pushed to the SP.
+<img
+  src="/img/updated/walkthroughs/sync-users/user-creation.png"
+  alt="Permit Directory screen with the Create New User panel open, showing Key, Email, First Name, Last Name, and Tenant fields"
+  data-zoomable
+/>
 
-> For example, Lisa joins your company. HR creates her profile in your IdP, such as
-> Okta, with her name, email address, and role, "Marketing Specialist". SCIM sends Lisa's
-> information to Permit.io, which creates her user and assigns her predefined roles.
+## Move existing users into Permit \{#bulk-user-synchronization}
 
-> When Lisa first logs in to the app, she already has the access she needs, without manual work from IT or administrators.
-> If her role changes or her account is deactivated, SCIM sends those updates too.
+If your application already has users, choose how they reach Permit.
 
-With SCIM, your IdP stays the source of truth for users, and Permit follows it.
+| Approach | How it works | Tradeoffs |
+|---|---|---|
+| [Bulk import script](#script-based-bulk-syncing) | A script reads your user database and sends every user to Permit with the API or SDK. | Every user exists in Permit right away. You write and run the script, and you handle errors and data mismatches. |
+| [Incremental sync at sign-in](#incremental-syncing-at-login-recommended) (recommended) | The handoff point syncs each user the next time the user signs in. | No import script to maintain. Only active users are synced. A user who hasn't signed in yet isn't in Permit. |
 
-## What did you learn?
+### Bulk import script \{#script-based-bulk-syncing}
 
-You now understand:
+Write a script that iterates over your users and sends them to Permit. The API has bulk endpoints that create, replace, or delete many users in one request. See [Sync users in bulk](/overview/sync-your-first-user-with-sdk#bulk-user-syncing). For an example with Auth0 users, see [Sync Auth0 users and roles](/authentication/auth0/auth0-sync-script).
 
-- **The Difference Between Users and Members**: Users are the end-users of your application, while Members are your team managing
-  Permit.io itself.
+### Incremental sync at sign-in (recommended) \{#incremental-syncing-at-login-recommended}
 
-- **The Importance of Syncing Users at the Right Time**: Syncing during sign-in or sign-up gives users the right roles
-  and permissions from their first request.
+Sync each user at the handoff point, during sign-in, after the user's identity is verified. You don't load the whole user database up front. As users sign in over time, your active users end up in Permit, and inactive or outdated accounts stay out.
 
-- **Methods to Sync Users**: Use the User Management Screen to add users manually, `syncUser` in the SDKs from your code, or the Permit
-  API from your own workflows.
+If your application needs to check permissions for a user who hasn't signed in, for example to list who can access a document, sync those users with a bulk import first.
 
-- **Bulk User Synchronization**: Incremental syncing at login is the recommended method, because it
-  syncs only active users.
+## Sync users with SCIM \{#scim-for-automation}
 
-- **SCIM Integration**: SCIM automates user management at scale and keeps Permit in step with your IdP.
+System for Cross-domain Identity Management (SCIM) is a standard protocol that sends user changes from an identity provider (IdP), such as Okta or Microsoft Entra ID, to a service provider such as Permit.
 
+### When to use SCIM \{#why-use-scim}
 
+Use SCIM when your IdP is the source of truth for users, for example for workforce or business-to-business (B2B) applications where an administrator manages accounts in the IdP. With SCIM, you don't write sync code: the IdP pushes user provisioning, updates, and deprovisioning to Permit.
+
+### How SCIM works with Permit \{#how-scim-works}
+
+When a user is created, changed, or deactivated in the IdP, the IdP sends the change to Permit's SCIM endpoint.
+
+For example, Lisa joins your company. HR creates her profile in Okta with her name, email address, and the Marketing Specialist role. Okta sends Lisa's profile to Permit, and Permit creates the user. When Lisa first signs in to your application, she already exists in Permit. If her account changes or is deactivated in Okta, Okta sends that change too.
+
+To set up SCIM, see [SCIM integration with Okta](/integrations/SCIM/OKTA) or [SCIM integration with Microsoft Entra ID](/integrations/SCIM/EntraID). The Okta guide maps Okta groups to Permit roles.
+
+## Summary \{#what-did-you-learn}
+
+| Question | Answer |
+|---|---|
+| Who do you sync? | Users of your application. Members are your team in the Permit dashboard. |
+| When do you sync? | At sign-up or sign-in, right after authentication. |
+| How do you load existing users? | Sync incrementally at sign-in, or run a bulk import when you need every user in Permit up front. |
+| When do you use SCIM? | When an IdP such as Okta or Entra ID is the source of truth for users. |
+
+## Next steps
+
+- [Sync users with the dashboard, SDK, or API](/how-to/sync-users)
+- [Sync your first user with the API](/overview/sync-your-first-user-with-sdk)
+- [Connect your authentication provider](/authentication/your-authentication)
+- [Sync tenants, resource instances, and relationships](/overview/sync-applications-data)

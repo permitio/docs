@@ -1,26 +1,33 @@
 ---
 sidebar_position: 7
-title: Get resource authorized users
-description: "List the users authorized to perform an action on a resource with permit.authorized_users()."
+title: List the users authorized on a resource
+sidebar_label: Get authorized users
+description: "List the users who can perform an action on a resource type or resource instance, and the role assignments that grant the access, with permit.authorized_users()."
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
+List the users who can perform an action on a resource type or a resource instance, together with the role assignments that grant each user access. This page is for developers who need to answer "who can do X on Y?", for example to show the people with access to a document.
 
-To get all users who have access to a resource, you can use the `permit.authorized_users` function.
-This function returns a list of users who have access to perform a specific action on a resource.
+## Prerequisites
 
-The `permit.authorized_users` function accepts an action and a resource as input,
-and returns a list of users who have access to perform the given action on the given resource,
-including the user's role assignments that granted the access:
+- The Python SDK connected to a policy decision point (PDP) version 0.4.0 or later ([Run the PDP](/overview/run-pdp))
+- Users with role assignments in Permit ([Sync users](/how-to/sync-users))
 
-:::note PDP Version
-Please note that the `permit.authorized_users` function is available starting from PDP version 0.4.0.
-:::
+`permit.authorized_users()` is an asynchronous function of the Python SDK client (`from permit import Permit`). Call it with `await`. From other languages, call the PDP's `POST /authorized_users` endpoint.
 
-## Simple Usage
+## Function arguments
 
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `action` | `str` | Yes | The action to check, for example `read`. |
+| `resource` | `str` or `dict` | Yes | A resource type (`repo`), a resource instance (`repo:OPAL`), or a dict with `type`, optional `key`, optional `tenant`, and optional `attributes`. |
+| `context` | `dict` | No | Extra data for the policy evaluation, such as the ABAC flag described in [Include ABAC rules](#abac-usage). |
+
+## List the users authorized on a resource type \{#simple-usage}
+
+This example lists the users who can `read` any `repo`:
 
 <Tabs groupId="language">
 <TabItem value="python" label="Python">
@@ -28,7 +35,7 @@ Please note that the `permit.authorized_users` function is available starting fr
 ```python
 from permit import AuthorizedUsersResult
 
-authorized_users: AuthorizedUsersResult = permit.authorized_users(
+authorized_users: AuthorizedUsersResult = await permit.authorized_users(
     "read", "repo",
 )
 ```
@@ -36,7 +43,7 @@ authorized_users: AuthorizedUsersResult = permit.authorized_users(
 </TabItem>
 </Tabs>
 
-The schema of the response in the code above is as follows:
+The result has this shape:
 ```json
 {
     "resource": "repo:*",
@@ -54,10 +61,19 @@ The schema of the response in the code above is as follows:
 }
 ```
 
-## Instance Specific Usage
+## Read the authorized users result
 
-Similar to the `permit.check` function, you can also pass the instance of the resource to the `permit.authorized_users` function.
-This will return a list of users who have access to perform the given action on the specific given instance.
+| Field | Description |
+|---|---|
+| `resource` | The resource the result is about: `type:*` for a resource type, or `type:key` for a resource instance. |
+| `tenant` | The tenant the result is about. |
+| `users` | An object keyed by user key. Each value is the list of role assignments that grant the user the action. |
+
+Each role assignment has `user`, `tenant`, `resource`, and `role`. A `resource` value of `__tenant:<tenant_key>` means a tenant-level role grants the access.
+
+## List the users authorized on a resource instance \{#instance-specific-usage}
+
+Pass a resource instance in `type:key` format, the same format as in [`permit.check()`](/how-to/enforce-permissions/check#relationships). The result lists the users who can perform the action on that instance.
 
 <Tabs groupId="language">
 <TabItem value="python" label="Python">
@@ -65,16 +81,15 @@ This will return a list of users who have access to perform the given action on 
 ```python
 from permit import AuthorizedUsersResult
 
-authorized_users: AuthorizedUsersResult = permit.authorized_users(
+authorized_users: AuthorizedUsersResult = await permit.authorized_users(
     "read", "repo:OPAL",
 )
 
 ```
-
 </TabItem>
 </Tabs>
 
-The schema of the response in the code above is as follows:
+The result has this shape:
 ```json
 {
     "resource": "repo:OPAL",
@@ -92,8 +107,7 @@ The schema of the response in the code above is as follows:
 }
 ```
 
-If the user also has access to the resource granted by a tenant level role assignment,
-the response will also contain the tenant level role assignment, and will look as follows:
+When a user also has access through a tenant-level role, the user's list contains both role assignments:
 ```json
 {
     "resource": "repo:OPAL",
@@ -117,33 +131,37 @@ the response will also contain the tenant level role assignment, and will look a
 }
 ```
 
-## ABAC Usage
+## Include ABAC rules in the result \{#abac-usage}
 
-:::danger
-    That feature is performance-intensive and is disabled by default.
+By default, the result includes only users with role assignments that grant the action. To also include users granted access by attribute-based access control (ABAC) rules, set `enable_abac_authorized_users` to `true` in the request context.
+
+:::warning ABAC evaluation is slower
+ABAC evaluation in authorized users queries is performance-intensive, so it is off by default. Set `enable_abac_authorized_users` only on the requests that need ABAC results. ABAC also needs a container PDP, because the Cloud PDP doesn't evaluate ABAC policies ([Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities)).
 :::
+
+Put `context` at the top level of the request body, next to `action` and `resource`.
 
 <Tabs groupId="language">
 <TabItem value="curl" label="cURL">
-Assuming <code>localhost:7766</code> is the PDP address relative to the caller:
+Replace <code>localhost:7766</code> with the PDP address as seen from the caller, and <code>&lt;api key&gt;</code> with your environment API key.
 
 ```
 curl --location 'http://localhost:7766/authorized_users' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer <api key>' \
---data '{   
+--data '{
     "action": "read",
     "resource": {
         "type": "Document",
-        "tenant":"default",
+        "tenant": "default",
         "attributes": {
-            "cost":500,
+            "cost": 500,
             "create_at": 2026
-      },
+        }
+    },
     "context": {
         "enable_abac_authorized_users": true
-    }  
- }
+    }
 }'
 ```
 </TabItem>
@@ -152,17 +170,24 @@ curl --location 'http://localhost:7766/authorized_users' \
 ```python
 from permit import AuthorizedUsersResult
 
-authorized_users: AuthorizedUsersResult = permit.authorized_users(
-    "read", {
-        type:"Document",
-        attributes:{
-        "cost":500,
-        "create_at": 2026
-    },{
-        "enable_abac_authorized_users": true
-    }},
+authorized_users: AuthorizedUsersResult = await permit.authorized_users(
+    "read",
+    {
+        "type": "Document",
+        "attributes": {
+            "cost": 500,
+            "create_at": 2026,
+        },
+    },
+    {"enable_abac_authorized_users": True},
 )
 ```
 
 </TabItem>
 </Tabs>
+
+## Next steps
+
+- [Get all permissions of a user](/how-to/enforce-permissions/user-permissions)
+- [Check permissions with permit.check()](/how-to/enforce-permissions/check)
+- [Filter data by permission](/how-to/enforce-permissions/data-filtering)

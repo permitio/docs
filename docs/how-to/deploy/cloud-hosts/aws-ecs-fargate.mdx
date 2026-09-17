@@ -1,42 +1,78 @@
 ---
 sidebar_position: 2
-title: on AWS-ECS-Fargate
-description: "AWS ECS Fargate"
+title: Deploy the PDP on AWS ECS Fargate
+sidebar_label: on AWS-ECS-Fargate
+description: "Run the Permit.io policy decision point (PDP) container as an Amazon ECS service on AWS Fargate, check that it is healthy, and connect your application to it."
 ---
 
+Run the Permit.io policy decision point (PDP) as an Amazon Elastic Container Service (ECS) service on AWS Fargate. This page is for operators who run workloads on AWS and want a PDP inside their VPC, including for applications on AWS Lambda.
 
-# Step-by-step guide - Deploying PDP using AWS-ECS-Fargate
+## Prerequisites
 
-In this example, we will show you how to deploy the Permit PDP on AWS ECS Fargate.
+- An AWS account with permission to create ECS clusters, task definitions, and services.
+- A VPC that your application runs in.
+- Your environment API key. See [Get your API key](/overview/get-api-key).
 
-### Task Definition Example
-We have provided an example of a task definition that you can use to deploy the PDP on AWS ECS Fargate.
+## Example task definition \{#task-definition-example}
 
-You can find the example in our Github repo:
+The [ECS task definition example](https://github.com/permitio/permit-pdp-deployments-examples/blob/main/aws/ecs-task-definition.json) in the permit-pdp-deployments-examples repository is a working starting point. The example:
 
-https://github.com/permitio/permit-pdp-deployments-examples/blob/main/aws/ecs-task-definition.json.
+- Runs `permitio/pdp-v2:latest` on Fargate with 512 CPU units and 1024 MiB of memory.
+- Maps container ports `7000` and `8181`.
+- Reads `PDP_API_KEY` from AWS Secrets Manager.
+- Sends logs to CloudWatch Logs.
 
+To use the example, replace the `<ACCOUNT ID>`, `<SECRET NAME>`, and role placeholders with your own values. The steps below create the same setup in the ECS console.
 
-### 1. Create a new ECS cluster
+## 1. Create an ECS cluster \{#1-create-a-new-ecs-cluster}
 
-Create a new cluster in the ECS console.
-![Create cluster](/img/deployments/aws-fargate/1.png)
+In the ECS console, create a cluster. Under **Infrastructure**, select **AWS Fargate (serverless)**.
 
-### 2. Create Task definitions
+![ECS Create cluster form with the cluster name pdp-example and AWS Fargate (serverless) selected under Infrastructure](/img/deployments/aws-fargate/1.png)
 
-Create a new task definition in the ECS console. Please pay attention to the following fields:
-- container port(s) to open: `7000` (required) `8181` (optional)
-  - `7000` is the port the PDP API runs on and is what the SDKs connect to for permit.check()
-  - `8181` is the port OPA runs on and isn't required to be open. If you need access to OPA directly, open this port.
-- Image URI: permitio/pdp-v2:latest
-- CPU and Memory, please consider changing values in case of high load. (1 vCPU is a good number to start with)
-- PDP_API_KEY - your API key
-- (optional) PDP_OPA_CLIENT_QUERY_TIMEOUT - timeout in seconds for the request to the OPA client (default 1), for heavy checks you might want to set it to a higher number (like bulk, get_user_tenants, etc.)
+## 2. Create a task definition for the PDP \{#2-create-task-definitions}
 
-![Configure definitions](/img/deployments/aws-fargate/2.png)
-![Configure definitions](/img/deployments/aws-fargate/3.png)
+In the ECS console, create a task definition with a Fargate launch type and these settings:
 
+| Setting | Value |
+|---|---|
+| Image URI | `permitio/pdp-v2:latest` |
+| Container port `7000` | Required. The PDP API port. The SDKs send `permit.check()` requests to this port. |
+| Container port `8181` | Optional. The port of Open Policy Agent (OPA) inside the PDP. Open it only to call OPA directly. |
+| CPU and memory | Start with 1 vCPU. Increase CPU and memory for high load. See [System requirements and performance](/how-to/deploy/deploy-to-production#system-requirements-and-performance-optimization). |
+| `PDP_API_KEY` environment variable | Your environment API key. Store the key in AWS Secrets Manager and reference it, as the example task definition does, so the key doesn't appear in plain text in the task definition. |
+| `PDP_OPA_CLIENT_QUERY_TIMEOUT` environment variable | Optional. Timeout in seconds for each query from the PDP to OPA. The default is `1`. Raise it for heavy queries, such as bulk checks or listing a user's tenants. |
 
-### 3. Create new service
-![Create service](/img/deployments/aws-fargate/4.png)
-![Create service](/img/deployments/aws-fargate/5.png)
+![ECS task definition Infrastructure requirements section with AWS Fargate as the launch type and CPU and memory task size fields](/img/deployments/aws-fargate/2.png)
+![ECS container details form with image permitio/pdp-v2:latest, port mappings 7000 and 8181, and the PDP_API_KEY environment variable](/img/deployments/aws-fargate/3.png)
+
+## 3. Create an ECS service that runs the PDP \{#3-create-new-service}
+
+1. Open the cluster, go to the **Services** tab, and click **Create**.
+2. Under **Deployment configuration**, choose **Service** as the application type, select the PDP task definition family, name the service, and set **Desired tasks**.
+3. Under networking, choose the VPC and subnets your application runs in. Choose a security group that allows inbound TCP on port `7000` from your application.
+4. Create the service.
+
+![ECS cluster page with the Services tab open and the Create button](/img/deployments/aws-fargate/4.png)
+![ECS create service form with Service selected as the application type, a task definition family, the service name pdp-service, and one desired task](/img/deployments/aws-fargate/5.png)
+
+:::warning Network access to the PDP
+Anyone who can reach port `7000` on the PDP can send it permission checks. Allow inbound traffic only from your application's security group, and don't assign a public IP address unless you need one.
+:::
+
+## 4. Verify the PDP is running \{#4-verify-the-pdp-is-running}
+
+1. In the cluster's **Tasks** tab, confirm the PDP task has the status **Running**.
+2. From a host in the same VPC, send a `GET` request to `http://<PDP_TASK_ADDRESS>:7000/health`. Replace `<PDP_TASK_ADDRESS>` with the task's private IP address. A healthy PDP returns HTTP `200` with `"status": "ok"`.
+
+If the task stops, read the container logs, for example in CloudWatch Logs when the task definition uses the `awslogs` log driver. An invalid `PDP_API_KEY` stops the PDP at startup.
+
+## 5. Connect your application to the PDP \{#5-connect-your-application}
+
+Set the PDP URL in your SDK to `http://<PDP_ADDRESS>:7000`, where `<PDP_ADDRESS>` is the address your application uses to reach the service, such as a load balancer or a service discovery name. See [Connect your SDK to the PDP](/how-to/deploy/deploy-to-production#using-the-pdp).
+
+## Next steps
+
+- [Choose a PDP deployment model](/how-to/deploy/overview)
+- [Run the PDP in offline mode](/how-to/deploy/offline-mode)
+- [Monitor your PDPs](/how-to/monitoring-pdps)

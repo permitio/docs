@@ -1,53 +1,67 @@
 ---
 sidebar_position: 4
-title: Condition Sets
-description: "Create ABAC user sets and resource sets as condition sets, with an example defining and matching them."
+title: Create condition sets with the API
+sidebar_label: Condition Sets
+description: "Create ABAC user sets and resource sets with the Permit condition sets API, and nest them with parent condition sets."
 ---
 
-Condition sets give you the flexibility of ABAC with the simplicity of RBAC.
+Create the user sets and resource sets of an attribute-based access control (ABAC) policy with the Permit API. This page is for developers who script policy setup. It defines both set types, shows the request body for each, and explains parent condition sets. For the concepts behind this section, see the [ABAC API overview](/api/working-with-abac/overview).
 
-:::info
-Condition sets are sets of objects that represent logical elements in your system.
+A condition set is a group of users or resources defined by conditions on their attributes, instead of by a fixed list. You grant permissions to condition sets the same way you grant permissions to roles in role-based access control (RBAC).
+
+There are two types of condition sets:
+
+| Type | `type` value | Contains |
+|---|---|---|
+| **User set** | `userset` | Every user whose attributes match all of the set's conditions |
+| **Resource set** | `resourceset` | Every resource whose attributes match all of the set's conditions |
+
+## Prerequisites
+
+- An environment API key. See [Get your API key](/overview/get-api-key).
+- The user and resource attributes that your conditions reference. See [Define attributes](/how-to/build-policies/abac/defining-attributes).
+- Familiarity with the `conditions` object. See [Build ABAC conditions](/api/working-with-abac/building-conditions).
+
+## Example user set: US-based employees \{#example-of-a-user-set}
+
+:::tip US-based employees
+All users who are **located in the United States** and have the **employee** role.
+
+The key of this user set is `us_based_employees`.
 :::
 
-There are currently **two types of condition sets** that you can work with:
+## Example resource set: private repositories \{#example-of-a-resource-set}
 
-1. **User Set** - defined as a set of users that match all the specified conditions.
-2. **Resource Set** - defined as a set of resources that match all the specified conditions.
+:::tip Private repositories
+All resources of **type repository** that are **private**.
 
-## Example of a User Set
-
-:::tip US BASED EMPLOYEES
-All users who are **located in the United States** and have the **role of an Employee**.
-
-We will call this _**us_based_employees**_.
+The key of this resource set is `private_repos`.
 :::
 
-## Example of a Resource Set
-
-:::tip PRIVATE REPOSITORIES
-All resources that are of the **type repository** and are **private**.
-
-We will call this _**private_repos**_.
-:::
-
-We can then picture a matrix of assignment between user sets and resource sets. We placed a checkbox to indicate that **us_based_employees**
-can perform **any action** on the **private_repos** resource.
+A condition set rule connects a user set to a resource set. The following matrix grants `us_based_employees` permissions on the **Private Repositories** resource set. The other cells have no grant.
 
 |                          | Admin | Employee | Employee in the US |
 | ------------------------ | ----- | -------- | :----------------: |
 | **Private Repositories** |       |          |       **X**        |
 | Marketing Materials      |       |          |                    |
 
-## Creating a Condition Set
+## Create a condition set \{#creating-a-condition-set}
 
-We will now view code examples of a condition set written for the above defined User and Resource Sets.
+Send the condition set as the JSON body of a `POST` request to `https://api.permit.io/v2/schema/{proj_id}/{env_id}/condition_sets`, with the header `Authorization: Bearer <API_KEY>`. The `{proj_id}` and `{env_id}` path parameters accept an ID or a key.
 
-### User Set - US Based Employees
+| Field | Required | Description |
+|---|---|---|
+| `key` | Yes | Unique identifier of the condition set. Condition set rules reference the set by this key. |
+| `name` | Yes | Display name, for example `US based employees`. |
+| `type` | No | `userset` (default) or `resourceset`. |
+| `conditions` | No | The boolean expression that decides membership. See [Build ABAC conditions](/api/working-with-abac/building-conditions). |
+| `resource_id` | For resource sets | For a resource set, the ID or key of the resource the set is based on. |
+| `parent_id` | No | The ID or key of a parent condition set. See [Condition set hierarchy](#condition-set-hierarchy). |
+| `description` | No | A longer description of the set. |
 
-Notice how we want both conditions to be true, so we ended up using the **allOf** logical operator.
+### User set body for US-based employees \{#user-set---us-based-employees}
 
-We have also specified the type of the condition set to be **userset**.
+Both conditions must be true, so the conditions use the `allOf` logical operator. The `type` is `userset`.
 
 ```javascript title="us_based_employees"
 {
@@ -73,15 +87,16 @@ We have also specified the type of the condition set to be **userset**.
 }
 ```
 
-### Resource Set - Private Repositories
+### Resource set body for private repositories \{#resource-set---private-repositories}
 
-In this example of a resource set condition, the type changed to **resourceset**.
+The resource set uses the same structure with `type` set to `resourceset`.
 
 ```javascript title="private_repos"
 {
-    "key": "private_repositories",
+    "key": "private_repos",
     "name": "Private Repositories",
     "type": "resourceset",
+    "resource_id": "repository",
     "conditions": {
         "allOf": [
             {
@@ -91,9 +106,7 @@ In this example of a resource set condition, the type changed to **resourceset**
             },
             {
                 "resource.access": {
-                    "equals": [
-                        "private"
-                    ]
+                    "equals": "private"
                 }
             }
         ]
@@ -101,20 +114,27 @@ In this example of a resource set condition, the type changed to **resourceset**
 }
 ```
 
-We have now successfully defined two condition sets. Let's learn how we can use them together and create a **[condition set rules](docs/api/working-with-abac/condition-set-rules.mdx)**.
+### Verify the condition set
 
-## Condition Set Hierarchy
+Send a `GET` request to `https://api.permit.io/v2/schema/{proj_id}/{env_id}/condition_sets/{condition_set_id}`, with the set's key as `{condition_set_id}`. The response contains the set's `key`, `type`, and `conditions`, plus the `id`, `created_at`, and `updated_at` fields that Permit assigns.
 
-Condition sets can have an optional **parent condition set**. A condition set with a parent applies all conditions from its parent in addition to its own conditions (logical AND). Condition Sets can have multiple levels of hierarchy, and the resulting condition will apply rules from all of a Condition Set's parents.
+To list all sets of one type, send a `GET` request to `/v2/schema/{proj_id}/{env_id}/condition_sets?type=userset` or `?type=resourceset`.
 
-Using the Condition Set created in the previous step, we will define a Condition Set for private repositories that have been archived.
+## Condition set hierarchy
+
+A condition set can have an optional **parent condition set**, set with `parent_id`. A set with a parent applies all of its parent's conditions in addition to its own conditions (logical AND). A hierarchy can have several levels, and the resulting condition includes the conditions of every ancestor.
+
+The API rejects a parent that has a different `type` from the child set, or a different `resource_id`.
+
+The following resource set has the private repositories set as its parent, and matches private repositories that are archived:
 
 ```javascript title="private_archived_repos"
 {
     "key": "private_archived_repos",
     "name": "Private Archived Repositories",
     "type": "resourceset",
-    "parent_id": "private_repositories",
+    "resource_id": "repository",
+    "parent_id": "private_repos",
     "conditions": {
         "allOf": [
             {
@@ -124,12 +144,17 @@ Using the Condition Set created in the previous step, we will define a Condition
             },
             {
                 "resource.archived": {
-                    "equals": [
-                        "true"
-                    ]
+                    "equals": true
                 }
             }
         ]
     }
 }
 ```
+
+To list a set's parents or children, send a `GET` request to `/v2/schema/{proj_id}/{env_id}/condition_sets/{condition_set_id}/ancestors` or `/descendants`.
+
+## Next steps
+
+- [Grant permissions with condition set rules](/api/working-with-abac/condition-set-rules) on the user set and resource set you created.
+- [Walk through a complete example](/api/working-with-abac/examples) with a user set, a resource set, and a rule.

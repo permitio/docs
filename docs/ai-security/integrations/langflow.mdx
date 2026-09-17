@@ -1,618 +1,633 @@
 ---
-title: LangFlow Integration
-sidebar_label: LangFlow
-description: A step-by-step implementation guide for securing LangFlow-based AI applications using Permit.io. This tutorial walks through a real-world flight booking assistant, enforcing access control across prompts, documents, actions, and responses using Permit's ABAC policies and LangFlow components.
+title: Secure a Langflow app with Permit.io
+sidebar_label: Langflow
+description: "Build a flight booking assistant in Langflow that uses the Permit JWT Validator, Permissions Check, and Data Protection components to enforce ABAC policies."
 ---
 
-import TimelineWrapper from "../../../src/components/timeline/TimelineWrapper";
-import TimelineStep from "../../../src/components/timeline/TimelineStep";
+Build a flight booking assistant in Langflow that checks Permit.io policies before it searches flights, answers policy questions, or books a ticket. This tutorial is for AI agent builders who design flows in the Langflow visual editor. It applies the [Four-Perimeter Framework](/ai-security/framework) with three Permit components for Langflow: **JWT Validator**, **Permissions Check**, and **Data Protection**.
 
-# LangFlow Integration
+You build three flows:
 
-**LangFlow** is a low-code, drag-and-drop framework for building AI applications with LLMs. It lets both developers and non-developers visually design and deploy LLM-driven workflows. When your AI workflows handle sensitive data, like personal bookings, financial information, or internal operations, they need proper access control. 
+| Flow | What it enforces | Perimeter |
+| --- | --- | --- |
+| Flight Search | Only users allowed to `search` on `flight` reach the agent and the flight database | Prompt filtering |
+| Flight Information | Only users allowed to `info` on `flight` get baggage and service policy answers | Secure external access |
+| Flight Booking | Only users allowed to `create` on `booking` can call the booking API | Secure external access, response enforcement |
 
-In this guide, we'll show how to wrap LangFlow workflows with **Permit.io** to enforce policy-based controls at every level using Permit's Four Perimeter Model.
+## Prerequisites and tech stack \{#prerequisites-and-tech-stack}
 
-:::info
-This guide uses Permit's [Four Perimeter Model for AI Access Control](/ai-security/framework). 
-These perimeters help ensure:
+- A [Permit.io account](https://app.permit.io/) and your environment API key. See [Get your API key](/overview/get-api-key).
+- Docker, to run an Edge policy decision point (PDP). The policies in this tutorial use attribute-based access control (ABAC), which the Cloud PDP doesn't evaluate. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+- A Langflow instance. See the [Langflow installation guide](https://docs.langflow.org/get-started-installation).
+- The Permit components for Langflow. Langflow doesn't include them. Get the component files from the [permit-langflow-framework repository](https://github.com/permitio/permit-langflow-framework) and add them to Langflow as custom components. See [Custom components](https://docs.langflow.org/components-custom-components) in the Langflow docs. The `permit-langflow` 0.1.0 package on PyPI pins `langflow==1.1.4.post1`, so check the pin against your Langflow version before you install it.
+- Python 3.9 or later, to generate the RS256-signed JSON Web Tokens (JWTs) and the JSON Web Key Set (JWKS) endpoint that the JWT Validator component needs. See [Create the test JWTs and the JWKS endpoint](#create-the-test-jwts-and-the-jwks-endpoint).
+- An OpenAI API key for the agent components, and an [Astra DB](https://www.datastax.com/products/datastax-astra) database with a `flights` collection for the Flight Search flow.
 
-- Only eligible users can interact with your AI agent
-- Sensitive data is protected based on user roles
-- External actions are never triggered without authorization
-- Outputs are policy-compliant before reaching the user
-:::
+### Tools and services \{#tools--services}
 
-## Use Case
-
-To demonstrate this integration, we'll build a **secure flight booking system** using Langflow and Permit.io. The app will include:
-
-- A **Flight Search Flow**: Users search for flights, but pricing/availability is restricted unless authorized
-- A **Policy Info Flow**: Access to baggage rules or services based on permission
-- A **Flight Booking Flow**: Only verified, premium users can complete bookings
-
-By the end of this guide, you'll have a fully operational Langflow app that enforces access control across prompts, retrieved data, external actions, and responses. 
-
-## Prerequisites and Tech Stack
-### Tools & Services
-
-| Tool | Purpose |
+| Tool | Role in this tutorial |
 | --- | --- |
-| [LangFlow](https://www.langflow.org/) | Visual LLM workflow builder |
-| [Permit.io](https://app.permit.io/) | Policy-as-code access control |
-| [OpenAI](https://platform.openai.com/docs) | LLM + embeddings for RAG |
+| [Langflow](https://www.langflow.org/) | Visual editor for the three flows |
+| [Permit.io](https://app.permit.io/) | Stores the policy and evaluates checks on the PDP |
+| [OpenAI](https://platform.openai.com/docs) | Model for the agent components |
 | Astra DB | Vector store for flight search |
-| Docker | To run Permit PDP locally |
+| Docker | Runs the Edge PDP locally |
 
-### Required Environment Variables
+### Required environment variables
 
-Add the following to your `.env` file:
+Collect these values. You enter them in the component settings in Langflow:
 
 ```bash
 PERMIT_API_KEY=your_api_key
-PERMIT_PDP_URL=http://localhost:7766  # Or your cloud PDP
-JWKS_URL=https://your-domain/.well-known/jwks.json  # For JWT validation
-OPENAI_API_KEY=sk-...  # From OpenAI
-```
-:::tip
-For a [PDP setup guide](/concepts/pdp/overview/), see Permit PDP Overview
-:::
-
-:::info
-Your PERMIT_API_KEY is available [in the Permit.io dashboard](https://app.permit.io/settings/api-keys)
-:::
-
-## Planning our Policies
-
-Before jumping into implementation, it's essential to define **what we're protecting**, **who needs access**, and **under what conditions**.
-
-We'll use a flight booking AI assistant as our example. It allows users to search for flights, view information, and book tickets, with access controlled by user attributes and policies.
-
-### Policy Model: Resources, Roles & Rules:
-
-### Resources & Actions
-
-- `Flight`
-    - Available Actions: `search`, `info` , `viewprice`, `viewavailability`
-    - Attributes:
-        - `type` (String) – Specifies the type of operation (info, search, booking).
-        - `sensitivity` (String) – Defines data sensitivity (public, protected, private).
-- `Booking`
-    - Available Actions: `create`, `modify`, `cancel`, `view`
-    - Attributes:
-        - `type` (String) – Defines booking operation types.
-        - `sensitivity` (String) – Controls access to booking data based on its sensitivity.
-
-### User Attributes
-
-User access is determined by three key attributes:
-
-- `membership_tier` (Array) – Defines a user's access level (e.g., `basic`, `premium`).
-- `region` (String) – Specifies the user's geographical location (`domestic`, `international`).
-- `verified` (Boolean) – Indicates if the user's identity has been confirmed (`true`/`false`).
-
-### Condition Sets
-
-These condition sets define who can access what, controlling how users interact with resources:
-
-- Membership Tier Access: `user.membership_tier` includes `resource.class` AND `user.verified == true`
-    
-- Regional Restrictions: `user.region == "domestic"`
-    
-- Sensitive Data Access: `user.membership_tier` includes `"premium"`
-    
-
-Let's set up attribute-based (ABAC) policies using the [Permit.io](https://www.permit.io/) dashboard.
-
-## Permit Schema Setup
-
-With our perimeters and policies mapped out, it's time to configure our **authorization schema** in the [Permit.io dashboard](https://app.permit.io/). This includes defining **resources**, **actions**, **user and resource sets**, and **ABAC rules**.
-
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Define Resources** <br/>
-    Navigate to <b>Policy → Resources</b> in your <a href="https://app.permit.io/">Permit.io dashboard</a>.<br/>
-    First, let's create a <code>flight</code> resource. This will handle everything related to flight information and searches:
-    
-    ```json
-    {
-      "actions": [
-        "search",       // Search for available flights
-        "info",         // Get flight details
-        "viewprice",    // Access pricing information
-        "viewavailability" // Check seat availability
-      ],
-      "attributes": {
-        "type": "String",        // Controls the type of operation ("info", "search", "booking")
-        "sensitivity": "String"  // Defines data sensitivity ("public", "protected", "private")
-      }
-    }
-    ```
-    
-    ![](/img/ai-security/integrations/langflow/2.jpg)
-    
-    Next, create a <code>booking</code> resource for managing actual flight bookings:
-    
-    ```json
-    {
-      "actions": [
-        "create", // Create new bookings
-        "modify", // Change existing bookings
-        "cancel", // Cancel bookings
-        "view"    // View booking details
-      ],
-      "attributes": {
-        "type": "String",        // Defines booking operation types
-        "sensitivity": "String"  // Controls booking data sensitivity
-      }
-    }
-    ```
-    
-    ![](/img/ai-security/integrations/langflow/3.jpg)
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Define User Attributes** <br/>
-    In the <b>Directory → Users → Settings</b> page, define the following user attributes to enable fine-grained access control based on user properties like membership tier, region, and verification status:
-    
-    ```json
-    {
-      "membership_tier": "Array",
-      "region": "String",
-      "verified": "Boolean"
-    }
-    ```
-    
-    ![](/img/ai-security/integrations/langflow/4.jpg)
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Create Condition Sets** <br/>
-    Navigate to <b>Policy → ABAC Rules</b> and click <b>ABAC User Sets</b>. Create the following sets:
-
-    <b>Membership Tier Access:</b>
- 
-    ```kotlin
-    user.membership_tier includes resource.class AND user.verified == true
-    ```
-    ![](/img/ai-security/integrations/langflow/5.jpg)
-
-    <b>Regional Restrictions:</b>
-
-    ```kotlin
-    user.region == "domestic"
-    ```
-    ![](/img/ai-security/integrations/langflow/6.jpg)
-
-    <b>Sensitive Data Access:</b>
-
-    ```kotlin
-    user.membership_tier includes "premium"
-    ```
-    ![](/img/ai-security/integrations/langflow/7.jpg)
-  </TimelineStep>
-  <TimelineStep stepNumber={4}>
-    **Enforce Policies** <br/>
-    Use the policy editor to enforce your access control rules. In the policy matrix, you'll see your resources and actions with checkboxes for each condition set at the top. These checkboxes enforce your conditions; when multiple boxes are checked for an action, all conditions must be satisfied for the action to be allowed.
-    
-    ![](/img/ai-security/integrations/langflow/8.jpg)
-    
-    Now that your access control infrastructure is configured, you can start building your flows!
-  </TimelineStep>
-</TimelineWrapper>
-
-## Running the Permit PDP Locally
-
-To enable real-time policy evaluations in Langflow, we'll run Permit.io's [PDP](/concepts/pdp/overview) locally. 
-The PDP acts as the enforcement engine, evaluating access requests against the policies you defined in the dashboard.
-To do that:
-
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-Pull the PDP Docker Image
-Make sure Docker is installed and running on your machine, then pull the latest version of the PDP:
-
-```bash
-docker pull permitio/pdp-v2:latest
-```
-  </TimelineStep>
-
-  <TimelineStep stepNumber={2}>
-Start the PDP Container
-Run the PDP with your Permit API key:
-
-```bash
-bash
-CopyEdit
-docker run -it -p 7766:7000 \
-  --env PDP_DEBUG=True \
-  --env PDP_API_KEY=<YOUR_API_KEY> \
-  permitio/pdp-v2:latest
-
-```
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-Replace `<YOUR_API_KEY>` with your actual API key from the Permit.io dashboard (found under Settings → API Keys).
-    - The PDP will listen on port `7766`
-    - All permission checks in Langflow will route to this local instance
-</TimelineStep>
-</TimelineWrapper>
-
-:::tip Cloud PDP
-You can also point to the cloud PDP instead of running locally, by setting `pdp_url` to `https://cloudpdp.api.permit.io`. 
-For detailed capabilities and limits, see [Cloud PDP Capabilities](/concepts/pdp/cloud-pdp-capabilities).
-:::
-
-## Building the Flows
-
-Now that we've set up our access control infrastructure, let's build our Flight Booking Agent! We'll create three flows that demonstrate how to implement security while providing a great user experience.
-
-## Flight Search Flow
-
-The **Flight Search Flow** is the first and most fundamental part of our secure AI agent. It allows users to search for flights while enforcing access policies to ensure that only authorized users can interact with the system.
-
-This flow demonstrates **Prompt Filtering** using Permit.io's `JWT Validator` and `Permissions Check` components.
-
-### Overview of Flow Components
-
-In your Langflow canvas, drag the following components:
-
-- **Text Input** – for entering a JWT token
-- **Chat Input** – for entering the flight search query
-- **JWT Validator** – to authenticate the user
-- **Permissions Check** – to enforce access policies
-- **If-Else Router** – to direct access based on the permission outcome
-- **City Selection Agent** – parses and validates city queries
-- **Astra DB** – retrieves flight data
-- **Parse Data** – formats results
-- **Two Chat Outputs** – to display allowed and denied responses
-
-### Component Configuration
-
-**JWT Validator**
-- **JWT Token**: Connected from Text Input
-- **JWKS URL**: `https://your-domain/.well-known/jwks.json` (Replace with your real endpoint)
-
-**Permissions Check**
-```
-PDP URL: `http://localhost:7766`
-API Key: Your Permit API Key
-Resource: `flight`
-Action: `search`
-```
-
-**City Selection Agent - Model:** `gpt-4o-mini` <br/>
-**Instructions**:
-```sql
-You are a flight search assistant. Your job is to:
-1. Extract departure and arrival cities from user queries
-2. Validate that these are real cities with airports
-3. Format the search request for our database
-4. Handle cases where cities are unclear or invalid
-```
-
-**Astra DB**
-- **Collection Name**: `flights`
-- **Database**: `flight_db` (replace with your Astra DB details)
-
-**Parse Data Template**:
-
-```css
-Flight {row_number}: {departure_city} to {arrival_city}
-Departure: {departure_time}
-Airline: {airline}
-Flight Number: {flight_number}
-Price: ${price}
-Available Seats: {seats}
-```
-
-![](/img/ai-security/integrations/langflow/9.jpg)
-
-### Flow Logic
-
-Connect your components like this:
-
-1. **Text Input → JWT Validator**
-2. **JWT Validator → Permissions Check**
-3. **Permissions Check → If-Else Router**
-    - **True path** → City Selection Agent → Astra DB → Parse Data → Chat Output (Allowed)
-    - **False path** → Chat Output (Denied)
-4. **Chat Input** connects to both the router and the City Selection Agent
-
-:::info This setup ensures that:
-
-- Users must pass JWT validation
-- Users must be permitted to perform a `search` action on the `flight` resource
-- Only authorized users can proceed to the AI-powered city lookup and DB search
-
-:::
-
-### Example Behavior
-
-**Authorized User:**
-- Sees a list of flights formatted clearly
-- Can query locations like “Find flights from NYC to Paris next week”
-
-**Unauthorized User:**
-- Receives an “Access Denied” message before any AI or database interaction
-
-## Flight Information Flow
-
-The **Flight Information Flow** is designed to answer user queries about travel policies, baggage allowances, and general flight service information.
-
-This flow enforces the **Secure External Access** perimeter using the `Permissions Check` component and ensures only authorized users can access policy data.
-
-### Overview of Flow Components
-
-For this flow, you'll use the following Langflow components:
-- **Text Input** – JWT token
-- **Chat Input** – User's policy-related question
-- **JWT Validator** – Validates and extracts user identity
-- **Permissions Check** – Checks if the user can access flight info
-
-### Component Configuration
-
-**JWT Validator** <br/>
-Connects to your identity provider's public JWKs.
-
-**JWKS URL**: `https://your-domain/.well-known/jwks.json`
-
-**Permissions Check**
-```
-PDP URL: `http://localhost:7766`
-API Key: Your Permit API key
-Resource: `flight`
-Action: `info`
-```
-
-**Local Expert Agent - Model:** `gpt-4o-mini` <br/>
-**Instructions**: 
-```sql
-You are a knowledgeable Local Expert that provides accurate flight policy and service information. You should:
-1. Answer questions about baggage policies
-2. Explain flight rules and restrictions
-3. Provide information about services and amenities
-4. Always maintain privacy by not revealing sensitive pricing or route details without authorization
-```
-
-**URL Component**
-
-- **URLs**:
-    - `https://api.flightpolicies.com/baggage`
-    - `https://api.flightpolicies.com/services`
-- **Output Format**: `Text`
-
-**Parse Data Template**
-
-```css
-Policy Information:
-------------------
-{policy_title}
-
-Details:
-{policy_details}
-
-Additional Information:
-{additional_info}
-------------------
-```
-
-![](/img/ai-security/integrations/langflow/10.png)
-
-### Flow Logic
-
-Connect your components like this:
-
-1. **Text Input → JWT Validator**
-2. **JWT Validator → Permissions Check**
-3. **Chat Input → If-Else Router**
-4. **Permissions Check** determines routing:
-    - If **allowed** → Local Expert Agent → URL → Parse Data → Chat Output (Allowed)
-    - If **not allowed** → Chat Output (Denied)
-
-### Example Behavior
-
-**Example Queries:**
-
-- “What's the baggage allowance for international flights?”
-- “What are the rules for pet travel?”
-
-:::info Expected Outcomes
-
-| **User Attributes** | **Result** |
-| --- | --- |
-| Verified, authorized user | ✅ Full response |
-| Unverified or not allowed by policy | ❌ Access denied |
-
-This ensures users only access policy data when permitted, even though the actual content may live behind APIs or LLM prompts.
-
-:::
-
-## Flight Booking Flow
-
-The **Flight Booking Flow** is the most important part of the app. It lets users finalize bookings — a privileged action that requires strict permission checks and response controls. This flow demonstrates:
-
-- **Secure External Access** using `Permissions Check`
-- **Response Enforcement** using `Data Protection`, `Filter Data`, and controlled formatting
-
-### Components Used
-
-This flow includes standard identity and policy components, plus booking-specific tools:
-
-- **Text Input** – JWT token
-- **Chat Input** – Booking intent or user prompt
-- **JWT Validator** – Authenticates the user
-- **Permissions Check** – Verifies booking access
-- **Data Protection** – Filters resource access
-- **If-Else Router** – Controls access routing
-- **API Request** – Executes booking (mocked)
-- **Astro Assistant Agent** – Helps process booking intent
-- **OpenAI** – Generates responses
-- **Data to Message**, **Filter Data** – Shapes the final output
-- **Chat Output** – Displays booking result
-
-### Component Configuration
-
-**JWT Validator** <br/>
-Connects to your identity provider's public JWKs.
-
-**Permissions Check**
-```
-PDP URL: `http://localhost:7766`
-API Key: Your Permit API key
-Resource: `booking`
-Action: `create`
-```
-
-**Data Protection**
-
-- **Resource Type**: `booking`
-- **Action**: `create`
-- **Filter IDs** (optional): List of specific booking records to restrict
-
-**API Request (Mocked for Tutorial)**
-
-- **URL**: `https://api.flights.com/v1/bookings`
-- **Method**: `POST`
-
-**Astro Assistant Agent - Model:** `gpt-4o-mini` <br/>
-**Instructions**: 
-```sql
-You are a booking assistant that helps process flight booking requests. 
-Always ensure the user is authorized before confirming anything.
-```
-
-### Flow Connections
-
-![](/img/ai-security/integrations/langflow/10.png)
-
-The full flow wiring looks like this:
-
-1. **Text Input → JWT Validator**
-2. **JWT Validator → Permissions Check AND Data Protection**
-3. **Chat Input → Permission Check → If-Else Router**
-4. If **allowed**:
-    - → API Request → Assistant Agent → Chat Output
-5. If **not allowed**:
-    - → Denied Chat Output
-6. **Data Protection → Filter Data → Format → Chat Output**
-
-This layered setup ensures that:
-
-- Unauthorized users can't book flights
-- Users only see booking-related data that they're allowed to access
-
-### Example Scenario
-
-User sends: “Book me a flight from NYC to LA for next Monday.”
-
-| **User Attributes** | **Outcome** |
-| --- | --- |
-| `verified: true`, `membership_tier: premium` | ✅ Booking succeeds, full response |
-| `verified: false` | ❌ Access denied before booking |
-| `tier: basic`, `region: international` | ❌ Might be restricted (based on policy) |
-
-## Running the Demo & Verifying Behavior
-
-With all three flows complete—**Search**, **Information**, and **Booking**—your Langflow app now includes end-to-end access control using Permit.io. This section walks through running the full system, verifying security boundaries, and testing common scenarios.
-
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-Start the Local PDP
-Ensure your local PDP is running:
-
-```bash
-docker run -it -p 7766:7000 \
-  --env PDP_DEBUG=True \
-  --env PDP_API_KEY=<YOUR_API_KEY> \
-  permitio/pdp-v2:latest
-```
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-Replace `<YOUR_API_KEY>`
-You can get your actual key in the Permit.io dashboard.
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-Launch Langflow
-If you're running Langflow locally:
-
-```bash
-poetry install
-poetry run langflow run
-```
-
-Or use [Langflow Cloud](https://www.langflow.org/) to import your flows via JSON.
-  </TimelineStep>
-  <TimelineStep stepNumber={4}>
-Set up .env and JWTs
-You'll need a `.env` file with:
-
-```
-PERMIT_API_KEY=...
 PERMIT_PDP_URL=http://localhost:7766
-JWKS_URL=https://your-domain/.well-known/jwks.json
+JWKS_URL=http://localhost:8080/jwks.json
+OPENAI_API_KEY=sk-...
 ```
 
-Use test JWT tokens with embedded attributes to simulate different user roles and access levels.
-  </TimelineStep>
-</TimelineWrapper>
+| Variable | Used in |
+| --- | --- |
+| `PERMIT_API_KEY` | **API Key** field of Permissions Check and Data Protection |
+| `PERMIT_PDP_URL` | **PDP URL** field of Permissions Check and Data Protection. Point it at your Edge PDP. The Cloud PDP returns a denial for every ABAC check in this tutorial. |
+| `JWKS_URL` | **JWKS URL** field of JWT Validator |
+| `OPENAI_API_KEY` | The agent and OpenAI components |
 
-### Example: Fully Authorized Premium User
+## Plan the access model \{#planning-our-policies}
+
+The assistant searches flights, answers questions about flight policies, and books tickets. User attributes decide what each user can do.
+
+### Resources and actions \{#resources--actions}
+
+| Resource | What it covers | Actions |
+| --- | --- | --- |
+| `flight` | Flight search and flight policy information | `search`, `info`, `viewprice`, `viewavailability` |
+| `booking` | Ticket bookings | `create`, `modify`, `cancel`, `view` |
+
+### User attributes
+
+| Attribute | Type | Values |
+| --- | --- | --- |
+| `membership_tier` | array | For example `["basic"]` or `["premium"]` |
+| `region` | string | `domestic` or `international` |
+| `verified` | bool | `true` when the user's identity is confirmed |
+
+### Condition sets
+
+An ABAC user set is a named condition over user attributes. Permit evaluates the set on every check and grants the actions you check for that set in the Policy Editor.
+
+| User set | Key | Condition |
+| --- | --- | --- |
+| membership tier access | `membership_tier_access` | `user.verified` equals `true` |
+| regional restrictions | `regional_restrictions` | `user.region` equals `domestic` |
+| sensitive data access | `sensitive_data_access` | `user.membership_tier` equals `premium` |
+
+## Configure the policy in Permit \{#permit-schema-setup}
+
+Create the schema in the [Permit dashboard](https://app.permit.io/).
+
+### 1. Create the resources \{#define-resources}
+
+Open **Policy > Resources** and click **Create a Resource**. Set **Name** and **Key** to `flight`, add the four actions, and add the two attributes under **ABAC Options**:
+
+| Action | What it covers |
+| --- | --- |
+| `search` | Search for available flights |
+| `info` | Read flight details and policy information |
+| `viewprice` | Read pricing information |
+| `viewavailability` | Read seat availability |
+
+| Attribute | Type | What it holds |
+| --- | --- | --- |
+| `type` | String | The operation type: `info`, `search`, or `booking` |
+| `sensitivity` | String | The data sensitivity: `public`, `protected`, or `private` |
+
+![Create Resource form for the flight resource with the search, info, viewprice, and viewavailability actions and the sensitivity and type String attributes](/img/ai-security/integrations/langflow/2.jpg)
+
+Repeat with **Name** and **Key** set to `booking`:
+
+| Action | What it covers |
+| --- | --- |
+| `create` | Create a booking |
+| `modify` | Change an existing booking |
+| `cancel` | Cancel a booking |
+| `view` | Read booking details |
+
+| Attribute | Type | What it holds |
+| --- | --- | --- |
+| `type` | String | The booking operation type |
+| `sensitivity` | String | The sensitivity of the booking data |
+
+![Create Resource form for the booking resource with the create, modify, cancel, and view actions and the type and sensitivity String attributes](/img/ai-security/integrations/langflow/3.jpg)
+
+The three flows in this tutorial check `flight:search`, `flight:info`, and `booking:create`. The other actions exist so you can extend the policy later.
+
+### 2. Define user attributes \{#define-user-attributes}
+
+Open **Directory > Settings > User Attributes**, click **Add Attribute**, and add these three attributes. `key`, `roles`, and `email` are built in.
+
+| Key | Type |
+| --- | --- |
+| `verified` | bool |
+| `membership_tier` | array |
+| `region` | string |
+
+![User Attributes settings with the built-in key, roles, and email attributes plus verified as bool, membership_tier as array, and region as string](/img/ai-security/integrations/langflow/4.jpg)
+
+### 3. Create the ABAC user sets \{#create-condition-sets}
+
+Open **Policy > ABAC Rules**, click **ABAC User Sets**, and create the three sets from [Condition sets](#condition-sets). For each set, enter the name, keep the generated key, leave **Resource set parent** as **No Parent**, add the condition, and click **Save User Set**.
+
+**membership tier access:** one condition, `user.verified` equals `True`.
+
+**regional restrictions:** one condition, `user.region` equals `domestic`.
+
+![User Set form named regional restrictions with the key regional_restrictions and the condition user.region equals domestic](/img/ai-security/integrations/langflow/6.jpg)
+
+**sensitive data access:** one condition, `user.membership_tier` equals `premium`.
+
+![User Set form named sensitive data access with the key sensitive_data_access and the condition user.membership_tier equals premium](/img/ai-security/integrations/langflow/7.jpg)
+
+:::warning The sensitive data access set does not match the test users
+`membership_tier` is an array attribute, and `equals` compares the whole value, so `user.membership_tier` equals `premium` does not match a user whose `membership_tier` is `["premium"]`. No test user in this tutorial matches `sensitive data access`, and the actions granted to that set alone never reach a test user. The three flows in this tutorial don't depend on it: `regional restrictions` grants `flight:search`, `flight:info`, and `booking:create`. To make the set match, either store `membership_tier` as a string attribute, or keep the array and build the condition with the `array contains` operator, which Permit sends as `array_contains`. For array conditions in the dashboard, see [Ownership via list on resource](/how-to/build-policies/abac/patterns#ownership-via-list-on-resource).
+:::
+
+### 4. Grant permissions in the Policy Editor \{#grant-permissions-in-the-policy-editor}
+
+Open **Policy > Policy Editor**. The columns are your three user sets and the rows are the actions of `booking` and `flight`. Check a box to grant that action to users in that user set. Check these boxes:
+
+| Action | membership tier access | regional restrictions | sensitive data access |
+| --- | --- | --- | --- |
+| `booking:create` | Yes | Yes | Yes |
+| `booking:modify` | Yes | No | Yes |
+| `booking:cancel` | Yes | No | No |
+| `booking:view` | Yes | No | No |
+| `flight:search` | No | Yes | No |
+| `flight:info` | No | Yes | No |
+| `flight:viewavailability` | Yes | No | No |
+| `flight:viewprice` | Yes | No | Yes |
+
+`flight:info` has to be checked for at least one user set. If no user set grants `flight:info`, the PDP denies every request in the Flight Information flow and that flow always returns its denial output.
+
+### 5. Add test users \{#add-test-users}
+
+The JWT Validator component reads only the `sub` claim from the token. The Permissions Check component sends that user key to the PDP without attributes, so the PDP uses the attributes stored on the user in Permit. Open **Directory > Users**, create a user for each test JWT `sub`, and set the user's attributes. See [Sync users](/how-to/sync-users).
+
+**Fully authorized premium user:**
 
 ```json
 {
-  "sub": "user-001",
+  "key": "user-001",
   "attributes": {
     "membership_tier": ["premium"],
     "region": "domestic",
-    "verified": true}
+    "verified": true
+  }
 }
 ```
 
-### Example: Limited Basic User
+**Limited basic user:**
 
 ```json
 {
-  "sub": "user-002",
+  "key": "user-002",
   "attributes": {
     "membership_tier": ["basic"],
     "region": "international",
-    "verified": false}
+    "verified": false
+  }
 }
 ```
 
-### Interact with the Flows
+`user-001` matches `membership tier access` and `regional restrictions`. `user-002` matches none of the three user sets, so the PDP denies every check for that user.
 
-Use the Langflow Playground or UI:
+## Create the test JWTs and the JWKS endpoint \{#create-the-test-jwts-and-the-jwks-endpoint}
 
-- **Search**: Try `“Flights from NYC to LA”`
-- **Info**: Ask `“What’s the pet travel policy?”`
-- **Booking**: Say `“Book a ticket for me from LAX to BOS”`
+The JWT Validator component fetches the JSON Web Key Set (JWKS) from its **JWKS URL**, looks up the key whose `kid` matches the token header, verifies the RS256 signature, and returns the `sub` claim as the user key. The component rejects any other algorithm, so the tokens have to be signed with RS256.
 
-### Expected Behavior Matrix
+For a local run, generate one RSA key pair, publish its public key as a JWKS file, and sign one token per test user.
 
-| **Flow** | **Fully Authorized** | **Unverified** | **Basic Tier** |
-| --- | --- | --- | --- |
-| Search Flights | ✅ Shows results | ❌ Blocked | ✅ Limited area |
-| Info Query | ✅ Full response | ❌ Denied | ✅ Public info |
-| Booking Request | ✅ Allowed + created | ❌ Blocked | ❌ Blocked |
+1. Install the signing libraries:
 
-### Where to View Permissions & Logs
+   ```bash
+   pip install "pyjwt[crypto]"
+   ```
 
-[Audit Logs](/how-to/use-audit-logs/types-and-filtering) in the Permit dashboard let you trace each check and see why a user was allowed or denied. 
-You can use the Policy Editor to tweak conditions and immediately affect runtime behavior.
+2. Save this script as `make_test_jwt.py`:
 
-:::tip In this guide we learned how to:
+   ```python
+   import json
 
-- Build secure LLM flows using Langflow
-- Enforce four critical authorization perimeters
-- Model and apply fine-grained ABAC policies with Permit.io
-- Keep AI workflows safe and compliant
+   import jwt
+   from cryptography.hazmat.primitives.asymmetric import rsa
+   from jwt.algorithms import RSAAlgorithm
 
-By combining Langflow's visual interface with Permit's policy engine, you can ship secure, compliant AI systems without writing custom enforcement logic from scratch.
+   KEY_ID = "flight-demo-key"
+   USER_KEYS = ["user-001", "user-002"]
 
+   private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+   jwk = json.loads(RSAAlgorithm.to_jwk(private_key.public_key()))
+   jwk.update({"kid": KEY_ID, "alg": "RS256", "use": "sig"})
+   with open("jwks.json", "w", encoding="utf-8") as handle:
+       json.dump({"keys": [jwk]}, handle, indent=2)
+
+   for user_key in USER_KEYS:
+       token = jwt.encode(
+           {"sub": user_key},
+           private_key,
+           algorithm="RS256",
+           headers={"kid": KEY_ID},
+       )
+       print(f"{user_key}: {token}")
+   ```
+
+   The `USER_KEYS` list holds the user keys you created in [Add test users](#add-test-users). `KEY_ID` is the `kid` that the script writes into both the JWKS entry and every token header.
+
+3. Run the script. It writes `jwks.json` next to itself and prints one token per user:
+
+   ```bash
+   python make_test_jwt.py
+   ```
+
+   ```text
+   user-001: eyJhbGciOiJSUzI1NiIsImtpZCI6ImZsaWdodC1kZW1vLWtleSIsInR5cCI6IkpXVCJ9...
+   user-002: eyJhbGciOiJSUzI1NiIsImtpZCI6ImZsaWdodC1kZW1vLWtleSIsInR5cCI6IkpXVCJ9...
+   ```
+
+   Copy both tokens. You paste them into the Text Input component of each flow.
+
+4. Serve `jwks.json` over HTTP from the folder that holds it, so the JWT Validator can fetch it:
+
+   ```bash
+   python -m http.server 8080
+   ```
+
+5. Verify that the JWKS endpoint answers:
+
+   ```bash
+   curl -s http://localhost:8080/jwks.json
+   ```
+
+   The response is a JSON object with a `keys` array whose single entry has `"kty": "RSA"`, `"kid": "flight-demo-key"`, and `"alg": "RS256"`. Use `http://localhost:8080/jwks.json` as the **JWKS URL** in every JWT Validator component.
+
+:::warning
+The private key exists only in memory while `make_test_jwt.py` runs, so every run signs the tokens with a new key and invalidates the tokens from the previous run. Regenerate `jwks.json` and the tokens together, and restart the JWKS server afterwards. These tokens have no `exp` claim and no audience, which is acceptable for a local test and not for production. For production, issue tokens from your identity provider and point **JWKS URL** at its JWKS endpoint.
 :::
 
-## Further Reading & Resources
+## Run the Edge PDP locally \{#running-the-permit-pdp-locally}
 
-- Got Questions? Join the [Permit.io Slack Community](https://io.permit.io/blog-slack)
-- Guide: [Building a Secure Flight Booking AI Agent with Langflow](https://www.permit.io/blog/building-a-secure-flight-booking-ai-agent-with-langflow)
-- Github: [langchain-permit](https://github.com/permitio/langchain-permit)
+The Permissions Check and Data Protection components send checks to the PDP. Run an Edge PDP in Docker:
+
+1. Pull the PDP image:
+
+   ```bash
+   docker pull permitio/pdp-v2:latest
+   ```
+
+2. Start the PDP container. Replace `<YOUR_API_KEY>` with your environment API key.
+
+   ```bash
+   docker run -it -p 7766:7000 \
+     --env PDP_DEBUG=True \
+     --env PDP_API_KEY=<YOUR_API_KEY> \
+     permitio/pdp-v2:latest
+   ```
+
+3. Verify that the PDP is up:
+
+   ```bash
+   curl -s http://localhost:7766/healthy
+   ```
+
+   A healthy PDP returns HTTP `200` with its top-level `status` field set to `ok`, together with a status for the PDP's Horizon and OPA processes. Enter `http://localhost:7766` in the **PDP URL** field of every Permissions Check and Data Protection component.
+
+For more deployment options, see the [PDP overview](/concepts/pdp/overview).
+
+## Build the flows \{#building-the-flows}
+
+Each flow starts with the same two identity components: a **Text Input** for the JWT and a **JWT Validator** that turns the JWT into a user key. The **User ID** output of JWT Validator connects to the **User ID** input of Permissions Check.
+
+Permissions Check has two outputs, **Allowed** and **Denied**. When the PDP allows the check, **Allowed** carries the text `Permission granted for <user> to <action> on <resource>` and **Denied** is empty. When the PDP denies the check, **Denied** carries `Permission denied for <user> to <action> on <resource>` and **Allowed** is empty. The **If-Else** component routes on that text: its **Text Input** takes the **Allowed** output, and its **True** and **False** outputs drive the allowed and denied paths.
+
+:::warning
+Permissions Check emits text, not a boolean. An If-Else set to **Operator** `equals` and **Match Text** `True` never matches either output, so every request takes the False branch and the allowed path never runs. Set **Operator** to `contains` and **Match Text** to `Permission granted`.
+:::
+
+## Flight Search flow \{#flight-search-flow}
+
+The Flight Search flow applies prompt filtering. The flow checks `search` on `flight` before the agent or the database receives the user's query.
+
+### Flight Search components \{#overview-of-flow-components}
+
+Add these components to the canvas:
+
+| Component | Purpose |
+| --- | --- |
+| Text Input | Receives the JWT |
+| Chat Input | Receives the flight search query |
+| JWT Validator | Verifies the JWT and outputs the user key |
+| Permissions Check | Checks `search` on `flight` for the user |
+| If-Else | Routes the query on the Permissions Check result |
+| Astra Assistant Agent | Extracts and validates the departure and arrival cities |
+| Astra DB | Retrieves flight data |
+| Parse DataFrame | Formats the results as text |
+| Two Chat Outputs | Show the allowed response or the denial |
+
+### Flight Search component configuration \{#component-configuration}
+
+**JWT Validator**
+- **JWT Token**: connected from Text Input
+- **JWKS URL**: `http://localhost:8080/jwks.json`
+
+**Permissions Check**
+- **User ID**: connected from the **User ID** output of JWT Validator
+- **Action**: `search`
+- **Resource**: `flight`
+- **Tenant**: leave empty to use the default tenant
+- **PDP URL**: `http://localhost:7766`
+- **API Key**: your Permit environment API key
+
+**If-Else**
+- **Text Input**: connected from the **Allowed** output of Permissions Check
+- **Operator**: `contains`
+- **Match Text**: `Permission granted`
+- **Message**: connected from Chat Input
+
+**Astra Assistant Agent**
+- **Model**: an OpenAI chat model your `OPENAI_API_KEY` can reach, for example `gpt-4o-mini`
+- **Agent Instructions**:
+
+  ```text
+  You are a flight search assistant. Your job is to:
+  1. Extract departure and arrival cities from user queries
+  2. Validate that these are real cities with airports
+  3. Format the search request for our database
+  4. Handle cases where cities are unclear or invalid
+  ```
+
+**Astra DB**
+- **Astra DB Application Token**: your Astra DB application token
+- **Database**: your Astra DB database, for example `flight_db`
+- **Collection**: `flights`
+
+**Parse DataFrame**
+- **Template**:
+
+  ```text
+  Flight {row_number}: {departure_city} to {arrival_city}
+  Departure: {departure_time}
+  Airline: {airline}
+  Flight Number: {flight_number}
+  Price: ${price}
+  Available Seats: {seats}
+  ```
+
+  Each placeholder is a column of the DataFrame that Astra DB returns.
+
+![Langflow canvas with the Flight Search flow: Permissions Check set to the search action on flight, If-Else, Astra Assistant Agent, Astra DB, Parse DataFrame, JWT Validator, Text Input with a JWT, Chat Input, and three Chat Outputs](/img/ai-security/integrations/langflow/9.jpg)
+
+### Connect the Flight Search flow \{#flow-logic}
+
+1. Connect **Text Input** to the **JWT Token** input of **JWT Validator**.
+2. Connect the **User ID** output of **JWT Validator** to the **User ID** input of **Permissions Check**.
+3. Connect the **Allowed** output of **Permissions Check** to the **Text Input** input of **If-Else**.
+4. Connect **Chat Input** to the **Message** input of **If-Else**.
+5. Connect the **True** output of **If-Else** to **Astra Assistant Agent**, then to **Astra DB**, then to **Parse DataFrame**, then to the allowed **Chat Output**.
+6. Connect the **False** output of **If-Else** to the denied **Chat Output**.
+
+With these connections, a query reaches the agent and Astra DB only when the JWT is valid and the PDP allows `search` on `flight`.
+
+### Flight Search results \{#example-behavior}
+
+| User | Query | Result |
+| --- | --- | --- |
+| A user a user set grants `flight:search` | "Find flights from NYC to Paris next week" | A formatted list of flights |
+| Any other user | Any query | The denied Chat Output, before the agent or the database runs |
+
+## Flight Information flow \{#flight-information-flow}
+
+The Flight Information flow answers questions about travel policies, baggage allowances, and services. It applies secure external access: the flow checks `info` on `flight` before the agent fetches data from external policy URLs.
+
+### Flight Information components \{#overview-of-flow-components-1}
+
+| Component | Purpose |
+| --- | --- |
+| Text Input | Receives the JWT |
+| Chat Input | Receives the policy question |
+| JWT Validator | Verifies the JWT and outputs the user key |
+| Permissions Check | Checks `info` on `flight` for the user |
+| If-Else | Routes the question on the Permissions Check result |
+| Astra Assistant Agent | Answers the policy question |
+| URL | Loads policy content from your policy pages |
+| Parse DataFrame | Formats the policy content as text |
+| Two Chat Outputs | Show the allowed response or the denial |
+
+### Flight Information component configuration \{#component-configuration-1}
+
+**JWT Validator**
+- **JWKS URL**: `http://localhost:8080/jwks.json`
+
+**Permissions Check**
+- **User ID**: connected from the **User ID** output of JWT Validator
+- **Action**: `info`
+- **Resource**: `flight`
+- **PDP URL**: `http://localhost:7766`
+- **API Key**: your Permit environment API key
+
+**If-Else**
+- **Text Input**: connected from the **Allowed** output of Permissions Check
+- **Operator**: `contains`
+- **Match Text**: `Permission granted`
+
+**Astra Assistant Agent**
+- **Model**: `gpt-4o-mini`
+- **Agent Instructions**:
+
+  ```text
+  You are a knowledgeable Local Expert that provides accurate flight policy and service information. You should:
+  1. Answer questions about baggage policies
+  2. Explain flight rules and restrictions
+  3. Provide information about services and amenities
+  4. Always maintain privacy by not revealing sensitive pricing or route details without authorization
+  ```
+
+**URL**
+- **URLs**: the pages that hold your baggage and service policies, for example `https://<your-policy-site>/baggage` and `https://<your-policy-site>/services`
+- **Output Format**: `Text`
+
+**Parse DataFrame**
+- **Template**:
+
+  ```text
+  Policy Information:
+  ------------------
+  {policy_title}
+
+  Details:
+  {policy_details}
+
+  Additional Information:
+  {additional_info}
+  ------------------
+  ```
+
+![Langflow canvas with the Flight Information flow: If-Else, Astra Assistant Agent on gpt-4o-mini, URL set to Text output, Parse DataFrame, JWT Validator, and Permissions Check set to the info action on flight with PDP URL http://localhost:7766](/img/ai-security/integrations/langflow/10.png)
+
+### Connect the Flight Information flow \{#flow-logic-1}
+
+1. Connect **Text Input** to the **JWT Token** input of **JWT Validator**.
+2. Connect the **User ID** output of **JWT Validator** to the **User ID** input of **Permissions Check**.
+3. Connect the **Allowed** output of **Permissions Check** to the **Text Input** input of **If-Else**.
+4. Connect **Chat Input** to the **Message** input of **If-Else**.
+5. Connect the **True** output of **If-Else** to **Astra Assistant Agent**, then to **URL**, then to **Parse DataFrame**, then to the allowed **Chat Output**.
+6. Connect the **False** output of **If-Else** to the denied **Chat Output**.
+
+### Flight Information results \{#example-behavior-1}
+
+Example questions:
+
+- "What's the baggage allowance for international flights?"
+- "What are the rules for pet travel?"
+
+| User | Result |
+| --- | --- |
+| A user a user set grants `flight:info` | The agent answers from the policy content |
+| Any other user | The denied Chat Output |
+
+## Flight Booking flow \{#flight-booking-flow}
+
+The Flight Booking flow completes a booking, which changes data in an external system. The flow applies two perimeters:
+
+- **Secure external access:** Permissions Check allows the booking API call only when the PDP allows `create` on `booking`.
+- **Response enforcement:** Data Protection outputs the `booking` resource instance IDs the user can `create`, and Filter Data keeps only those IDs in the response.
+
+### Flight Booking components \{#components-used}
+
+| Component | Purpose |
+| --- | --- |
+| Text Input | Receives the JWT |
+| Chat Input | Receives the booking request |
+| JWT Validator | Verifies the JWT and outputs the user key |
+| Permissions Check | Checks `create` on `booking` for the user |
+| Data Protection | Outputs the IDs of `booking` resource instances the user can `create` |
+| If-Else | Routes the request on the Permissions Check result |
+| API Request | Calls your booking API |
+| Astra Assistant Agent | Processes the booking request |
+| Filter Data | Keeps only the allowed booking IDs in the API response |
+| Chat Output | Shows the booking result |
+
+### Flight Booking component configuration \{#component-configuration-2}
+
+**JWT Validator**
+- **JWKS URL**: `http://localhost:8080/jwks.json`
+
+**Permissions Check**
+- **User ID**: connected from the **User ID** output of JWT Validator
+- **Action**: `create`
+- **Resource**: `booking`
+- **PDP URL**: `http://localhost:7766`
+- **API Key**: your Permit environment API key
+
+**Data Protection**
+- **User ID**: connected from the **User ID** output of JWT Validator
+- **Action**: `create`
+- **Resource Type**: `booking`
+- **PDP URL** and **API Key**: the same values as Permissions Check
+
+**API Request**
+- **URL**: your booking API endpoint, for example `https://<your-booking-api>/v1/bookings`. Use a mock endpoint while you test.
+- **Method**: `POST`
+
+**Astra Assistant Agent**
+- **Model**: `gpt-4o-mini`
+- **Agent Instructions**:
+
+  ```text
+  You are a booking assistant that helps process flight booking requests.
+  Always ensure the user is authorized before confirming anything.
+  ```
+
+**Filter Data**
+- **JSON**: connected from the **API Request** response
+- **Filter Criteria**: connected from the **Allowed IDs** output of Data Protection
+
+### Connect the Flight Booking flow \{#flow-connections}
+
+1. Connect **Text Input** to the **JWT Token** input of **JWT Validator**.
+2. Connect the **User ID** output of **JWT Validator** to the **User ID** input of both **Permissions Check** and **Data Protection**.
+3. Connect the **Allowed** output of **Permissions Check** to the **Text Input** input of **If-Else**, and **Chat Input** to the **Message** input of **If-Else**.
+4. Connect the **True** output of **If-Else** to **API Request**, then to **Astra Assistant Agent**, then to the **Chat Output**.
+5. Connect the **False** output of **If-Else** to the denied **Chat Output**.
+6. Connect the **API Request** response to the **JSON** input of **Filter Data**, and the **Allowed IDs** output of **Data Protection** to the **Filter Criteria** input of **Filter Data**.
+
+Data Protection calls the PDP for the user's permissions and emits the list of `booking` instance IDs that the user can `create`. Filter Data drops every top-level key of its **JSON** input that is not in that list, so a response keyed by booking ID comes out holding only the bookings the user is allowed to create. A user the PDP denies never reaches the booking API, because the **False** branch of If-Else skips **API Request**.
+
+### Flight Booking results \{#example-scenario}
+
+Request: "Book me a flight from NYC to LA for next Monday."
+
+| User | Result |
+| --- | --- |
+| `user-001` (`membership_tier: ["premium"]`, `region: domestic`, `verified: true`) | The PDP allows `create`. API Request runs and the agent confirms the booking. |
+| `user-002` (`membership_tier: ["basic"]`, `region: international`, `verified: false`) | The PDP denies `create`. The flow returns the denied Chat Output before the API call. |
+
+## Run the flows and verify access \{#running-the-demo--verifying-behavior}
+
+1. Start the Edge PDP. Replace `<YOUR_API_KEY>` with your environment API key:
+
+   ```bash
+   docker run -it -p 7766:7000 \
+     --env PDP_DEBUG=True \
+     --env PDP_API_KEY=<YOUR_API_KEY> \
+     permitio/pdp-v2:latest
+   ```
+
+2. Start the JWKS server from the folder that holds `jwks.json`:
+
+   ```bash
+   python -m http.server 8080
+   ```
+
+3. Install and start Langflow. For other installation options, see the [Langflow installation guide](https://docs.langflow.org/get-started-installation):
+
+   ```bash
+   uv pip install langflow
+   uv run langflow run
+   ```
+
+4. Check that each Permit component uses these values: **PDP URL** `http://localhost:7766`, **API Key** your Permit environment API key, and **JWKS URL** `http://localhost:8080/jwks.json`.
+
+5. Paste the JWT for `user-001` or `user-002` into the Text Input of each flow.
+
+### Interact with the flows
+
+In the Langflow Playground, send these messages:
+
+| Flow | Message |
+| --- | --- |
+| Flight Search | "Flights from NYC to LA" |
+| Flight Information | "What's the pet travel policy?" |
+| Flight Booking | "Book a ticket for me from LAX to BOS" |
+
+### Expected results \{#expected-behavior-matrix}
+
+These results assume the policy from [Grant permissions in the Policy Editor](#grant-permissions-in-the-policy-editor):
+
+| Flow | `user-001` (premium, domestic, verified) | `user-002` (basic, international, unverified) |
+| --- | --- | --- |
+| Flight Search | Allowed. `regional restrictions` matches `region: domestic` and grants `flight:search`. | Denied. No user set matches `user-002`. |
+| Flight Information | Allowed. `regional restrictions` grants `flight:info`. | Denied. |
+| Flight Booking | Allowed. `regional restrictions` grants `booking:create`. | Denied. |
+
+A denied flow shows the text `Permission denied for user-002 to <action> on <resource>` in its denial Chat Output, and the agent, database, and API components stay unexecuted on the canvas.
+
+### View decisions in the audit logs \{#where-to-view-permissions--logs}
+
+Open [audit logs](/how-to/use-audit-logs/types-and-filtering) in the Permit dashboard to see each check and why the PDP allowed or denied it. Each entry names the user, the action, the resource, and the decision. When you change a condition in the Policy Editor, the PDP receives the updated policy and the next check uses it.
+
+## Next steps \{#further-reading--resources}
+
+- Read how the four perimeters fit together in the [Four-Perimeter Framework](/ai-security/framework).
+- Learn how user sets and conditions work in [Build ABAC policies](/how-to/build-policies/abac/building-abac-policy).
+- Review the component inputs and outputs in the [permit-langflow-framework README](https://github.com/permitio/permit-langflow-framework).
+- Read the [flight booking agent walkthrough on the Permit blog](https://www.permit.io/blog/building-a-secure-flight-booking-ai-agent-with-langflow).
+- Ask questions in the [Permit Slack community](https://io.permit.io/slack).

@@ -1,20 +1,34 @@
 ---
 sidebar_position: 3
-title: Check in All Tenants
-description: "Check a user's permissions for an action across all tenants with permit.AllTenantsCheck()."
+title: Check a permission in all tenants
+sidebar_label: Check in all tenants
+description: "Find every tenant in which a user can perform an action on a resource with a single all-tenants check against the PDP."
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-To validate permissions irrespective of the tenant, you can use the `permit.AllTenantsCheck` function.
-This function determines if a user has permissions for a specified action on a resource across all tenants,
-the response will be a list of tenants in which the user is allowed to perform the request.
+Find every tenant in which a user can perform an action on a resource, in one call to the policy decision point (PDP). This page is for developers of multi-tenant applications who need to show a user the tenants they can act in, without running one [`permit.check()`](/how-to/enforce-permissions/check) per tenant.
 
-## Simple Usage
+## Prerequisites
 
-The `permit.AllTenantsCheck` function accepts an [individual check requests](./check.mdx) as input.
-The tenant key isn't required and will be ignored if provided:
+- A Permit SDK client connected to a container PDP ([Run the PDP](/overview/run-pdp)). The Cloud PDP doesn't support the all-tenants check ([Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities)).
+- Users with role assignments in one or more tenants
+
+## All-tenants check function by SDK
+
+The all-tenants check takes the same `user`, `action`, and `resource` arguments as [`permit.check()`](/how-to/enforce-permissions/check). The PDP ignores a tenant key in the resource, because it evaluates the check in every tenant.
+
+| SDK | Function | Returns |
+|---|---|---|
+| Node.js | `permit.checkAllTenants(user, action, resource, context?)` | `TenantDetails[]` |
+| Java | `permit.checkInAllTenants(user, action, resource)` | `List<TenantDetails>` |
+| Go | `permit.AllTenantsCheck(user, action, resource)` | `[]enforcement.TenantDetails` |
+| PDP API | `POST /allowed/all-tenants` | `{"allowed_tenants": [...]}` |
+
+## Run an all-tenants check \{#simple-usage}
+
+This example asks in which tenants `john@doe.com` can `read` a `document`:
 
 <Tabs groupId="language">
 <TabItem value="java" label="Java">
@@ -24,6 +38,7 @@ import io.permit.sdk.Permit;
 import io.permit.sdk.PermitConfig;
 import io.permit.sdk.enforcement.*;
 import java.util.Arrays;
+import java.util.List;
 
 
 Permit permit = new Permit(
@@ -55,7 +70,7 @@ import "github.com/permitio/permit-golang/pkg/enforcement"
 func main() {
 	// Create permit client
 	permitConfig := config.NewConfigBuilder("<YOUR_API_TOKEN>").Build()
-	permit := p.New(permitConfig)
+	permit := p.NewPermit(permitConfig)
 
 	// Create user and resource variables
 	user := enforcement.UserBuilder("john@doe.com").Build()
@@ -67,7 +82,7 @@ func main() {
 	if err != nil {
 		fmt.Printf("Error enforcing permissions: %s", err)
 	} else if len(allowedTenants) > 0 {
-		fmt.Println("John is PERMITTED to create a document in some tenant in the environment")
+		fmt.Println("John is PERMITTED to read a document in some tenant in the environment")
 		for i, tenant := range allowedTenants {
 			attributes, _ := json.MarshalIndent(tenant.Attributes, "", "\t")
 			fmt.Printf("%d. Allowed Tenant is '%s', attributes are:\n%s",
@@ -75,7 +90,7 @@ func main() {
 			)
 		}
 	} else {
-		fmt.Println("John is NOT PERMITTED to create a document in any tenant in the environment")
+		fmt.Println("John is NOT PERMITTED to read a document in any tenant in the environment")
 	}
 }
 ```
@@ -83,11 +98,13 @@ func main() {
 </TabItem>
 </Tabs>
 
+## Read the all-tenants check result
 
-The result will be an array containing the details about the request for each allowed tenant,
-including the allowed tenant's attributes.
+The result is a list with one entry for each tenant in which the PDP allows the action. Each entry holds the tenant `key` and the tenant `attributes`. An empty list means the user can't perform the action in any tenant.
 
-## Enforce with attributes
+## Run an all-tenants check with attributes \{#enforce-with-attributes}
+
+For attribute-based access control (ABAC) policies, pass user and resource attributes the same way as in [`permit.check()`](/how-to/enforce-permissions/check#attributes). The PDP evaluates the attributes in every tenant.
 
 <Tabs groupId="language">
 <TabItem value="java" label="Java">
@@ -97,6 +114,9 @@ import io.permit.sdk.Permit;
 import io.permit.sdk.PermitConfig;
 import io.permit.sdk.enforcement.*;
 import java.util.Arrays;
+import java.util.List;
+import java.util.HashMap;
+import java.util.ArrayList;
 
 
 Permit permit = new Permit(
@@ -130,14 +150,14 @@ import "github.com/permitio/permit-golang/pkg/enforcement"
 func main() {
 	// Create permit client
 	permitConfig := config.NewConfigBuilder("<YOUR_API_TOKEN>").Build()
-	permit := p.New(permitConfig)
+	permit := p.NewPermit(permitConfig)
 
 	// Create user and resource variables with attributes
-	user := enforcement.UserBuilder("john@doe.com").WithAttributes(map[string]string{
+	user := enforcement.UserBuilder("john@doe.com").WithAttributes(map[string]interface{}{
         "location": "England",
         "department": "Engineering",
     }).Build()
-    resource := enforcement.ResourceBuilder("document").WithAttributes(map[string]string{
+    resource := enforcement.ResourceBuilder("document").WithAttributes(map[string]interface{}{
         "hasApproval": "true",
     }).Build()
 
@@ -147,7 +167,7 @@ func main() {
     if err != nil {
 		fmt.Printf("Error enforcing permissions: %s", err)
 	} else if len(allowedTenants) > 0 {
-		fmt.Println("John is PERMITTED to create a document in some tenant in the environment")
+		fmt.Println("John is PERMITTED to read a document in some tenant in the environment")
 		for i, tenant := range allowedTenants {
 			attributes, _ := json.MarshalIndent(tenant.Attributes, "", "\t")
 			fmt.Printf("%d. Allowed Tenant is '%s', attributes are:\n%s",
@@ -155,7 +175,7 @@ func main() {
 			)
 		}
 	} else {
-		fmt.Println("John is NOT PERMITTED to create a document in any tenant in the environment")
+		fmt.Println("John is NOT PERMITTED to read a document in any tenant in the environment")
 	}
 }
 ```
@@ -163,11 +183,12 @@ func main() {
 </TabItem>
 </Tabs>
 
-:::note
-Currently, using relationship-based access control (ReBAC) doesn't work for the "All Tenants Check".
-This is because ReBAC checks are done on a specific resource that is tied to only one tenant at a time.
+## Limitation: relationship-based checks
 
-If the check isn't allowed for that tenant, the result will be an empty list. If it is allowed,
-you'll get a list with one item. To avoid this and make things run more smoothly,
-it's better to stick with a simpler check method.
-:::
+The all-tenants check doesn't return useful results for relationship-based access control (ReBAC) policies. A ReBAC check targets a resource instance, and a resource instance belongs to exactly one tenant. The result is either an empty list or a list with that one tenant. For ReBAC, call [`permit.check()`](/how-to/enforce-permissions/check#relationships) with the resource instance instead.
+
+## Next steps
+
+- [Get all permissions of a user across tenants](/how-to/enforce-permissions/user-permissions)
+- [Check many permissions with bulk check](/how-to/enforce-permissions/bulk-check)
+- [Filter data by permission](/how-to/enforce-permissions/data-filtering)

@@ -1,116 +1,131 @@
 ---
 sidebar_position: 3
-title: Write Custom Policies
-description: "Extend Permit's GitOps-generated policy with custom Rego code, such as a deny rule that overrides other access policies."
+title: Write custom policies with GitOps
+sidebar_label: Write Custom Policies
+description: "Add custom Rego to the policy repository that Permit.io generates, using a time-limited deny rule for a role as the worked example."
 ---
 
-:::tip
-This guide assumes you have a [basic Git setup with Permit. Follow the Git integration guide before starting with this one](/integrations/gitops/github).
-:::
+Add your own Open Policy Agent (OPA) Rego code to the policy that Permit.io generates, for rules that the Policy Editor can't express. This guide is for developers who have connected a Git repository to Permit and want to extend the generated policy. The worked example is a deny rule: the `tmp-admin` role grants access only inside a set time window, even when other policies allow the action.
 
+## Prerequisites
 
-While the Permit.io platform offers support to the majority of policy configurations, sometimes developers are required to extend their policies with functionalities currently unsupported by Permit's UI.
-Since Permit.io's cloud configuration generates Policy as Code for each user configuration, you can easily extend it by writing custom policy code.
+- A Git repository connected to a Permit project. See [Connect a GitHub repository to Permit](/integrations/gitops/github).
+- An Edge PDP for the environment you change. The Cloud PDP doesn't run custom Rego. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities#supported-policy-models).
+- A role with the key `tmp-admin` in the environment, if you follow the example as written.
+- Basic knowledge of Rego. See the [OPA policy language documentation](https://www.openpolicyagent.org/docs/latest/policy-language/).
 
-This document demonstrates an example use-case for defining a policy not supported via Permit.io UI, but easily configurable using the Policy as Code extension to Permit.io's UI config.
+## Why you need custom Rego for a deny rule \{#the-deny-rule}
 
-##  The Deny Rule
-Before diving into the custom policy example, let's give an example of a common scenario where developers would want to extend the Permit.io platform configuration with their own custom code - `Deny` rules.
+The policies that Permit generates for role-based, attribute-based, and relationship-based access control (RBAC, ABAC, and ReBAC) are all allow rules. A permission check returns `allow: true` when at least one of the policies allows the action.
 
-Policies generated via Permit's UI, whether RBAC, ABAC or ReBAC, are based on 'Allow' rules. If a user is allowed to preformed an action based on the policy, the permit.check function will return 'Allow = True'
+The Policy Editor has no rule of the form "deny access when this condition matches, regardless of other policies". To add one, you write the condition in Rego and change how the generated root policy combines the results.
 
-In some specific cases, you might want to create a special `Deny` rule that trumps other access policies. The Permit.io UI doesn't let you define a rule like "If this rule applies, deny access regardless of any other defined policies". 
+## How the policy repository is organized \{#writing-custom-policy}
 
-For example, let's say we want to restrict access to a role `tmp-admin` only to a certain time boundary. This means that even if the configured policy returns `true`, the `Deny` rule will block access outside the allocated time.
+Permit generates Rego code for OPA. Each environment has a branch in your repository, named `permit/generated/<env_id>`, and each branch has this layout:
 
-## Writing Custom Policy
-Permit.io supports two open-source policy engines: OPA, and Cedar to keep policy configuration flexible.
-Each engine has a Policy language to write policies: Rego and Cedar (respectively). This article will show an example of writing custom Rego code to extend Permit.io's policy configuration.
+| Path | Package | Contents |
+|---|---|---|
+| `root.rego` | `permit.root` | The entry point. Combines the generated policies and the custom package into the final `allow` decision. |
+| `permit/`, `rbac.rego`, `abac.rego`, and other top-level files | `permit.policies`, `permit.rbac`, `permit.abac`, and others | Code that Permit generates from your dashboard configuration. |
+| `custom/root.rego` | `permit.custom` | Your custom Rego. Permit creates the file with an empty rule set. |
 
-The first step to create custom policies is enabling the GitOps feature. This will allow you to create custom code.
-_If you have the GitOps feature enabled already, skip to the next step - 'Custom Deny Rule'._
+Permit regenerates the files outside the `custom` folder when you change the policy. Put your code in the `custom` folder so a policy change doesn't overwrite it.
 
-## The `custom.rego` file
-A Permit.io policy repository structure consists of two folders, `permit` and `custom`.
-Hinted by its name, the 'custom' folder is where you can add your custom Rego code. If you look there, you'll find a file named 'custom.rego' with a sample policy script.
+The PDP can also run AWS Cedar as its engine. See [Policy engines](/integrations/policy-engines/overview). This guide covers Rego only.
 
-_Rego is a logical language (same as Prolog/Datalog). Hence, it could look unnatural for developers who code in common languages. This shouldn't worry you - the policy we want to define is simple, and we'll cover it step-by-step._
+## Start from the custom package file \{#the-customrego-file}
 
-Let's take a look at the sample policy script to understand the initial structure of our custom rule:
-In the first row, you can see the `package` declaration:
+Check out the environment branch you want to change and open `custom/root.rego`. The file starts with the package declaration:
 
+```rego
+package permit.custom
 ```
-`package permit.custom` 
-```
-The purpose of this declaration is to enable the use of this custom Rego configuration in other places in our project.
-We will use it later to import the custom code to Permit.io's centralized policy configuration, so when you use the SDK to call the PDP, the engine will include this policy package.
 
-Next, we will find the basic declaration for logical policy - the default value that is equal to false.
-```
+The generated `root.rego` imports the `permit.custom` package, so the PDP evaluates your rules together with the generated policy.
+
+The file then sets the default value of the custom `allow` rule:
+
+```rego
 default allow := false
 ```
-Basically, this is a deny rule, which means every time this policy is evaluated, the default result value is false.
 
-The default configuration of policies in Permit states that as long as one of the policy configurations (Whether it's RBAC, ABAC, ReBAC, or a custom rule) results in 'true', access is granted. 
-To add a deny rule, we would need to change Permit's default configuration. We will do that in the next steps. 
+With `default allow := false`, the custom `allow` rule is `false` unless one of your `allow` rules matches.
 
-## Creating the Custom Deny Rule
+By default, the generated `root.rego` allows access when the generated policies allow it or when the custom `allow` rule is `true`. A deny rule needs an "and" instead. You change the combination in [Enforce the deny rule](#enforce-the-deny-policy).
 
-Now that we understand the reasoning behind setting the default decision to 'false', let's model a decision tree that could revert the false value to true - thus granting our user access. 
-Thinking logically about our rule, we would like our decision tree to look this way:
+## Write custom Rego in the syntax the PDP accepts \{#rego-syntax-the-pdp-accepts}
 
-```
-false
-   - true if not rbac // since our date boundary rule is 
-   - true if not role `tmp-admin`
-   - true if role `tmp-admin` and now is in the desired date boundaries
-```
+The PDP runs OPA with the `--v0-compatible` flag, which the PDP sets through `OPAL_INLINE_OPA_CONFIG='{"v0_compatible": true}'` in the [PDP Dockerfile](https://github.com/permitio/PDP/blob/main/Dockerfile). Write your Rego in the pre-1.0 form that OPA's v0 mode parses:
 
-Let's create our first state - allow if the decision is not based on RBAC.
-The first step will be to import the section in Permit.io generated code that is responsible for centralizing the policies. In the top of the file, after the package declaration, insert the following section:
+| Rule | Form the PDP accepts | Form the PDP rejects |
+|---|---|---|
+| Rule body | `allow { ... }`, with no keyword before the body | `allow if { ... }` |
+| The `in` operator | Available after `import future.keywords.in` | Available without an import |
 
-```
-import data.permit.policies
-```
-Now, we can use the previously allowed policies to check if this is an RBAC decision.
-Let's do it by adding the following code after the `default allow := false` section:
-```
-allow {
-    not "rbac" in policies.__allow_sources
-}
-```
+A module written in OPA 1.0 syntax fails to parse in v0 mode, with the error `rego_parse_error: 'if' keyword is required before rule body`. To check a file before you push it, install the [OPA command-line tool](https://www.openpolicyagent.org/docs/latest/#running-opa) and run `opa check --v0-compatible custom/root.rego`.
 
-Continuing to the next state, the role checking, let's import the relevant data from Permit.io's RBAC package. Add the following import:
+## Write the deny rule \{#creating-the-custom-deny-rule}
 
-```
-import permit.rbac
-```
+The custom `allow` rule for the example is `true` in three cases. Each case is its own rule, and Rego combines rules with the same name with "or", so the custom `allow` rule is `true` when any of the three matches:
 
-Together with the `rbac` package, we will also get the context data from the current policy evaluation, which means we can get the allowing roles from the decision.
-Let's continue our decision state with the following section:
+- The decision doesn't come from RBAC.
+- RBAC allowed the request, but the `tmp-admin` role wasn't one of the allowing roles.
+- The `tmp-admin` role allowed the request, and the current time is inside the window.
 
-```
-else {
-   not "tmp-admin" in rbac.allowing_roles
-}
-```
-What this section checks is if `tmp-admin` role does not exist in the allowing roles array from the evaluation context.
-To use the Rego `in` keyword, we need to import it, so also make sure you add an `import` statement at the top of the file before importing any `permit` packages.
+Add all three rules to `custom/root.rego`, in any order:
 
-Now, we are left with the last step of this deny rule - allow only if the date is between our set date boundaries.
-Of course, in your custom Rego, you can use any context of data (such as user/resource attributes) to set such boundaries. Here, we use hard-coded strings to simplify it.
-Let's add the following code after the previous one:
-```
-else {
-   time.now_ns() >= time.parse_rfc3339_ns("2023-01-01T00:00:00+02:00")
-   time.now_ns() <= time.parse_rfc3339_ns("2024-01-01T00:00:00+02:00")
-}
-```
-We declare a rule that returns `true` only if the `now` date is in the boundaries of 2023.
+1. **Allow decisions that don't come from RBAC.** Import the generated `permit.policies` package after the package declaration:
 
-At this point, our `custom.rego` file should look like this:
-```
-package package permit.custom
+   ```rego
+   import data.permit.policies
+   ```
+
+   The `policies.__allow_sources` set lists which generated policies allowed the request, such as `"rbac"` or `"abac"`. Add a rule after `default allow := false` that is `true` when RBAC isn't one of them:
+
+   ```rego
+   allow {
+       not "rbac" in policies.__allow_sources
+   }
+   ```
+
+2. **Allow RBAC decisions that don't use the `tmp-admin` role.** Import the generated `permit.rbac` package:
+
+   ```rego
+   import data.permit.rbac
+   ```
+
+   The `rbac.allowing_roles` set lists the roles that allowed the request. Add a second `allow` rule that is `true` when RBAC allowed the request and `tmp-admin` isn't one of the allowing roles:
+
+   ```rego
+   allow {
+      "rbac" in policies.__allow_sources
+      not "tmp-admin" in rbac.allowing_roles
+   }
+   ```
+
+   The `in` keyword requires `import future.keywords.in`. Add that import above the `permit` imports.
+
+3. **Allow the `tmp-admin` role only inside the time window.** Add two rules that hold the start and end of the window in nanoseconds, and a third `allow` rule that compares the current time with them:
+
+   ```rego
+   # Replace both timestamps with the start and end of your window.
+   window_start_ns := time.parse_rfc3339_ns("2026-01-01T00:00:00Z")
+   window_end_ns := time.parse_rfc3339_ns("2027-01-01T00:00:00Z")
+
+   allow {
+      "tmp-admin" in rbac.allowing_roles
+      time.now_ns() >= window_start_ns
+      time.now_ns() <= window_end_ns
+   }
+   ```
+
+   The two timestamps in the example are placeholders. Replace them with the RFC 3339 start and end of your own window before you push the file. Once `window_end_ns` has passed, every request whose only allowing role is `tmp-admin` is denied, so a stale window silently removes that role's access. Instead of fixed strings, you can compare against user or resource attributes from the `input` document, so the window comes from your data instead of the policy file.
+
+The complete `custom/root.rego` file:
+
+```rego
+package permit.custom
 
 import future.keywords.in
 import data.permit.policies
@@ -118,34 +133,34 @@ import data.permit.rbac
 
 default allow := false
 
+# Replace both timestamps with the start and end of your window.
+window_start_ns := time.parse_rfc3339_ns("2026-01-01T00:00:00Z")
+window_end_ns := time.parse_rfc3339_ns("2027-01-01T00:00:00Z")
+
+# The decision does not come from RBAC.
 allow {
     not "rbac" in policies.__allow_sources
-} else {
-   not "tmp-admin" in rbac.allowing_roles
-} else {
-   time.now_ns() >= time.parse_rfc3339_ns("2023-01-01T00:00:00+02:00")
-   time.now_ns() <= time.parse_rfc3339_ns("2024-01-01T00:00:00+02:00")
+}
+
+# RBAC allowed the request, but not through the tmp-admin role.
+allow {
+    "rbac" in policies.__allow_sources
+    not "tmp-admin" in rbac.allowing_roles
+}
+
+# The tmp-admin role allowed the request, and the current time is inside the window.
+allow {
+    "tmp-admin" in rbac.allowing_roles
+    time.now_ns() >= window_start_ns
+    time.now_ns() <= window_end_ns
 }
 ```
 
-## Testing the custom policy
-With Permit's GitOps feature, pushing your changes to a remote repository will immediately affect your tenant.
-While the built-in Permit configuration has a detailed Audit log decision output, for the custom Rego, the audit log only returns the result.
-You can use the built-in print function in Rego to debug your created custom policy.
-For example, if you add the following print command in the first 'allow' section, you'll see all the allowing policies per evaluation in the PDP logs.
-```
-print(policies.__allow_sources)
-```
+## Enforce the deny rule \{#enforce-the-deny-policy}
 
-## Enforce the deny policy
-As mentioned, the current Permit-generated policies evaluate all the `allowing_source` in an `or` operator.
-In our `deny` example, we would like to calculate the particular `custom` package as an end argument to the total policy evaluation.
-This means no matter what is the total evaluation result, the final result will depend on the result of our custom rule.
+The generated `root.rego` in the root of the branch has two `allow` rules. In Rego, two rules with the same name combine with "or", so access is allowed when either rule is `true`:
 
-To do so, we need to tweak our desired deny rules in the `root.rego` file in the root folder (the file that centralized the policy evaluation).
-In the `root.rego` file, you'll find two allow blocks - one for Permit's default and the other for the `custom` default.
-
-```
+```rego
 allow {
    policies.allow
 }
@@ -154,21 +169,55 @@ allow {
    custom.allow
 }
 ```
-To change this behavior, we need to unify this allow section so it will look like this:
-```
+
+Replace both rules with one rule that requires both conditions:
+
+```rego
 allow {
     policies.allow
     custom.allow
 }
 ```
-Changing the main `allow` block this way will affect `and` operator on all the custom rules added there.
 
-## Multiple custom rules
-Permit custom rules are not limited to only one `custom.rego` file.
-You can add as many files and folders as you want in the `custom` folder. There are two options to add them to the custom rule calculation:
-Use the `custom.rego` as an additional root file and centralize the custom package rules into it.
-Import multiple `custom` packages in the `root.rego` file and add them as (or in) `allow` blocks.
+After the change, access is allowed only when the generated policies allow the request and the custom `allow` rule is `true`. The comments that Permit generates in `root.rego` describe the same change.
 
-## Disclaimer
-Extending custom policies with Permit.io is an advanced task, and you should do it at your own risk.
-If you have any questions regarding implementing policies without extending them with custom code, you can set a meeting with our engineering team. Were always happy to help you model your policies :slightly_smiling_face: .
+:::warning An empty custom rule denies every request
+After the change, the custom `allow` rule must be `true` for every request you want to allow. If `custom/root.rego` has only `default allow := false` and no matching `allow` rule, the PDP denies every permission check in the environment.
+:::
+
+### Re-apply the root.rego change after a policy change \{#reapply-the-rootrego-change}
+
+`root.rego` sits outside the `custom` folder, so Permit regenerates it when you change the policy in the dashboard, and the regenerated file can overwrite the combined rule. Combining the `allow` rules is the one edit outside `custom` that [Test the connection with a custom policy](/integrations/gitops/github#test-your-configuration) sanctions, and Permit's generated comments in `root.rego` name it. After every policy change in the dashboard, check the environment branch and re-apply the combined rule if it is gone. If the combined rule disappears, the generated policies and the custom rule go back to combining with "or", and requests that only the custom rule denies are allowed again.
+
+## Test the custom policy \{#testing-the-custom-policy}
+
+1. Run `opa check --v0-compatible custom/root.rego root.rego`. The command prints nothing when both files parse.
+2. Commit your changes to `custom/root.rego` and `root.rego`, and push the environment branch `permit/generated/<env_id>`. Permit detects the push and sends the updated policy to the PDPs of the environment.
+3. Run a permission check for a user whose only allowing role is `tmp-admin`. Outside the time window, the check returns `allow: false`. Inside the window, the check returns `allow: true`.
+4. Run a permission check for a user with another role that allows the action. The check returns `allow: true` at any time.
+
+The [audit log](/how-to/use-audit-logs/types-and-filtering) shows detailed decision reasons for the generated policies. For custom Rego, the audit log shows only the result. To debug a custom rule, add a Rego `print` call to it. For example, add this line inside the first `allow` rule to write the allowing policies of each evaluation to the PDP logs:
+
+```rego
+print(policies.__allow_sources)
+```
+
+## Add more custom rules \{#multiple-custom-rules}
+
+You can add more files and folders in the `custom` folder. Connect them to the decision in one of two ways:
+
+- **Reference them from `custom/root.rego`.** Import each package in `custom/root.rego` and use its rules in the custom `allow` rule. `custom/root.rego` stays the one custom entry point.
+- **Reference them from the top-level `root.rego`.** Import each package in `root.rego` and add its rule to an `allow` rule: as its own rule for an "or" effect, or inside an existing rule for an "and" effect. Permit regenerates `root.rego`, so re-apply these edits after a policy change, as [Re-apply the root.rego change after a policy change](#reapply-the-rootrego-change) describes.
+
+## Get help with custom policies \{#disclaimer}
+
+Custom Rego changes how the PDP decides every permission check in the environment. A mistake can deny all requests or allow requests that your policy should deny. Test custom rules in a development environment before you merge them into a production environment's branch.
+
+To model a rule without custom code, or for help with a custom policy, ask in the [Permit Slack community](https://io.permit.io/slack) or [book a demo](https://www.permit.io/demo).
+
+## Next steps
+
+- [Connect a GitHub repository to Permit](/integrations/gitops/github)
+- [Copy and merge environments](/manage-your-account/creating-environments)
+- [Build ABAC policies](/how-to/build-policies/abac/overview)
+- [GitOps commands in the Permit CLI](/how-to/permit-cli/permit-cli-gitops)
