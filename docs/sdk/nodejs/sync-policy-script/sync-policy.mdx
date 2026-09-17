@@ -11,98 +11,29 @@ Write a Node.js script that defines your resources and roles in code and applies
 - Node.js and a project with the `permitio` package installed. See [Install the Permit.io SDK](/sdk/nodejs/quickstart-nodejs#1-install-the-permitio-sdk).
 - An API key for the environment that the script changes. See [Get your API key](/overview/get-api-key).
 
-## Structure of the policy script \{#steps-to-use-the-script}
+## Parts of the policy script \{#steps-to-use-the-script}
 
-The script has four parts. The code blocks in this section show the outline of each part. The [full policy script](#attached-the-full-code-for-reference) fills in every part.
+The [full policy script](#attached-the-full-code-for-reference) has four parts, in this order.
 
 ### 1. Create a Permit client
 
-Import the SDK and create a `Permit` client. Replace `permit_key_` with your API key. The script calls the Permit API, which uses the API key to select the environment.
+The script imports `Permit` from the `permitio` package and creates a client with an API key read from the `PERMIT_API_KEY` environment variable. The script calls only the Permit API, so it needs no PDP URL. The API key selects the environment that the script changes.
 
-```javascript
-const { Permit } = require('permitio');
-const permit = new Permit({
-    pdp: 'https://cloudpdp.api.permit.io',
-    token: 'permit_key_',
-});
-```
+:::warning An API key in the script changes that environment's policy
+Anyone with your environment API key can change that environment's policy and data through the Permit API. Export the key in the shell that runs the script (`export PERMIT_API_KEY=<YOUR_API_KEY>`), and don't commit the key to your repository.
+:::
 
 ### 2. Define resources and roles \{#define-resources-and-roles}
 
-Define two arrays. Each item in `resources` is a `ResourceCreate` object with `key`, `name`, and `actions`. Each item in `roles` is a `RoleCreate` object with `key`, `name`, and `permissions` in the format `resource:action`. See [Create a resource with the Node.js SDK](/sdk/nodejs/resource/create-resource) and [Create a role with the Node.js SDK](/sdk/nodejs/role/create-role) for all fields.
+The script defines two arrays. Each item in `resources` is a `ResourceCreate` object with `key`, `name`, and `actions`. Each item in `roles` is a `RoleCreate` object with `key`, `name`, and `permissions` in the format `resource:action`. The three resources in the script share one `actions` object, because they have the same actions. Define every resource and action that the permissions of your roles reference. For all fields, see [Create a resource with the Node.js SDK](/sdk/nodejs/resource/create-resource) and [Create a role with the Node.js SDK](/sdk/nodejs/role/create-role).
 
-```javascript
-const resources = [
-    // Define resources here
-];
+### 3. Apply the definitions in createPolicy \{#create-policy-function}
 
-const roles = [
-    // Define roles here
-];
-```
+The `createPolicy` function loops over both arrays. For each resource, the function reads the resource with `permit.api.resources.get()` and creates it when the read fails. For each role, the function reads the role, creates it when the read fails, and otherwise compares the role's current permissions with the defined permissions and changes only the difference.
 
-### 3. Write the createPolicy function \{#create-policy-function}
+### 4. Run createPolicy and log the result \{#running-the-script}
 
-The `createPolicy` function loops over both arrays. For each item, the function checks whether the resource or role exists, and creates or updates it.
-
-```javascript
-const createPolicy = async () => {
-    // Implementation here
-};
-```
-
-### 4. Run the script \{#running-the-script}
-
-Call `createPolicy` and log the result. The script prints `done` when every resource and role is applied, and prints the error otherwise.
-
-```javascript
-createPolicy().then(() => {
-    console.log("done");
-}).catch((err) => {
-    console.log(err);
-});
-```
-
-The following outline shows the four parts together:
-
-```javascript
-// Define resources
-const resources = [
-    {
-        key: "employee",
-        name: "Employee",
-        // Define actions
-    },
-    // ... other resources
-];
-
-// Define roles
-const roles = [
-    {
-        key: "User",
-        name: "User",
-        permissions: ["employee:read-all", "employee:export"]
-    },
-    // ... other roles
-];
-
-// Implement the createPolicy function
-const createPolicy = async () => {
-    // Iterate through resources
-    // ... implementation
-    // Iterate through roles
-    // ... implementation
-};
-
-// Run the script
-createPolicy().then(() => {
-    console.log("done");
-}).catch((err) => {
-    console.log(err);
-});
-```
-
-Define every resource and action that the permissions of your roles reference.
+The script calls `createPolicy()`, prints `done` when every resource and role is applied, and prints the error otherwise.
 
 ## Full policy script \{#attached-the-full-code-for-reference}
 
@@ -114,7 +45,7 @@ The full script defines three resources (`employee`, `task`, and `folder`) with 
 | Resource | Yes | Logs `resource already exists` and leaves the resource unchanged. The script doesn't update the actions of an existing resource. |
 | Role | No | Creates the role with `permit.api.roles.create()`. |
 | Role | Yes, with the same permissions | Logs `permissions for role: <key> are up to date`. |
-| Role | Yes, with different permissions | Removes the current permissions with `permit.api.roles.removePermissions()`, then adds the defined permissions with `permit.api.roles.assignPermissions()`. |
+| Role | Yes, with different permissions | Removes the permissions the role has and the definition doesn't with `permit.api.roles.removePermissions()`, then adds the permissions the definition has and the role doesn't with `permit.api.roles.assignPermissions()`. |
 
 The script treats any error from `permit.api.resources.get()` or `permit.api.roles.get()` as "doesn't exist" and tries to create the item.
 
@@ -214,8 +145,17 @@ createPolicy()
 
 ## Verify the policy script \{#notes}
 
-1. Save the full script as `sync-policy.js` and run `node sync-policy.js`. The first run logs `creating resource: employee`, `creating resource: task`, `creating resource: folder`, `creating role: manager`, and `done`.
-2. Run the script a second time. The second run logs `resource already exists` for each resource, `permissions for role: manager are up to date`, and `done`.
+1. Export your API key, save the full script as `sync-policy.js`, and run it. Replace `<YOUR_API_KEY>` with the API key of the environment you want to change:
+
+   ```bash
+   export PERMIT_API_KEY=<YOUR_API_KEY>
+   node sync-policy.js
+   ```
+
+   In an empty environment, the first run logs a `no resource: <key>` line and a `creating resource: <key>` line for each of `employee`, `task`, and `folder`, then `no role: manager` and `creating role: manager`, and ends with `done`.
+
+2. Run the script a second time. The second run logs `resource already exists: <key>` for each resource, `role already exists: manager`, `permissions for role: manager are up to date`, and `done`.
+
 3. In the Permit dashboard, open the Policy Editor. The `employee`, `task`, and `folder` resources and the `manager` role appear, and `manager` has the `export` and `delete` permissions on `employee`.
 
 ## Next steps

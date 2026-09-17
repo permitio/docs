@@ -22,7 +22,7 @@ The Policy Editor has no rule of the form "deny access when this condition match
 
 ## How the policy repository is organized \{#writing-custom-policy}
 
-Permit generates Rego code for OPA. Each environment has a branch in your repository, and each branch has this layout:
+Permit generates Rego code for OPA. Each environment has a branch in your repository, named `permit/generated/<env_id>`, and each branch has this layout:
 
 | Path | Package | Contents |
 |---|---|---|
@@ -52,18 +52,28 @@ default allow := false
 
 With `default allow := false`, the custom `allow` rule is `false` unless one of your `allow` rules matches.
 
-By default, the generated `root.rego` allows access when the generated policies allow it **or** when the custom `allow` rule is `true`. A deny rule needs an **and** instead. You change the combination in [Enforce the deny rule](#enforce-the-deny-policy).
+By default, the generated `root.rego` allows access when the generated policies allow it or when the custom `allow` rule is `true`. A deny rule needs an "and" instead. You change the combination in [Enforce the deny rule](#enforce-the-deny-policy).
+
+## Write custom Rego in the syntax the PDP accepts \{#rego-syntax-the-pdp-accepts}
+
+The PDP runs OPA with the `--v0-compatible` flag, which the PDP sets through `OPAL_INLINE_OPA_CONFIG='{"v0_compatible": true}'` in the [PDP Dockerfile](https://github.com/permitio/PDP/blob/main/Dockerfile). Write your Rego in the pre-1.0 form that OPA's v0 mode parses:
+
+| Rule | Form the PDP accepts | Form the PDP rejects |
+|---|---|---|
+| Rule body | `allow { ... }`, with no keyword before the body | `allow if { ... }` |
+| The `in` operator | Available after `import future.keywords.in` | Available without an import |
+
+A module written in OPA 1.0 syntax fails to parse in v0 mode, with the error `rego_parse_error: 'if' keyword is required before rule body`. To check a file before you push it, install the [OPA command-line tool](https://www.openpolicyagent.org/docs/latest/#running-opa) and run `opa check --v0-compatible custom/root.rego`.
 
 ## Write the deny rule \{#creating-the-custom-deny-rule}
 
-The custom `allow` rule for the example is `true` in three cases, checked in order:
+The custom `allow` rule for the example is `true` in three cases. Each case is its own rule, and Rego combines rules with the same name with "or", so the custom `allow` rule is `true` when any of the three matches:
 
-```text
-false
-   - true if the decision doesn't come from RBAC
-   - true if the tmp-admin role isn't one of the allowing roles
-   - true if the tmp-admin role allows and the current time is inside the window
-```
+- The decision doesn't come from RBAC.
+- RBAC allowed the request, but the `tmp-admin` role wasn't one of the allowing roles.
+- The `tmp-admin` role allowed the request, and the current time is inside the window.
+
+Add all three rules to `custom/root.rego`, in any order:
 
 1. **Allow decisions that don't come from RBAC.** Import the generated `permit.policies` package after the package declaration:
 
@@ -85,7 +95,7 @@ false
    import data.permit.rbac
    ```
 
-   The `rbac.allowing_roles` set lists the roles that allowed the request. Chain an `else` branch to the previous rule that is `true` when `tmp-admin` isn't one of them:
+   The `rbac.allowing_roles` set lists the roles that allowed the request. Add a second `allow` rule that is `true` when RBAC allowed the request and `tmp-admin` isn't one of the allowing roles:
 
    ```rego
    allow {
@@ -96,7 +106,7 @@ false
 
    The `in` keyword requires `import future.keywords.in`. Add that import above the `permit` imports.
 
-3. **Allow the `tmp-admin` role only inside the time window.** Chain a last `else` branch that compares the current time with the start and end of the window:
+3. **Allow the `tmp-admin` role only inside the time window.** Add two rules that hold the start and end of the window in nanoseconds, and a third `allow` rule that compares the current time with them:
 
    ```rego
    # Replace both timestamps with the start and end of your window.
@@ -110,7 +120,7 @@ false
    }
    ```
 
-   The example window is the year 2023. Replace both timestamps with the RFC 3339 start and end of your window. Outside the window, a request allowed only by `tmp-admin` is denied. Instead of fixed strings, you can compare against user or resource attributes from the `input` document.
+   The two timestamps in the example are placeholders. Replace them with the RFC 3339 start and end of your own window before you push the file. Once `window_end_ns` has passed, every request whose only allowing role is `tmp-admin` is denied, so a stale window silently removes that role's access. Instead of fixed strings, you can compare against user or resource attributes from the `input` document, so the window comes from your data instead of the policy file.
 
 The complete `custom/root.rego` file:
 
@@ -148,7 +158,7 @@ allow {
 
 ## Enforce the deny rule \{#enforce-the-deny-policy}
 
-The generated `root.rego` in the root of the branch has two `allow` rules. In Rego, two rules with the same name combine with **or**, so access is allowed when either rule is `true`:
+The generated `root.rego` in the root of the branch has two `allow` rules. In Rego, two rules with the same name combine with "or", so access is allowed when either rule is `true`:
 
 ```rego
 allow {
@@ -169,19 +179,22 @@ allow {
 }
 ```
 
-After the change, access is allowed only when the generated policies allow the request **and** the custom `allow` rule is `true`. The generated comments in `root.rego` describe this change for an **and** effect.
+After the change, access is allowed only when the generated policies allow the request and the custom `allow` rule is `true`. The comments that Permit generates in `root.rego` describe the same change.
 
 :::warning An empty custom rule denies every request
 After the change, the custom `allow` rule must be `true` for every request you want to allow. If `custom/root.rego` has only `default allow := false` and no matching `allow` rule, the PDP denies every permission check in the environment.
 :::
 
-`root.rego` is outside the `custom` folder. After you change the policy in the dashboard, check that your change to `root.rego` is still in the branch.
+### Re-apply the root.rego change after a policy change \{#reapply-the-rootrego-change}
+
+`root.rego` sits outside the `custom` folder, so Permit regenerates it when you change the policy in the dashboard, and the regenerated file can overwrite the combined rule. Combining the `allow` rules is the one edit outside `custom` that [Test the connection with a custom policy](/integrations/gitops/github#test-your-configuration) sanctions, and Permit's generated comments in `root.rego` name it. After every policy change in the dashboard, check the environment branch and re-apply the combined rule if it is gone. If the combined rule disappears, the generated policies and the custom rule go back to combining with "or", and requests that only the custom rule denies are allowed again.
 
 ## Test the custom policy \{#testing-the-custom-policy}
 
-1. Commit your changes to `custom/root.rego` and `root.rego`, and push the environment branch. Permit detects the push and sends the updated policy to the PDPs of the environment.
-2. Run a permission check for a user whose only allowing role is `tmp-admin`. Outside the time window, the check returns `allow: false`. Inside the window, the check returns `allow: true`.
-3. Run a permission check for a user with another role that allows the action. The check returns `allow: true` at any time.
+1. Run `opa check --v0-compatible custom/root.rego root.rego`. The command prints nothing when both files parse.
+2. Commit your changes to `custom/root.rego` and `root.rego`, and push the environment branch `permit/generated/<env_id>`. Permit detects the push and sends the updated policy to the PDPs of the environment.
+3. Run a permission check for a user whose only allowing role is `tmp-admin`. Outside the time window, the check returns `allow: false`. Inside the window, the check returns `allow: true`.
+4. Run a permission check for a user with another role that allows the action. The check returns `allow: true` at any time.
 
 The [audit log](/how-to/use-audit-logs/types-and-filtering) shows detailed decision reasons for the generated policies. For custom Rego, the audit log shows only the result. To debug a custom rule, add a Rego `print` call to it. For example, add this line inside the first `allow` rule to write the allowing policies of each evaluation to the PDP logs:
 
@@ -194,7 +207,7 @@ print(policies.__allow_sources)
 You can add more files and folders in the `custom` folder. Connect them to the decision in one of two ways:
 
 - **Reference them from `custom/root.rego`.** Import each package in `custom/root.rego` and use its rules in the custom `allow` rule. `custom/root.rego` stays the one custom entry point.
-- **Reference them from the top-level `root.rego`.** Import each package in `root.rego` and add its rule to an `allow` rule, as its own rule for an **or** effect, or inside an existing rule for an **and** effect.
+- **Reference them from the top-level `root.rego`.** Import each package in `root.rego` and add its rule to an `allow` rule: as its own rule for an "or" effect, or inside an existing rule for an "and" effect. Permit regenerates `root.rego`, so re-apply these edits after a policy change, as [Re-apply the root.rego change after a policy change](#reapply-the-rootrego-change) describes.
 
 ## Get help with custom policies \{#disclaimer}
 

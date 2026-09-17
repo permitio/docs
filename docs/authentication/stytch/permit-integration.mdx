@@ -92,7 +92,7 @@ const Login = () => {
 };
 ```
 
-Replace `SEE_STEP_5` with the full URL of the redirect page you create in step 4, for example `http://localhost:3000/authenticate` if you name the page `pages/authenticate.js`. Stytch sends users to that URL after they click a magic link or finish OAuth. Add the same URL on the [Redirect URLs tab](https://stytch.com/docs/guides/dashboard/redirect-urls) of the Stytch dashboard.
+`REDIRECT_URL` is the full URL of the redirect page you create in [4. Create the redirect page](#step-4-handle-redirects-and-complete-the-authentication-flow). The value above matches a page at `pages/authenticate.js` on a development server. Stytch sends users to that URL after they click a magic link or finish OAuth, so add the same URL on the [Redirect URLs tab](https://stytch.com/docs/guides/dashboard/redirect-urls) of the Stytch dashboard, and change it to your deployed URL in production.
 
 Add the `Login` component to your login page. The page sends users who are already signed in to `/profile`:
 
@@ -217,7 +217,7 @@ export async function getServerSideProps({ req }) {
 }
 ```
 
-When `authenticateJwt()` succeeds, the session is valid and your backend knows the Stytch user ID. This is the handoff point: the place to sync the user into Permit before you show the user any content.
+When `authenticateJwt()` succeeds, the session is valid and your backend knows the Stytch user ID. This is the handoff point: the place to sync the user into Permit before you show the user any content. [9. Sync the user at the handoff point](#creating-a-handoff-point-check) shows the same function with the Permit calls added.
 
 :::tip Why sync users to Permit?
 Permit evaluates a permission check against the roles assigned to the user. If the user doesn't exist in Permit, the user has no roles, and every role-based check returns deny.
@@ -227,9 +227,11 @@ Permit evaluates a permission check against the roles assigned to the user. If t
 
 Create the roles, resources, and permissions that your app checks. The [Quickstart](/quickstart) shows how to create a workspace, roles, and resources, and how to assign permissions to roles.
 
-This tutorial uses an `AccountOwner` role (displayed as Account Owner). The role can take the `view-all` action on the account resource, among other actions:
+This tutorial uses a role whose key is `AccountOwner`, displayed as Account Owner in the Policy Editor. The role can take the `view-all` action on an account resource, among other actions:
 
-![Permit Policy Editor for the Account Owner role with view-all and other actions checked on Current Account](/ui-videos/authentication/stytch/account-owner-role.png)
+![Permit Policy Editor for the Account Owner role with view-all and other actions checked on the account resource](/ui-videos/authentication/stytch/account-owner-role.png)
+
+The screenshot shows the resource by its display name, Current Account. The SDK takes keys, not display names: the `permit.api.users.assignRole()` call in step 9 passes the role key `AccountOwner`, and the `permit.check()` call in step 10 passes the resource key, which this tutorial writes as `Account`. Use the keys of your own role and resource, which the Policy Editor shows under each name.
 
 ## 8. Initialize the Permit SDK \{#importing-and-initializing-the-permit-object}
 
@@ -253,35 +255,36 @@ const permit = new Permit({
 
 ## 9. Sync the user at the handoff point \{#creating-a-handoff-point-check}
 
-Run the Permit calls right after Stytch authenticates the session, before you render protected content.
+Run the Permit calls in the same `getServerSideProps` function as the Stytch session check, after `authenticateJwt()` returns. `authenticateJwt()` throws for an invalid or expired session JWT, so code that runs after it runs only for an authenticated user.
 
-### Get the Stytch user ID \{#fetching-the-stytch-userid}
+### The complete server-side handoff \{#fetching-the-stytch-userid}
 
-Authenticate the session JWT with the Stytch backend SDK, then read the Stytch user ID and email from the session. Permit uses the user ID as the user key:
-
-```javascript
-// authenticateJwt throws if the session JWT is invalid
-const { session } = await stytchClient.sessions.authenticateJwt({ session_jwt: sessionJWT });
-const userId = session.user_id;
-const { emails } = await stytchClient.users.get({ user_id: userId });
-const userEmail = emails[0]?.email;
-// perform all Permit SDK calls here, passing in the userId.
-```
-
-### Run the Permit calls after authentication \{#performing-the-authentication-check}
-
-Run the Permit calls only after the session JWT is authenticated. `authenticateJwt()` throws when the JWT is invalid, so place the calls after it inside the `try` block from step 6.
-
-The handoff runs three Permit SDK calls, in this order.
-
-### Create a tenant for the user \{#creating-a-new-tenant}
-
-Each user in this example gets a tenant, so the user's data and role assignments stay separate from other users:
+This version of the `pages/profile.js` server-side function from step 6 adds the three Permit calls. It reads the Stytch user ID and email, creates the user's tenant when it is missing, syncs the user, and assigns the role:
 
 ```javascript
-import { PermitApiError } from "permitio";
+// pages/profile.js
+import stytch from "stytch";
+import { Permit, PermitApiError } from "permitio";
 
-// Returns the tenant, and creates it on the first login of this user.
+let client;
+
+const loadStytch = () => {
+  if (!client) {
+    client = new stytch.Client({
+      project_id: process.env.STYTCH_PROJECT_ID || "",
+      secret: process.env.STYTCH_SECRET || "",
+      env: process.env.STYTCH_PROJECT_ENV === "live" ? stytch.envs.live : stytch.envs.test,
+    });
+  }
+  return client;
+};
+
+const permit = new Permit({
+  token: process.env.PERMIT_API_KEY,
+  pdp: process.env.PERMIT_PDP_HOSTNAME,
+});
+
+// Returns the tenant, and creates it on this user's first sign-in.
 async function ensureTenant(tenantKey, tenantName) {
   try {
     return await permit.api.tenants.get(tenantKey);
@@ -293,32 +296,78 @@ async function ensureTenant(tenantKey, tenantName) {
   }
 }
 
-const tenantKey = userId; // one tenant per user
-await ensureTenant(tenantKey, userEmail);
+export async function getServerSideProps({ req }) {
+  const redirectRes = {
+    redirect: {
+      destination: "/",
+      permanent: false,
+    },
+  };
+
+  const sessionJWT = req.cookies["stytch_session_jwt"];
+
+  if (!sessionJWT) {
+    return redirectRes;
+  }
+
+  const stytchClient = loadStytch();
+
+  let session;
+  try {
+    // authenticateJwt throws if the session JWT is invalid or expired
+    ({ session } = await stytchClient.sessions.authenticateJwt({ session_jwt: sessionJWT }));
+  } catch (e) {
+    return redirectRes;
+  }
+
+  // The session is authenticated from here on.
+  const userId = session.user_id;
+  const { emails } = await stytchClient.users.get({ user_id: userId });
+  const userEmail = emails[0]?.email;
+
+  const tenantKey = userId; // one tenant per user
+  await ensureTenant(tenantKey, userEmail);
+
+  await permit.api.syncUser({
+    key: userId,
+    email: userEmail,
+  });
+
+  await permit.api.users.assignRole({
+    role: "AccountOwner",
+    tenant: tenantKey,
+    user: userId,
+  });
+
+  return { props: { userId } };
+}
 ```
+
+The Permit calls sit outside the `catch` that redirects to `/`. If they shared it, a Permit API error would send the user to the home page as if the session had expired, and you would have no sign that the sync failed.
+
+### What each Permit call does \{#performing-the-authentication-check}
+
+| Call | What it does |
+|---|---|
+| `permit.api.tenants.get()` and `permit.api.tenants.create()`, through `ensureTenant()` | Returns the user's tenant, and creates it on the first sign-in |
+| `permit.api.syncUser()` | Creates or updates the Permit user, with the Stytch user ID as the user key |
+| `permit.api.users.assignRole()` | Gives the user the `AccountOwner` role in that tenant, which also places the user in the tenant |
+
+The calls run in that order because a role assignment names both a tenant and a user, so both have to exist first.
+
+### Create the tenant only when it is missing \{#creating-a-new-tenant}
+
+Each user in this example gets a tenant, so the user's data and role assignments stay separate from other users. The tenant key is the Stytch user ID.
+
+`permit.api.tenants.create()` fails when the tenant already exists, so calling it on every sign-in throws a `PermitApiError` on the second sign-in of the same user, and the sync stops before it syncs the user. `ensureTenant()` calls `permit.api.tenants.get()` first and creates the tenant only when the Permit API answers `404`. Any other error status rethrows, so a wrong API key or a network failure still surfaces.
 
 ### Sync the user \{#adding-a-user-to-the-tenant}
 
-Sync the user to Permit with the Stytch user ID as the key and the user's email:
-
-```javascript
-await permit.api.syncUser({
-  key: userId,
-  email: userEmail,
-});
-```
+`permit.api.syncUser()` creates the Permit user on the first sign-in and updates it on later sign-ins, so it is safe to call every time. Pass the Stytch user ID as `key`, because `permit.check()` and every role assignment identify the user by that key. See [Sync users](/how-to/sync-users) for the full parameter list.
 
 ### Assign a role to the user \{#assigning-a-role-to-the-user}
 
-Assign the `AccountOwner` role to the user in the user's tenant. The role assignment places the user in the tenant:
-
-```javascript
-await permit.api.users.assignRole({
-  role: "AccountOwner",
-  tenant: tenantKey,
-  user: userId,
-});
-```
+`permit.api.users.assignRole()` gives the user the `AccountOwner` role in the user's own tenant. Assigning a role in a tenant also adds the user to that tenant, so no separate call adds the user to the tenant. Repeating the same assignment on a later sign-in leaves the existing assignment in place. See [Assign a role to a user with the Node.js SDK](/sdk/nodejs/role/assign-role).
 
 ## 10. Verify the integration \{#wrapping-up}
 
@@ -327,7 +376,7 @@ await permit.api.users.assignRole({
 
 ![Permit Directory showing a synced user with the AccountOwner role in the user's tenant](/ui-videos/authentication/stytch/user-synced.png)
 
-3. Check a permission in your backend. This check asks whether the user can take the `view-all` action on the `Account` resource in the user's tenant:
+3. Check a permission in your backend. This check asks whether the user can take the `view-all` action on the resource with the key `Account` in the user's tenant:
 
 ```javascript
 const isPermitted = await permit.check(userId, "view-all", {
@@ -336,7 +385,10 @@ const isPermitted = await permit.check(userId, "view-all", {
 });
 ```
 
-The check returns `true`, because the `AccountOwner` role has `view-all` checked in the Policy Editor.
+   `isPermitted` is `true`, because the `AccountOwner` role has `view-all` checked in the Policy Editor for that resource.
+
+4. Sign out and sign in again as the same user. The second sign-in succeeds and the Directory shows one user and one tenant, because `ensureTenant()` reuses the existing tenant instead of creating it again.
+5. Open the [Audit Log](https://app.permit.io/audit-log) screen in the Permit dashboard. The check from step 3 appears with the user key, the `view-all` action, the resource, the tenant, and `Allow` as the decision.
 
 ## Next steps
 

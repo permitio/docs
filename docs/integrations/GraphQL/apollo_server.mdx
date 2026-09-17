@@ -5,7 +5,11 @@ sidebar_label: Apollo Server
 description: "Add an Apollo Server plugin that maps each GraphQL operation to a Permit resource and action, and rejects requests the policy doesn't allow."
 ---
 
-Check a Permit.io permission for every GraphQL operation in Apollo Server, with one server plugin. This page is for backend developers who run Apollo Server and want to block operations a user isn't allowed to run. The example builds on the server in [Apollo's fullstack tutorial](https://github.com/apollographql/fullstack-tutorial/tree/main/final/server), which uses Apollo Server 3. To compare this approach with checks in resolvers, schema directives, or data sources, see [Enforce permissions in a GraphQL API](/integrations/GraphQL/overview).
+Check a Permit.io permission for every GraphQL operation in Apollo Server, with one server plugin. This page is for backend developers who run Apollo Server and want to block operations a user isn't allowed to run. To compare this approach with checks in resolvers, schema directives, or data sources, see [Enforce permissions in a GraphQL API](/integrations/GraphQL/overview).
+
+:::note The examples target Apollo Server 3
+Every code sample on this page uses the Apollo Server 3 plugin API and the `apollo-server-core` package, and builds on the server in [Apollo's fullstack tutorial](https://github.com/apollographql/fullstack-tutorial/tree/main/final/server). Apollo Server 3 has been end of life since 22 October 2024. On Apollo Server 4 and later the import paths differ, for example `ApolloServerPluginLandingPageLocalDefault` moves from `apollo-server-core` to `@apollo/server/plugin/landingPage/default`, so port the samples with [Migrating from Apollo Server 3](https://www.apollographql.com/docs/apollo-server/migration-from-v3).
+:::
 
 ## How the plugin works \{#apollo-server}
 
@@ -22,15 +26,23 @@ Check a Permit.io permission for every GraphQL operation in Apollo Server, with 
 
 ## 1. Add the Permit SDK to your project \{#1-add-the-permit-package-to-your-project}
 
-Install the `permitio` package: `npm install permitio`
+Install the `permitio` package in the server project:
+
+```bash
+npm install permitio
+```
 
 ## 2. Import the Permit SDK in your server \{#2-import-the-package-into-your-server}
 
-Add the import to your server file: `const { Permit } = require("permitio");`
+Add the import at the top of your server file, next to the Apollo Server import:
+
+```js
+const { Permit } = require("permitio");
+```
 
 ## 3. Create the Permit client \{#3-init-the-permit-object-with-the-secret-api-key}
 
-Create a Permit client, and replace `permit_key_secret` with your environment API key. The Permit dashboard also shows this code, with your API key filled in, on the [Connect an SDK](https://app.permit.io/get-started/connect-an-sdk) screen.
+Create a Permit client below the import. Set the `PERMIT_API_KEY` environment variable to your environment API key before you start the server. The Permit dashboard also shows this code, with your API key filled in, on the [Connect an SDK](https://app.permit.io/get-started/connect-an-sdk) screen.
 
 ```js
 const permit = new Permit({
@@ -53,7 +65,7 @@ Choose one of two ways to map operations to resources and actions.
 
 ### Option 1: map operation names to resources and actions \{#4-option-1---operation-name-to-resource--action-mapping}
 
-This plugin looks up each operation name in a `PermissionMap` object and checks the mapped resource and action. The plugin reads `operationName` from the request, so clients must send named operations. An operation that isn't in the map is denied.
+This plugin looks up each operation name in a `PermissionMap` object and checks the mapped resource and action. The plugin reads `operationName` from the request, which is the name the client gives the operation document (`query Launches { ... }` sends `Launches`), not a field name in your schema. Clients must send named operations, and an operation that isn't in the map is denied.
 
 ```js
 const PermissionMap = {
@@ -85,7 +97,7 @@ const permitPlugin = {
 };
 ```
 
-In the Permit Policy Editor, create each resource in the map (`user`, `launch`) with its actions (`login`, `logout`, `get`, `getall`), and give roles permission to them.
+The keys of `PermissionMap` are lowercase operation names, and the entries above are an example. Replace them with the operation names your clients send, then in the Permit Policy Editor create every resource the map names (`user`, `launch`) with its actions (`login`, `logout`, `get`, `getall`), and give roles permission to them. A client that sends an operation name outside the map gets the `Not allowed` error, and the plugin logs `No such operation in PermissionMap`.
 
 ### Option 2: use the operation name as the resource and the operation type as the action \{#4-option-2---operation-name-as-resource-and-operation-type-as-action}
 
@@ -114,7 +126,7 @@ const permitPlugin = {
 }
 ```
 
-In the Permit Policy Editor, create a resource for each operation name, for example `launches`, with `read` and `write` actions.
+In the Permit Policy Editor, create a resource for each lowercase operation name your clients send, for example `launches`, with `read` and `write` actions. Option 2 needs no map, but it ties your policy to the operation names clients choose, so a renamed operation on the client denies the request until you add the new resource.
 
 ## 5. Add the plugin to Apollo Server \{#5-add-the-plugin-to-the-apollo-server-plugins-list}
 
@@ -141,10 +153,17 @@ const server = new ApolloServer({
 
 ## 6. Verify the permission checks
 
-1. Start the server. The fullstack tutorial server listens on `http://localhost:4000`.
-2. In the Permit dashboard, assign a role with permission for the `launches` operation's resource and action to a user, and send a named `launches` query as that user. The server returns the query result.
-3. Send the same query as a user without that permission. The response contains the `Not allowed` error.
-4. Open the [Audit Log](https://app.permit.io/audit-log) screen in the Permit dashboard. Each check appears with the user, the action, the resource, and the decision.
+1. Set `PERMIT_API_KEY` and start the server. The fullstack tutorial server listens on `http://localhost:4000`.
+2. In the Permit dashboard, assign a role with permission for the `launches` operation's resource and action to a user.
+3. Open the landing page at `http://localhost:4000`, set the `Authorization` header to that user's token, and run a query whose operation you name `launches`. The response contains a `data` object with the query result.
+
+4. Run the same query as a user without that permission. The response contains no data, and its `errors` array carries the message the plugin throws:
+
+   ```json
+   { "errors": [{ "message": "Not allowed" }] }
+   ```
+
+5. Open the [Audit Log](https://app.permit.io/audit-log) screen in the Permit dashboard. Each check appears with the user, the action, the resource, and the decision.
 
 ## Next steps
 

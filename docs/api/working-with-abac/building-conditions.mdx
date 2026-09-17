@@ -17,9 +17,11 @@ A condition set's request body holds its conditions under the `conditions` key, 
 
 A condition is built from three parts:
 
-- An **attribute reference** in the form `<object>.<attribute>`, for example `user.location` or `resource.type`.
+- An **attribute reference** in the form `<object>.<attribute>`, for example `user.location` or `resource.owner`.
 - A **comparison operator** and its operand, for example `{"in": ["US", "Canada"]}`.
 - Optional **logical operators** (`allOf`, `anyOf`, `not`) that combine several conditions.
+
+The object in an attribute reference follows the type of the set. A user set (`"type": "userset"`) reads `user.<attribute>`, and a resource set (`"type": "resourceset"`) reads `resource.<attribute>`. The attribute must be defined in your environment before a condition can use it, and the value comes from the user or resource record in Permit, or from the attributes your application passes in the `permit.check()` call. See [Define attributes](/how-to/build-policies/abac/defining-attributes).
 
 ## Combine conditions with logical operators \{#working-with-logical-operators}
 
@@ -30,7 +32,7 @@ Place a logical operator inside the `conditions` object. The `allOf` and `anyOf`
 The `allOf` operator returns `true` only when condition A **and** condition B are true.
 
 :::info allOf example
-Grant access to resource X only to employees who are **located in the US** **and** have the **editor** role.
+To match only the users who are **located in the US** **and** hold the **editor** role, put both conditions in `allOf`. `user.roles` holds the keys of the roles the user has, so the condition on it uses `array_contains`.
 :::
 
 ```javascript
@@ -47,7 +49,7 @@ Grant access to resource X only to employees who are **located in the US** **and
 The `anyOf` operator returns `true` when condition A **or** condition B is true.
 
 :::info anyOf example
-Allow a student to participate when the student has a **math score higher than 80%** **or** an **average of 60% across all subjects**.
+To match a student who has a **math score higher than 80** **or** an **average of 60 or more across all subjects**, put both conditions in `anyOf`.
 :::
 
 ```javascript
@@ -64,7 +66,7 @@ Allow a student to participate when the student has a **math score higher than 8
 The `not` operator inverts the result of the condition nested inside it. When the nested condition is `false`, `not` returns `true`.
 
 :::info not example
-A user set of users who are **not** located in the US wraps the condition "`user.location` is in `["US"]`" in `not`.
+To match every user outside the US, wrap the condition "`user.location` is in `["US"]`" in `not`.
 :::
 
 The value of `not` is a single nested condition or logical operator object. It doesn't accept a primitive value such as a string or a number.
@@ -199,7 +201,19 @@ The following condition is the attribute-first form of the same-attribute exampl
 }
 ```
 
+## Test a condition \{#test-a-condition}
+
+The API validates the shape of a condition when you create the set, and the policy decision point (PDP) evaluates it on each check. Test both:
+
+1. Create a condition set with the condition, with a `POST` request to `https://api.permit.io/v2/schema/{proj_id}/{env_id}/condition_sets`. See [Create condition sets with the API](/api/working-with-abac/condition-sets). An HTTP 422 response means the condition has an unknown operator or the wrong shape, and the response body names the field that failed.
+2. Read the set back with `GET /v2/schema/{proj_id}/{env_id}/condition_sets/{condition_set_id}`, and confirm that `conditions` holds what you sent.
+3. Grant a permission to the set with a [condition set rule](/api/working-with-abac/condition-set-rules), so a check can return `true` through it. Without a rule, a check returns `false` however well the condition matches.
+4. Run `permit.check()` for a user and resource whose attributes make the condition true, and confirm the check returns `true`. Then change one attribute so the condition is false, and confirm the check returns `false`. See [Check permissions](/how-to/enforce-permissions/check).
+
+If a check returns `false` when you expect `true`, open the decision log for that check: the `no_matching_usersets` and `no_matching_resourcesets` codes say which side of the rule didn't match. See [Denial codes in decision logs](/how-to/use-audit-logs/types-and-filtering#denial-codes-in-decision-logs).
+
 ## Next steps
 
 - [Create condition sets](/api/working-with-abac/condition-sets) with these conditions.
 - [Review the full operator reference](/api/working-with-abac/operators).
+- [Walk through a complete ABAC example](/api/working-with-abac/examples) with a user set, a resource set, and a rule.
