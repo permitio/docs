@@ -1,63 +1,64 @@
 ---
 sidebar_position: 6
 title: Time Based Role Example
-description: "Configure temporary, time-based role assignments in Permit using ABAC condition sets and expiring tenant attributes."
+description: "Grant a temporary, per-tenant admin role in Permit.io with an attribute-based access control (ABAC) user set that compares an expiration time with the current time."
 ---
-
-One of the basic requirements for proper fine-grained authorization is time-based conditions.
-
-On this page, we will learn how to implement temporary role assignments using ABAC Condition Sets in Permit.io, with a
-step-by-step implementation guide.
 
 import TimelineStep from "../../../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../../../src/components/timeline/TimelineWrapper";
 
+Grant a user a role that expires at a set time, per tenant, with an attribute-based access control (ABAC) user set (condition set) in Permit.io. This guide is for developers who need temporary access, such as an admin role for a support session, without removing the role assignment when the time is up.
+
+## How the time-based role works
+
+- The user has the `admin` role and a `time_based_groups` user attribute. Each entry in `time_based_groups` names a role, a tenant, and an expiration time.
+- Your application passes the current time as the `current_time` user attribute in each `permit.check()` call.
+- The `temp-admin` user set matches the user when the user has the `admin` role, and an entry in `time_based_groups` has an `expires` value greater than or equal to `current_time` and a `tenant` value equal to the tenant of the check.
+- When the expiration time passes, the user set stops matching, and the check returns `false`.
+
 ## Prerequisites
 
-Before proceeding, ensure you have the following:
+- A [Permit.io](https://app.permit.io) account.
+- A **role** with the key `admin`.
+- A **resource** with the key `internal_api`, with the actions you want to grant temporarily. The check in this guide uses the `patch` action.
+- Your environment API key. See [Get your API key](/overview/get-api-key).
 
-- A [Permit.io](https://www.permit.io) account.
-- A **role** called `admin`.
-- A **resource** called `internal_api`.
-
-## Step 1: Configure Schema & Policy
-
----
+## Step 1: Configure schema & policy \{#step-1-configure-schema--policy}
 
 <TimelineWrapper>
 <TimelineStep>
 
-### Configure Tenant Attribute Key
+### Configure the tenant attribute key \{#configure-tenant-attribute-key}
 
-1. Navigate to [Tenant Attributes](https://app.permit.io/user-management/tenant-settings/tenant-attributes) in the Permit.io dashboard.
-2. Create a new **Tenant Attribute** named `key`.
-3. **Do not assign it to a tenant yet.**
+1. Open [Tenant Attributes](https://app.permit.io/user-management/tenant-settings/tenant-attributes) in the Permit dashboard.
+2. Create a tenant attribute named `key`.
+3. Don't assign a value to a tenant yet.
 
-![Tenant Key Attribute](/img/abac/tenant_key.png)
+![Tenant Attributes settings with the key attribute](/img/abac/tenant_key.png)
 
 </TimelineStep>
 <TimelineStep>
 
-### Configure `time_based_groups` User Attribute
+### Configure the time_based_groups user attribute \{#configure-time_based_groups-user-attribute}
 
-1. Go to [User Attributes](https://app.permit.io/user-management/tenant-settings/user-attributes).
+1. Open [User Attributes](https://app.permit.io/user-management/tenant-settings/user-attributes).
 2. Create the `time_based_groups` attribute.
-3. **Do not assign it to a user yet.**
+3. Don't assign a value to a user yet.
 
-![Time-Based Groups](/img/abac/time_based_groups.png)
+![User Attributes settings with the time_based_groups attribute](/img/abac/time_based_groups.png)
 
 </TimelineStep>
 <TimelineStep>
 
-### Create Condition Set
+### Create the condition set \{#create-condition-set}
 
-A condition set ensures temporary permissions based on:
+The `temp-admin` condition set is a user set that matches a user based on:
 
-- User role (`admin`)
-- Expiration time
-- Tenant key match
+- The user's role (`admin`).
+- The expiration time in `time_based_groups`, compared with `current_time`.
+- The tenant in `time_based_groups`, compared with the tenant's `key` attribute.
 
-Use the following API request to create the condition set:
+Create the condition set with the Permit API. The URL path contains the project key `default` and the environment key `production`: replace them with your project and environment keys. Replace `permit_key_` with your environment API key.
 
 ```bash
 curl --location 'https://api.permit.io/v2/schema/default/production/condition_sets' \
@@ -84,29 +85,30 @@ curl --location 'https://api.permit.io/v2/schema/default/production/condition_se
 }'
 ```
 
+The API responds with the created condition set.
+
 </TimelineStep>
 <TimelineStep>
 
-### Assign Permissions to the Condition Set
+### Assign permissions to the condition set \{#assign-permissions-to-the-condition-set}
 
-1. Navigate to the [Policy Editor](https://app.permit.io/policy-editor).
-2. Assign the necessary resource actions to the `temp-admin` condition set.
+1. Open the [Policy Editor](https://app.permit.io/policy-editor).
+2. Select the `internal_api` actions that the `temp-admin` user set can perform.
+3. Save your changes.
 
-![Permit UI Temp Admin](/img/abac/permit_ui_temp_admin.png)
+![Policy Editor with actions selected for the Temporary Admin user set](/img/abac/permit_ui_temp_admin.png)
 
 </TimelineStep>
 </TimelineWrapper>
 
-## Step 2: Test the Configuration
-
----
+## Step 2: Test the configuration \{#step-2-test-the-configuration}
 
 <TimelineWrapper>
 <TimelineStep>
 
-### Create a Tenant with the Key `coke`
+### Create a tenant with the key coke \{#create-a-tenant-with-the-key-coke}
 
-Use the following JSON format:
+Create a tenant with the key `coke`:
 
 ```json
 {
@@ -117,9 +119,9 @@ Use the following JSON format:
 </TimelineStep>
 <TimelineStep>
 
-### Create a User with Role & `time_based_groups` Value
+### Create a user with the admin role and a time_based_groups value \{#create-a-user-with-role--time_based_groups-value}
 
-Assign the `admin` role and set `time_based_groups`:
+Create a user, assign the user the `admin` role, and set the `time_based_groups` user attribute. The following value gives the user a temporary admin entry in the `default` tenant and another in the `coke` tenant, each with its own expiration time:
 
 ```json
 "time_based_groups": [
@@ -136,16 +138,16 @@ Assign the `admin` role and set `time_based_groups`:
 ]
 ```
 
-:::info
-The `expires` value is a Unix timestamp in milliseconds. The `current_time` value must be passed in `permit.check()` as a user attribute.
+:::info Time format
+`expires` is a Unix timestamp in milliseconds. Pass `current_time` in `permit.check()` as a user attribute, in the same format.
 :::
 
 </TimelineStep>
 <TimelineStep>
 
-### Run Permit Check
+### Run permit.check() \{#run-permit-check}
 
-Use the following code snippet to verify permissions:
+Run a check for the user in the `coke` tenant. In the resource object, set `type` to the key of your resource (`internal_api`). The call passes the current time as the `current_time` user attribute:
 
 ```javascript
 const permitted = await permit.check(
@@ -166,11 +168,25 @@ const permitted = await permit.check(
 );
 ```
 
-Modify `user.time_based_groups` expiration times to test different scenarios.
+The expected results:
 
-:::info Tip
-In a production environment, update `User.time_based_groups[]` via the Permit.io API dynamically with `time.now() + expiration_amount`.
+| Condition at check time | Result |
+|---|---|
+| The `coke` entry's `expires` is later than the current time | `true` |
+| The `coke` entry's `expires` is earlier than the current time | `false` |
+| The user has no `time_based_groups` entry for the tenant of the check | `false` |
+
+To test each case, change the `expires` values in `time_based_groups` and run the check again. The timestamps in the example are in the past, so set them to a future time to get `true`.
+
+:::tip Set expiration times from your application
+In production, update `time_based_groups` with the Permit API when you grant temporary access, and set `expires` to the current time plus the access duration.
 :::
 
 </TimelineStep>
 </TimelineWrapper>
+
+## Next steps
+
+- [Defining attributes](/how-to/build-policies/abac/defining-attributes): store user and tenant attributes, or pass them in the check.
+- [ABAC design patterns](/how-to/build-policies/abac/patterns): ownership, groups, and custom Rego attributes.
+- [Check permissions with permit.check()](/how-to/enforce-permissions/check): all check options.
