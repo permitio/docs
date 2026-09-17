@@ -214,9 +214,10 @@ Primary: link-purple fill, `--pm-on-primary` text (white in light, page navy in 
 ### Cards / Containers
 
 - **Doc cards** (category indexes, `DocCardList`): surface-1 panel, hairline border that turns purple on hover, a small tinted icon chip and a title.
-- **Home cards** (`CardGrid`): same panel language; the arrow sits in flow at the foot of the card.
+- **Home cards** (`CardGrid`): same panel language; the icon (or step number) sits beside the title in link purple, and the arrow sits in flow at the foot of the card.
 - **Pagination**: same panel, border-only hover.
-- **Next-step callout** (`NextStepCallout`): surface-1 panel with a `--pm-border-strong` edge and a Rajdhani label.
+- **Next-step callout** (`NextStepCallout`): surface-1 panel with a `--pm-border-strong` edge and a Rajdhani label. No tint and no stripe, so it never reads as an admonition.
+- **Element tiles** (`ElementTile`): preview image, title and description as one link.
 
 ### Navigation
 
@@ -231,7 +232,7 @@ Blocks on `--pm-code-bg` with a hairline border and no shadow; a title bar one s
 
 ### Admonitions
 
-A faint tint of the type's status colour over the page, an icon and a Rajdhani type label in the status colour, body copy in `--pm-text`. Links inside stay link-purple and clear 4.5:1 on every tint.
+A faint tint of the type's status colour over the page inside a 1px border of the same colour (28% alpha), an icon and a Rajdhani type label in the status colour, body copy in `--pm-text`. An author's own title (`:::tip[Title]`) is set in Manrope 700 in its written case instead of the label. Links inside stay link-purple and clear 4.5:1 on every tint.
 
 ### Tables
 

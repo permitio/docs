@@ -20,7 +20,7 @@ Audit of docs.permit.io against [Impeccable](https://impeccable.style/) (Paul Ba
 
 **Implementation integrity verdict: pass.** The makeover already expresses one system: tokens mirrored from www.permit.io with measured contrast for every pair, one partial per surface on stable selectors, a fixed role for each typeface, and coded diagrams instead of images. The findings are local drift and a few reflexive patterns, not a missing system.
 
-**Issues by severity:** P0 0, P1 4, P2 9, P3 6.
+**Issues by severity:** P0 0, P1 4, P2 10, P3 6.
 
 ## Findings by command
 
@@ -58,15 +58,16 @@ Audit of docs.permit.io against [Impeccable](https://impeccable.style/) (Paul Ba
 | Sev | Anti-pattern | Where | Screenshot | Evidence and fix |
 |-----|--------------|-------|------------|------------------|
 | P2 | `side-tab` / `border-accent-on-rounded`: a 3px coloured left stripe on rounded admonitions and on the rounded `NextStepCallout` | Every admonition (probe: 1-14 per page), every NextStepCallout | `quickstart-1440-light.png`, `pdp-overview-1440-dark-mid.png`, `permit-mcp-gateway-1440-light.png` | The tint, icon and coloured label already identify the type. Replace the stripe with a 1px border in the type's colour at low alpha; callout keeps its strong hairline. |
-| P2 | `icon-tile-stack`: a tinted icon square stacked above the title on every card | Home "Choose your path" and API cards, DocCards on category index pages | `home-1440-light.png`, `home-390-light-mid.png` | Put the icon beside the title so the title leads and cards lose ~52px of height each. |
+| P2 | `icon-tile-stack`: a tinted icon square stacked above the title on every card | Home "Choose your path" and "Go beyond a yes or no" cards (the DocCard layout supports the same chip, but no sidebar item sets `svgIcon` today) | `home-1440-light.png`, `home-390-light-mid.png` | Put the icon beside the title so the title leads and cards lose ~52px of height each. |
 | P3 | `repeated-container-text`-adjacent redundancy: the home "How it works" section heading is followed by a 2px rule and a label restating it ("How a permission decision is made") | Home | `home-1440-light-mid.png` | Leave: the frame is the website's DiagramFrame voice and the label names the figure when it is reused in docs pages. Noted only. |
 
 ### clarify
 
 | Sev | Anti-pattern | Where | Screenshot | Evidence and fix |
 |-----|--------------|-------|------------|------------------|
-| P1 | Non-semantic control and placeholder alt text: `ElementTile` navigates from a `div` `onClick` (not focusable, not announced as a link) and every tile image has `alt="placeholder"` | embeddable-uis/overview, ai-security/framework | `embeddable-uis-overview-1440-dark-mid.png` | Render the tile as a real link; image alt describes the element preview. Component-only change, same props. |
-| P3 | `ActionTile` "Learn More →" is a `span` with `onClick` | Pages importing `ActionTile` | n/a (not in capture set) | Same pattern; convert to a link. |
+| P1 | Non-semantic control and placeholder alt text: `ElementTile` navigates from a `div` `onClick` (not focusable, not announced as a link) and every tile image has `alt="placeholder"` | embeddable-uis/overview | `embeddable-uis-overview-1440-dark-mid.png` | Render the tile as a real link; image alt describes the element preview. Once they are real links, the build's link check shows two tiles pointing at legacy `/features/permit-elements/...` paths that only resolve through client redirects; point those two props at the canonical pages. |
+| P3 | `ActionTile` "Learn More →" is a `span` with `onClick`, on fixed slate greys | Imported by seven Elements and API pages, rendered by none today | n/a | Convert to a link on theme tokens. |
+| P2 | `ActionContainer` calls to action are `span`s with `onClick` and its images have `alt="placeholder-image"`; three of its four targets are anchors that no longer exist (`#customising-your-element`, `#configure-your-webhook` on the User Management page) | embeddable-uis/overview "Configure and Customize" | `embeddable-uis-overview-1440-light-mid.png` | Needs the right destination for each card first (a content decision): converting to links today would fail the anchor check. Left for the content PR. |
 
 Page copy (headings ending in colons, em-dashes, "powerful" and similar) is left to the parallel content review PR, per the scope of this one.
 
