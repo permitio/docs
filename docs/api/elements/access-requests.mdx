@@ -1,25 +1,25 @@
 ---
 sidebar_position: 9
 title: Access Request API
-description: "Use the Access Request API with Permit Elements: initialize Permit, add a server-side login route, and create requests."
+description: "Create, list, review, approve, deny, and cancel access requests through the Permit Elements API as a user signed in to an element."
 ---
-import HelpSupportTile from "@site/src/components/elements/HelpSupportTile.js";
-import ActionContainer from "@site/src/components/elements/ActionContainer.js";
-import ActionTile from "@site/src/components/elements/ActionTile.js";
 import CodeDropdown from "@site/src/components/elements/CodeDropdown.js";
-import FlexWrapper from "@site/src/components/elements/FlexWrapper.js";
 import code from "@site/src/components/elements/codeBlock.json";
 
-# Access Request API for Embeddable Elements
+Manage access requests through the Permit Elements API from your own interface. This page is for developers who build a custom access request flow on top of Permit Elements, the embeddable UI components. A user asks for a role on a tenant, resource, or resource instance, and a reviewer approves or denies the request.
 
-The Access Request API allows to create access requests for specific roles or resource instances. It also assigns relevant moderators to approve or deny user requests based on your decision.
-This document will guide you in using access requests for Embeddable Elements. If you're looking for the Access Request API for backend-only use, you can find it [here](/api/elements/access-request-api).
+The requests on this page run as a user signed in to an element, with the session that your server-side login route creates. To call the same operations from a backend with your API key and no element user session, see [Access Request API with an API key](/api/elements/access-request-api).
 
-:::note
-You can also find information about the Access Requests API in the [Permit Redoc](https://api.permit.io/v2/redoc#tag/Access-Requests-(EAP)/operation/list_access_requests_v2_elements__proj_id___env_id__config__elements_config_id__access_requests_get).
-:::
+## Prerequisites
 
-### Initializing Permit
+- An environment API key, used to initialize the Permit SDK in your backend. See [Get your API key](/overview/get-api-key).
+- The ID or key of your project and environment. See [Get the project and environment IDs](/api/examples/get-project-and-env).
+- The ID of the element configuration, used as `elements_config_id`. See [List the elements in an environment](/api/elements/overview).
+- Users synced to Permit and assigned to the tenant they request access in.
+
+## Sign in the element user
+
+### Initialize the Permit SDK \{#initializing-permit}
 
 <CodeDropdown
 	number="1"
@@ -31,34 +31,28 @@ You can also find information about the Access Requests API in the [Permit Redoc
 	open
 >
 	{/* If you already use Permit, skip this step. */}
-	To use Permit Elements, you need to be a **user of Permit**. When starting to use Permit, you will need to
-	initialize an instance of Permit in your backend logic. This **only needs to be done once**, both to use Permit and Elements.
-	Remember to copy your `SDK Secret Key` and pass it into the initialized Permit object.
+	Initialize one instance of the Permit SDK in your backend. The same instance serves your permission checks and
+	Permit Elements. Pass your environment API key to the Permit constructor.
 
 </CodeDropdown>
 
-### Server-side Login Route
+### Add a server-side login route \{#server-side-login-route}
 
-To allow your client to `loginAs` themselves and get access to the Permit Element you will need to create a route in your backend server.
+Create a route in your backend that signs the current user in to the element with `loginAs`. Match the route to the authentication method your application uses, such as a bearer token or cookies.
 
-The backend `loginAs` route is matched based on the Authentication methods you have implemented inside your App.
-Most applications authenticate using a **Bearer Token** or **Cookies**, but you can also use any other **HTTP Security Header**.
-Make sure you use the right code example below depending on your authentication method.
-
-The `loginAs` function takes two parameters - a unique `userId` you get from your **JWT** (JSON Web Token), and a `tenant_key` or `tenantId`.
+The `loginAs` method takes the unique ID of the user, usually read from the user's JSON Web Token (JWT), and the key or ID of the tenant:
 
 ```js
 permit.elements.loginAs({ userId, tenant });
 ```
 
-:::info IMPORTANT
-The **user must belong to the tenant** that they will be logged into. If not, you will see a login error saying `USER_NOT_FOUND`.
+:::info The user must belong to the tenant
+If the user is not a member of the tenant passed to `loginAs`, the login fails with the error `USER_NOT_FOUND`.
 
-If the user gets logged out, they also exit the current tenant specified in the `loginAs` method. If you want to **change tenants** for
-a user, you need to **log them out**, and **log them back in** to a different tenant.
+The session applies to one tenant. To switch a user to a different tenant, sign the user out and call `loginAs` again with the other tenant.
 :::
 
-Passing in the tenant is **compulsory** when logging in a user **server-side**.
+Passing the tenant is required for a server-side login.
 
 <CodeDropdown
 	title="Using Cookies"
@@ -72,21 +66,39 @@ Passing in the tenant is **compulsory** when logging in a user **server-side**.
 	language={["javascript", "python", "csharp", "java"]}
 	languages={["Node", "Python", "Dotnet", "Java"]}
 >
-    To get the cookie, in the `redirect_url` (that you will get
-    from the `ticket` object) you will have `get_cookie`.
+    The `loginAs` call returns a ticket. The ticket's `redirect_url` is a `get_cookie` URL.
+    The example route redirects the browser to that URL to get the session cookie.
 </CodeDropdown>
 
+## Access request endpoints \{#api-requests}
 
-## API requests
+All paths start with `https://api.permit.io/v2/elements/{proj_id}/{env_id}/config/{elements_config_id}`. Replace `<COOKIE FROM LOGIN>` in the examples with the session cookie from the login route.
 
-To use the Access Requests API, follow these steps:
+| Method | Path suffix | Operation | Who calls it |
+|---|---|---|---|
+| `POST` | `/access_requests` | [Create an access request](#creating-an-access-request) | Requesting user |
+| `GET` | `/access_requests/{access_request_id}` | [Get an access request](#1-get-an-access-request) | Reviewer |
+| `GET` | `/access_requests` | [List access requests](#2-get-all-the-access-requests) | Reviewer, or a user for their own requests |
+| `PATCH` | `/access_requests/{access_request_id}/reviewer` | [Update the reviewer comment or role](#3-updating-reviewer-details-in-the-access-request) | Reviewer |
+| `PUT` | `/access_requests/{access_request_id}/approve` | [Approve an access request](#4-approve-access-request) | Reviewer |
+| `PUT` | `/access_requests/{access_request_id}/deny` | [Deny an access request](#5-deny-access-request) | Reviewer |
+| `PUT` | `/access_requests/{access_request_id}/cancel` | [Cancel an access request](#1-cancel-access-request) | Requesting user |
 
-[Get your `API_SECRET_KEY`](/api/api-with-cli/#get-your-api-key) from the dashboard and [get the current `project_id` and `env_id`](/api/examples/get-project-and-env)<br/>.
-Replace `API_SECRET_KEY` with the key from the Permit dashboard, as well as the `project_id` and `env_id` you got from the API in the following commands.
+Reviewers are users with the permission level that the element allows to manage requests, such as an admin. See [Permission levels](/embeddable-uis/permission-levels).
 
-### Creating an Access Request
+An access request has one of these `status` values: `pending`, `approved`, `denied`, or `canceled`.
 
-To create a new access request, make a POST request to the following with the required data.
+## Create an access request \{#creating-an-access-request}
+
+Send a `POST` request to `/access_requests` with the details of the requested access.
+
+| Field | Required | Description |
+|---|---|---|
+| `access_request_details.tenant` | Yes | ID or key of the tenant the user requests access in |
+| `access_request_details.role` | Yes | ID or key of the requested role |
+| `access_request_details.resource` | No | ID or key of the resource the role applies to |
+| `access_request_details.resource_instance` | No | ID or key of the resource instance the role applies to |
+| `reason` | No | Business justification from the requesting user |
 
 ```bash
 curl 'https://api.permit.io/v2/elements/{proj_id}/{env_id}/config/{elements_config_id}/access_requests' \
@@ -104,7 +116,7 @@ curl 'https://api.permit.io/v2/elements/{proj_id}/{env_id}/config/{elements_conf
  } \
 ```
 
-The return access request object will look like this:
+The API returns the created access request:
 ```json
 {
     "requesting_user_id": "1c1e4ada-f282-40e6-b3b7-20b3a51c93b5",
@@ -127,21 +139,23 @@ The return access request object will look like this:
 }
 ```
 
-:::info Info
-The user who creates the access request must be in the tenant that the access request is for.
+The response includes the request's `id`, which you pass as `{access_request_id}` in the other calls.
+
+:::info Tenant membership
+The user who creates the access request must be a member of the tenant that the request is for.
 :::
 
-## Reviewer actions:
+## Reviewer actions \{#reviewer-actions}
 
-### 1. Get an Access Request
+### Get an access request \{#1-get-an-access-request}
 
-To get a specific access request, make a GET request to the following.
+Send a `GET` request to `/access_requests/{access_request_id}`.
 ```bash
 curl 'https://api.permit.io/v2/elements/{proj_id}/{env_id}/config/{elements_config_id}/access_requests/{access_request_id}' \
     -H 'cookie: <COOKIE FROM LOGIN>' \
   -H 'origin: https://api.permit.io'
 ```
-The return access request object will look like this:
+The API returns the access request:
 ```json
 {
     "requesting_user_id": "1c1e4ada-f282-40e6-b3b7-20b3a51c93b5",
@@ -163,16 +177,20 @@ The return access request object will look like this:
     "reviewer_comment": "new employee",
 }
 ```
-### 2. Get all the Access Requests
 
-You can filter access requests by passing the following headers:
-- `status` - Status of the access request
-- `tenant` - Tenant key of the access request
-- `role` - Role key of the access request
-- `resource` - Resource key of the access request
-- `resource_instance` - Resource instance key of the access request
+### List access requests \{#2-get-all-the-access-requests}
 
-To get a list of access requests, make the following GET request:
+Send a `GET` request to `/access_requests`. Filter and paginate the list with these query parameters:
+
+| Query parameter | Description |
+|---|---|
+| `status` | Only requests with this status: `pending`, `approved`, `denied`, or `canceled` |
+| `tenant` | Only requests in this tenant |
+| `role` | Only requests for this role |
+| `resource` | Only requests for this resource |
+| `resource_instance_id` | For ReBAC elements, only requests for this resource instance ID or key |
+| `page` | Page number, starting at 1. Default `1`. |
+| `per_page` | Results per page, maximum 100. Default `30`. |
 
 ```bash
 curl 'https://api.permit.io/v2/elements/{proj_id}/{env_id}/config/{elements_config_id}/access_requests' \
@@ -187,7 +205,7 @@ curl 'https://api.permit.io/v2/elements/{proj_id}/{env_id}/config/{elements_conf
   -H 'per_page: The number of results per page (max 100)' #Default: 30
 ```
 
-The return access request object will look like this:
+The API returns a page of access requests:
 ```json
 {
     "data": [
@@ -215,14 +233,18 @@ The return access request object will look like this:
     "page_count": 1
 }
 ```
-:::info Info
-Users who are not designated as reviewers will only have visibility into their own access requests.
+:::info Visibility for non-reviewers
+Users who are not reviewers see only their own access requests in the list.
 :::
 
+### Update the reviewer comment or role \{#3-updating-reviewer-details-in-the-access-request}
 
-### 3. Updating Reviewer details in the Access Request
+Send a `PATCH` request to `/access_requests/{access_request_id}/reviewer`. Both body fields are optional:
 
-To update an access request, make the following PATCH request (data is optional):
+| Field | Description |
+|---|---|
+| `reviewer_comment` | Comment from the reviewer |
+| `role` | ID or key of the role for the access request |
 
 ```bash
 curl 'https://api.permit.io/v2/elements/{proj_id}/{env_id}/config/{elements_config_id}/access_requests/{access_request_id}/reviewer' \
@@ -234,7 +256,7 @@ curl 'https://api.permit.io/v2/elements/{proj_id}/{env_id}/config/{elements_conf
  } \
 ```
 
-The return access request object will look like this:
+The API returns the updated access request:
 ```json
 {
     "requesting_user_id": "1c1e4ada-f282-40e6-b3b7-20b3a51c93b5",
@@ -257,10 +279,9 @@ The return access request object will look like this:
 }
 ```
 
+### Approve an access request \{#4-approve-access-request}
 
-### 4. Approve Access Request
-
-To approve an access request, make the following PUT request (data is optional):
+Send a `PUT` request to `/access_requests/{access_request_id}/approve`. The body is optional and accepts `reviewer_comment` and `role`.
 
 ```bash
 curl 'https://api.permit.io/v2/elements/{proj_id}/{env_id}/config/{elements_config_id}/access_requests/{access_request_id}/approve' \
@@ -272,7 +293,7 @@ curl 'https://api.permit.io/v2/elements/{proj_id}/{env_id}/config/{elements_conf
  }\
 ```
 
-The return user object will look like this:
+The API returns the approved access request with `status` set to `approved`:
 ```json
 {
     "requesting_user_id": "1c1e4ada-f282-40e6-b3b7-20b3a51c93b5",
@@ -295,9 +316,9 @@ The return user object will look like this:
 }
 ```
 
-### 5. Deny Access Request
+### Deny an access request \{#5-deny-access-request}
 
-To deny an access request, make the following PUT request (data is optional):
+Send a `PUT` request to `/access_requests/{access_request_id}/deny`. The body is optional and accepts `reviewer_comment`.
 
 ```bash
 curl 'https://api.permit.io/v2/elements/{proj_id}/{env_id}/config/{elements_config_id}/access_requests/{access_request_id}/deny' \
@@ -309,7 +330,7 @@ curl 'https://api.permit.io/v2/elements/{proj_id}/{env_id}/config/{elements_conf
  }\
 ```
 
-The return access request object will look like this:
+The API returns the denied access request:
 ```json
 {
     "requesting_user_id": "1c1e4ada-f282-40e6-b3b7-20b3a51c93b5",
@@ -332,11 +353,11 @@ The return access request object will look like this:
 }
 ```
 
-## Users actions:
+## Requesting user actions \{#users-actions}
 
-### 1. Cancel Access Request
+### Cancel an access request \{#1-cancel-access-request}
 
-To cancel an access request, make the following PUT request:
+Send a `PUT` request to `/access_requests/{access_request_id}/cancel`. The request has no body.
 
 ```bash
 curl 'https://api.permit.io/v2/elements/{proj_id}/{env_id}/config/{elements_config_id}/access_requests/{access_request_id}/cancel' \
@@ -347,7 +368,7 @@ curl 'https://api.permit.io/v2/elements/{proj_id}/{env_id}/config/{elements_conf
     "reason": "done onboarding last week",
 } \
 ```
-The return access request object will look like this:
+The API returns the canceled access request:
 ```json
 {
     "requesting_user_id": "1c1e4ada-f282-40e6-b3b7-20b3a51c93b5",
@@ -370,3 +391,8 @@ The return access request object will look like this:
 }
 ```
 
+## Related pages
+
+- [Access Request element](/embeddable-uis/element/access-request)
+- [Access Request API with an API key](/api/elements/access-request-api)
+- [Access Requests API reference](https://api.permit.io/v2/redoc#tag/Access-Requests-(EAP)/operation/list_access_requests_v2_elements__proj_id___env_id__config__elements_config_id__access_requests_get)

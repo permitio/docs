@@ -1,33 +1,36 @@
 ---
 sidebar_position: 3
-title: Building Conditions
-description: "Build ABAC condition groups with the allOf, anyOf, and not logical operators, made of attributes and comparison operators."
+title: Build ABAC conditions
+sidebar_label: Building Conditions
+description: "Structure the conditions object of an ABAC condition set with the allOf, anyOf, and not logical operators and comparison operators."
 ---
 
-Conditions for an ABAC Policy can be very complex. We can have **many conditions in one group**, and several groups
-working together to produce a rule. For both user sets and resource sets, conditions within a group are made
-up of **attributes**, **attribute types** and **comparison operators**. Multiples of these can be joined together by logical operators
-within each group. Groups can also be combined together with logical operators.
+Write the `conditions` object that defines which users or resources belong to an attribute-based access control (ABAC) condition set. This page is for developers who create condition sets through the Permit API. It shows the shape of a condition, how logical operators nest, and valid and invalid examples. For the full operator list, see [ABAC condition operators](/api/working-with-abac/operators).
 
-## Condition Outline
+## Structure of a condition \{#condition-outline}
 
-Writing the API call payload, we start a condition definition by creating a key called **conditions** with an object as it's value.
+A condition set's request body holds its conditions under the `conditions` key, and the value is an object:
 
 ```js
 "conditions": {}
 ```
 
-## Working with Logical Operators
+A condition is built from three parts:
 
-Any of the logical operators below can be defined within the conditions object, where each of these take an array as a value.
-Within the array we define sub-conditions that are made up of **attributes**, **attribute types** and **comparison operators**.
+- An **attribute reference** in the form `<object>.<attribute>`, for example `user.location` or `resource.type`.
+- A **comparison operator** and its operand, for example `{"in": ["US", "Canada"]}`.
+- Optional **logical operators** (`allOf`, `anyOf`, `not`) that combine several conditions.
 
-### allOf
+## Combine conditions with logical operators \{#working-with-logical-operators}
 
-The **allOf** operator only returns **true** if **condition A _AND_ B are true**.
+Place a logical operator inside the `conditions` object. The `allOf` and `anyOf` operators take an array of sub-conditions. Each sub-condition is an attribute with a comparison operator, or another logical operator.
 
-:::info example
-Only employees that are **located in the US** _**AND**_ have a **role of editor** can have access to resource X.
+### allOf: every condition must be true \{#allof}
+
+The `allOf` operator returns `true` only when condition A **and** condition B are true.
+
+:::info allOf example
+Grant access to resource X only to employees who are **located in the US** **and** have the **editor** role.
 :::
 
 ```javascript
@@ -38,12 +41,12 @@ Only employees that are **located in the US** _**AND**_ have a **role of editor*
 }
 ```
 
-### anyOf
+### anyOf: at least one condition must be true \{#anyof}
 
-The **anyOf** operator only returns **true** if **condition A _OR_ condition B** is true.
+The `anyOf` operator returns `true` when condition A **or** condition B is true.
 
-:::info example
-Only students with a **maths score higher than 80%** _**OR**_ students with an **average of 60% from all subjects** can participate.
+:::info anyOf example
+Allow a student to participate when the student has a **math score higher than 80%** **or** an **average of 60% across all subjects**.
 :::
 
 ```javascript
@@ -54,20 +57,15 @@ Only students with a **maths score higher than 80%** _**OR**_ students with an *
 }
 ```
 
-### not
+### not: invert a condition \{#not}
 
-The **not** operator returns the inverted result. If **condition A** is **false**, it will return true.
+The `not` operator inverts the result of the condition nested inside it. When the nested condition is `false`, `not` returns `true`.
 
-:::info example
-If we go ahead and make a statement that says:
-
-**"A user with the Editor role can only request changed to the document."**
-
-will be reflected as:
-
-**"An Editor can request changes to the document and any other available resources."**
-
+:::info not example
+A user set of users who are **not** located in the US wraps the condition "`user.location` is in `["US"]`" in `not`.
 :::
+
+The value of `not` is a single nested condition or logical operator object. It doesn't accept a primitive value such as a string or a number.
 
 ```javascript
 "conditions": {
@@ -77,19 +75,19 @@ will be reflected as:
 }
 ```
 
-:::tip
-It is **important to note** that when writing your conditions, you can **either** use the **alias versions** of the
-logical operators **(allOf, anyOf)**, or the **normal verbose** version **(and, or)**.
+:::tip Alternative operator keys
+You can write the AND and OR operators as `allOf` and `anyOf`, or as `and` and `or`. Both forms produce the same condition.
 :::
 
-## Working with Comparison Operators
+## Valid and invalid condition examples \{#working-with-comparison-operators}
 
-There are many ways to go about defining conditions within groups. Let's look at some examples, ones that are valid, and
-others that are not. This will give you a good understanding of how conditions can be built and how complex they might get.
+You can nest operators in two ways: start with a logical operator and put attributes inside it (logical-first), or start with an attribute and put logical operators inside its comparison (attribute-first). The examples below show both forms, with the reason each invalid example fails.
 
-### Logical-First Conditions
+### Logical-first conditions
 
-#### VALID
+#### Valid: nested allOf and anyOf \{#valid}
+
+The following condition is true for paying users who have the `editor` role or belong to the `marketing` department, in the US or Canada:
 
 ```js
 {
@@ -106,9 +104,9 @@ others that are not. This will give you a good understanding of how conditions c
 }
 ```
 
-#### INVALID
+#### Invalid: unknown logical operator names \{#invalid}
 
-This version is invalid because the logical operator is invalid.
+The following condition is invalid because `all_of` and `any_of` are not logical operators. Use `allOf` and `anyOf` (or `and` and `or`).
 
 ```js
 {
@@ -125,7 +123,9 @@ This version is invalid because the logical operator is invalid.
 }
 ```
 
-#### VALID
+#### Valid: logical operators inside an attribute \{#valid-1}
+
+The following condition is true between 9 and 12 or between 13 and 18, on any day except Saturday and Sunday:
 
 ```js
 {
@@ -144,10 +144,9 @@ This version is invalid because the logical operator is invalid.
 }
 ```
 
-#### INVALID
+#### Valid: two conditions on the same attribute \{#invalid-1}
 
-This example is invalid because we specify the **user.age** to be between 15 and 18, but then set
-another condition to test for the age being greater than 48. This will throw an **Unbound Error**.
+The following condition is true when `user.age` is between 15 and 18, or greater than 40. Each item of the `or` array is a separate attribute condition:
 
 ```js
 {
@@ -158,17 +157,17 @@ another condition to test for the age being greater than 48. This will throw an 
 }
 ```
 
-### Attribute-First Conditions
+### Attribute-first conditions
 
-#### VALID
+#### Valid: and inside an attribute \{#valid-2}
 
 ```js
 {"subject.time": {"and": [{"between": [9, 12]}, {"equals": "13:00"}]}}
 ```
 
-#### INVALID
+#### Invalid: unsupported comparison operator \{#invalid-2}
 
-This example is invalid because the conditional operator is invalid.
+The following condition is invalid because `greater-than-unsupported` is not a comparison operator. The API rejects a condition set whose operator key is not in the [comparison operator list](/api/working-with-abac/operators#comparison-operators).
 
 ```js
 {
@@ -181,7 +180,9 @@ This example is invalid because the conditional operator is invalid.
 }
 ```
 
-#### VALID
+#### Valid: or inside an attribute \{#valid-3}
+
+The following condition is the attribute-first form of the same-attribute example: `user.age` is between 15 and 18, or greater than 40.
 
 ```js
 {
@@ -193,3 +194,8 @@ This example is invalid because the conditional operator is invalid.
     }
 }
 ```
+
+## Next steps
+
+- [Create condition sets](/api/working-with-abac/condition-sets) with these conditions.
+- [Review the full operator reference](/api/working-with-abac/operators).
