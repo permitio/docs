@@ -493,4 +493,30 @@ module.exports = [
     ],
     to: "/permit-mcp-gateway/guide/"
   },
+  {
+    // New Edge PDP was renamed to Nexus PDP. www.permit.io/nexus-pdp links
+    // to these old paths, so keep them resolving.
+    from: "/concepts/pdp/new-edge-pdp",
+    to: "/concepts/pdp/nexus-pdp",
+  },
+  {
+    from: "/concepts/pdp/new-edge-pdp-architecture",
+    to: "/concepts/pdp/nexus-pdp-architecture",
+  },
+  {
+    from: "/concepts/pdp/new-edge-pdp-how-it-works",
+    to: "/concepts/pdp/nexus-pdp-how-it-works",
+  },
+  {
+    from: "/concepts/pdp/new-edge-pdp-feature-parity",
+    to: "/concepts/pdp/nexus-pdp-feature-parity",
+  },
+  {
+    from: "/concepts/pdp/new-edge-pdp-deployment",
+    to: "/concepts/pdp/nexus-pdp-deployment",
+  },
+  {
+    from: "/concepts/pdp/new-edge-pdp-configuration",
+    to: "/concepts/pdp/nexus-pdp-configuration",
+  },
 ];

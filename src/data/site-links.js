@@ -16,6 +16,7 @@ module.exports = {
   TRUST: `${WWW}/trust`,
   BLOG: `${WWW}/blog`,
   VIDEOS: `${WWW}/videos`,
+  NEXUS_PDP: `${WWW}/nexus-pdp`,
   PRIVACY: `${WWW}/legal/privacy-policy`,
   TERMS: `${WWW}/legal/terms-and-conditions`,
   COMMUNITY: "https://io.permit.io/slack",
