@@ -20,7 +20,7 @@ Audit of docs.permit.io against [Impeccable](https://impeccable.style/) (Paul Ba
 
 **Implementation integrity verdict: pass.** The makeover already expresses one system: tokens mirrored from www.permit.io with measured contrast for every pair, one partial per surface on stable selectors, a fixed role for each typeface, and coded diagrams instead of images. The findings are local drift and a few reflexive patterns, not a missing system.
 
-**Issues by severity:** P0 0, P1 4, P2 8, P3 7.
+**Issues by severity:** P0 0, P1 4, P2 9, P3 6.
 
 ## Findings by command
 
@@ -30,7 +30,7 @@ Audit of docs.permit.io against [Impeccable](https://impeccable.style/) (Paul Ba
 |-----|--------------|-------|------------|------------------|
 | P2 | `all-caps-body` / `wide-tracking`: custom admonition titles set as uppercase Rajdhani labels | Any admonition with a title: quickstart ("A video walkthrough"), modeling/google-drive, pdp/overview ("Cloud PDP – when not to use it"), embeddable-uis/overview, permit-mcp-gateway/architecture | `quickstart-1440-light.png`, `embeddable-uis-overview-390-light-mid.png` | Probe found 4+ word uppercase runs on 8 of 19 pages. Keep the Rajdhani label for the default type name ("Note", "Tip"); set a custom title in Manrope 600 sentence case (Admonition Layout swizzle decides; no MDX change). |
 | P3 | `tiny-text` (< 12px) | Home SDK tiles registry label (11px), `NextStepCallout` label (11px) | `home-1440-light-mid.png`, `permit-mcp-gateway-1440-light.png` | Raise both to the 0.75rem label floor. |
-| P3 | `line-length`: body measure 77 characters at 16px (Impeccable range 45-75) | Every doc page with 16px prose | `rbac-overview-1440-light.png` | `--pm-measure: 72ch` is measured in Manrope zeros, which are wider than an average character. Cap prose at 68ch (~73 characters); code, tables and figures keep the full column. |
+| P2 | `line-length`: running text sets about 89 characters per line at 16px (Impeccable range 45-75; the detector fires above 80). `--pm-measure: 72ch` never applied: `.markdown > * { max-width: 100% }` in `_markdown.scss` wins at equal specificity, and 72ch of Manrope zeros is wider than the column anyway | Every doc page with 16px prose | `rbac-overview-1440-light.png` | Apply the cap after the 100% rule and set it in rem: 34rem holds running text near 75 characters. Code, tables and figures keep the full column. |
 | P3 | `heading-rhythm`: an h3 directly after an h2 sits as close to the h2 as to its own paragraph (16px above, 15px below) | api/rebac/rebac-api-calls, permit-mcp-gateway/architecture, modeling/google-drive, nodejs quickstart | `admonitions-tables-mcp-arch-1440-light-mid.png` | Give stacked headings 1.25rem between them and tighten the space under h2/h3 so each binds to what it introduces. |
 
 ### layout
