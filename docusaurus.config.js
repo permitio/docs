@@ -31,6 +31,10 @@ const config = {
     "Permit is a Fullstack Authorization as a Service, allowing you to configure policies with a no-code UI and bake in enforcement points into your application, never having to write permissions again.",
   url: "https://docs.permit.io",
   baseUrl: "/",
+  // Netlify serves every page at its trailing-slash URL and 301s the bare path
+  // to it. Declaring that here keeps canonical, og:url, hreflang and the sitemap
+  // on the URL that answers 200, instead of on one that redirects.
+  trailingSlash: true,
   onBrokenLinks: "throw",
   favicon: "logo/favicon.ico",
   organizationName: "permitio", // Usually your GitHub org/user name.
