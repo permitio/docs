@@ -1,21 +1,20 @@
-## Add the SDK to your Golang code
+### Install and initialize the Go SDK
 
-Initialise the **Golang SDK** and check for permissions.
+Install the `permit-golang` module, import the `permit` and `config` packages, and create a Permit client that connects to your PDP.
 
-1. Install the Permit.io SDK for Golang
+1. Install the Permit.io Go SDK:
 
 ```bash
 go get github.com/permitio/permit-golang
 ```
 
-2. Import the SDK into your code
+2. Import the `permit` package:
 
 ```go
 import "github.com/permitio/permit-golang/pkg/permit"
 ```
 
-3. Create a new instance of the SDK. <br/>
-   You can find instructions on getting a secret API key in the previous section.
+3. Create a Permit client from a config that `config.NewConfigBuilder()` builds. Replace `<YOUR_API_TOKEN>` with your environment API key, and set the PDP URL with `WithPdpUrl()`.
 
 ```go
 package main
@@ -24,20 +23,25 @@ import "github.com/permitio/permit-golang/pkg/permit"
 import "github.com/permitio/permit-golang/pkg/config"
 
 func main() {
-	PermitConfig := config.NewConfigBuilder("<YOUR_API_TOKEN>").Build()
-	Permit := permit.New(PermitConfig)
+	permitConfig := config.NewConfigBuilder("<YOUR_API_TOKEN>").
+		WithPdpUrl("http://localhost:7766").
+		Build()
+	permitClient := permit.NewPermit(permitConfig)
+	_ = permitClient
 }
 ```
 
-## Check for permissions using the SDK
+### Check permissions with the Go SDK
 
-You can run a permission check with `permit.check()`. You need to pass 3 arguments to the function:
+Call `Check()` on the Permit client with three arguments. `Check()` returns `true` when the policy allows the action, `false` otherwise, and an error if the check fails.
 
-- `User`: a unique user that identifies the user doing the action - this can be created using `models.NewUserCreate("user_key")`
-- `action`: the action performed, as string.
-- `resource`: the resource the action is performed on - this can be created using `models.NewResourceCreate("resource_key")`
+| Argument | Description |
+|---|---|
+| `user` | An `enforcement.User`. Build one with `enforcement.UserBuilder("<user key>").Build()`. The user key is typically the user ID from your authentication provider. |
+| `action` | The action key, for example `"create"`. |
+| `resource` | An `enforcement.Resource`. Build one with `enforcement.ResourceBuilder("<resource key>").Build()`. |
 
-In the following example we are checking that a user with the unique id `john@permit.io` can `create` a `document` resource.
+This example checks whether a user can `create` a `document`:
 
 ```go
 package main
@@ -48,7 +52,7 @@ import "github.com/permitio/permit-golang/pkg/enforcement"
 
 func main() {
 	PermitConfig := config.NewConfigBuilder("<YOUR_API_TOKEN>").Build()
-	Permit := permit.New(PermitConfig)
+	Permit := permit.NewPermit(PermitConfig)
 
 	user := enforcement.UserBuilder("john@doe.com").Build()
 	resource := enforcement.ResourceBuilder("document").Build()
@@ -64,58 +68,45 @@ func main() {
 }
 ```
 
-:::info
-Usually instead of an email you'd use the unique identifier provided by your chosen authentication solution.
-You can also pass the entire decoded JWT, to include attributes about the user.
-:::
+`permitted` is `true` if `john@doe.com` exists in your environment and has a role that grants `create` on `document`. To add users and assign roles, see [Sync users](/how-to/sync-users).
 
-:::tip REMEMBER
+#### Check a permission in a specific tenant
 
-In cases where you are dealing with more than one tenant in your application, `Permit.Check()` can pass the **tenant** as part of the **resource**.
-
-The tenant passed in needs to be either the **tenant id** or the **tenant key**.
-
-You can use the **[list_tenants API](https://api.permit.io/v2/redoc#tag/Tenants/operation/list_tenants)** to **get the ids and keys set for your tenants**.
-
-`tenant`: a unique tenant id or tenant key that you have defined within Permit.
-
-:::
+In a multi-tenant application, set the tenant key on the resource with `WithTenant()`. To look up the keys of your tenants, call the [list tenants API](https://api.permit.io/v2/redoc#tag/Tenants/operation/list_tenants).
 
 ```go
-	resource := enforcement.ResourceBuilder("document").WithTenant("tenant").Build()
-    const permitted = await permit.check(user, "create", resource);
+resource := enforcement.ResourceBuilder("document").WithTenant("tenant").Build()
+permitted, err := permitClient.Check(user, "create", resource)
 ```
 
-## Check permissions against ABAC policies
+:::note Where checks run and where user data is stored
+`Check()` sends each check to the PDP URL you configure. A container PDP evaluates checks on your machine, using policy and data that the PDP loads from Permit. Users, roles, and attributes that you create in the dashboard or sync through the Permit API are stored in the Permit control plane.
+:::
 
-Above we have checked for permissions against an RBAC policy - but what if we have an **ABAC policy** we want to run a permission check for?
-An ABAC policy is made up of **User Sets** and **Resource Sets**, which you can read more about [here](/how-to/build-policies/abac/components#subject--subject-attributes).
+### Check ABAC permissions with the Go SDK
 
-With ABAC we define conditions based on **pre-configured attributes**.
+An attribute-based access control (ABAC) policy grants permissions based on user and resource attributes, grouped into user sets and resource sets. See [ABAC policy components](/how-to/build-policies/abac/components). ABAC checks need a container PDP.
 
-If we are running a `permit.check()` for an ABAC policy, we replace the `userId` and the `resource` with objects, containing attributes.
+To check an ABAC policy, set just-in-time attributes on the user or the resource with `WithAttributes()`. In this example, replace `userKey` and `resourceKey` with a user key and a resource key from your environment:
 
 ```go
 userCheck := enforcement.UserBuilder("userKey").Build()
-attributes := map[string]string{
+attributes := map[string]interface{}{
 	"hasApproval": "true",
 }
 resourceCheck := enforcement.ResourceBuilder("resourceKey").WithTenant("default").WithAttributes(attributes).Build()
 allowed, _ := permitClient.Check(userCheck, "create", resourceCheck)
 ```
 
-:::note REMEMBER
+For more check options, see [Check permissions with permit.check()](/how-to/enforce-permissions/check).
 
-Permission checks are being run against the PDP container that's running locally on your machine - offering
-minimal latency and without leaving your network.
+### Run a full Go example app
 
-This means that your user data **never** goes outside your system, **keeping security high**.
+This single-file Go app runs a permission check on each request to `http://localhost:4000`. The app logs with `go.uber.org/zap`.
 
-:::
-
-## Full app example
-
-Assuming a Node.js app made up of a single file, with the `permitio` and `express` modules installed.
+1. In a Go module, add the dependencies with `go get github.com/permitio/permit-golang go.uber.org/zap`.
+2. Save the following code as `main.go`.
+3. Replace `<YOUR_API_KEY>` with your environment API key, and `user_id` with the key of a user in your environment.
 
 ```go
 package main
@@ -135,8 +126,7 @@ const (
 )
 
 func main() {
-	// This line initializes the SDK and connects your Go app
-	// to the Permit.io PDP container (you've set in the previous step), with the API key provided.
+	// Connect the SDK to the PDP that evaluates permission checks.
 	permitClient := permit.NewPermit(
 		// Building new config for Permit client
 		config.NewConfigBuilder(
@@ -151,22 +141,18 @@ func main() {
 	// You can open http://localhost:4000 to invoke this http
 	// endpoint, and see the outcome of the permission check.
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// This user was defined by you in the previous step and
-		// is already assigned with a role in the permission system.
+		// The user must exist in your environment and have a role that grants the action.
+		// Create users with permitClient.SyncUser(ctx, models.UserCreate{Key: "user_id"}).
+		// A user key can be any string (an email, a database id) that is unique for each user.
 		user := enforcement.UserBuilder("user_id").
 			WithFirstName("john").
 			WithLastName("doe").
-			WithEmail("jown@doe.com").
+			WithEmail("john@doe.com").
 			Build()
 
-		// This resource was defined by you in the previous step
-		// and is already has actions assigned in the permission system.
+		// The document resource and its read action must exist in your policy.
 		resource := enforcement.ResourceBuilder("document").Build()
 
-		// After we created this user in the previous step, we also synced the user's identifier
-		// to permit.io servers with permitClient.syncUser(user)).
-		// The user identifier can be anything (email, db id, etc) but must be unique for each user.
-		// Now that the user is synced, we can use its identifier to check permissions with `permit.check()`.
 		permitted, err := permitClient.Check(user, "read", resource)
 		if err != nil {
 			fmt.Println(err)
@@ -185,6 +171,11 @@ func main() {
 }
 ```
 
-## Full app example (includes ABAC RBAC and terraform )
+4. Run `go run main.go`. The terminal prints `Listening on http://localhost:4000`.
+5. Open `http://localhost:4000` in a browser.
 
-https://github.com/permitio/permit-go-example
+If the user's role grants `read` on `document`, the page returns HTTP `200` with `john doe is PERMITTED to read document!`. Otherwise, the page returns HTTP `403` with `john doe is NOT PERMITTED to read document!`.
+
+### Explore the Go example repository
+
+The [permit-go-example](https://github.com/permitio/permit-go-example) repository contains a Go app and a Terraform configuration that creates the app's policy in Permit.

@@ -1,31 +1,64 @@
 ---
-title: No matching user sets found for the given user and attributes
-description: "Fix the no matching user sets found error by sending correct user attributes or creating a matching user set."
+title: No matching user sets (no_matching_usersets)
+description: "Fix a no_matching_usersets decision, where the user's attributes don't meet the conditions of any ABAC user set."
 ---
 
-This error surfaced because the user you are attempting to verify does not have any associated User Sets. Essentially, the user attributes
-you're submitting either in the check or within the Permit database do not align with any User Sets established in the Permit web
-application.
+A denied decision with the code `no_matching_usersets` means the user's attributes don't meet the conditions of any user set in the environment. This page is for developers who find this code in a decision log and need to fix the user's attributes, the check, or the user set.
 
-You can view and manage the User Sets you have crafted in the [Policy Management Screen](https://app.permit.io/policy-editor),
-where you'll also have the option to modify a User Set and review its conditions.
+## What the no_matching_usersets reason means
 
-## A Solution to the issue
+The policy decision point (PDP) writes this code in the attribute-based access control (ABAC) part of the decision log's debug details (`debug.abac`). The debug details appear when [Debug Mode](/how-to/use-audit-logs/debug-mode) is on.
 
-To resolve this, you have two options: either send the correct user attributes or establish a User Set that aligns with the user
-attributes you are defining.
+| Field | Value |
+|---|---|
+| `code` | `no_matching_usersets` |
+| `reason` | `user '<user-key>' did not match any userset conditions. known usersets: <user-set-keys>` |
+| `support_link` | A link to `/errors/no_matching_usersets` on docs.permit.io |
 
-### Sending the correct user attributes
+A user set (also called a dynamic role) is a group of users whose attributes meet a set of conditions. The PDP checks user sets first in its ABAC evaluation. When no user set matches, the PDP stops and reports `no_matching_usersets` without checking resource sets or rules.
 
-Ensure that the necessary user attributes are stored in the Permit DB if you are utilizing it. You can verify this information through the
-[User Management Screen](https://app.permit.io/user-management) in the Permit web application or by utilizing the
-[Get User](https://api.permit.io/v2/redoc#tag/Users/operation/get_user) API Call.
+The decision log also has a `request.user` object with the user attributes the PDP evaluated. Compare those attributes with the conditions of the user sets listed in `known usersets`.
 
-If you're inputting the attributes via the `permit.check()`, double-check that you're sending the correct attributes.
+## Causes of no_matching_usersets
 
-### Creating a User Set that matches the user attributes
+| Cause | How to confirm | Fix |
+|---|---|---|
+| The check doesn't send the user attributes that the user set conditions test. | `request.user.attributes` in the decision log is missing the attribute. | [Send the attributes in the check](#sending-the-correct-user-attributes). |
+| The user in Permit doesn't have the attribute, or has a different value. | The user's attributes in the **Directory** screen or the [Get user](https://api.permit.io/v2/redoc#tag/Users/operation/get_user) API response differ from the condition. | [Update the user's attributes in Permit](#update-the-users-attributes-in-permit). |
+| The attribute value has a different type or case than the condition, for example the string `"true"` instead of the boolean `true`. | The value in `request.user.attributes` differs in type or case from the condition value. | Send the value with the type and case the condition uses. |
+| No user set has conditions that this user should meet. | `known usersets` doesn't list a user set for this user. | [Create or edit a user set](#creating-a-user-set-that-matches-the-user-attributes). |
 
-You can create a User Set that matches the user attributes using [Policy management screen](https://app.permit.io/policy-editor) in
-the Permit web application.
+## Fix no_matching_usersets \{#a-solution-to-the-issue}
 
-You can also create a User Set with the [Create User Set](https://api.permit.io/v2/redoc#tag/Condition-Sets/operation/create_condition_set) API call.
+### Send the user attributes in the check \{#sending-the-correct-user-attributes}
+
+Pass the attributes in the user object of `permit.check()`. For examples in each SDK, see [Check an ABAC permission with attributes](/how-to/enforce-permissions/check#attributes).
+
+### Update the user's attributes in Permit
+
+Store the attributes on the user so every check can use them:
+
+1. Check the attributes Permit stores for the user in the [Directory](https://app.permit.io/user-management) screen, or with the [Get user](https://api.permit.io/v2/redoc#tag/Users/operation/get_user) API.
+2. Sync the user again with the correct `attributes`, using an SDK or the API. See [Sync users](/how-to/sync-users#via-the-sdks).
+
+To define which user attributes exist, see [Defining attributes](/how-to/build-policies/abac/defining-attributes).
+
+### Create or edit a user set that matches the user \{#creating-a-user-set-that-matches-the-user-attributes}
+
+- In the dashboard: open the **Policy** screen, select the **ABAC Rules** tab, and create or edit a user set. For the steps, see [Define a dynamic role (user set)](/how-to/build-policies/abac/building-abac-policy#step-3-defining-dynamic-role-user-set).
+- With the API: call [Create condition set](https://api.permit.io/v2/redoc#tag/Condition-Sets/operation/create_condition_set) with `"type": "userset"`. For a complete request, see [Create condition sets with the API](/api/working-with-abac/condition-sets).
+
+A new user set grants nothing until a rule connects it to a resource set. After you create the user set, grant it the action in the **Policy Editor**.
+
+## Confirm the fix
+
+1. Run the same `permit.check()` call again with the same user, attributes, action, and resource. To run the check from a terminal, use [`permit pdp check`](/how-to/permit-cli/permit-cli-pdp#permit-pdp-check) with `--user-attributes`.
+2. Open the [Audit Log](https://app.permit.io/audit-log) and select the new decision.
+
+The `debug.abac.code` is no longer `no_matching_usersets`. If the code is `no_matching_resourcesets` or `no_matching_rules`, the user matched a user set, and the next check failed.
+
+## Related pages
+
+- [No matching resource sets (no_matching_resourcesets)](/how-to/use-audit-logs/errors/no_matching_resourcesets)
+- [No ABAC rule grants the permission (no_matching_rules)](/how-to/use-audit-logs/errors/no_matching_rules)
+- [Building your first ABAC policy](/how-to/build-policies/abac/building-abac-policy)

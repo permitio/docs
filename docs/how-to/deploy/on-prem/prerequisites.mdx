@@ -1,179 +1,110 @@
 ---
-title: "Prerequisites Setup"
-description: "Prepare your environment for Permit Platform installation"
+title: "On-premises prerequisites"
+sidebar_label: "Prerequisites Setup"
+description: "Prepare the cluster, command-line tools, Git repository, network, and storage that the self-hosted Permit Platform installer needs."
 ---
-
-:::info Enterprise Only
-This section is only relevant to Enterprise customers who acquired an on-prem license.
-:::
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Prerequisites Setup
+Prepare your environment before you run the self-hosted Permit Platform installer. This page is for the operator who sets up the cluster. When every item in the [verification checklist](#verification-checklist) passes, continue to the [installation guide](/how-to/deploy/on-prem/installation).
 
-Complete these requirements before running the Permit Platform installer.
-
-:::info Important
-The Permit Platform installer is designed to be self-contained and handles most setup automatically. You only need to meet basic system requirements and configure Git integration (required).
+:::info Enterprise on-premises license required
+The on-premises installer is available to Enterprise customers with an on-premises license. To get a license, [contact Permit.io](https://www.permit.io/demo).
 :::
 
-## System Requirements
+## Requirements at a glance
 
-### Server Specifications
+| Requirement | Details |
+|---|---|
+| Cluster | Kubernetes 1.21 or later, or Red Hat OpenShift 4.8 or later, sized as described in [Cluster sizing](#server-specifications) |
+| Tools | `kubectl` and Helm 3.8 or later, plus `oc` for OpenShift and `docker` to push images |
+| Permissions | Rights to create namespaces, deployments, ingress resources, and persistent volume claims |
+| Storage | A storage class with dynamic provisioning |
+| Container registry | A registry the cluster can pull from, unless you use the OpenShift internal registry |
+| Git | A policy repository and an SSH deploy key with write access |
+| Network | A frontend domain and inbound access on ports 80 and 443 |
 
-Based on actual production deployment requirements:
+## Cluster sizing \{#system-requirements}
 
-| Component | Single Node | Multi-Node Cluster | High-Availability Production |
-|-----------|-------------|-------------------|------------------------------|
-| **CPU** | 8 cores | 4 cores/node (4+ nodes) | 8+ cores/node (6+ nodes) |
-| **RAM** | 32GB | 16GB/node (4+ nodes) | 32GB+/node (6+ nodes) |
-| **Storage** | 100GB+ | 50GB+/node | 200GB+/node |
-| **Network** | 1 Gbps | 1 Gbps | 10 Gbps |
+### Node and cluster sizes \{#server-specifications}
 
-### Current Deployment Resource Usage
+| Deployment | Nodes | CPU per node | RAM per node | Storage per node | Network |
+|---|---|---|---|---|---|
+| Development, testing, or proof of concept | 1 | 8 cores | 32 GB | 100 GB | 1 Gbps |
+| Production | 4 or more | 4 cores | 16 GB | 50 GB, plus shared storage | 1 Gbps |
+| High-availability production | 6 or more | 8 cores | 32 GB | 200 GB | 10 Gbps |
 
-The Permit Platform deploys **35 services** with actual resource consumption:
+OpenSearch and Keycloak run on the Java virtual machine (JVM), so plan node memory for both. Decision logs in OpenSearch and data in PostgreSQL grow over time, so monitor volume usage after installation.
 
-- **Active CPU Usage**: ~1.2 cores (with bursts up to 3-4 cores)
-- **Memory Usage**: ~13GB RAM (with 35 running pods)
-- **Persistent Storage**: 51GB (production database sizes)
-- **Services**: 26 internal services with complex networking
+### Example node types \{#cloud-provider-equivalents}
 
-**Why Higher Requirements:**
-- **Memory overhead**: JVM services (Keycloak ~1.5GB, OpenSearch ~3.7GB)
-- **Data processing**: Heavy workloads (permit-data-generator: 500m CPU each)
-- **Database performance**: PostgreSQL + read replica + connection pooling
-- **Search & analytics**: OpenSearch with 20GB storage for audit logs
-- **Policy enforcement**: 8 OPAL relay services for high-performance policy evaluation
+| Provider | 4 vCPU, 16 GB node | 8 vCPU, 32 GB node | Storage |
+|---|---|---|---|
+| AWS (EKS, Red Hat OpenShift Service on AWS) | `m5.xlarge` | `m5.2xlarge` | gp3 SSD volumes, for example the `gp3-csi` storage class on ROSA |
+| Google Cloud (Google Kubernetes Engine, GKE) | `e2-standard-4` | `e2-standard-8` | SSD persistent disks, for example the `premium-rwo` storage class |
+| Azure (AKS) | `Standard_D4s_v3` | `Standard_D8s_v3` | Premium SSD managed disks |
+| OpenShift Container Platform (OCP) on VMware vSphere or bare metal | 4 vCPU, 16 GB | 8 vCPU, 32 GB | Local SSD or storage area network (SAN) storage with a Container Storage Interface (CSI) driver |
 
-### Platform Architecture Overview
+### Supported platforms \{#operating-system-support}
 
-The Permit Platform is an **enterprise-grade authorization system** with significant infrastructure requirements:
+| Platform | Versions and variants |
+|---|---|
+| Kubernetes | Any Cloud Native Computing Foundation (CNCF) certified Kubernetes 1.21 or later: Amazon EKS, Google GKE, Azure AKS, or a kubeadm cluster |
+| Red Hat OpenShift | 4.8 or later: OpenShift Container Platform (OCP), Red Hat OpenShift Service on AWS (ROSA), or OpenShift Dedicated |
+| Kind | Local development and testing only |
 
-#### Service Categories (35 total services):
-- **Core Platform Services (7)**: Backend API, frontend, policy management, task processing
-- **Policy Enforcement (8)**: OPAL relay components for distributed policy evaluation
-- **Data Processing (9)**: Decision logging, analytics, data generation, webhook delivery
-- **Infrastructure (11)**: Databases, caching, search, authentication, networking
+## Install the command-line tools \{#required-tools}
 
-#### Why This Complexity?
-- **High Performance**: Sub-millisecond policy decisions with distributed caching
-- **Enterprise Scale**: Supports millions of authorization requests per day
-- **Audit & Compliance**: Complete decision logs with real-time analytics
-- **Multi-tenancy**: Isolated environments for different organizations
-- **Policy Distribution**: Real-time policy updates across distributed PDPs
-- **Advanced Features**: SCIM integration, webhooks, advanced analytics
+The installer checks for the tools it needs for the target you choose and exits with a list of the missing ones.
 
-#### Production Considerations:
-- **Memory-intensive**: Multiple JVM services require significant RAM
-- **Storage growth**: Audit logs and analytics data accumulate over time  
-- **Network complexity**: 26+ internal services with mesh communication
-- **High availability**: Multiple database instances with read replicas
+| Target | Required on your workstation |
+|---|---|
+| Kubernetes (EKS, AKS, self-managed) | `kubectl`, `helm`, and `docker` to push images to your registry |
+| Google GKE | `gcloud`, `kubectl`, `helm`, and `docker` to push images to Artifact Registry |
+| Red Hat OpenShift | `oc`, `kubectl`, and `helm` |
+| Kind | `docker`, `kind`, `kubectl`, and `helm` |
 
-## Deployment Scenarios
+Use Helm 3.8 or later. For Kind and OpenShift, the installer generates certificates with mkcert when it is installed, and with OpenSSL otherwise.
 
-### Development/Testing Environment
+## Prepare cluster access \{#cluster-access-requirements}
 
-**Single Node Requirements:**
-- **CPU**: 8+ cores (handles all 35 services)
-- **RAM**: 32GB (actual usage ~13GB + OS overhead)
-- **Storage**: 100GB (51GB platform + growth buffer)
-- **Use case**: Development, testing, proof-of-concept
+### Kubernetes cluster access \{#standard-kubernetes-access}
 
-### Small Production Environment
+For Amazon EKS, Google GKE, Azure AKS, or a self-managed Kubernetes cluster, your `kubectl` context needs cluster admin access, or role-based access control (RBAC) permissions to:
 
-**Multi-Node Cluster (3-4 nodes):**
-- **CPU**: 4+ cores per node
-- **RAM**: 16GB per node  
-- **Storage**: 50GB per node + shared storage
-- **Use case**: Small teams (50-500 users), basic production
+- Create namespaces. The default namespace is `permit-platform`.
+- Create deployments, services, secrets, and ingress resources.
+- Create persistent volume claims.
 
-### Enterprise Production Environment
+The installer deploys to the cluster in your current `kubectl` context. Check access, permissions, and tools:
 
-**High-Availability Cluster (6+ nodes):**
-- **CPU**: 8+ cores per node
-- **RAM**: 32GB+ per node
-- **Storage**: 200GB+ per node + enterprise storage
-- **Use case**: Large organizations (1000+ users), high availability required
+```bash
+# Check Kubernetes access
+kubectl cluster-info
+kubectl get nodes
 
-### Cloud Provider Equivalents
+# Verify permissions
+kubectl auth can-i create namespace
+kubectl auth can-i create deployment
+kubectl auth can-i create ingress
 
-**Red Hat OpenShift on AWS (ROSA):**
-- **Node type**: **m5.xlarge** (4 vCPU, 16GB) minimum, m5.2xlarge (8 vCPU, 32GB) recommended
-- **Storage**: gp3-csi with dynamic provisioning
-- **Worker nodes**: 4+ nodes recommended
-- **Version**: OpenShift 4.10+ on AWS
+# Check storage
+kubectl get storageclass
 
-**OpenShift Container Platform (OCP) - On-Premise:**
-- **Node specs**: **m5.xlarge equivalent** (4+ vCPU, 16GB+ RAM) per worker node
-- **Storage**: Local SSD or SAN with CSI driver
-- **Infrastructure**: VMware vSphere, bare metal, or hyper-converged
-- **Version**: OCP 4.8+
+# Verify Docker
+docker --version
+docker system info
 
-**OpenShift Dedicated (OSD):**
-- **Cloud**: AWS or Google Cloud
-- **Node sizing**: Same as ROSA requirements
-- **Management**: Fully managed by Red Hat
+# Check Helm
+helm version
+```
 
-**AWS EKS (Alternative):**
-- **Node type**: m5.2xlarge (8 vCPU, 32GB) or larger
-- **Storage**: gp3 SSD with 3000+ IOPS
-- **Instances**: 3-6 nodes depending on requirements
+Each `kubectl auth can-i` command prints `yes`. `kubectl get storageclass` lists at least one class, and `helm version` reports version 3.8 or later.
 
-**Google GKE (Alternative):**
-- **Node type**: e2-standard-8 (8 vCPU, 32GB) or larger  
-- **Storage**: SSD persistent disks
-- **Instances**: 3-6 nodes depending on requirements
+### Google GKE access \{#google-gke-specific-requirements}
 
-**Azure AKS (Alternative):**
-- **Node type**: Standard_D8s_v3 (8 vCPU, 32GB) or larger
-- **Storage**: Premium SSD with high IOPS
-- **Instances**: 3-6 nodes depending on requirements
-
-### Operating System Support
-
-- **Red Hat OpenShift**: 4.8+ (ROSA, OCP, OpenShift Dedicated)
-- **Kubernetes**: Any CNCF-certified Kubernetes 1.21+
-- **Cloud Kubernetes**: EKS, GKE, AKS support
-- **On-premise**: Kubernetes clusters, kubeadm clusters
-
-### OpenShift-Specific Requirements
-
-**For Red Hat OpenShift deployments:**
-
-#### OpenShift Node Specifications
-- **Node type**: worker nodes with container runtime
-- **Security Context Constraints (SCC)**: Platform uses `anyuid` SCC for database containers
-- **Registry access**: Internal registry or external registry connectivity
-- **Route vs Ingress**: Platform supports both OpenShift Routes and Ingress
-
-#### OpenShift Resource Requirements
-- **Worker nodes**: 4+ nodes recommended for production
-- **Node size**: **m5.xlarge** (4 vCPU, 16GB RAM) minimum per node
-- **Storage**: CSI-compatible storage class with dynamic provisioning
-- **Network**: OpenShift SDN or OVN-Kubernetes networking
-
-### Google GKE-Specific Requirements
-
-**For Google Kubernetes Engine deployments:**
-
-#### GKE Cluster Types
-
-GKE offers two cluster modes, both supported by Permit Platform:
-
-- **GKE Standard**: Full control over node configuration
-  - Recommended node type: **n1-standard-4** or **e2-standard-4** (4 vCPU, 15-16GB RAM)
-  - Worker nodes: 3-6 nodes for production
-  - Best for: Production deployments requiring full control
-
-- **GKE Autopilot**: Fully managed, automatic node provisioning
-  - Nodes: Automatically scaled based on workload
-  - Best for: Simplified operations, no node management
-
-#### GKE Prerequisites and Setup
-
-**1. Install Google Cloud SDK:**
+1. Install the Google Cloud SDK:
 
 ```bash
 # macOS
@@ -187,7 +118,7 @@ exec -l $SHELL
 gcloud --version
 ```
 
-**2. Authenticate and configure:**
+2. Sign in, select the project, and get the cluster credentials:
 
 ```bash
 # Authenticate with Google Cloud
@@ -206,304 +137,25 @@ kubectl cluster-info
 kubectl get nodes
 ```
 
-**3. Container Registry Setup (Required for Private Registry):**
+Your Google Cloud account needs the `roles/container.admin` and `roles/artifactregistry.writer` roles, or these permissions:
 
-If using Google Artifact Registry (recommended) or Google Container Registry:
+- `container.clusters.get`
+- `container.clusters.update`
+- `artifactregistry.repositories.uploadArtifacts`
+- `artifactregistry.repositories.downloadArtifacts`
 
-```bash
-# Create Artifact Registry repository
-gcloud artifacts repositories create permit-platform \
-  --repository-format=docker \
-  --location=us-central1 \
-  --description="Permit Platform container images" \
-  --project=YOUR_PROJECT_ID
+The installer does not install an ingress controller on GKE. The Helm chart creates its ingress with the `nginx` class (`ingress.className` in `values.yaml`), so install the NGINX ingress controller in the cluster, or set `ingress.className` to the controller you use. The Artifact Registry repository for the images is created during installation, in [Push the images to your container registry](/how-to/deploy/on-prem/installation#step-35-push-images-to-private-registry-gke-example).
 
-# Configure Docker authentication
-gcloud auth configure-docker us-central1-docker.pkg.dev
+### OpenShift cluster access \{#openshift-cluster-access}
 
-# Your registry URL will be:
-# us-central1-docker.pkg.dev/YOUR_PROJECT_ID/permit-platform
-```
+For Red Hat OpenShift, your `oc` login needs cluster admin access, or permissions to:
 
-**Alternative: Google Container Registry (Legacy):**
+- Create projects. The default project is `permit-platform`.
+- Create deployments and routes or ingress resources.
+- Create persistent volume claims.
+- Grant the `anyuid` security context constraint (SCC). The installer grants `anyuid` to the namespace's default service account, which OpenSearch needs.
 
-```bash
-# Configure Docker authentication for GCR
-gcloud auth configure-docker
-
-# Your registry URL will be:
-# gcr.io/YOUR_PROJECT_ID
-```
-
-#### GKE IAM Permissions Required
-
-Your Google Cloud service account or user needs these permissions:
-
-- `container.clusters.get` - View cluster details
-- `container.clusters.update` - Update cluster configuration
-- `artifactregistry.repositories.uploadArtifacts` - Push images to GAR
-- `artifactregistry.repositories.downloadArtifacts` - Pull images from GAR
-- Or role: `roles/container.admin` and `roles/artifactregistry.writer`
-
-#### GKE Networking Requirements
-
-- **Ingress Controller**: Platform requires **nginx-ingress-controller**
-  - The installer will set this up automatically with `--gke` flag
-  - Creates a Google Cloud Load Balancer automatically
-  - External IP assigned for ingress traffic
-
-- **Load Balancer**: GCP Load Balancer created automatically for ingress
-- **Storage**: Uses Google Persistent Disks (SSD) automatically
-- **Network**: VPC-native cluster recommended for better security
-
-#### GKE-Specific Notes
-
-- **Security Contexts**: Some database containers run as root (handled automatically)
-- **Storage Class**: Default `standard-rwo` or `premium-rwo` storage classes work
-- **TLS**: Can use self-signed certificates or Google-managed certificates
-- **Ingress**: nginx-ingress creates LoadBalancer service with external IP
-
-### Required Tools
-
-The installer checks for these tools and will guide you to install them if missing:
-
-#### For OpenShift Deployments
-- **oc**: OpenShift command-line tool (primary)
-- **kubectl**: Kubernetes command-line tool (also supported)
-- **helm**: Helm v3.8+ package manager
-- **docker**: Docker runtime (for loading images)
-
-#### For Google GKE Deployments
-- **gcloud**: Google Cloud SDK (for authentication and cluster access)
-- **kubectl**: Kubernetes command-line tool
-- **helm**: Helm v3.8+ package manager
-- **docker**: Docker runtime (for pushing images to registry)
-
-#### For Standard Kubernetes (EKS, AKS, on-premise)
-- **kubectl**: Kubernetes command-line tool
-- **helm**: Helm v3.8+ package manager
-- **docker**: Docker runtime (for loading images)
-
-:::note
-The installer will validate all requirements and provide guidance for any missing components.
-:::
-
-## Cluster Access Requirements
-
-### OpenShift Cluster Access
-
-**For Red Hat OpenShift deployments:**
-
-You need an OpenShift cluster with:
-- **Cluster admin access** or sufficient RBAC permissions  
-- **Ability to create projects/namespaces** (default: `permit-platform`)
-- **Access to create routes or ingress resources**
-- **Storage provisioning** (PersistentVolume claims)
-- **Security Context Constraints**: Ability to use `anyuid` SCC for database containers
-
-#### OpenShift Cluster Validation
-
-Test your OpenShift cluster access before installation:
-
-```bash
-# Check OpenShift cluster connectivity
-oc cluster-info
-oc whoami
-
-# Verify permissions  
-oc auth can-i create project
-oc auth can-i create route
-oc auth can-i create deployment
-
-# Check storage classes
-oc get storageclass
-
-# Verify SCC access (required for databases)
-oc get scc anyuid
-oc adm policy who-can use scc anyuid
-```
-
-### Standard Kubernetes Access
-
-**For EKS, GKE, AKS, or on-premise Kubernetes:**
-
-You need a Kubernetes cluster with:
-- **Cluster admin access** or sufficient RBAC permissions
-- **Ability to create namespaces** (default: `permit-platform`)
-- **Access to create ingress resources**
-- **Storage provisioning** (for databases and persistent volumes)
-
-#### Kubernetes Cluster Validation
-
-Test your cluster access before installation:
-
-```bash
-# Check cluster connectivity
-kubectl cluster-info
-
-# Verify permissions
-kubectl auth can-i create namespace
-kubectl auth can-i create ingress
-
-# Check storage classes
-kubectl get storageclass
-```
-
-## Git Repository Setup (Required)
-
-:::warning Required
-Git repository setup is mandatory for Permit Platform policy management. The platform requires a Git repository to store and sync authorization policies.
-:::
-
-If you want to enable Git-based policy synchronization during installation:
-
-### Step 1: Create SSH Key Pair
-
-```bash
-# Generate SSH key for policy repository access
-ssh-keygen -t rsa -b 4096 -f permit-policy-key -N ""
-
-# This creates:
-# permit-policy-key      (private key - keep secure)
-# permit-policy-key.pub  (public key - add to Git repository)
-
-# Set correct permissions
-chmod 600 permit-policy-key
-```
-
-### Step 2: Add Key to Your Git Platform
-
-<Tabs>
-  <TabItem value="github" label="GitHub">
-    1. Go to your repository → **Settings** → **Deploy keys**
-    2. Click **"Add deploy key"**
-    3. Copy contents of `permit-policy-key.pub` and paste it
-    4. ✅ **CRITICAL**: Check **"Allow write access"**
-    5. Click **"Add key"**
-  </TabItem>
-  
-  <TabItem value="gitlab" label="GitLab">
-    1. Go to your project → **Settings** → **Repository** → **Deploy Keys**
-    2. Click **"Add new key"**
-    3. Paste contents of `permit-policy-key.pub`
-    4. ✅ **CRITICAL**: Check **"Grant write permissions to this key"**
-    5. Click **"Add key"**
-  </TabItem>
-  
-  <TabItem value="bitbucket" label="Bitbucket">
-    1. Go to repository → **Settings** → **Access keys**
-    2. Click **"Add key"**
-    3. Paste contents of `permit-policy-key.pub`
-    4. Click **"Add SSH key"**
-  </TabItem>
-</Tabs>
-
-### Step 3: Test Git Access
-
-```bash
-# Test SSH connection (replace with your Git platform)
-ssh -T git@github.com -i ./permit-policy-key
-
-# Expected response:
-# "Hi username/repository! You've successfully authenticated, but GitHub does not provide shell access."
-```
-
-### Information Needed for Installation
-
-You'll need during installation:
-- **Repository SSH URL**: `git@github.com:yourorg/permit-policies.git`
-- **Private key content**: Contents of the `permit-policy-key` file
-
-## Network and Firewall Configuration
-
-### Required Port Access
-
-The installer configures these ports automatically, but ensure they're available:
-
-| Port | Service | Purpose | External Access |
-|------|---------|---------|----------------|
-| **80** | HTTP | Web traffic (redirects to HTTPS) | Required |
-| **443** | HTTPS | Main application access | Required |
-| **6443** | Kubernetes API | K8s management (if applicable) | Optional |
-
-### Internal Service Ports (Managed Automatically)
-
-The platform uses these internal ports for service communication:
-
-| Port | Service | Internal Use |
-|------|---------|-------------|
-| **5432** | PostgreSQL | Database connections (3 instances) |
-| **6379** | Redis | Cache and session storage |
-| **5672/15672** | RabbitMQ | Message queue and management |
-| **9200/9300** | OpenSearch | Search and cluster communication |
-| **5601** | OpenSearch Dashboards | Analytics interface |
-| **7002** | OPAL Server | Policy management |
-| **8000** | Platform APIs | 15+ internal API services |
-| **8080** | Keycloak | Authentication server |
-| **8181** | OPA Engine | Policy evaluation |
-| **3128** | Proxy Services | Internal proxy and routing |
-
-### Firewall Configuration
-
-For production deployments, ensure firewall rules allow:
-
-```bash
-# Web traffic (required)
-iptables -A INPUT -p tcp --dport 80 -j ACCEPT
-iptables -A INPUT -p tcp --dport 443 -j ACCEPT
-
-# Kubernetes API (if managing cluster externally)
-iptables -A INPUT -p tcp --dport 6443 -j ACCEPT
-```
-
-### DNS Requirements
-
-- **Production**: Configure DNS to point your domain to the server
-- **Development**: Use `.local` domains with hosts file entries
-
-## Storage Requirements
-
-### Persistent Storage
-
-Based on actual production deployment, the platform requires:
-
-| Service | Storage Size | Purpose | Growth Rate |
-|---------|-------------|---------|-------------|
-| **PostgreSQL (main)** | 10GB | User data, policies, audit trails | ~1GB/month |
-| **PostgreSQL (read replica)** | 5GB | Read-only queries, reporting | Mirrors main DB |
-| **PostgreSQL (auth)** | 5GB | Keycloak user authentication | ~100MB/month |
-| **OpenSearch** | 20GB | Audit logs, decision logs, analytics | ~2-5GB/month |
-| **RabbitMQ** | 5GB | Message queues, background tasks | ~500MB peak |
-| **Redis** | 5GB | Session cache, policy cache | Stable size |
-| **Celery Beat** | 1GB | Scheduled task configurations | ~10MB/month |
-
-**Total Production Storage: 51GB minimum, 100GB+ recommended**
-
-### Storage Performance Requirements
-
-- **Database (PostgreSQL)**: SSD with 3000+ IOPS recommended
-- **Search (OpenSearch)**: NVMe SSD for query performance  
-- **Cache (Redis)**: Fast storage for low-latency access
-- **Backup space**: Additional 50GB+ for backups and snapshots
-
-### Storage Classes
-
-Verify your cluster has a default storage class:
-
-```bash
-# Check available storage classes
-kubectl get storageclass
-
-# Should show something like:
-# NAME                 PROVISIONER             AGE
-# standard (default)   k8s.io/minikube-hostpath   1h
-```
-
-## Pre-Installation Validation
-
-### OpenShift System Check
-
-**For Red Hat OpenShift deployments:**
+The installer exits if `oc whoami` fails, so sign in with `oc login` first. Check access, permissions, and tools:
 
 ```bash
 # Check OpenShift cluster access
@@ -533,56 +185,158 @@ oc new-project permit-test-validation
 oc delete project permit-test-validation
 ```
 
-### Standard Kubernetes System Check
+Each `oc auth can-i` command prints `yes`, and `oc get scc anyuid` returns the constraint.
 
-**For EKS, GKE, AKS, or on-premise Kubernetes:**
+## Set up the Git repository for Policy Sync \{#git-repository-setup-required}
+
+Policy Sync stores and syncs your policies in a Git repository over SSH. The installer requires a repository URL and an SSH private key, and exits if either placeholder in `values.yaml` is not replaced.
+
+### 1. Create an SSH key pair \{#step-1-create-ssh-key-pair}
 
 ```bash
-# Check Kubernetes access
-kubectl cluster-info
-kubectl get nodes
+# Generate SSH key for policy repository access
+ssh-keygen -t rsa -b 4096 -f permit-policy-key -N ""
 
-# Verify permissions
-kubectl auth can-i create namespace
-kubectl auth can-i create deployment
-kubectl auth can-i create ingress
+# This creates:
+# permit-policy-key      (private key - keep secure)
+# permit-policy-key.pub  (public key - add to Git repository)
 
-# Check storage
+# Set correct permissions
+chmod 600 permit-policy-key
+```
+
+The command creates `permit-policy-key` (the private key, which goes into `values.yaml`) and `permit-policy-key.pub` (the public key, which goes into the Git platform).
+
+### 2. Add the public key as a deploy key \{#step-2-add-key-to-your-git-platform}
+
+<Tabs>
+  <TabItem value="github" label="GitHub">
+    1. In the repository, open **Settings** > **Deploy keys**.
+    2. Click **Add deploy key**.
+    3. Paste the contents of `permit-policy-key.pub`.
+    4. Select **Allow write access**. Policy Sync needs write access to the repository.
+    5. Click **Add key**.
+  </TabItem>
+
+  <TabItem value="gitlab" label="GitLab">
+    1. In the project, open **Settings** > **Repository** > **Deploy Keys**.
+    2. Click **Add new key**.
+    3. Paste the contents of `permit-policy-key.pub`.
+    4. Select **Grant write permissions to this key**. Policy Sync needs write access to the repository.
+    5. Click **Add key**.
+  </TabItem>
+
+  <TabItem value="bitbucket" label="Bitbucket">
+    1. In the repository, open **Settings** > **Access keys**.
+    2. Click **Add key**.
+    3. Paste the contents of `permit-policy-key.pub`.
+    4. Click **Add SSH key**.
+  </TabItem>
+</Tabs>
+
+### 3. Test Git access \{#step-3-test-git-access}
+
+```bash
+# Test SSH connection (replace with your Git platform)
+ssh -T git@github.com -i ./permit-policy-key
+
+# Expected response:
+# "Hi username/repository! You've successfully authenticated, but GitHub does not provide shell access."
+```
+
+A greeting with your repository name confirms that the key works.
+
+### Values to keep for installation \{#information-needed-for-installation}
+
+| Value | Example | Goes into |
+|---|---|---|
+| Repository SSH URL | `git@github.com:yourorg/permit-policies.git` | `permitServices.policySync.policyRepoUrl` |
+| Private key | Contents of `permit-policy-key` | `permitServices.policySync.sshPrivateKey` |
+
+## Plan network access \{#network-and-firewall-configuration}
+
+### External ports \{#required-port-access}
+
+| Port | Protocol | Purpose | Required |
+|---|---|---|---|
+| 80 | HTTP | Web traffic to the frontend domain | Yes |
+| 443 | HTTPS | Web traffic to the frontend domain | Yes |
+| 6443 | Kubernetes API | Cluster management from outside the cluster | Only if you manage the cluster remotely |
+
+On hosts that filter traffic with iptables, allow the ports:
+
+```bash
+# Web traffic (required)
+iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+
+# Kubernetes API (if managing cluster externally)
+iptables -A INPUT -p tcp --dport 6443 -j ACCEPT
+```
+
+### Internal service ports \{#internal-service-ports-managed-automatically}
+
+The platform services use these ports inside the namespace. Kubernetes services route them, so open them only if you apply network policies:
+
+| Port | Service |
+|---|---|
+| 5432 | PostgreSQL, the read replica, PgBouncer, and the Keycloak database |
+| 6379 | Redis |
+| 5672, 15672 | RabbitMQ: Advanced Message Queuing Protocol (AMQP) and the management UI |
+| 9200, 9300 | OpenSearch |
+| 5601 | OpenSearch Dashboards |
+| 7002 | OPAL server (Open Policy Administration Layer) |
+| 8000 | Permit backend and internal API services |
+| 8080 | Keycloak |
+| 8181 | Open Policy Agent (OPA) |
+
+### DNS \{#dns-requirements}
+
+- **Production:** create a DNS record that points the frontend domain at your ingress or load balancer.
+- **Development:** use a `.local` domain and add it to the hosts file on the machine that runs the browser.
+
+The installation guide shows both in [Point the frontend domain at the cluster](/how-to/deploy/on-prem/installation#dns-and-hosts-file-configuration).
+
+## Plan storage \{#storage-requirements}
+
+The platform stores data in persistent volumes for PostgreSQL, the PostgreSQL read replica, the Keycloak database, OpenSearch, RabbitMQ, and Redis. The cluster needs a storage class that provisions volumes dynamically.
+
+| Service | Storage recommendation |
+|---|---|
+| PostgreSQL | SSD with 3000 or more input/output operations per second (IOPS) |
+| OpenSearch | NVMe SSD |
+| Redis | SSD |
+
+The installer package sets each volume size in `charts/permit-platform/values.yaml` under `thirdPartyServices.<service>.persistence.size`. Check the sizes there before you provision storage, and reserve extra space for backups and snapshots.
+
+Check that a default storage class exists:
+
+```bash
+# Check available storage classes
 kubectl get storageclass
 
-# Verify Docker
-docker --version
-docker system info
-
-# Check Helm
-helm version
+# Should show something like:
+# NAME                 PROVISIONER             AGE
+# standard (default)   k8s.io/minikube-hostpath   1h
 ```
 
-### Expected Outputs
+One class shows `(default)` after its name.
 
-#### OpenShift Expected Results:
-```bash
-✅ OpenShift cluster: Reachable and accessible
-✅ User authentication: Valid login
-✅ Project permissions: Can create projects
-✅ Route permissions: Can create routes
-✅ SCC access: anyuid SCC available
-✅ Storage class: gp3-csi or equivalent available
-✅ Tools: oc, docker, helm working
-```
+## Choose how to handle TLS \{#tlsssl-certificate-configuration}
 
-#### Kubernetes Expected Results:
-```bash
-✅ Kubernetes cluster: Reachable
-✅ Cluster permissions: Sufficient
-✅ Storage class: Available
-✅ Docker: Running
-✅ Helm: v3.8+
-```
+Decide before installation how the frontend domain gets its certificate:
 
-### Troubleshooting Common Issues
+- Self-signed certificates that the installer generates with `--generate-tls`.
+- Your own certificate from your certificate authority, set in `values.yaml`.
+- TLS terminated outside the cluster, for example at a load balancer or with cert-manager, with `--skip-tls-check`.
 
-#### Kubernetes Access Issues
+[Configure TLS certificates](/how-to/deploy/on-prem/installation#tlsssl-certificates) in the installation guide describes each option.
+
+## Fix common prerequisite problems \{#troubleshooting-common-issues}
+
+### kubectl can't reach the cluster \{#kubernetes-access-issues}
+
+Point `kubectl` at your kubeconfig file and test the connection:
 
 ```bash
 # If kubectl not configured:
@@ -592,7 +346,9 @@ export KUBECONFIG=/path/to/your/kubeconfig
 kubectl cluster-info
 ```
 
-#### Storage Class Missing
+### No storage class exists \{#storage-class-missing}
+
+For a development cluster, create a default storage class:
 
 ```bash
 # Create a simple storage class (development only)
@@ -608,7 +364,11 @@ volumeBindingMode: WaitForFirstConsumer
 EOF
 ```
 
-#### Docker Permission Issues
+The `kubernetes.io/no-provisioner` class does not create volumes. Create a PersistentVolume for each claim manually, or the database pods stay `Pending`. Use a dynamic provisioner for production.
+
+### Docker commands fail with a permission error \{#docker-permission-issues}
+
+Add your user to the `docker` group, then sign out and back in:
 
 ```bash
 # Add user to docker group (requires logout/login)
@@ -618,66 +378,24 @@ sudo usermod -aG docker $USER
 sudo docker --version
 ```
 
-## TLS/SSL Certificate Configuration
+## Verification checklist
 
-### Automatic Certificate Generation
+Before you install, confirm each item:
 
-The installer can automatically generate TLS certificates using **mkcert** (preferred) or **OpenSSL** (fallback):
+- [ ] `kubectl cluster-info` (or `oc cluster-info`) reaches the cluster.
+- [ ] You can create namespaces, deployments, and ingress resources.
+- [ ] A default storage class exists.
+- [ ] Helm 3.8 or later is installed.
+- [ ] Docker runs on your workstation, if you push images to a registry.
+- [ ] A container registry is ready, unless you use the OpenShift internal registry.
+- [ ] The frontend domain is chosen, and DNS or a hosts file entry is planned.
+- [ ] The policy Git repository exists, and `ssh -T` succeeds with the deploy key.
+- [ ] You know how the frontend domain gets its TLS certificate.
 
-```bash
-# Install with auto-generated certificates
-./scripts/install-permit-platform.sh --generate-tls
-```
+## Next steps
 
-### Custom Certificates
+- [Install the platform](/how-to/deploy/on-prem/installation) with the installation guide.
+- [Follow the on-premises quick start](/how-to/deploy/on-prem/quick-start) for a default installation.
+- [Troubleshoot the on-premises platform](/how-to/deploy/on-prem/troubleshooting).
 
-For production deployments, you can provide your own certificates by configuring `values.yaml`:
-
-```yaml
-ingress:
-  tls:
-    enabled: true
-    certificate:
-      cert: |
-        -----BEGIN CERTIFICATE-----
-        [Your certificate content]
-        -----END CERTIFICATE-----
-      key: |
-        -----BEGIN PRIVATE KEY-----
-        [Your private key content]
-        -----END PRIVATE KEY-----
-```
-
-### External TLS Termination
-
-If using external TLS termination (AWS ALB, cert-manager, etc.):
-
-```bash
-# Skip TLS configuration (handle externally)
-./scripts/install-permit-platform.sh --skip-tls-check
-```
-
-## Verification Checklist
-
-Before proceeding to installation, verify:
-
-- [ ] **Kubernetes cluster accessible** with `kubectl cluster-info`
-- [ ] **Sufficient permissions** to create namespaces and deployments
-- [ ] **Storage class available** for persistent volumes
-- [ ] **Docker runtime working** and accessible
-- [ ] **Helm v3.8+** installed and working
-- [ ] **Frontend domain planned** (what domain customers will use to access the platform)
-- [ ] **Git repository ready** (required for policy sync)
-- [ ] **SSH key configured** (required for Git access)
-- [ ] **TLS certificates ready** (or plan to use `--generate-tls` flag for auto-generation)
-
-:::tip Ready to install?
-Continue to the [Installation Guide](/how-to/deploy/on-prem/installation).
-:::
-
-## Support
-
-Need help with prerequisites setup?
-
-- 📧 **Email**: support@permit.io
-- 💬 **Slack**: [Join our community](https://io.permit.io/slack)
+For help with prerequisites, email support@permit.io or ask in the [Permit community on Slack](https://io.permit.io/slack).

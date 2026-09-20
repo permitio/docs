@@ -1,78 +1,81 @@
 ---
 sidebar_position: 6
-title: Login Method
-description: "Log a user into a Permit element from your frontend or backend using the client-side or server-side login method."
+title: Log users in to Permit Elements
+sidebar_label: Login Method
+description: "Choose a login method for Permit Elements, add the backend login route if the method needs one, and call permit.elements.login() in your frontend before the element loads."
 ---
 
-import HelpSupportTile from "@site/src/components/elements/HelpSupportTile.js";
-import ActionContainer from "@site/src/components/elements/ActionContainer.js";
-import ActionTile from "@site/src/components/elements/ActionTile.js";
-import FlexWrapper from "@site/src/components/elements/FlexWrapper.js";
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
-import code from "@site/src/components/elements/codeBlock.json";
 
-import userManagementElementInstances from "/static/ui-videos/embeddable-uis/user-management-element.mp4";
+Sign a user in to Permit Elements before your application shows an element. This page is for developers who embed Permit Elements, the embeddable UI components, and need to pick and implement a login method. To create an element and get its iframe code first, see [Embed Permit Elements](/embeddable-uis/embedding-elements).
 
-The Login Method for Permit Elements is a simple and secure way to embed Permit Elements into your application.
+Every login method ends the same way: your frontend calls `permit.elements.login()` from the `@permitio/permit-js` package, and Permit creates an element session for the user in one tenant. Most methods also need a login route in your backend that calls the Permit SDK's `loginAs` method.
 
-## Overview
-Before showing the Permit Element in your application, you need to log in the end-user.
-In order to login you'll first need to decide which login method you want to use. There are two main ways to login a user to the Permit Element:
+![Login methods diagram: cookie, bearer, and header methods call a login route in your server that uses the server-side SDK, while the frontend-only method calls the Permit API directly, and then the element iframe loads](/img/elements/login/login-methods.png)
 
-1. 🌏 **Client-side Login** - This is used when you want to log in a user from your frontend application - **this is the most common way to log in a user.**
+## Prerequisites
 
-2. ⚙️ **Server-side Login** - This is used when you want to log in a user from your backend server - You can choose between **Cookies**, **Bearer Token** or **Custom Headers**  login methods.
+- An element created in the Permit dashboard, and its iframe code. See [Embed Permit Elements](/embeddable-uis/embedding-elements).
+- The user synced to Permit and assigned a role in the tenant the element shows. See [Sync users](/how-to/sync-users).
+- For methods with a backend route: your environment API key. See [Get your API key](/overview/get-api-key).
+- For the `frontendOnly` method: a JSON Web Key Set (JWKS) configured for the environment. See [Configure JWKS for your environment](/embeddable-uis/embedding-elements#configuring-jwks-for-your-environment).
 
-Here's a diagram to help you understand the flow of the login process:
+## Choose a login method \{#overview}
 
-![Login Method Flow](/img/elements/login/login-methods.png)
+Pick the method that matches how your frontend authenticates to your backend.
 
-## ⚙ Server-side Login method
+| Method | `loginMethod` value | Backend route | Use it when |
+|---|---|---|---|
+| Cookie | `LoginMethod.cookie` (the default) | Yes. A `GET` route that redirects to `ticket.redirect_url`. | Your backend authenticates requests with a session cookie. |
+| Bearer token | `LoginMethod.bearer` | Yes. A `POST` route that returns `ticket.content`. | Your backend authenticates requests with an `Authorization: Bearer` header. |
+| Other headers | `LoginMethod.header` | Yes. A `POST` route that returns `ticket.content`. | Your backend authenticates requests with a custom HTTP header. |
+| Frontend only | `LoginMethod.frontendOnly` | No. Permit verifies the user's JWT against the environment JWKS. | You don't want to add a backend route, and your identity provider issues JWTs. |
+| Private browsing | `LoginMethod.supportsPrivateBrowser` | Yes. A `POST` route that returns an element bearer token. | Your users open the element in a browser that blocks third-party cookies, such as a private window. See [Support private browsing](#support-for-private-browsing-mode). |
 
-In the server side, We have the `permit.elements.loginAs()` method takes two parameters.
-You need to pass in the unique `userId` that your end-user has in Permit.io, and a Tenant Key or ID.
-Passing in the tenant is **compulsory** when logging in a user **server-side**.
+The `tenant` you log in to is the only tenant the element shows. To show a different tenant, call `permit.elements.logout()` and log the user in again with the other tenant.
+
+## 1. Add a backend login route \{#-server-side-login-method}
+
+Skip this step if you use the `frontendOnly` method.
+
+The backend login route identifies the signed-in user from your own authentication, then calls the server-side SDK's `loginAs` method with the user's key and a tenant key or ID. Both values are required. In Node.js the call takes one object:
 
 ```js
-permit.elements.loginAs({ userId, tenant });
+permit.elements.loginAs({ userId, tenantId });
 ```
-:::info IMPORTANT
-The **user must belong to the tenant** in order to login. Otherwise, the user will get an error saying `USER_NOT_FOUND`.
 
-If the user want to **change tenant**, the user will have to **log-out**, and then **log-in** to a different tenant.
+Each SDK follows its own naming: `loginAs` in Node.js, .NET, and Java, and `login_as` in Python, which takes the two values as positional arguments.
+
+:::warning User must belong to the tenant
+If the user is not a member of the tenant you pass to `loginAs`, the login fails with `USER_NOT_FOUND`, and the element doesn't load. See [Login errors](#login-errors).
 :::
 
+### Initialize the Permit SDK \{#initializing-permit}
 
-
-
-### Initializing Permit
-
-To use the Permit SDK, you need to initialize it with your API key. You can find your API key in the Permit.io dashboard.
-
+Create a Permit client in your backend with your environment API key. Replace `<YOUR_API_KEY>` with the key from [Get your API key](/overview/get-api-key).
 
 <Tabs groupId="language">
 <TabItem value="nodejs" label="Node.js">
 
 ```js
-from permitio import Permit
 const { Permit } = require("permitio");
-const permit = new Permit({token: "<YOUR_API_KEY>", ...});
+const permit = new Permit({ token: "<YOUR_API_KEY>" });
 ```
 </TabItem>
 <TabItem value="python" label="Python">
 
 ```python
-from permitio import Permit
+from permit import Permit
 
-permit = Permit(token="<YOUR_API_KEY>", ...)
+permit = Permit(token="<YOUR_API_KEY>")
 ```
 
 </TabItem>
 <TabItem value="dotnet" label=".NET">
 
 ```csharp
-using PermitIO;
+using PermitSDK;
 
 var permit = new Permit("<YOUR_API_KEY>");
 ```
@@ -85,20 +88,25 @@ import io.permit.sdk.Permit;
 import io.permit.sdk.PermitConfig;
 
 Permit permit = new Permit(
-    new PermitConfig.Builder("[YOUR_API_KEY]").build()
+    new PermitConfig.Builder("<YOUR_API_KEY>").build()
 );
 ```
 
 </TabItem>
 </Tabs>
 
-### Use the `loginAs` function
-You need to create a route in your backend server to allow your client to `loginAs` themselves and get access the Permit Element.
+### Call `loginAs` from the login route \{#use-the-loginas-function}
 
-The backend `loginAs` route is matched based on the Authentication methods you have implemented inside your App. Most applications
-authenticate with the **Bearer Token** or **Cookies**, but we also allows you to use any other **HTTP Security Header**. The important
-part here is, that you use the appropriate code example below based on your Authentication method.
+Choose the tab that matches your authentication method, then your backend language. Each example is a complete server with one login route. Replace these placeholders:
 
+| Placeholder | Replace with |
+|---|---|
+| `<YOUR_API_KEY>` | Your environment API key. Load it from an environment variable in production. |
+| `<USER_KEY>` | Code that reads the signed-in user's key from your own session or token. The key must match the user's key in Permit. |
+| `<TENANT_KEY>` | The key of the tenant the element shows. |
+
+- **Cookies:** the route handles a `GET` request and redirects to `ticket.redirect_url`. `permit.elements.login()` loads the route in a hidden iframe and appends the tenant as a `tenant` query parameter.
+- **Bearer token** and **Other headers:** both methods use the same route. The route handles a `POST` request and returns `ticket.content` as JSON. `ticket.content` holds the redirect URL in a `url` field, which `permit.elements.login()` reads. The two methods differ only in how the frontend authenticates the request: an `Authorization: Bearer` header or your custom headers.
 
 <Tabs groupId="auth-method">
 <TabItem value="cookies" label="Cookies">
@@ -108,201 +116,93 @@ part here is, that you use the appropriate code example below based on your Auth
 
 ```js
 const express = require("express");
- const app = express();
- app.get("/login_cookie", async (req, res) => {
-     // const user_key = get_user_from_jwt();
-     const ticket = await permit.elements.loginAs({userId: user_key, tenantId: TENANT});
-     res.status(302).redirect(ticket.redirect_url);
- });
- app.listen(port, () => {
-   console.log(`Example app listening at http://localhost:${port}`);
- });
+const { Permit } = require("permitio");
+
+const app = express();
+const permit = new Permit({ token: "<YOUR_API_KEY>" });
+
+function getUserKey(req) {
+  // Replace with code that reads the signed-in user's key from your session
+  return "<USER_KEY>";
+}
+
+app.get("/login_cookie", async (req, res) => {
+  const ticket = await permit.elements.loginAs({
+    userId: getUserKey(req),
+    tenantId: "<TENANT_KEY>",
+  });
+  res.redirect(302, ticket.redirect_url);
+});
+
+app.listen(4000, () => {
+  console.log("Login route listening at http://localhost:4000/login_cookie");
+});
 ```
 
 </TabItem>
 <TabItem value="python" label="Python">
 
 ```python
-from fastapi import FastAPI
- from starlette.responses import JSONResponse
- app = FastAPI()
- @app.post("/login_cookie")
- async def login():
-     # get user from jwt
-     # user_id = get_user_from_jwt(request)
-     ticket = await permit.elements.login_as(USER, TENANT)
-     return JSONResponse(status_code=302, headers={"Location": ticket.redirect_url}, content={})
+from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
+from permit import Permit
+
+app = FastAPI()
+permit = Permit(token="<YOUR_API_KEY>")
+
+
+def get_user_key(request: Request) -> str:
+    # Replace with code that reads the signed-in user's key from your session
+    return "<USER_KEY>"
+
+
+@app.get("/login_cookie")
+async def login_cookie(request: Request):
+    ticket = await permit.elements.login_as(get_user_key(request), "<TENANT_KEY>")
+    return RedirectResponse(url=ticket.redirect_url, status_code=302)
 ```
 
 </TabItem>
 <TabItem value="dotnet" label=".NET">
 
 ```csharp
+using System;
+using System.Net;
+using System.Threading.Tasks;
 using PermitSDK;
- namespace PermitOnboardingApp
- {
-     class HttpServer
-     {
-         public static HttpListener listener;
-         public static string url = "http://localhost:4000/login_cookie";
 
-         public static async Task HandleIncomingConnections()
-         {
-             bool runServer = true;
+namespace PermitOnboardingApp
+{
+    class HttpServer
+    {
+        public static HttpListener listener;
+        public static string url = "http://localhost:4000/login_cookie/";
+        static Permit permit = new Permit("<YOUR_API_KEY>");
 
-             while (runServer)
-                    HttpListenerContext ctx = await listener.GetContextAsync();
-                              HttpListenerResponse resp = ctx.Response;
-                              // In the next 4 lines we have the acutal code that is relevant to the Permit SDK
-                              // string testUserId = getUserIdFromJWT();
-                              EmbeddedLoginContentRequestOutput ticket = await permit.Elements.LoginAs(testUserId, TENANT_ID);
-                              resp.Redirect(ticket.RedirectUrl);
-                              resp.OutputStream.Close();
-                          }
-                      public static void Main(string[] args)
-                      {
-                          // Create a Http server and start listening for incoming connections
-                          listener = new HttpListener();
-                          listener.Prefixes.Add(url);
-                          listener.Start();
-                          Console.WriteLine("Listening for connections on {0}", url);
-
-                          // Handle requests
-                          Task listenTask = HandleIncomingConnections();
-                          listenTask.GetAwaiter().GetResult();
-
-                          // Close the listener
-                          listener.Close();
-                      }
-                  }
-              }
-```
-
-</TabItem>
-<TabItem value="java" label="Java">
-
-```java
-package com.example.myproject;
-
-import io.permit.sdk.Permit;
-import io.permit.sdk.PermitConfig;
-import io.permit.sdk.api.PermitApiException;
-import io.permit.sdk.api.models.UserLoginResponse;
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import java.io.IOException;
-
-@RestController
-@SpringBootApplication
-public class DemoApplication {
-	Permit permit = new Permit(
-			new PermitConfig.Builder("<SET_API_KEY_HERE>")
-							.withPdpAddress("http://localhost:7766")
-            					.withDebugMode(true)
-            					.build()
-            	);
-
-            	@GetMapping("/login_cookie")
-            	public ResponseEntity<Object> loginWithCookie() throws IOException, PermitApiException {
-                // String userId = getUserIdFromJWT();
-            		UserLoginResponse ticket = permit.elements.loginAs(userId, tenantId);
-            		HttpHeaders headers = new HttpHeaders();
-            		headers.add("Location", ticket.redirectUrl);
-            		return new ResponseEntity<>(ticket.content, headers, HttpStatus.FOUND);
-            	}
-
-            	public static void main(String[] args) {
-            		SpringApplication.run(DemoApplication.class, args);
-            	}
+        public static async Task HandleIncomingConnections()
+        {
+            while (true)
+            {
+                HttpListenerContext ctx = await listener.GetContextAsync();
+                HttpListenerResponse resp = ctx.Response;
+                string userId = "<USER_KEY>"; // read the user key from your own session
+                EmbeddedLoginContentRequestOutput ticket = await permit.Elements.LoginAs(userId, "<TENANT_KEY>");
+                resp.Redirect(ticket.RedirectUrl);
+                resp.OutputStream.Close();
             }
-```
+        }
 
-</TabItem>
-</Tabs>
-
-</TabItem>
-
-<TabItem value="bearer" label="Bearer Token">
-
-<Tabs groupId="language">
-<TabItem value="nodejs" label="Node.js">
-
-```js
-const express = require("express");
- const app = express();
- app.post("/login_header", async (req, res) => {
-     // const user_key = get_user_from_jwt();
-     const ticket = await permit.elements.loginAs({userId: user_key, tenantId: TENANT});
-     res.status(200).send(ticket.content);
- });
- app.listen(port, () => {
-   console.log(`Example app listening at http://localhost:${port}`);
- });
-```
-
-</TabItem>
-<TabItem value="python" label="Python">
-
-```python
-from fastapi import FastAPI
- from starlette.responses import JSONResponse
- app = FastAPI()
-
-
- @app.post("/login_header")
- async def main():
-     # get user from jwt
-     # user_id = get_user_from_jwt(request)
-     ticket = await permit.elements.login_as(USER, TENANT)
-     return JSONResponse(content=ticket.content, status_code=200)
-```
-
-</TabItem>
-<TabItem value="dotnet" label=".NET">
-
-```csharp
-using PermitSDK;
- namespace PermitOnboardingApp
- {
-     class HttpServer
-     {
-         public static HttpListener listener;
-         public static string url = "http://localhost:4000/login_cookie";
-         public static async Task HandleIncomingConnections()
-         {
-             bool runServer = true;
-             while (runServer)
-                 HttpListenerContext ctx = await listener.GetContextAsync();
-                 HttpListenerResponse resp = ctx.Response;
-                 // In the next 6 lines we have the acutal code that is relevant to the Permit SDK
-                 // string testUserId = getUserIdFromJWT();
-                 EmbeddedLoginContentRequestOutput ticket = await permit.Elements.LoginAs(testUserId, TENANT_ID);
-                 byte[] data = Encoding.UTF8.GetBytes(ticket.Content);
-                 resp.StatusCode = 200;
-                 await resp.OutputStream.WriteAsync(data, 0, data.Length);
-                 resp.OutputStream.Close();
-             }
-         public static void Main(string[] args)
-          {
-                      // Create a Http server and start listening for incoming connections
-                      listener = new HttpListener();
-                      listener.Prefixes.Add(url);
-                      listener.Start();
-                      Console.WriteLine("Listening for connections on {0}", url);
-                      // Handle requests
-                      Task listenTask = HandleIncomingConnections();
-                      listenTask.GetAwaiter().GetResult();
-                      // Close the listener
-                      listener.Close();
-                  }
-              }
-          }
+        public static void Main(string[] args)
+        {
+            listener = new HttpListener();
+            listener.Prefixes.Add(url);
+            listener.Start();
+            Console.WriteLine("Listening for connections on {0}", url);
+            HandleIncomingConnections().GetAwaiter().GetResult();
+            listener.Close();
+        }
+    }
+}
 ```
 
 </TabItem>
@@ -313,8 +213,9 @@ package com.example.myproject;
 
 import io.permit.sdk.Permit;
 import io.permit.sdk.PermitConfig;
-import io.permit.sdk.api.PermitApiException;
-import io.permit.sdk.api.models.UserLoginResponse;
+import io.permit.sdk.api.PermitApiError;
+import io.permit.sdk.api.PermitContextError;
+import io.permit.sdk.api.models.ElementsLoginResult;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.http.HttpHeaders;
@@ -328,23 +229,23 @@ import java.io.IOException;
 @RestController
 @SpringBootApplication
 public class DemoApplication {
-	Permit permit = new Permit(
-			new PermitConfig.Builder("<SET_API_KEY_HERE>")
-					.withPdpAddress("http://localhost:7766")
-					.withDebugMode(true)
-					.build()
-	);
+    Permit permit = new Permit(
+        new PermitConfig.Builder("<YOUR_API_KEY>").build()
+    );
 
-	@GetMapping("/login_header")
-	public ResponseEntity<Object> loginWithHeader() throws IOException, PermitApiException {
-    // String userId = getUserIdFromJWT();
-		UserLoginResponse ticket = permit.elements.loginAs(userId, tenantId);
-		return new ResponseEntity<>(ticket.content, HttpStatus.OK);
-	}
+    @GetMapping("/login_cookie")
+    public ResponseEntity<Object> loginWithCookie() throws IOException, PermitApiError, PermitContextError {
+        String userId = "<USER_KEY>"; // read the user key from your own session
+        String tenantId = "<TENANT_KEY>";
+        ElementsLoginResult ticket = (ElementsLoginResult) permit.elements.loginAs(userId, tenantId);
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("Location", ticket.redirectUrl);
+        return new ResponseEntity<>(headers, HttpStatus.FOUND);
+    }
 
-	public static void main(String[] args) {
-		SpringApplication.run(DemoApplication.class, args);
-	}
+    public static void main(String[] args) {
+        SpringApplication.run(DemoApplication.class, args);
+    }
 }
 ```
 
@@ -353,81 +254,109 @@ public class DemoApplication {
 
 </TabItem>
 
-<TabItem value="headers" label="Other Headers">
+<TabItem value="bearer" label="Bearer Token or Other Headers">
 
 <Tabs groupId="language">
 <TabItem value="nodejs" label="Node.js">
 
 ```js
 const express = require("express");
- const app = express();
- app.post("/login_header", async (req, res) => {
-     // const user_key = get_user_from_jwt();
-     const ticket = await permit.elements.loginAs({userId: user_key, tenantId: TENANT});
-     res.status(200).send(ticket.content);
- });
- app.listen(port, () => {
-   console.log(`Example app listening at http://localhost:${port}`);
- });
+const { Permit } = require("permitio");
+
+const app = express();
+const permit = new Permit({ token: "<YOUR_API_KEY>" });
+
+function getUserKey(req) {
+  // Replace with code that reads the signed-in user's key from the
+  // Authorization header or your custom header
+  return "<USER_KEY>";
+}
+
+app.post("/login_header", async (req, res) => {
+  const ticket = await permit.elements.loginAs({
+    userId: getUserKey(req),
+    tenantId: "<TENANT_KEY>",
+  });
+  // ticket.content is { url: ticket.redirect_url }
+  res.status(200).json(ticket.content);
+});
+
+app.listen(4000, () => {
+  console.log("Login route listening at http://localhost:4000/login_header");
+});
 ```
 
 </TabItem>
 <TabItem value="python" label="Python">
 
 ```python
-from fastapi import FastAPI
- from starlette.responses import JSONResponse
- app = FastAPI()
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from permit import Permit
+
+app = FastAPI()
+permit = Permit(token="<YOUR_API_KEY>")
 
 
- @app.post("/login_header")
- async def main():
-     # get user from jwt
-     # user_id = get_user_from_jwt(request)
-     ticket = await permit.elements.login_as(USER, TENANT)
-     return JSONResponse(content=ticket.content, status_code=200)
+def get_user_key(request: Request) -> str:
+    # Replace with code that reads the signed-in user's key from the
+    # Authorization header or your custom header
+    return "<USER_KEY>"
+
+
+@app.post("/login_header")
+async def login_header(request: Request):
+    ticket = await permit.elements.login_as(get_user_key(request), "<TENANT_KEY>")
+    # ticket.content is {"url": ticket.redirect_url}
+    return JSONResponse(content=ticket.content, status_code=200)
 ```
 
 </TabItem>
 <TabItem value="dotnet" label=".NET">
 
 ```csharp
+using System;
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
 using PermitSDK;
- namespace PermitOnboardingApp
- {
-     class HttpServer
-     {
-         public static HttpListener listener;
-         public static string url = "http://localhost:4000/login_cookie";
-         public static async Task HandleIncomingConnections()
-         {
-             bool runServer = true;
-             while (runServer)
-                 HttpListenerContext ctx = await listener.GetContextAsync();
-                 HttpListenerResponse resp = ctx.Response;
-                 // In the next 6 lines we have the acutal code that is relevant to the Permit SDK
-                 // string testUserId = getUserIdFromJWT();
-                 EmbeddedLoginContentRequestOutput ticket = await permit.Elements.LoginAs(testUserId, TENANT_ID);
-                 byte[] data = Encoding.UTF8.GetBytes(ticket.Content);
-                 resp.StatusCode = 200;
-                 await resp.OutputStream.WriteAsync(data, 0, data.Length);
-                 resp.OutputStream.Close();
-             }
-         public static void Main(string[] args)
-         {
-             // Create a Http server and start listening for incoming connections
-             listener = new HttpListener();
-             listener.Prefixes.Add(url);
-             listener.Start();
-             Console.WriteLine("Listening for connections on {0}", url);
-             // Handle requests
-             Task listenTask = HandleIncomingConnections();
-             listenTask.GetAwaiter().GetResult();
-             // Close the listener
-             listener.Close();
-         }
-     }
- }
+
+namespace PermitOnboardingApp
+{
+    class HttpServer
+    {
+        public static HttpListener listener;
+        public static string url = "http://localhost:4000/login_header/";
+        static Permit permit = new Permit("<YOUR_API_KEY>");
+
+        public static async Task HandleIncomingConnections()
+        {
+            while (true)
+            {
+                HttpListenerContext ctx = await listener.GetContextAsync();
+                HttpListenerResponse resp = ctx.Response;
+                string userId = "<USER_KEY>"; // read the user key from your own session
+                EmbeddedLoginContentRequestOutput ticket = await permit.Elements.LoginAs(userId, "<TENANT_KEY>");
+                byte[] data = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(ticket.Content));
+                resp.StatusCode = 200;
+                resp.ContentType = "application/json";
+                await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                resp.OutputStream.Close();
+            }
+        }
+
+        public static void Main(string[] args)
+        {
+            listener = new HttpListener();
+            listener.Prefixes.Add(url);
+            listener.Start();
+            Console.WriteLine("Listening for connections on {0}", url);
+            HandleIncomingConnections().GetAwaiter().GetResult();
+            listener.Close();
+        }
+    }
+}
 ```
 
 </TabItem>
@@ -438,14 +367,14 @@ package com.example.myproject;
 
 import io.permit.sdk.Permit;
 import io.permit.sdk.PermitConfig;
-import io.permit.sdk.api.PermitApiException;
-import io.permit.sdk.api.models.UserLoginResponse;
+import io.permit.sdk.api.PermitApiError;
+import io.permit.sdk.api.PermitContextError;
+import io.permit.sdk.api.models.ElementsLoginResult;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
@@ -453,259 +382,275 @@ import java.io.IOException;
 @RestController
 @SpringBootApplication
 public class DemoApplication {
-	Permit permit = new Permit(
-			new PermitConfig.Builder("<SET_API_KEY_HERE>")
-					.withPdpAddress("http://localhost:7766")
-					.withDebugMode(true)
-					.build()
-	);
+    Permit permit = new Permit(
+        new PermitConfig.Builder("<YOUR_API_KEY>").build()
+    );
 
-	@GetMapping("/login_header")
-	public ResponseEntity<Object> loginWithHeader() throws IOException, PermitApiException {
-    // String userId = getUserIdFromJWT();
-		UserLoginResponse ticket = permit.elements.loginAs(userId, tenantId);
-		return new ResponseEntity<>(ticket.content, HttpStatus.OK);
-	}
+    @PostMapping("/login_header")
+    public ResponseEntity<Object> loginWithHeader() throws IOException, PermitApiError, PermitContextError {
+        String userId = "<USER_KEY>"; // read the user key from your own session
+        String tenantId = "<TENANT_KEY>";
+        ElementsLoginResult ticket = (ElementsLoginResult) permit.elements.loginAs(userId, tenantId);
+        return new ResponseEntity<>(ticket.content, HttpStatus.OK);
+    }
 
-	public static void main(String[] args) {
-		SpringApplication.run(DemoApplication.class, args);
-	}
+    public static void main(String[] args) {
+        SpringApplication.run(DemoApplication.class, args);
+    }
 }
 ```
 
 </TabItem>
 </Tabs>
-If you use custom Authentication Header to authenticate to your backend, add this route to your backend.
 
 </TabItem>
 
 <TabItem value="frontendonly" label="FrontendOnly">
-For FrontendOnly Login, there is no need in backend.
-For a full guide, please check our [Embedded Elements](/embeddable-uis/embedding-elements) documentation.
+
+The `frontendOnly` method doesn't use a backend route. Go to [Call permit.elements.login()](#-client-side-login-method).
 
 </TabItem>
 </Tabs>
 
-### Setup The Client-side Login
-Next you need to setup the client-side login method to log in the user to the Permit Element - **follow the instructions below.**
+## 2. Call `permit.elements.login()` in your frontend \{#-client-side-login-method}
 
-____
-## 🌏 Client-side login method
+Call `permit.elements.login()` after your identity provider confirms the user's identity, and before your application renders the element iframe. The element iframe reads the `permit_session` cookie that the login creates, so an iframe that loads first has no session.
 
-In the client side, you need to call the `permit.elements.login()` method from [**"Permit-JS" SDK**](https://github.com/permitio/permit-js) to log in the user. This function is used to log in the user to the Permit Element
-### Install Permit-js
+### Install permit-js \{#install-permit-js}
 
-Once you have your application ready, you need to install Permit-JS SDK. This gives you access to our prebuilt embeddable Element components.
-
-Run the following command to install the Permit-js SDK in your project:
+Install the `@permitio/permit-js` package in your frontend project:
 
 ```bash
 npm install @permitio/permit-js
 ```
 
-In the client side, you need to call the `permit.elements.login()` function to log in the user.
+### Set the login parameters \{#setup-the-client-side-login}
 
-This function will use the Server-side endpoint you created in the previous step (if you are using the Server-side login method).
+`permit.elements.login()` takes one object. The required parameters depend on the login method.
 
-```js
-permit.elements.login({
-    loginUrl: 'https://your_app_url.com/login_cookie',
-    tenant: 'your_tenant_key',
-    token: '<TOKEN>',
-    loginMethod: LoginMethod.bearer
-}).then((res: any) => {
-    //optional handle success
-}).catch((err: any) => {
-    //handle error
-});
-```
+| Parameter | Required for | Description |
+|---|---|---|
+| `loginMethod` | All methods except cookie | One of `LoginMethod.cookie` (default), `LoginMethod.bearer`, `LoginMethod.header`, `LoginMethod.frontendOnly`, or `LoginMethod.supportsPrivateBrowser`. Import it with `import permit, { LoginMethod } from "@permitio/permit-js"`. |
+| `loginUrl` | Cookie, bearer, header, private browsing | The URL of the backend login route from [step 1](#-server-side-login-method). Ignored by `frontendOnly`. |
+| `tenant` | `frontendOnly` (optional for the others) | The key of the tenant to log the user in to. With backend methods, your route can set the tenant instead. |
+| `token` | Bearer | The user's token. `permit.elements.login()` sends it as `Authorization: Bearer <token>` to `loginUrl`. |
+| `headers` | Header | The authentication headers `permit.elements.login()` sends to `loginUrl`. |
+| `userJwt` | `frontendOnly` | The signed-in user's JWT. Permit verifies it against the environment JWKS. |
+| `envId` | `frontendOnly` | The ID of the Permit environment. The **Generate Code** dialog in the Elements screen shows it in the iframe `src`. |
+| `userKeyClaim` | Optional, `frontendOnly` only | The JWT claim that holds the user's Permit key, when the key is not in `sub`. |
+| `elementIframeUrl` | Private browsing | The exact `src` of the element iframe. |
 
-There are few things that need to be configured here:
+### Log in with your method \{#use-the-login-method}
 
-1.  `loginUrl` - The URL that corresponds to your Server-side login route you created in the previous steps.
-2.  `loginMethod` - The login method you are using (cookie, bearer, headers, frontendOnly)
-3.  `tenant` (Optional) - Required for **frontendOnly** login method. the name of the tenant that the user is part of, you can set it at your backend as well.
-4.  `token` (Optional) - Required for **bearer token** login method, you need to pass the token here.
-5.  `headers` (Optional) - Required for **custom headers** login method, you need to pass the headers here.
-6.  `userJwt` (Optional) - Required for **frontendOnly** login method, you need to pass the user JWT here.
-7.  `envId` (Optional) - Required for **frontendOnly** login method, you need to pass the Permit.io Environment Key or ID here.
+Choose the tab for your login method. In each example, replace `<TENANT_KEY>` with the tenant key, and set `loginUrl` to the URL of your backend login route. The promise that `permit.elements.login()` returns resolves after the login completes, so render the element iframe in the `then` callback.
 
-:::tip
-We recommend to place the login close to the user's authentication part, after the user's identity confirmed by the Authentication provider you are using, but **just before** the Permit.io Element is loaded.
-:::
+<Tabs groupId="auth-method">
+<TabItem value="cookies" label="Cookie">
 
-### Use The `login` Method
+Set `loginUrl` to your cookie login route. `LoginMethod.cookie` is the default, so you can omit `loginMethod`.
 
-There are **4 supported login options** choose the one that you are using in your backend.
+```ts
+import permit from "@permitio/permit-js";
 
-<Tabs groupId="language">
-<TabItem value="cookie" label="Cookie Login Method">
-
-The **loginMethod** here should be set to: `LoginMethod: LoginMethod.cookie`.
-
-```js
-permit.elements.login({
-    loginUrl: 'https://your_app_url.com/permit_login,
-    tenant: 'your_tenant_key'
-}).then((res: any) => {//optional handle success
- }).catch((err: any) => {//handle error
-});
+permit.elements
+  .login({
+    loginUrl: "https://your_app_url.com/login_cookie",
+    tenant: "<TENANT_KEY>",
+  })
+  .then((loggedIn: boolean) => {
+    // Render the element iframe here
+  })
+  .catch((err: unknown) => {
+    console.error("Permit Elements login failed", err);
+  });
 ```
 
 </TabItem>
 
-<TabItem value="bearer" label="Bearer Token Login Method">
+<TabItem value="bearer" label="Bearer Token">
 
-The **loginMethod** here should be set to: `LoginMethod: LoginMethod.bearer` and the **token**
-should be set to the current user token.
+Set `loginMethod` to `LoginMethod.bearer` and `token` to the signed-in user's token.
 
-```js
-permit.elements.login({
-    loginUrl: backendUrl,
-    tenant: 'your_tenant_key',
+```ts
+import permit, { LoginMethod } from "@permitio/permit-js";
+
+permit.elements
+  .login({
+    loginUrl: "https://your_app_url.com/login_header",
+    tenant: "<TENANT_KEY>",
     loginMethod: LoginMethod.bearer,
-    token: JWT_secret
-}).then((res: any) => {//optional handle success
- }).catch((err: any) => {//handle error
-});
+    token: "<USER_ACCESS_TOKEN>",
+  })
+  .then((loggedIn: boolean) => {
+    // Render the element iframe here
+  })
+  .catch((err: unknown) => {
+    console.error("Permit Elements login failed", err);
+  });
 ```
 
 </TabItem>
 
-<TabItem value="headers" label="Other Header Login Method">
+<TabItem value="headers" label="Other Headers">
 
-The **loginMethod** here should be set to: `LoginMethod: LoginMethod.header`
-and you should pass the **headers** to the current user auth headers.
+Set `loginMethod` to `LoginMethod.header` and `headers` to the signed-in user's authentication headers.
 
-```js
-permit.elements.login({
-    loginUrl: backendUrl,
-    tenant: 'your_tenant_key',
+```ts
+import permit, { LoginMethod } from "@permitio/permit-js";
+
+permit.elements
+  .login({
+    loginUrl: "https://your_app_url.com/login_header",
+    tenant: "<TENANT_KEY>",
     loginMethod: LoginMethod.header,
-    headers: {'<secure header name>': 'secret'}
-}).then((res: any) => {//optional handle success
- }).catch((err: any) => {//handle error
-});
+    headers: { "<AUTH_HEADER_NAME>": "<AUTH_HEADER_VALUE>" },
+  })
+  .then((loggedIn: boolean) => {
+    // Render the element iframe here
+  })
+  .catch((err: unknown) => {
+    console.error("Permit Elements login failed", err);
+  });
 ```
 
 </TabItem>
 
 <TabItem value="frontendonly" label="FrontendOnly">
 
-Running the `permit.elements.login` function with the `LoginMethod.frontendOnly` requires some more setup on Permit.io Dashboard - **check our [Embedded Elements](/embeddable-uis/embedding-elements) documentation for a full guide.**
+Set `loginMethod` to `LoginMethod.frontendOnly`, and pass the user's JWT, the tenant key, and the environment ID. The environment must have a JWKS configured, and the user's key in Permit must match the JWT `sub` claim or the claim you pass as `userKeyClaim`. See [Embed Permit Elements](/embeddable-uis/embedding-elements) for the full `frontendOnly` walkthrough.
 
+```ts
+import permit, { LoginMethod } from "@permitio/permit-js";
 
-```js
-permit.elements.login({
+permit.elements
+  .login({
     loginMethod: LoginMethod.frontendOnly,
     userJwt: "<YOUR_USER_JWT>",
-    tenant: "<YOUR_TENANT_KEY>",
+    tenant: "<TENANT_KEY>",
     envId: "<YOUR_ENV_ID>",
-})
-    .then((res: any) => {
-    console.log("success", res);
-})
-    .catch((err: any) => {
-    // you can handle the error either here or in your BE
-    console.log("err", err);
-});
+  })
+  .then((loggedIn: boolean) => {
+    // Render the element iframe here
+  })
+  .catch((err: unknown) => {
+    console.error("Permit Elements login failed", err);
+  });
 ```
+
 </TabItem>
 </Tabs>
 
-___
-After you run login successfully you will **get a cookie** called `permit_session` which will allow you to
-load your Permit Element securely and successfully.
+## 3. Log the user out of the element \{#client-side-logout-method}
 
-### Client-side logout method
-
-This function should be called along with the logging-out logic that you have within your App, to make sure the user does not
-continue to have access to the Permit Element.
-
-This logout method **should be called** as part of the logic of logging your user out with your
-authentication solution.
+Call `permit.elements.logout()` in the same code path that signs the user out of your application. If you skip this call, the element session stays active in that browser after the user signs out of your application, and the element still opens as that user.
 
 ```javascript
 permit.elements.logout();
 ```
 
----
-### Support for private browsing mode
+## Verify the login
 
+1. Open your browser's developer tools and select the **Network** tab.
+2. Reload the page that runs `permit.elements.login()`.
+3. Confirm that the login request succeeds and that the response sets a cookie named `permit_session`.
+4. Confirm that the element iframe loads the user's data instead of an error page.
 
-Permit Element is now compatible with private browsers, such as Chrome Incognito Mode and Safari.
-To do that you need to change a few things from the regular cookie-based permit elements
+With `LoginMethod.frontendOnly`, step 3 is a `POST` to `https://api.permit.io/v2/auth/<YOUR_ENV_ID>/elements_fe_login_as` whose response holds a `redirect_url`.
 
-#### Backend configuration
-To enable support for private browsing, you need to use ticket.element_bearer_token instead of the ticket.redirect_url like so:
+If the login fails, see [Login errors](#login-errors) for the error codes Permit returns, and [Troubleshoot Permit Elements](/embeddable-uis/troubleshooting) for network and cookie problems.
 
-```js
-    const express = require("express");
-    const app = express();
-    app.post("/login_private_browser", async (req, res) => {
-        const ticket = await permit.elements.loginAs({userId: user_key, tenantId: TENANT});
-        // this is the changed part
-        res.status(200).json({url: ticket.element_bearer_token});
-    });
-    app.listen(port, () => {
-        console.log(`Example app listening at http://localhost:${port}`);
-    });
-```
+## Support private browsing \{#support-for-private-browsing-mode}
 
-#### Frontend configuration
-To ensure proper functionality, add the following code to your frontend:
+Private windows, such as Chrome Incognito, and browsers such as Safari can block the third-party `permit_session` cookie. With `LoginMethod.supportsPrivateBrowser`, your backend returns an element bearer token instead of a cookie redirect, and `permit.elements.login()` passes the token to the element iframe with `postMessage`. This method needs `@permitio/permit-js` version 0.5.2 or later.
+
+### Return the element bearer token from the backend \{#backend-configuration}
+
+In the backend route, return `ticket.element_bearer_token` in a JSON field named `url`. `permit.elements.login()` reads the token from the `url` field of the response.
 
 ```js
-    permit.elements.login({
-        loginUrl: backendUrl,
-            tenant: 'your_tenant_key',
-            loginMethod: LoginMethod.supportsPrivateBrowser,
-            // If your server uses a bearer token, put it here:
-            // token: <JWT_secret>
-            // If your server uses headers, put it here:
-            // headers: <Headers>
-            //This should be the exact URL copied from the iframe (we use it to ensure the element type)
-            elementIframeUrl: 'https://embed.permit.io/<ELEMENT_NAME>?envId=<SOME_UNIQUE_ID>&darkMode=false&tenantKey=<TENANT_KEY>&elementsToken=true',
+const express = require("express");
+const { Permit } = require("permitio");
 
-    }).then((res: any) => {//optional handle success
-    }).catch((err: any) => {//handle error
-    });
+const app = express();
+const permit = new Permit({ token: "<YOUR_API_KEY>" });
+
+function getUserKey(req) {
+  // Replace with code that reads the signed-in user's key from your session
+  return "<USER_KEY>";
+}
+
+app.post("/login_private_browser", async (req, res) => {
+  const ticket = await permit.elements.loginAs({
+    userId: getUserKey(req),
+    tenantId: "<TENANT_KEY>",
+  });
+  // Return the element bearer token, not the redirect URL
+  res.status(200).json({ url: ticket.element_bearer_token });
+});
+
+app.listen(4000, () => {
+  console.log("Login route listening at http://localhost:4000/login_private_browser");
+});
 ```
 
-#### Modifications to the Iframe URL
-In the iframe source URL, you need to append the following parameters:
+### Pass the iframe URL to the frontend login \{#frontend-configuration}
 
-`&elementsToken=true`
+Set `loginMethod` to `LoginMethod.supportsPrivateBrowser`, and set `elementIframeUrl` to the exact `src` of the element iframe. If your backend route expects a bearer token or custom headers, pass `token` or `headers` as well.
+
+```ts
+import permit, { LoginMethod } from "@permitio/permit-js";
+
+permit.elements
+  .login({
+    loginUrl: "https://your_app_url.com/login_private_browser",
+    tenant: "<TENANT_KEY>",
+    loginMethod: LoginMethod.supportsPrivateBrowser,
+    // If your backend route expects a bearer token, add: token: "<USER_ACCESS_TOKEN>",
+    // If your backend route expects custom headers, add: headers: { "<AUTH_HEADER_NAME>": "<AUTH_HEADER_VALUE>" },
+    // The exact src of the element iframe
+    elementIframeUrl:
+      "https://embed.permit.io/<ELEMENT_NAME>?envId=<ENV_ID>&darkMode=false&tenantKey=<TENANT_KEY>&elementsToken=true",
+  })
+  .then((loggedIn: boolean) => {
+    // The element iframe receives the token
+  })
+  .catch((err: unknown) => {
+    console.error("Permit Elements login failed", err);
+  });
+```
+
+### Add `elementsToken=true` to the iframe URL \{#modifications-to-the-iframe-url}
+
+Append `&elementsToken=true` to the iframe `src`, and use the same URL in `elementIframeUrl`:
 
 ```html
-    <iframe
-        src="https://embed.permit.io/<ELEMENT_NAME>?envId=<SOME_UNIQUE_ID>&darkMode=false&tenantKey=<TENANT_KEY>&elementsToken=true"
-        width="100%"
-        height="100%"
-        frameborder="0"/>
+<iframe
+    src="https://embed.permit.io/<ELEMENT_NAME>?envId=<ENV_ID>&darkMode=false&tenantKey=<TENANT_KEY>&elementsToken=true"
+    width="100%"
+    height="100%"
+    frameborder="0"
+></iframe>
 ```
 
-:::info IMPORTANT
-This feature is available from version [**"permitio/permit-js@0.5.2"**](https://github.com/permitio/permit-js)
-:::
+### Match the iframe URL exactly \{#ensuring-login-before-loading-the-iframe}
 
+`permit.elements.login()` finds the iframe whose `src` equals `elementIframeUrl` and posts the token to it. If the two URLs differ by any character, including the `elementsToken=true` parameter, the token never reaches the element, and the browser console logs that the iframe was not found.
 
-#### Ensuring Login Before Loading the Iframe
-It is important to make sure that the login process runs before the iframe is loaded. This ensures that the iframe is opened with an authenticated session, preventing issues with private browsing mode.
-Add with an authenticated session to Permit cloud.
+## Login errors \{#login-errors}
 
+When a login fails, Permit returns one of these errors.
 
+| Error | Cause | Fix |
+|---|---|---|
+| `USER_NOT_FOUND` | The user doesn't exist in Permit, or the user is not a member of the tenant you logged in to. | Sync the user to Permit and assign the user a role in that tenant. |
+| `TENANT_NOT_FOUND` | The tenant passed to `permit.elements.login()` or `loginAs` doesn't exist in the environment. | Check the tenant key, or create the tenant. |
+| `INVALID_PERMISSION_LEVEL` | The user's role has no access to the part of the element being opened. A role left in **Hidden Roles** is the usual cause. | Drag the role to a permission level. See [Permission levels](/embeddable-uis/permission-levels). |
+| `FORBIDDEN_ACCESS` | The API key that the backend login route uses is not an environment API key. A project-level or organization-level key is refused here. | Use the environment API key of the environment the element belongs to. See [Get your API key](/overview/get-api-key). |
 
+A role left in **Hidden Roles** doesn't stop the login itself. The login creates the session for any user who is a member of the tenant, and the element then loads and asks Permit for its data. Those data requests return HTTP 403 for a hidden role, so the element renders an error instead of the user list. Assign the role a permission level to fix it.
 
+## Next steps
 
-
-
-### Login Errors
-
-There are a few possible errors you might find yourself come across while working with the embedding of Permit Elements.
-
-| Error                      | Description                                                                                                                                                                                                                                        |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `USER_NOT_FOUND`           | This error can appear if you are trying to log in as a particular user, but that **user does not exist within Permit**. You can also experience this login error when you are trying to login a user into a **tenant that he does not belong to**. |
-| `TENANT_NOT_FOUND`         | This error can appear when you are passing in a tenant, either in the frontend `permit.elements.login` function, or in your backend URL endpoint, where the tenant has not been created in Permit.                                                 |
-| `INVALID_PERMISSION_LEVEL` | This error will emerge when you are trying to access part of the Element which you have not been given access too.
+- [Troubleshoot Permit Elements](/embeddable-uis/troubleshooting) when the login or the element fails to load.
+- [Assign roles to permission levels](/embeddable-uis/permission-levels) to control what each user sees in an element.
+- [Call the Access Request API](/api/elements/access-requests) as a signed-in element user.

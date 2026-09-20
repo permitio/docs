@@ -1,25 +1,47 @@
 ---
 sidebar_position: 2
-title: List User Permissions
-description: "List a user's roles and fetch the permissions for each role with the Permit API."
+title: List the role permissions of a user with the API
+sidebar_label: List User Permissions
+description: "List a user's top-level roles and the permissions of each role with the Permit API, and learn when to use getUserPermissions() on the PDP instead."
 ---
 
-# Overview
+List the permissions a user gets from top-level roles with the Permit API: get the roles of the user, then get the permissions of each role. This page is for developers who build admin tools or reports from the Permit API.
 
-To get user permissions, you need to list all the user roles and then fetch all the permissions for each role.
+:::info When to use the PDP instead
+The API method on this page reads stored role assignments and role definitions. The method does not evaluate resource instance roles, derived roles from relationship-based access control (ReBAC), or attribute-based access control (ABAC) conditions. To get the effective permissions of a user for a permission-aware UI or data filtering, call [`permit.getUserPermissions()`](/how-to/enforce-permissions/user-permissions) on the policy decision point (PDP).
+:::
 
-## Get User Roles
+## Prerequisites
 
-First of all we need to [get our `API_SECRET_KEY`](/api/api-with-cli/#get-your-api-key) from the dashboard and [get the current `project_id` and `env_id`](/api/examples/get-project-and-env)<br/>
+- An environment API key ([Get your API key](/overview/get-api-key))
+- The project ID or key and the environment ID or key ([Get the project ID and environment ID](/api/examples/get-project-and-env))
 
-### Get User Roles via the API
+In each request on this page, replace:
 
-You can get the user roles by requesting the user API endpoint
+| Placeholder | Value |
+|---|---|
+| `{project_id}` | Your project ID or key |
+| `{env_id}` | Your environment ID or key |
+| `user_id_or_key` | The user ID or key |
+| `tenant_id` | The tenant ID or key. If you don't use tenants, use `default`. |
+| `role_id_or_key` | A role ID or key from the user object, such as `admin` or `board` |
+| `API_SECRET_KEY` | Your environment API key |
+
+## 1. Get the roles of the user \{#get-user-roles}
+
+Get the user object with the [Get User API](https://api.permit.io/v2/redoc#tag/Users/operation/get_user). The `roles` array of the user object lists each role and the tenant the role applies in.
+
+### Get the user by ID or key \{#get-user-roles-via-the-api}
+
+Send a `GET` request to `https://api.permit.io/v2/facts/{project_id}/{env_id}/users/user_id_or_key` with the API key in the `authorization` header:
+
 ```bash
-https://api.permit.io/v2/facts/{project_id}/{env_id}/users/user_id_or_key
+curl 'https://api.permit.io/v2/facts/{project_id}/{env_id}/users/user_id_or_key' \
   -H 'authorization: Bearer API_SECRET_KEY'
 ```
-The return user object will look like this:
+
+The API responds with the user object:
+
 ```json        
 {
         "key": "key@permit.io",
@@ -52,19 +74,24 @@ The return user object will look like this:
                 "tenant": "default"
             }
         ],
-        "email": "test@gmail.com",
+        "email": "key@permit.io",
         "first_name": "",
         "last_name": "",
         "attributes": {}
     }
 ```
 
-#### get users with a key or email
+### Search users by key or email \{#get-users-with-a-key-or-email}
+
+If you don't know the exact user key, search the users of the environment with the `search` query parameter:
+
 ```bash
 curl 'https://api.permit.io/v2/facts/{project_id}/{env_id}/users?search=key@permit.io&page=1&per_page=3' \
   -H 'authorization: Bearer API_SECRET_KEY'
 ```
-The return user object will look like this:
+
+The API responds with the matching users, each with a `roles` array:
+
 ```json
 {
 "data": [
@@ -100,15 +127,17 @@ The return user object will look like this:
 }
 ```
 
-#### You can also get users per tenant
+### Search the users of a tenant \{#you-can-also-get-users-per-tenant}
 
-Replace `tenant_id` with your tenant id if you don't use tenants use `default` instead
+To get only the users that have roles in one tenant, search the tenant users endpoint:
 
 ```bash
 curl 'https://api.permit.io/v2/facts/{project_id}/{env_id}/tenants/tenant_id/users?search=key@permit.io&page=1&per_page=3' \
   -H 'authorization: Bearer API_SECRET_KEY'
 ```
-The return user object will look like this:
+
+The API responds with the matching users of the tenant:
+
 ```json
 {
 "data": [
@@ -143,7 +172,7 @@ The return user object will look like this:
                 "tenant": "default"
             }
         ],
-        "email": "test@gmail.com",
+        "email": "key@permit.io",
         "first_name": "",
         "last_name": "",
         "attributes": {}
@@ -154,22 +183,17 @@ The return user object will look like this:
 }
 ```
 
+## 2. Get the permissions of each role \{#get-role-permissions}
 
-
-
-## Get Role Permissions
-
-Now that we have the user roles, we can get the permissions for each role.<br/>
-To get the permissions for all the user roles (note that user can have multiple roles) we need to list all the permissions for each role.<br/>
-Replace `role_id_or_key` with your role id or key that you got from the previous step (E.G admin, board, etc...).
-
-
+A user can have several roles. For each role in the `roles` array of the user, get the role with the [Get Role API](https://api.permit.io/v2/redoc#tag/Roles/operation/get_role):
 
 ```bash
 curl 'https://api.permit.io/v2/schema/{project_id}/{env_id}/roles/role_id_or_key' \
   -H 'authorization: Bearer API_SECRET_KEY'
 ```
-The return role object will look like this:
+
+The API responds with the role object. The `permissions` array lists the permissions of the role in the `resource:action` format. The `extends` array lists the keys of roles that this role inherits all permissions from. Get each extended role the same way.
+
 ```json
 {
 "name": "board",
@@ -199,4 +223,14 @@ The return role object will look like this:
 
 ```
 
-Remove duplicates and get the final list of permitted roles.
+## 3. Combine the permissions
+
+Merge the `permissions` arrays of all the roles of the user, including the extended roles, and remove duplicates. The result is the list of permissions the user has from top-level roles. For example, a user with the `board` role in the preceding response can `create` a `document`, because the list contains `document:create`.
+
+Roles apply per tenant. If the user has roles in several tenants, combine the permissions per tenant.
+
+## Next steps
+
+- [Get all permissions of a user with getUserPermissions()](/how-to/enforce-permissions/user-permissions)
+- [Check a single permission with permit.check()](/how-to/enforce-permissions/check)
+- [Filter role assignments](/api/examples/filter-role-associations)

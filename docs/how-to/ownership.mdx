@@ -1,113 +1,109 @@
 ---
 sidebar_position: 8
 title: Model Ownership
-description: "Model resource ownership in Permit using either an ABAC owner attribute or a ReBAC parent-child relationship."
+description: "Model resource ownership in Permit.io with an attribute-based (ABAC) owner attribute or a relationship-based (ReBAC) parent-child relationship, and check the result."
 sidebar_label: Modeling Ownership
 ---
 
-Ownership plays an important role in managing and securing access to resources - this guide explains how to setup ownership using Permit
+Set up resource ownership in Permit.io, so that users can act on the resources they own. This guide is for developers who need an ownership rule and want to choose between attribute-based access control (ABAC) and relationship-based access control (ReBAC).
 
----
-
-As we always want to ensure that data owned by a user is accessible to them and to those given the privilege by them, ownership is on of the first building block of fine-grained authorization.
-
-There are two primary methods that can be employed to model ownership of resources -
-Attribute Based Access Control (ABAC) and Relationship Based Access Control (ReBAC).
-Both approaches offer unique advantages and cater to different requirements for managing access controls.
-
-Let's take a look at a simple example:
+Both approaches implement this example:
 
 :::tip Example
-`Bob`, a user in our system, needs to have access to his own files based on his ownership of them.
+`Bob`, a user in your application, can read, update, and delete the files he owns.
 :::
 
-There are two possible ways to create policies that would enforce `Bob`'s ownership of his files:
+## Choose an approach
 
-:::note RBAC based Ownership
-Technically, it is possible to setup ownership by using roles. Using roles for ownership, we would need to set up access per user and per resource - making it highly inefficient and unscalable.
+| Approach | How ownership is stored | Strengths | Limitations |
+|---|---|---|---|
+| [ABAC](#abac) | An `owner` attribute on each resource | Per-resource control, with no relationship data to sync | Can't follow application relationships, such as a file inside a folder. You set the owner on every resource. |
+| [ReBAC](#rebac) | An owner role on a parent resource, derived to its children | Ownership follows your resource hierarchy | More parts to model: relations, resource roles, role derivations, and instance relationships |
+
+:::note Ownership with roles
+You can also model ownership with role-based access control (RBAC) roles. Roles don't refer to a specific resource, so you would need a separate role for each user and each resource. This approach doesn't scale beyond a few resources.
 :::
+
+## Prerequisites
+
+- A Permit.io account with a project and an environment. See the [Quickstart](/quickstart).
+- A resource called `File`. For the ReBAC approach, also a resource called `Folder`. See [Policy basics](/how-to/build-policies/policy-basics#define-resources-and-actions).
+- For the ABAC approach, a role called `User`, assigned to the user `Bob` on the **Directory** screen.
+- To verify with a check: a Permit SDK connected to a policy decision point (PDP). See [Check permissions with permit.check()](/how-to/enforce-permissions/check).
 
 ## ABAC
 
-ABAC utilizes **attributes** as the basis for access control decisions. These attributes can be associated with users, resources, or the environment.
-In the context of granting a user access to files based on ownership, ABAC involves adding an `Owner` attribute to each file and folder.
-The user is then granted a role that permits them access to any file or folder where the `Owner` attribute matches their ID.
+ABAC decides access based on attributes of users and resources. For ownership, each file has an `owner` attribute. A resource set matches the files whose `owner` equals the key of the user who makes the request, and you grant that resource set its actions.
 
 :::tip Example
-![ABAC Model](/ui-videos/ownership/justabac.png)
+![Diagram of the user Bob connected to the Bob's Files folder and to File1, File2, and File3, each with the attribute Owner: Bob, and the conditions User.id == File.owner and User.id == Folder.owner](/ui-videos/ownership/justabac.png)
 :::
 
-### Pros & Cons
+### Set up ABAC ownership in Permit \{#setting-up-abac-based-ownership-in-permit}
 
-While offering a very granular way of managing ownership on a per-resource level, ABAC lacks the ability to rely on existing application-level relationships (Such as a file residing within a folder).
-This can result in a rather meticulous ownership assignment process only fit for specific scenarios.
+1. Sign in to the [Permit dashboard](https://app.permit.io).
+2. Open **Policy** and select the **Resources** tab. Find the `File` resource and click **Add Attributes**.
+   ![Resources tab with the File resource and the Add Attributes link](/ui-videos/how-to/ownership/1.png)
+3. In the resource editor, under **ABAC Options**, click **Add attribute**.
+   ![Resource editor with the ABAC Options section](/ui-videos/how-to/ownership/2.png)
+4. Name the attribute `owner`, set its type to **String**, and click **Save**.
+   ![ABAC Options with the owner attribute of type String](/ui-videos/how-to/ownership/3.png)
+5. Select the **ABAC Rules** tab and create a resource set:
+   - Name: `file ownership` (key `file_ownership`)
+   - Resource type: `File`
+   - Condition: `resource.owner` `equals (ref)` `user.key`
+   ![Resource Set form named file ownership for the File resource type, with the condition resource.owner equals (ref) user.key](/ui-videos/how-to/ownership/4.png)
+6. Select the **Policy Editor** tab. Under the `User` role, select `read`, `update`, and `delete` for the `file ownership` resource set, and save.
+   ![Policy Editor with the file ownership resource set](/ui-videos/how-to/ownership/5.png)
 
-### Setting up ABAC based Ownership in Permit
+The resource set matches a file when its `owner` attribute equals the `user.key` of the user who makes the request.
 
-:::tip Example Policy
-For the purpose of this example, let's try and setup the following policy:
-`Bob` can `Read`, `Upadte`, and `Delete` every file he is an `Owner` of.  
-:::
+### Verify ABAC ownership
 
-To setup an ABAC based ownership policy in Permit's UI -
+Call `permit.check()` for `Bob` on a file, and pass the `owner` attribute:
 
-1. Login to your Permit account at app.permit.io
-2. For the purpose of this tutorial, we setup a resource called `File` and a role called `User` in advance.
-3. Go to the `Resources` tab under `Policy`. Locate your resource, and click "Add Attributes".
-   ![Add Attributes](/ui-videos/how-to/ownership/1.png)
-4. In the resource editor, under `ABAC Options`, click on `Add Attribute`.
-   ![Resource Editor](/ui-videos/how-to/ownership/2.png)
-5. Name the attribute, and set it as a string. Click save.
-   ![Add Attribute](/ui-videos/how-to/ownership/3.png)
-6. Go to the `ABAC Rules` tab, and enable ABAC Options.
-7. Create the following ABAC Resource Set:
-   ![Resource Set](/ui-videos/how-to/ownership/4.png)
-8. Go back to the policy editor screen. You should now be able to see a new file-ownership resource set you can manage the permissions for.
-   ![Policies](/ui-videos/how-to/ownership/5.png)
-
-The ABAC condition will compare the file_ownership attribute (On the resource) is equal to the `user.key` of the user trying to perform the action.
+- `permit.check("Bob", "update", { type: "File", attributes: { owner: "Bob" } })` returns `true`.
+- The same check with `owner: "Alice"` returns `false`.
 
 ## ReBAC
 
-ReBAC allows us to implement ownership in a more effective way by leveraging existing application-level relationships and creating simple policies based on hierarchies and groupings.
-
-By creating Parent-Child hierarchies, ReBAC allows us to nest resources under other resources.
-Such a relationship allows us to derive roles based on the relationship between two resources:
+ReBAC decides access based on relationships between resource instances. For ownership, a user who owns a folder also owns every file in the folder, through a parent-child relationship between the folder and its files.
 
 :::tip Example
-![ReBAC Example](/ui-videos/how-to/ownership/6.png)
+![Graph of Bob as Owner of the Bob's Files folder, which is the Parent of the Bob's Pics and Bob's Docs folders, each of which is the Parent of files](/ui-videos/how-to/ownership/6.png)
 :::
 
-The ReBAC policy for this graph will look like this:
+The ReBAC policy for this graph is:
 
-A user who is assigned the role `Folder#Owner` will also be assigned the `File#Owner` when the `Folder` instance is the `Parent` of a `File` instance.
+A user who is assigned the role `Folder#Owner` is also assigned the role `File#Owner` when the `Folder` instance is the `Parent` of a `File` instance.
 
-In simpler words, if a file resides inside a folder (That's the Parent-Child relationship), and a user is assigned the owner of that folder, they will also be the owner of the files.
+If a file is in a folder (a parent-child relationship), and a user owns the folder, the user also owns the files in the folder.
 
-### Pros & Cons
+### Set up ReBAC ownership in Permit \{#setting-up-rebac-based-ownership-with-permit}
 
-While providing the obvious benefit of managing hierarchical ownership scenarios, ReBAC might be a little more complex to model.
+1. Sign in to the [Permit dashboard](https://app.permit.io).
+2. Open **Policy** and select the **Resources** tab. Click **Add Roles** on a resource.
+   ![Resources tab with the Add Roles and Add Attributes links for the File resource](/ui-videos/how-to/ownership/7.png)
+3. Under **ReBAC Options**, add a resource role named `owner` to both the `File` and `Folder` resources. In the `Folder` resource, add the relation `folder` **is parent of** `file`.
+   ![ReBAC Options of the folder resource with the folder#owner role and the relation folder is parent of file](/ui-videos/how-to/ownership/8.png)
+4. Define a role derivation: `folder#owner` derives `file#owner` when the folder is the parent of the file. See [Define role derivations](/how-to/build-policies/rebac/building-rebac-policies#defining-role-derivations).
+5. Select the **Policy Editor** tab. Select `create`, `delete`, `read`, and `update` for `file#owner` on `file`, and for `folder#owner` on `folder`.
+   ![Policy Editor with all file actions selected for file#owner and all folder actions selected for folder#owner](/ui-videos/how-to/ownership/11.png)
+6. Open the **Directory** screen, select the **Instances** tab, and create a `folder` instance with the key `Bobs_Files`.
+7. On the **Directory** screen, click **Add user**. Create the user `Bob`, and under **Assigned Resource Roles**, assign `folder` : `Bobs_Files` # `owner`.
+   ![Create a new user form for Bob with the resource role folder Bobs_Files owner](/ui-videos/how-to/ownership/9.png)
+8. On the **Instances** tab, create a `file` instance, such as `bobs_picture`. Under **Relationships**, add `folder` `Bobs_Files` **is parent of** `file` `bobs_picture`.
+   ![New Resource Instance form for the file bobs_picture with the relationship folder Bobs_Files is parent of file bobs_picture](/ui-videos/how-to/ownership/10.png)
 
-### Setting up ReBAC based Ownership with Permit
+Because the `Bobs_Files` folder is the parent of the `bobs_picture` file, Bob's `folder#owner` role on the folder derives the `file#owner` role on the file. The permissions of `file#owner` apply to every file you add to the folder.
 
-:::tip Example Policy
-For the purpose of this example, let's use the same one from before:
-`Bob` can `Read`, `Upadte`, and `Delete` every file he is an `Owner` of.  
-:::
+### Verify ReBAC ownership
 
-To setup a ReBAC based ownership policy in Permit's UI -
+- `permit.check("Bob", "update", "file:bobs_picture")` returns `true`, through the derived `file#owner` role.
+- For a file instance without a relationship to `Bobs_Files`, the same check returns `false`.
 
-1. Login to your Permit account at app.permit.io
-2. For the purpose of this tutorial, we setup a resource called `File`, a resource called `Folder`, and a role called `User` in advance.
-3. In the `Policy` section, go to the `Resources` tab. Click on `Add Roles`.
-   ![Resource Editor](/ui-videos/how-to/ownership/7.png)
-4. Under "ReBAC Options", add a resource role named "owner" to both the `File` and `Folder` resources. In the `Folder` resource, add the following relation:
-   ![ReBAC Options](/ui-videos/how-to/ownership/8.png)
-5. In the `Direcrory` section, click on `Add User`. Create a new user who you want to give access to the specific file instance.
-   In our case, we created a user named `Bob` and gave him the resource role `Bobs_Files#owner`.
-   ![ReBAC Options](/ui-videos/how-to/ownership/9.png)
-6. Go to the `Policy` section and click on `Resource instances`. Click on `Add instance` and fill out the form. This will create our file instance, adding the relationships to it.
-   ![ReBAC Options](/ui-videos/how-to/ownership/10.png)
-7. Going back to the `Policy Editor` screen, you will be able to see the `file#owner` role and the `folder#owner` role.
-   As `file` is set as parent of `folder`, all permissions set on a `folder` will automatically propagate to `files` within those folders as well.
-   ![Policy Editor](/ui-videos/how-to/ownership/11.png)
+## Next steps
+
+- [ABAC design patterns](/how-to/build-policies/abac/patterns): other ways to model ownership with attributes.
+- [Building ReBAC policies](/how-to/build-policies/rebac/building-rebac-policies): relations, resource roles, and role derivations in detail.
+- [Mix and Match Policies](/how-to/build-policies/overview): combine ABAC and ReBAC with RBAC.

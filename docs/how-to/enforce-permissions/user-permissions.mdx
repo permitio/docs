@@ -1,21 +1,33 @@
 ---
 sidebar_position: 5
-title: Get user permissions
-description: "Get a user's permissions across all tenants, including ABAC-based access, with permit.GetUserPermissions()."
+title: Get all permissions of a user
+sidebar_label: Get user permissions
+description: "Get every permission a user has, per tenant and resource instance, with permit.getUserPermissions(), including ABAC-based permissions and result filters."
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
+Get every permission a user has, in every tenant and on every resource instance, in one call to the policy decision point (PDP). This page is for developers who build permission-aware UIs or pre-filter data, and need "what can this user do?" instead of a single yes-or-no [`permit.check()`](/how-to/enforce-permissions/check).
 
-To get all user permissions irrespective of the tenant, you can use the `permit.GetUserPermissions` function.
-This function determines all user permissions for every registered resource across all tenants.
+## Prerequisites
 
-## Simple Usage
+- A Permit SDK client connected to a PDP ([Run the PDP](/overview/run-pdp))
+- Users with role assignments in Permit ([Sync users](/how-to/sync-users))
 
-The `permit.GetUserPermissions` function accepts a "User" as input and optionally a list of tenants to filter,
-and returns an object containing the details about the request for each assigned tenant,
-including the assigned tenant's attributes, and the allowed permissions:
+## Get user permissions function by SDK
+
+| SDK | Function |
+|---|---|
+| Node.js | `permit.getUserPermissions(user, tenants?, resources?, resource_types?)` |
+| Python | `permit.get_user_permissions(user, tenants=None, resources=None, resource_types=None)` |
+| Java | `permit.getUserPermissions(GetUserPermissionsQuery query)` |
+| Go | `permit.GetUserPermissions(user, tenants ...string)` and `permit.GetUserPermissionsWithOptions(user, opts ...)` |
+| PDP API | `POST /user-permissions` |
+
+## Get all permissions of a user \{#simple-usage}
+
+Pass the user key. Optionally pass tenant keys to limit the result to those tenants.
 
 <Tabs groupId="language">
 <TabItem value="nodejs" label="Node.js">
@@ -23,7 +35,7 @@ including the assigned tenant's attributes, and the allowed permissions:
 ```js
 const { Permit } = require("permitio");
 
-const permit = new Permit({token: "<YOUR_API_KEY>", ...});
+const permit = new Permit({ token: "<YOUR_API_KEY>", pdp: "http://localhost:7766" });
 const userPermissions = await permit.getUserPermissions("john@doe.com");
 ```
 
@@ -66,7 +78,7 @@ import "github.com/permitio/permit-golang/pkg/enforcement"
 func main() {
 	// Create permit client
 	permitConfig := config.NewConfigBuilder("<YOUR_API_TOKEN>").Build()
-	permit := p.New(permitConfig)
+	permit := p.NewPermit(permitConfig)
 
 	// Create user and resource variables
 	user := enforcement.UserBuilder("john@doe.com").Build()
@@ -99,20 +111,35 @@ func main() {
 </TabItem>
 </Tabs>
 
-## Enabling ABAC in user permissions
+## Read the user permissions result
 
-The `permit.GetUserPermissions` function can also find all permitted objects based on
-attribute-based rules (ABAC condition sets), however this calculation is a bit more
-expensive to run performance wise. For that reason, you have to manually turn on
-this capability when needed.
+The result is an object keyed by the object the permissions apply to: a tenant or a resource instance. Each value contains:
 
-Not all SDKs are supporting this feature at this point in time,
-you can directly call the PDP API if your SDK is not supporting it yet.
+| Field | Description |
+|---|---|
+| `tenant` | The tenant `key` and tenant `attributes`. |
+| `resource` | For a resource instance: the resource `type`, `key`, and `attributes`. |
+| `permissions` | The permissions the user has on the object, in `resource:action` format, for example `document:read`. |
+| `roles` | The roles that grant the permissions. |
+
+An empty object means the user has no permissions in the environment.
+
+## Include ABAC permissions in the result \{#enabling-abac-in-user-permissions}
+
+By default, the result includes only permissions from role assignments: role-based access control (RBAC) and relationship-based access control (ReBAC). To also include permissions granted by attribute-based access control (ABAC) rules, set `enable_abac_user_permissions` to `true` in the request context. ABAC evaluation takes more PDP resources, so enable the flag only on requests that need it.
+
+When you enable ABAC permissions:
+
+- Pass `resource_types`. The PDP needs the resource types to evaluate ABAC rules.
+- Add `__tenant` to `resource_types` to keep tenant-level (RBAC) permissions in the result.
+- Run a container PDP. The Cloud PDP doesn't evaluate ABAC policies ([Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities)).
+
+The Node.js and Python SDK functions don't take a context argument. From those languages, call the PDP API directly.
 
 <Tabs groupId="language">
 <TabItem value="curl" label="cURL">
 
-Assuming `localhost:7766` is the PDP address relative to the caller:
+Replace `localhost:7766` with the PDP address as seen from the caller, and `<api key>` with your environment API key.
 
 ```
 curl --location 'http://localhost:7766/user-permissions' \
@@ -156,18 +183,21 @@ UserPermissions permissions = permit.getUserPermissions(
 		null, // tenants filter is not required for ABAC
 		Arrays.asList("document", "__tenant"), // resource types is always required for ABAC, __tenants is required to not ignore RBAC-based permissions
 		null, // resources not required
-		context,
+		context
 	)
 );
 
 ```
 
-##  Get user permissions directly from opa
+</TabItem>
+</Tabs>
 
-:::info Info
-When experiencing high load, it may be more efficient to call the OPA engine directly from the SDK.
-Please note that to enable this, you will need to expose the OPA port (8181).
-:::
+## Get user permissions directly from OPA \{#get-user-permissions-directly-from-opa}
+
+The PDP evaluates policies with an embedded Open Policy Agent (OPA) engine. Under high load, the Java SDK can query OPA directly with `permit.getUserPermissionsFromOPA()`, which skips the PDP's HTTP layer. To use it:
+
+1. Expose the OPA port (`8181`) of the PDP container. See [Exposing OPA within the PDP](/how-to/deploy/deploy-to-production#exposing-opa-within-the-pdp).
+2. If OPA isn't at `http://localhost:8181`, set the address with `PermitConfig.Builder.withOpaAddress()`.
 
 ```java
 import io.permit.sdk.Permit;
@@ -188,20 +218,18 @@ UserPermissions permissions = permit.getUserPermissionsFromOPA(
 );
 
 ```	
-</TabItem>
-</Tabs>
 
-:::note
-`enable_abac_user_permissions` parameter name is subject to change. Make sure to verify that the name remains accurate. 
-:::
+## Filter the user permissions result \{#filtering-out-the-results}
 
-## Filtering out the results
+Limit the result with one or more filters:
 
-You can filter the results by any one of the following:
-- tenants - returns only the permissions for instances or globally for the specified tenants
-- resource_types - returns only the permissions for instances of the specified resource types
-  - To get only top level accesses, please use the `__tenant` resource type
-- resources - returns only the permissions for the specified resource instances, format should be `resource_type:resource_key`
+| Filter | Returns |
+|---|---|
+| `tenants` | Permissions in the listed tenants only. |
+| `resource_types` | Permissions on instances of the listed resource types only. Use `__tenant` to get tenant-level permissions only. |
+| `resources` | Permissions on the listed resource instances only, in `resource_type:resource_key` format. |
+
+The argument order differs by SDK. In Node.js and Python, the order is `tenants`, `resources`, `resource_types`. In the Java `GetUserPermissionsQuery` constructor, the order is `tenants`, `resource_types`, `resources`. In Go, use `enforcement.WithTenants()`, `enforcement.WithResources()`, and `enforcement.WithResourceTypes()` with `GetUserPermissionsWithOptions()`.
 
 <Tabs groupId="language">
 <TabItem value="nodejs" label="Node.js">
@@ -209,11 +237,11 @@ You can filter the results by any one of the following:
 ```js
 const { Permit } = require("permitio");
 
-const permit = new Permit({token: "<YOUR_API_KEY>", ...});
+const permit = new Permit({ token: "<YOUR_API_KEY>", pdp: "http://localhost:7766" });
 const userPermissions = await permit.getUserPermissions(
     "john@doe.com",
     ["tenant-1", "tenant-2"], // tenants
-    ["document:doc-1", "document:doc-2"] // resources
+    ["document:doc-1", "document:doc-2"], // resources
     ["document", "__tenant"], // resource_types
 );
 ```
@@ -236,8 +264,8 @@ UserPermissions permissions = permit.getUserPermissions(
     new GetUserPermissionsQuery(
         User.fromString("john@doe.com"),
         Arrays.asList("tenant-1", "tenant-2"), // tenants
-        Arrays.asList("document", "__tenant") // resource_types
-        Arrays.asList("document:doc-1", "document:doc-2"), // resources
+        Arrays.asList("document", "__tenant"), // resource_types
+        Arrays.asList("document:doc-1", "document:doc-2") // resources
     )
 );
 
@@ -245,3 +273,9 @@ UserPermissions permissions = permit.getUserPermissions(
 
 </TabItem>
 </Tabs>
+
+## Next steps
+
+- [List the users who can act on a resource](/how-to/enforce-permissions/authorized-users)
+- [Check a permission across all tenants](/how-to/enforce-permissions/all-tenants-check)
+- [Filter data by permission](/how-to/enforce-permissions/data-filtering)

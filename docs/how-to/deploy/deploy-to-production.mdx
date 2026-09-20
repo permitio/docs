@@ -1,29 +1,36 @@
 ---
 sidebar_position: 1
-title: Deploy Permit to Production
-description: "How to deploy the Permit PDP to Prod"
+title: Deploy the PDP to production
+description: "Run the Permit.io policy decision point (PDP) container in your own network, connect your SDK to it, check its health, and size it for production."
 ---
 
-When deploying to production, you might want to work with a local PDP (A Policy-Decision-Point microservice) within your VPC.
-The PDP is easy to install via Docker, and will ensure **zero-latency, great performance, high availability, and improved security**.
-Like all Permit customer deployed components, the [Permit PDP is open-source](https://github.com/permitio/PDP).
+Run the Permit.io policy decision point (PDP) as a container inside your own network, and point your application's SDK at it. This page is for operators and backend developers who move a Permit integration from the Cloud PDP to a production deployment.
 
-## Architecture diagram
+A self-hosted PDP (an Edge PDP) evaluates permission checks next to your services, so checks don't make a network round trip to Permit. The PDP keeps working from its local copy of the policy when the connection to Permit drops. The [Permit PDP is open source](https://github.com/permitio/PDP).
 
-<br />
-<br />
+## Prerequisites
 
-![Connectivity Map Diagram](/img/diagrams/connectivity.svg)
+- A Permit.io environment with a policy. See [Quickstart](/quickstart).
+- The environment API key. See [Get your API key](/overview/get-api-key).
+- Docker, or a container platform. See [Get Docker](https://docs.docker.com/get-docker/).
 
-## Installing the PDP
+## Architecture \{#architecture-diagram}
 
-Pull our PDP container from Docker Hub [(Click here to install Docker)](https://docs.docker.com/get-docker/):
+Your application calls the PDP. The PDP keeps an outgoing connection to Permit's control plane and receives policy and data updates over it.
+
+![Connectivity map: your app and its policy enforcement point query the PDP in your VPC, and the PDP subscribes to updates from Permit.io cloud](/img/diagrams/connectivity.svg)
+
+For a comparison of sidecar, cluster, serverless, and single-PDP layouts, see [PDP deployment models](/how-to/deploy/overview).
+
+## Run the PDP container \{#installing-the-pdp}
+
+Pull the PDP image from Docker Hub:
 
 ```sh
 docker pull permitio/pdp-v2:latest
 ```
 
-Run the container & replace the `PDP_API_KEY` environment variable with your API key.
+Run the container. Replace `<YOUR_API_KEY>` with your environment API key.
 
 ```sh
 docker run -it \
@@ -33,16 +40,53 @@ docker run -it \
   permitio/pdp-v2:latest
 ```
 
-### Running the PDP with Organization/Project API Key
-In some cases, you might want to use an Organization or Project API Key to authenticate with the PDP - instead of using the Environment API Key.
-That's useful when you want to have a single API Key for all your environments, or when you want to have a separate API Key for each of your projects - which is also great to reduce operations around Secrets management, one API Key (or few) to rule them all.
+The PDP API listens on port `7000` inside the container. The `-p 7766:7000` flag maps it to port `7766` on the host, which is the port the SDK examples in these docs use.
 
-To do that, you can set the `PDP_ORG_API_KEY` or `PDP_PROJECT_API_KEY` environment variable instead of `PDP_API_KEY`.
-In addition -
-- When setting Organization API Key, you'll need to set the `PDP_ACTIVE_ENV` and `PDP_ACTIVE_PROJECT` environment variables with the ID or Key of the environment and project you want to use.
-- When setting Project API Key, you'll need to set the `PDP_ACTIVE_ENV` environment variable with the ID or Key of the environment you want to use.
+| Environment variable | Purpose |
+|---|---|
+| `PDP_API_KEY` | The environment API key. The PDP uses it to fetch its configuration and policy from Permit. |
+| `PDP_DEBUG` | `True` turns on decision debug logging. Set it to `False` in production. |
 
-For example, to run the PDP with an Organization API Key:
+## Verify the PDP is healthy \{#pdp-health-check-endpoints}
+
+Send a `GET` request to `http://localhost:7766/health`, for example with `curl` or a browser. A healthy PDP returns HTTP `200` with `"status": "ok"` at the top level. When the PDP's internal API service (Horizon) or its policy engine (OPA) is not healthy, the endpoint returns HTTP `503` with `"status": "error"` and the failing component under `components`.
+
+The PDP serves the same health check on three paths. Use whichever path your platform expects.
+
+| Path | Port inside the container | Common use |
+|---|---|---|
+| `/health` | `7000` | Liveness probe |
+| `/healthy` | `7000` | Readiness probe, Docker `healthcheck` |
+| `/ready` | `7000` | Startup probe |
+
+All three paths return the same response. They don't require an API key. From the host, use the mapped port (`7766` in the examples on this page). Inside a container, pod, or task, use `7000`.
+
+## Connect your SDK to the PDP \{#using-the-pdp}
+
+Set the SDK's PDP URL to the address of your PDP. For a container that maps port `7766` on the same host, the URL is `http://localhost:7766`.
+
+For example, in Node.js:
+
+```js
+const permit = new Permit({
+  pdp: "http://localhost:7766",
+  token: "<YOUR_API_KEY>",
+});
+```
+
+`Permit` is imported from the `permitio` package. For the full setup in each language, see [Check permissions](/how-to/enforce-permissions/check).
+
+## Run the PDP with an organization or project API key \{#running-the-pdp-with-organizationproject-api-key}
+
+An organization API key or a project API key lets one secret serve several environments. The PDP still serves one environment at a time, so you tell it which one to load.
+
+| API key type | Set instead of `PDP_API_KEY` | Also set |
+|---|---|---|
+| Organization | `PDP_ORG_API_KEY` | `PDP_ACTIVE_PROJECT` and `PDP_ACTIVE_ENV` (ID or key) |
+| Project | `PDP_PROJECT_API_KEY` | `PDP_ACTIVE_ENV` (ID or key) |
+
+Run the PDP with an organization API key:
+
 ```sh
 docker run -it \
   -p 7766:7000 \
@@ -53,7 +97,8 @@ docker run -it \
   permitio/pdp-v2:latest
 ```
 
-And here's an example of running the PDP with a Project API Key:
+Run the PDP with a project API key:
+
 ```sh
 docker run -it \
   -p 7766:7000 \
@@ -63,24 +108,9 @@ docker run -it \
   permitio/pdp-v2:latest
 ```
 
-## Using the PDP
+## Expose OPA from the PDP container \{#exposing-opa-within-the-pdp}
 
-The PDP will listen on port `7766` by default, so all you have to do is to set your PDP_URL in our SDK initialization to
-`http://localhost:7766` and you're good to go.
-
-For example in Node.js:
-
-```js
-const permit = new Permit({
-  pdp: "http://localhost:7766",
-  token: "<YOUR_API_KEY>",
-});
-```
-
-## Exposing OPA within the PDP
-
-Similar to a regular run of the PDP, with the addition of a single port mapping (`-p 8181:8181`)
-Run the container & replace the `PDP_API_KEY` environment variable with your API key.
+The PDP bundles Open Policy Agent (OPA), which listens on port `8181` inside the container. To call the OPA API directly, add the `-p 8181:8181` port mapping:
 
 ```sh
 docker run -it \
@@ -91,53 +121,42 @@ docker run -it \
   permitio/pdp-v2:latest
 ```
 
-Reviews [OPA's docs here for accessing its API](https://www.openpolicyagent.org/docs/latest/rest-api/).
+For the endpoints OPA exposes, see the [OPA REST API reference](https://www.openpolicyagent.org/docs/latest/rest-api/).
 
-## System Requirements and Performance Optimization
+## System requirements and performance \{#system-requirements-and-performance-optimization}
 
-When deploying your PDP in production, consider the following system requirements and performance tips to ensure optimal operation:
+CPU and memory needs depend on your request volume, policy complexity, and the amount of data in the environment.
 
-### Where to start
+### Starting resources for a PDP \{#where-to-start}
 
-CPU & memory requirements would obviously deeply depend on the scale of your application, but here are some good values to start with:
+- CPU: request about 200 millicores. Allow a limit of at least 1000 millicores so the PDP stays responsive during short CPU spikes.
+- Memory: about 512 MiB.
 
-- CPU: ~200 mcores. but enable upper limit of at least ~1000 mcores to enable short CPU spikes and keep the PDP responsive
-- Memory: ~512Mb
+### Scale the PDP for CPU \{#scaling-cpu}
 
-### Scaling CPU
+CPU use grows with the number of requests and the complexity of the policies they query. When CPU is the bottleneck, scale the PDP horizontally: run more PDP instances behind a load balancer, for example by increasing the replicas of a Kubernetes deployment.
 
-Processing demands of PDP would depend on the number of requests it has to handle, as well as the complexity of the queried policies.
-When CPU usage becomes a bottleneck, you can scale the PDP horizontally by deploying multiple instances behind a load balancer (e.g. scale replicas of Kubernetes deployment),
-thus distributing the load and increasing the number of requests the PDP can handle.
+### Scale the PDP for memory \{#scaling-memory}
 
-### Scaling Memory
+Memory use grows with the volume of data in the environment. The PDP evaluates policy in OPA, and OPA keeps all of the environment's policy data in process memory, together with indexes and caches. Adding PDP instances doesn't reduce the memory each one needs. Give each PDP more memory instead.
 
-Memory usage of the PDP would depend on the volume of data in your environment.
-PDP makes use of OPA to achieve very fast policy evaluation, this speed of evaluation is achieved by:
+To estimate memory, multiply the number of policy objects (users, resource instances, and tenants) by 6 KB. For example, an environment with 100,000 users, 500,000 resource instances, and 100 tenants needs about 3.5 GB. Attributes on objects and relationships between objects in relationship-based access control (ReBAC) change the real figure.
 
-- Storing the environment's policy data in its entirety in local process's memory.
-- Using redundant data structures and caches.
-  This means that scaling of your environment's policy data requires vertical scaling of the PDP's memory.
-  And while exact requirements would depend on many factors (e.g. what attributes your objects have, complexity of relations between objects when ReBAC is used),
-  we can suggest using the formula of _`# of policy objects X 6kb`_ (where policy objects include: users, resource instances & tenants) as a rough estimate.
-  For example: For environment of 100k users, 500k resource instances and 100 tenants, you'll need ~3.5Gb of memory.
+### Performance settings \{#general-performance-tips}
 
-### General Performance Tips
+- **Run the PDP close to your application.** Deploy the PDP in the same VPC, and preferably on the same node, as the services that query it.
+- **Turn off decision debug information.** Set `--env PDP_DEBUG=False`. Debug logging adds work to every decision.
+- **Tune the base policy.** For example, turning off ReBAC checks in an environment that doesn't use ReBAC shortens policy evaluation. Contact Permit support at [support@permit.io](mailto:support@permit.io) to change the base policy.
 
-To achieve high throughput and low latency:
+With these settings, a PDP handles several thousand requests per second at under 10 ms per request.
 
-- **Use a Local PDP**: Deploy the PDP in the same VPC as your application to minimize network latency.
-- **Disable Decision Debug Info**: In production, you can turn off decision debug information to enhance performance. Disable debug logging by adding `--env PDP_DEBUG=False` to the PDP command line.
-- **Optimize Base Policy**: Tailor the base policy to your specific use case. For example, disabling ReBAC checks (if not used) can speed up policy execution (this requires our tech support).
-  With these optimizations, you can expect several thousand RPS with less than 10ms latency per request.
+## Keep serving decisions when Permit is unreachable \{#pdp-offline-mode}
 
+Offline mode makes the PDP persist its configuration and policy to a local backup. When the PDP can't reach Permit at startup, it loads from that backup. Offline mode also lets the PDP start disconnected from the control plane and reconnect at runtime (PDP version 0.9.11 or later). See [PDP offline mode](/how-to/deploy/offline-mode).
 
-## PDP Offline Mode
+## Next steps
 
-For extra resilience, the PDP can be configured to work in offline mode, serving decisions from a local backup when it can't reach Permit Cloud. Offline mode also supports starting the PDP fully disconnected from the control plane, with runtime API endpoints to toggle connectivity without restarting.
-
-:::note
-The connectivity control feature requires PDP version **0.9.11** or later.
-:::
-
-See the dedicated [PDP Offline Mode](/how-to/deploy/offline-mode) page for full details on setup, configuration, and the connectivity control API.
+- [Deploy the PDP on Kubernetes with Helm](/how-to/deploy/cloud-hosts/helm)
+- [Deploy the PDP on GCP Cloud Run](/how-to/deploy/cloud-hosts/gcp-cloud-run)
+- [Choose a PDP deployment model](/how-to/deploy/overview)
+- [Monitor your PDPs](/how-to/monitoring-pdps)

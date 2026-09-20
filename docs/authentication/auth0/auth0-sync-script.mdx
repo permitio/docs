@@ -1,34 +1,45 @@
 ---
 sidebar_position: 3
-title: Sync Users and Roles
-description: "Export users from Auth0 and run a Python script to sync them and their roles into Permit.io."
+title: Sync Auth0 Users and Roles
+description: "Export users from Auth0 and run the Permit.io admin script to sync them and their Auth0 roles into a Permit tenant."
+sidebar_label: Sync Users and Roles
 ---
 
+Import your existing Auth0 users and their Auth0 roles into Permit.io in one run. You export the users from Auth0 as a CSV file, then run a Python script from the [permitio/admin-scripts](https://github.com/permitio/admin-scripts) repository. This guide is for developers who add Permit to an Auth0 app that already has users. To sync users as they sign in, see [Auth0 and Permit integration](/authentication/auth0/permit-integration).
 
+## What the script does
 
-## Introduction
-Auth0 is one of the leading authentication platform for developers. While Permit.io is the leading authorization platform for developers.
+The `auth0/auth0_sync_users_with_permit.py` script:
 
-You can use this guide to sync all the users from Auth0 to Permit.
+1. Reads the roles from your Auth0 tenant and compares them with the role keys in your Permit environment.
+2. If Auth0 roles are missing in Permit, asks whether to create them. After it creates the roles, the script exits. Run it again to sync users.
+3. For each row in the CSV file, reads the user's roles from the Auth0 Management API, syncs the user to Permit with the Auth0 `user_id` as the user key, and assigns each Auth0 role in the tenant you choose.
 
 ## Prerequisites
-- Auth0 account
-- Permit account
-- Auth0 management API Key
-- Ability to run python script
 
+- An Auth0 account with permission to use the Auth0 Management API.
+- A Permit.io account and your environment API key. See [Get your API key](/overview/get-api-key).
+- Python 3 with `pip`, and Git.
+- `curl`, to run the Auth0 export requests.
 
-## Let's get started
-### Step 1: Get Auth0 management API Token
-- Go to [Auth0 dashboard](https://manage.auth0.com/dashboard/) and click on "Applications" in the sidebar.
-- Click on the "Auth0 Management API" application.
-- Click on the "API Explorer" tab and copy the "Token" value (you can set below the "Token Expiration" value if you want to use this script more then once).
+## 1. Get an Auth0 Management API token \{#step-1-get-auth0-management-api-token}
 
-### Step 2: Export users from Auth0
-You can follow the [Auth0 documentation](https://auth0.com/docs/users/bulk-user-exports) to export all the users from Auth0.
+1. In the [Auth0 dashboard](https://manage.auth0.com/dashboard/), open **Applications**.
+2. Open the **Auth0 Management API** application.
+3. On the **API Explorer** tab, copy the **Token** value. To run the script more than once, set a longer **Token Expiration** before you copy the token.
 
-Or you can do the following steps:
-#### 2.1 Perform this post request to get the export job id:
+:::warning
+The Management API token can read and change every user in your Auth0 tenant. Keep it out of source control, and delete the `.env` file after the sync.
+:::
+
+## 2. Export users from Auth0 \{#step-2-export-users-from-auth0}
+
+You can export users with the [Auth0 bulk user export guide](https://auth0.com/docs/users/bulk-user-exports), or with the requests below.
+
+### Start the export job \{#21-perform-this-post-request-to-get-the-export-job-id}
+
+Send a request to start a user export job:
+
 ```bash
 curl --location 'https://[your auth0 domain].auth0.com/api/v2/jobs/users-exports' \
 --header 'authorization: Bearer [Auth0 management API Key]' \
@@ -41,7 +52,7 @@ curl --location 'https://[your auth0 domain].auth0.com/api/v2/jobs/users-exports
         {"name": "email"},
         {"name":"user_id"},
         {"name":"given_name"},
-        {"name":"last_name"},
+        {"name":"family_name"},
         {
             "name": "identities[0].connection",
             "export_as": "provider"
@@ -49,60 +60,86 @@ curl --location 'https://[your auth0 domain].auth0.com/api/v2/jobs/users-exports
     ]
 }'
 ```
-You need to replace the following values:
-- [your auth0 domain] - your auth0 domain
-- [Auth0 management API Key] - the token you copied in step 1
-- con_1234567890 - the connection id you want to export users from (you can get it from the [Auth0 dashboard](https://manage.auth0.com/dashboard/)) -> Authentication -> Database -> your database -> Settings -> Social / Database -> Click on the connection name -> copy the id from the url or near the Identifier field.
 
-You will get back the job_id value that looks like this: job_abcdefghijk
+Replace these values:
 
-#### 2.2 Get the exported link from the job:
+| Placeholder | Value |
+|---|---|
+| `[your auth0 domain]` | Your Auth0 tenant domain |
+| `[Auth0 Management API Key]` | The Management API token from step 1 |
+| `con_1234567890` | The ID of the connection to export users from. In the Auth0 dashboard, go to **Authentication** > **Database**, open the connection, and copy the ID from the URL or from the **Identifier** field. |
+
+The response includes the job ID, which looks like `job_abcdefghijk`.
+
+### Download the export file \{#22-get-the-exported-link-from-the-job}
+
+Check the export job. Replace `[your auth0 domain]` and `[Auth0 Management API Key]` as before, and `[job_id]` with the job ID from the previous request:
+
 ```bash
 curl --location 'https://[your auth0 domain].auth0.com/api/v2/jobs/users-exports/[job_id]' \
 --header 'authorization: Bearer [Auth0 management API Key]'
 ```
-You need to replace the following values:
-- [your auth0 domain] - your auth0 domain
-- [Auth0 management API Key] - the token you copied in step 1
-- [job_id] - the job id you got from the previous request
 
-When the job status is "completed" you will get back a link to download the users csv file compressed in a gz file.
-The link will look like this:
+When the job status is `completed`, the response includes a `location` link to the users CSV file, compressed as a `.gz` file:
+
 ```
 "location": "https://peu2-auth0-export-users-eu-west-1.s3.eu-west-1.amazonaws.com/job_....
 ```
 
-#### 2.3 Download the file and extract it.
+Download the file from that link and extract the CSV file.
 
-### Step 3: Prepare your environment to run the python script
-- Clone the python script from [here](https://github.com/permitio/admin-scripts) to the same folder you extracted the users csv file to.
+## 3. Prepare the script environment \{#step-3-prepare-your-environment-to-run-the-python-script}
+
+1. Clone the [admin-scripts repository](https://github.com/permitio/admin-scripts):
+
 ```bash
 git clone git@github.com:permitio/admin-scripts.git
 ```
-- Move the users.csv file to the same folder you cloned repository to under the `auth0` folder.
-- Install the python requirements:
+
+2. Move the extracted CSV file into the `admin-scripts/auth0` folder, and open that folder in your terminal. The script, its `requirements.txt`, and its `.env.example` file are in the `auth0` folder.
+
+3. Install the Python requirements:
+
 ```bash
+cd admin-scripts/auth0
 pip install -r requirements.txt
 ```
-- Set the following environment variables in the .env file:
-- - PERMIT_SDK_TOKEN - your permit api key, follow [those instructions](/sdk/python/quickstart_python_sync#1-get-your-permit-environment-api-key) 
-- - AUTH0_DOMAIN - your auth0 domain
-- - AUTH0_MGMT_ACCESS_TOKEN - the token you copied in step 1
 
-### Step 4: Run the python script
-By running the python script you will sync all the users from Auth0 to Permit.
+4. Create a `.env` file in the `auth0` folder, based on `.env.example`, with these variables:
+
+| Variable | Value |
+|---|---|
+| `PERMIT_SDK_TOKEN` | Your Permit environment API key |
+| `AUTH0_DOMAIN` | Your Auth0 tenant domain |
+| `AUTH0_MGMT_ACCESS_TOKEN` | The Management API token from step 1 |
+
+## 4. Run the sync script \{#step-4-run-the-python-script}
+
+Run the script from the `auth0` folder:
+
 ```bash
 python auth0_sync_users_with_permit.py
 ```
-- Fill the name of the csv file you downloaded from Auth0 (users.csv) 
-- Fill the name of the tenant that you want us to sync the users to, if you have only one tenant you can leave it empty and we will use the `default` tenant.
-- If you don't have all the roles inside the permit environment the script will ask you if you want to create them, if you choose `no` you will need to create them manually before running the script again.
 
+The script asks for two values:
 
+| Prompt | What to enter |
+|---|---|
+| `All users export CSV file path` | The name or path of the CSV file, for example `users.csv` |
+| `Tenant key` | The key of the Permit tenant to assign roles in. Press Enter to use `default`. |
 
-### Step 5: Verify the users were synced to Permit
-- Go to [Permit User Management](https://app.permit.io/user-management) and choose the right tenant.
-_![Select Tenant](/img/integrations/auth0/select-tenant.png)_
+If your Permit environment is missing any Auth0 roles, the script lists them and asks `y/n`. Enter `y` to create the roles, then run the script again to sync the users. Enter `n` to stop, create the roles in Permit yourself, and run the script again.
 
+## 5. Verify the users in Permit \{#step-5-verify-the-users-were-synced-to-permit}
 
+1. Open [Directory](https://app.permit.io/user-management) in the Permit dashboard and select the tenant you entered.
 
+![Permit Directory tenant selector for choosing the tenant the users were synced to](/img/integrations/auth0/select-tenant.png)
+
+2. Confirm that each exported Auth0 user appears with the Auth0 `user_id` as the user key, and with the roles the user has in Auth0.
+
+## Next steps
+
+- [Auth0 and Permit integration](/authentication/auth0/permit-integration): sync new users and roles at each login.
+- [Bulk user operations](/how-to/bulk-operations#bulk-user-operations): import users from other sources through the Permit API.
+- [Check permissions](/how-to/enforce-permissions/check): enforce the synced roles in your application.

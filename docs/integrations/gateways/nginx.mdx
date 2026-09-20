@@ -1,37 +1,58 @@
 ---
 sidebar_position: 2
-title: NGINX x Permit
-description: "Add external authorization to Nginx with the ngx_http_auth_request_module, forwarding each request to Permit's PDP for a permission check."
+title: Send NGINX permission checks to the Permit PDP
+sidebar_label: NGINX x Permit
+description: "Configure the NGINX auth_request module to send a subrequest to the Permit PDP's /nginx_allowed endpoint, and learn which component has to block a denied request."
 ---
 
-# Integration Guide: Permit.io with Nginx using ngx_http_auth_request_module
+Send a permission check to the Permit.io policy decision point (PDP) for each request that NGINX serves, with the NGINX `ngx_http_auth_request_module`. This page is for developers and operators who run NGINX in front of their applications. Every request to a protected location produces a decision you can read in the Permit audit log, and this page names the component you have to add to block a denied request.
 
-## 1. Introduction
-This guide outlines the steps to integrate Permit.io with Nginx using the ngx_http_auth_request_module.
-This integration allows you to implement external authorization checks for your Nginx-served applications using Permit.io's Policy Decision Point (PDP).
+:::danger The auth_request module cannot block a denied check on its own
+The PDP's `/nginx_allowed` endpoint answers HTTP `200` for both allowed and denied checks, and puts the decision in the `allow` field of the response body (`is_allowed_nginx` in `horizon/enforcer/api.py` of the [PDP repository](https://github.com/permitio/PDP) declares `status_code=status.HTTP_200_OK`). The `auth_request` module decides from the subrequest's status code alone, so with the configuration on this page NGINX forwards every request, including the ones the policy denies. To block denied requests, add a component that reads the response body, as [Block denied requests](#block-denied-requests) describes. Don't treat the `auth_request` configuration alone as an enforcement layer.
+:::
 
-## 2. Prerequisites
-- Nginx installed with ngx_http_auth_request_module support
-- Permit.io account and PDP set up
-- Basic understanding of Nginx configuration
+## How the NGINX integration works \{#1-introduction}
 
-## 3. Configuration Steps
+1. A client request reaches an NGINX `location` that has an `auth_request` directive.
+2. NGINX sends a subrequest to an internal location, which proxies it to the PDP's `/nginx_allowed` endpoint.
+3. The PDP reads four request headers and runs a permission check:
 
-### 3.1 Enable ngx_http_auth_request_module
-Ensure that the ngx_http_auth_request_module is enabled in your Nginx build. You can check this by running:
+   | Header | Check field |
+   |---|---|
+   | `permit-user-key` | User key |
+   | `permit-action` | Action |
+   | `permit-resource-type` | Resource type |
+   | `permit-tenant-id` | Tenant |
 
-```
+4. The PDP returns HTTP `200` with a JSON body whose `allow` field is `true` or `false`, and records the decision in the Permit audit log.
+5. NGINX reads the status code of the subrequest and forwards the request. See the [ngx_http_auth_request_module documentation](https://nginx.org/en/docs/http/ngx_http_auth_request_module.html).
+
+## Prerequisites \{#2-prerequisites}
+
+- NGINX built with `ngx_http_auth_request_module`
+- A Permit.io policy with the resources, actions, and tenants your requests use ([Configure your first RBAC policy](/overview/configure-your-first-rbac-policy))
+- A running PDP that NGINX can reach, for example at `http://localhost:7766` ([Run the PDP](/overview/run-pdp))
+- Your environment API key ([Get your API key](/overview/get-api-key))
+
+## Configure NGINX \{#3-configuration-steps}
+
+### 1. Check that NGINX has the auth_request module \{#31-enable-ngx_http_auth_request_module}
+
+Print the NGINX build options:
+
+```sh
 nginx -V
 ```
 
-Look for `--with-http_auth_request_module` in the output.
+The output contains `--with-http_auth_request_module` when the module is available.
 
-### 3.2 Set up Permit.io PDP
-Ensure your Permit.io PDP is running and accessible at http://localhost:7766. This is the authorization endpoint that Nginx will query for each request to check permissions.
+### 2. Confirm the PDP URL \{#32-set-up-permitio-pdp}
 
-### 3.3 Configure Nginx
+Make sure the PDP is running and reachable from the NGINX host. The NGINX configuration in the next step uses `http://localhost:7766`. If your PDP runs at another address, change the `proxy_pass` URL to match.
 
-Edit your Nginx configuration file (usually `/etc/nginx/nginx.conf` or a site-specific configuration in `/etc/nginx/sites-available/`):
+### 3. Add the auth_request configuration \{#33-configure-nginx}
+
+Edit your NGINX configuration file, usually `/etc/nginx/nginx.conf` or a site file in `/etc/nginx/sites-available/`:
 
 ```nginx
 http {
@@ -43,19 +64,6 @@ http {
 
         location / {
             auth_request /auth;
-            auth_request_set $auth_status $upstream_status;
-
-            # Set the required Permit.io headers
-            auth_request_set $permit_user_key $upstream_http_permit_user_key;
-            auth_request_set $permit_action $upstream_http_permit_action;
-            auth_request_set $permit_resource_type $upstream_http_permit_resource_type;
-            auth_request_set $permit_tenant_id $upstream_http_permit_tenant_id;
-
-            # Pass the Permit.io headers to the application
-            proxy_set_header permit-user-key $permit_user_key;
-            proxy_set_header permit-action $permit_action;
-            proxy_set_header permit-resource-type $permit_resource_type;
-            proxy_set_header permit-tenant-id $permit_tenant_id;
 
             # ... your existing location configuration ...
         }
@@ -64,9 +72,11 @@ http {
             internal;
             # Forward the request to your deployed PDP
             proxy_pass http://localhost:7766/nginx_allowed;
+            proxy_method POST;
             proxy_pass_request_body off;
             proxy_set_header Content-Length "";
             proxy_set_header X-Original-URI $request_uri;
+            proxy_set_header Authorization "Bearer <YOUR_API_KEY>";
 
             # Pass the required Permit.io headers
             proxy_set_header permit-user-key $http_permit_user_key;
@@ -78,8 +88,80 @@ http {
 }
 ```
 
-### 3.4 Configure Error Handling
-Add error handling for unauthorized requests:
+In this configuration:
+
+- The `location /` block sends a check for every path with `auth_request /auth`.
+- The internal `location = /auth` block proxies the subrequest to the PDP's `/nginx_allowed` endpoint as a `POST` request without a body, adds your environment API key (replace `<YOUR_API_KEY>`) in the `Authorization` header, and copies the four `permit-*` headers from the client request. The PDP answers `401` for a request without the `Authorization` header.
+
+:::warning The client sets the permit-* headers
+`$http_permit_user_key` and the other `$http_permit_*` variables hold header values that the client sent. If clients reach NGINX directly, a client can send another user's key and get that user's permissions. Set the `permit-*` headers from a trusted source, such as an authentication layer in front of NGINX that removes client-supplied `permit-*` headers.
+:::
+
+### 4. Restart NGINX \{#35-restart-nginx}
+
+Restart NGINX to load the configuration. The command depends on how you run NGINX. On a host managed by systemd:
+
+```sh
+sudo systemctl restart nginx
+```
+
+## Verify that the check reaches the PDP \{#4-testing-the-integration}
+
+1. Send a request to NGINX with the four headers:
+
+   ```sh
+   curl -H "permit-user-key: john@permit.io" \
+        -H "permit-action: read" \
+        -H "permit-resource-type: document" \
+        -H "permit-tenant-id: default" \
+        http://example.com/
+   ```
+
+2. Open the [Audit Log](https://app.permit.io/audit-log) screen in the Permit dashboard. The check appears with the user key, action, resource type, tenant, and decision.
+3. Repeat step 1 as a user without the permission. A second decision appears in the audit log, with `Deny` as the decision. NGINX still serves the request, which is the behavior the warning at the top of this page describes.
+4. If no decision appears, check the NGINX error log, usually `/var/log/nginx/error.log`.
+
+## Block denied requests \{#block-denied-requests}
+
+The `auth_request` module reads only the status code of the subrequest, and the PDP answers `200` for a denied check, so blocking needs a component that reads the `allow` field of the response body. Pick one:
+
+| Component | How it blocks | When to use it |
+|---|---|---|
+| The `ngx_http_js_module` (njs) | An njs handler calls the PDP, parses the JSON body, and returns `403` from the internal location when `allow` is `false`. See the [njs documentation](https://nginx.org/en/docs/njs/). | You want the decision enforced in NGINX and can add the njs module |
+| OpenResty with Lua | A Lua block calls the PDP with `ngx.location.capture` or `resty.http`, reads `allow`, and calls `ngx.exit(403)`. | You already run OpenResty |
+| The application behind NGINX | The service calls `permit.check()` before it handles the request. See [Check permissions with permit.check()](/how-to/enforce-permissions/check). | You control the service code and want object-level checks too |
+
+Both NGINX options call the PDP's `/allowed` endpoint, which takes the full check in the request body instead of headers. Run this request from the NGINX host to see the exact contract:
+
+```sh
+curl -X POST http://localhost:7766/allowed \
+  -H "Authorization: Bearer <YOUR_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user": { "key": "john@permit.io" },
+    "action": "read",
+    "resource": { "type": "document", "tenant": "default" }
+  }'
+```
+
+The response body holds the decision in the `allow` field, alongside a `result` copy of it for older SDKs and `query` and `debug` objects:
+
+```json
+{
+  "allow": true,
+  "query": {},
+  "debug": {},
+  "result": true
+}
+```
+
+A denied check returns the same HTTP `200` status with `"allow": false`. Your handler blocks the request when `allow` is `false`.
+
+### Return errors for blocked requests \{#34-configure-error-handling}
+
+Once a component returns `401` or `403` for the subrequest, `auth_request` fails the request with that status. Add these blocks to serve a response or a redirect for each status.
+
+Return a response for unauthorized (`401`) requests:
 
 ```nginx
 error_page 401 = @error401;
@@ -90,7 +172,9 @@ location @error401 {
     # return 302 /login;
 }
 ```
-And for Forbidden requests:
+
+Return a response for forbidden (`403`) requests:
+
 ```nginx
 error_page 403 = @error403;
 
@@ -101,39 +185,29 @@ location @error403 {
 }
 ```
 
+## Troubleshoot the integration \{#5-troubleshooting}
 
-### 3.5 Restart Nginx
-After making changes, restart Nginx - depends on your deployment method, but typically you can run the following command to restart Nginx:
+| Symptom | Cause | Fix |
+|---|---|---|
+| A path produces no check | The `location` has no `auth_request` directive | Add `auth_request /auth;` to every location that needs a check |
+| NGINX returns `500` for every request | NGINX can't reach the PDP, or the PDP returned a status other than `2xx`, `401`, or `403` | Check that the PDP runs at the `proxy_pass` URL, and read the NGINX error log and the PDP container logs |
+| No decision appears in the audit log | The subrequest didn't reach the PDP, or a `permit-*` header is missing | Check that the client or your authentication layer sends all four `permit-*` headers |
+| The PDP answers `401` | The `Authorization` header in the `/auth` location has no valid environment API key | Replace `<YOUR_API_KEY>` with your environment API key |
+| A denied check still reaches the application | The `auth_request` module reads only the status code | Add one of the components in [Block denied requests](#block-denied-requests) |
 
-```
-sudo systemctl restart nginx
-```
+## Secure the PDP connection \{#6-security-considerations}
 
-## 4. Testing the Integration
-- Make requests to your Nginx server, ensuring you include the required Permit.io headers:
-* permit-user-key
-* permit-action
-* permit-resource-type
-* permit-tenant-id
+- Use HTTPS between clients and NGINX, and between NGINX and the PDP when they run on different hosts.
+- Allow connections to the PDP only from trusted sources, such as the NGINX server.
+- Anyone with your environment API key can change that environment's policy through the Permit API. Keep the NGINX configuration file that holds the key out of source control.
 
-Verify that requests are being authorized correctly through the Permit.io PDP:
-- You can check out "Audit Logs" in Permit.io Application (https://app.permit.io/audit) to see the audit logs from the PDP.
-- Check Nginx error logs (`/var/log/nginx/error.log`) for any issues.
+## Monitor authorization overhead \{#7-performance-optimization}
 
-## 5. Troubleshooting
-- Ensure all Nginx locations that need authorization have the `auth_request` directive.
-- Verify that the Permit.io PDP is running and accessible at http://localhost:7766 or in any other URL you have configured.
-- Check that the required headers (`permit-user-key`, `permit-action`, `permit-resource-type`, `permit-tenant-id`) are being passed correctly.
-- Examine Nginx and Permit.io PDP logs for any error messages.
+NGINX sends one subrequest to the PDP for every request to a protected location. Monitor the latency of the subrequests, and run the PDP close to NGINX, for example on the same host, to keep that latency low.
 
-## 6. Security Considerations
-- Use HTTPS for all communications between Nginx, clients, and the Permit.io PDP.
-- Ensure the PDP is only accessible from trusted sources, preferably only from the Nginx server.
-- Regularly update Nginx and Permit.io components to the latest versions.
-- Implement proper rate limiting and DDoS protection.
+## Next steps
 
-## 7. Performance Optimization
-- Consider caching authorization results to reduce load on the Permit.io PDP.
-- Monitor the performance impact of the additional authorization requests.
-
-For any questions or issues, don't hesitate to reach out to [Our Slack Community](https://permit-io.slack.com/join/shared_invite/zt-nz6yjgnp-RlP9rtOPwO0n0aH_vLbmBQ#/shared-invite/email).
+- [Enforce permissions at an API gateway or proxy](/integrations/gateways/overview)
+- [Run the PDP](/overview/run-pdp)
+- [Check permissions by URL with simple URL mapping](/how-to/enforce-permissions/url-mapping/url-mapping-check)
+- [View and filter audit logs](/how-to/use-audit-logs/types-and-filtering)

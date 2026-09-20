@@ -1,116 +1,163 @@
 ---
-title: Bulk Requests Examples
-description: "Create, replace, and delete relationship tuples and users in bulk with the Node.js SDK's bulk endpoints."
+title: Bulk user and relationship tuple requests with the Node.js SDK
+sidebar_label: Bulk requests
+description: "Create, replace, or delete users and create or delete relationship tuples in bulk with the Node.js SDK or the Permit API bulk endpoints."
 ---
 
-# Node.js Bulk Requests Examples
+The Node.js SDK wraps the Permit API bulk endpoints for users and relationship tuples, so one call creates, replaces, or deletes many items. This reference is for backend developers who sync many users or relationships at once, for example during an initial import. For item limits per call and bulk endpoints for tenants, resource instances, role assignments, and roles, see [Perform bulk operations](/how-to/bulk-operations).
 
-### 1. Bulk Create Relationship Tuples
+## Prerequisites
 
-The bulk request will creates multiple relationship tuples at once using the provided tuple data.       The bulk request is a POST request to the `/relationship_tuples/bulk` endpoint.
-        In the data of the request, each tuple object in the operations array is of type RelationshipTupleCreate and is
-essentially a tuple of (subject, relation, object, tenant).
+- A `permit` client created with an API key for the environment. See [Create a Permit client](/sdk/nodejs/quickstart-nodejs#3-create-a-permit-client).
+- For the HTTP samples: your project ID and environment ID. See [Get the project ID and environment ID](/api/examples/get-project-and-env).
 
-- **subject and object** are both resource instances, formatted as `<resource_type:instance_key>` strings (e.g: Folder:budget23).
-- **relation** is the name of the relation.
-- **tenant** is the key of the tenant in which to place the relation (optional if at least one of subject/object already exists).
+## Bulk methods in the Node.js SDK
+
+| Method | Signature | Permit API endpoint |
+|---|---|---|
+| `permit.api.users.bulkUserCreate` | `bulkUserCreate(users: UserCreate[])` | `POST /v2/facts/{proj_id}/{env_id}/bulk/users` |
+| `permit.api.users.bulkUserReplace` | `bulkUserReplace(users: UserCreate[])` | `PUT /v2/facts/{proj_id}/{env_id}/bulk/users` |
+| `permit.api.users.bulkUserDelete` | `bulkUserDelete(userKeys: string[])` | `DELETE /v2/facts/{proj_id}/{env_id}/bulk/users` |
+| `permit.api.relationshipTuples.bulkRelationshipTuples` | `bulkRelationshipTuples(tuples: RelationshipTupleCreate[])` | `POST /v2/facts/{proj_id}/{env_id}/relationship_tuples/bulk` |
+| `permit.api.relationshipTuples.bulkUnRelationshipTuples` | `bulkUnRelationshipTuples(tuples: RelationshipTupleDelete[])` | `DELETE /v2/facts/{proj_id}/{env_id}/relationship_tuples/bulk` |
+
+Each method wraps the array in the request body that the endpoint expects (`operations` for create and replace, `idents` for delete) and resolves to the response body of the endpoint.
+
+If the Permit API returns an error status code, each method throws a `PermitApiError`. If the configured API context doesn't match the environment-level endpoint, each method throws a `PermitContextError`.
+
+Each bulk endpoint answers a successful request with an empty JSON object (`{}`), so the response body doesn't report per-item results. To confirm what a bulk call changed, read the items back, for example with [`permit.api.users.list()`](/sdk/nodejs/user/list-users), or open the **Directory** screen in the Permit dashboard.
+
+Each SDK example in the following sections calls `await` inside an `async` function, with the `permit` client from the prerequisites. The HTTP sample after each SDK example shows the request body of the endpoint that the method calls. In each HTTP sample, replace `{proj_id}` and `{env_id}` with your project and environment IDs or keys, and `API_SECRET_KEY` with your API key.
+
+## Bulk create relationship tuples \{#1-bulk-create-relationship-tuples}
+
+`bulkRelationshipTuples()` creates many relationship tuples in one request. Each item in the `operations` array is a `RelationshipTupleCreate` object:
+
+| Field | Required | Description |
+|---|---|---|
+| `subject` | Yes | Subject resource instance, in the format `resource_type:instance_key`, for example `folder:budget23`. |
+| `relation` | Yes | Key of the relation. |
+| `object` | Yes | Object resource instance, in the format `resource_type:instance_key`. |
+| `tenant` | No | Key of the tenant of the subject and object. Required when neither the subject nor the object instance exists. |
+
+```js
+await permit.api.relationshipTuples.bulkRelationshipTuples([
+  { subject: 'folder:folder-1', relation: 'parent', object: 'file:file-1', tenant: 'default' },
+]);
+```
+
+The same request as an HTTP call:
 
 ```bash
-curl 'https://api.permit.io/v2/facts/{proj_id}/{env_id}/relationship_tuples/bulk' \
-  -H 'authorization: Bearer API_SECRET_KEY'
-  -D '{ "operations":[
-                         {
-                         "subject": "organization:permitio",
-                         "relation": "owner",
-                         "object": "repo:opal",
-                         "tenant": "public"
-                         },
-                     ]
+curl -X POST 'https://api.permit.io/v2/facts/{proj_id}/{env_id}/relationship_tuples/bulk' \
+  -H 'Authorization: Bearer API_SECRET_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "operations": [
+          { "subject": "folder:folder-1", "relation": "parent", "object": "file:file-1", "tenant": "default" }
+        ]
       }'
 ```
-The return value is a list of RelationshipTuple objects, one for each tuple that was created.
 
+## Bulk delete relationship tuples \{#2-bulk-delete-relationship-tuples}
 
-### 2. Bulk Delete Relationship Tuples
+`bulkUnRelationshipTuples()` deletes many relationship tuples in one request. Each item in the `idents` array is a `RelationshipTupleDelete` object with the required fields `subject`, `relation`, and `object`, in the same formats as for creation.
 
-Deletes multiple relationship tuples at once using the provided tuple data.
-The bulk request is a DELETE request to the `/relationship_tuples/bulk` endpoint.
-Each tuple object is of type RelationshipTupleDelete and is essentially a tuple of (subject, relation, object).
-
-- **subject and object** are both resource instances, formatted as `<resource_type:instance_key>` strings (e.g: Folder:budget23).
-- **relation** is the name of the relation.
-
-
-```bash
-curl 'https://api.permit.io/v2/facts/{proj_id}/{env_id}/relationship_tuples/bulk' \
-  -H 'authorization: Bearer API_SECRET_KEY'
-  -D '{ "idents": [
-                    {
-                    "subject": "organization:permitio",
-                    "relation": "owner",
-                    "object": "repo:removed_repo"
-                    }
-                  ]
-      }'
-```
-### 3. Bulk Create Users
-
-The bulk request creates multiple users at once using the provided user data. The bulk request is a POST request to the `/bulk/users` endpoint. In the data of the request, each user object in the `users` array is of type UserCreate and contains the user's details such as username, email, password, etc.
-
-```bash
-curl -X POST \
-'https://api.permit.io/v2/facts/{proj_id}/{env_id}/bulk/users' \
-  -H 'authorization: Bearer API_SECRET_KEY' \
-  -D '{
-            "operations": [{
-            "key": "user|892179821739812389327",
-            "email": "jane@coolcompany.com",
-            "first_name": "Jane",
-            "last_name": "Doe",
-            "attributes": {}
-            }, ...]
-        }'
-```
-### 4. Bulk Replace Users
-
-
-The bulk request replaces multiple users at once using the provided user data, allowing you to change users' data (e.g., email, first name), except for the `key` value. The bulk request is a PUT request to the `/bulk/users` endpoint. In the data of the request, each user object in the `users` array is of type UserCreate and contains the user's details such as username, email, password, etc.
-
-```bash
-
-curl -X PUT \
-'https://api.permit.io/v2/facts/{proj_id}/{env_id}/bulk/users' \
-  -H 'authorization: Bearer API_SECRET_KEY' \
-  -D '{
-            "operations": [{
-            "key": "user|892179821739812389327",
-            "email": "jane@coolcompany.com",
-            "first_name": "Jane",
-            "last_name": "Doe",
-            "attributes": {}
-            }, ...]
-        }'
+```js
+await permit.api.relationshipTuples.bulkUnRelationshipTuples([
+  { subject: 'folder:folder-1', relation: 'parent', object: 'file:file-2' },
+]);
 ```
 
-
-### 5. Bulk Delete Users
-
-The bulk request deletes multiple users at once using the provided user data. The bulk request is a DELETE request to the `/bulk/users` endpoint. In the data of the request, every 'string' value in the `idents` array represents a user to delete.
+The same request as an HTTP call:
 
 ```bash
-
-curl -X DELETE \
-'https://api.permit.io/v2/facts/{proj_id}/{env_id}/bulk/users' \
-  -H 'authorization: Bearer API_SECRET_KEY' \
-  -D '{
+curl -X DELETE 'https://api.permit.io/v2/facts/{proj_id}/{env_id}/relationship_tuples/bulk' \
+  -H 'Authorization: Bearer API_SECRET_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
         "idents": [
-                    "user1",
-                    "user2"
-                  ]
+          { "subject": "folder:folder-1", "relation": "parent", "object": "file:file-2" }
+        ]
       }'
 ```
 
+## Bulk create users \{#3-bulk-create-users}
 
-### 6. Possible Errors:
-- **PermitApiError**: If the API returns an error HTTP status code.
-- **PermitContextError**: If the configured ApiContext does not match the required endpoint context.
+`bulkUserCreate()` creates many users in one request. Each item in the `operations` array is a `UserCreate` object with a required `key` and the optional fields `email`, `first_name`, `last_name`, `attributes`, and `role_assignments`. See [Create a user with the Node.js SDK](/sdk/nodejs/user/create-user) for the field descriptions.
+
+```js
+await permit.api.users.bulkUserCreate([
+  { key: 'user-1', email: 'user1@example.com', first_name: 'Ada', last_name: 'Example' },
+  { key: 'user-2', email: 'user2@example.com' },
+]);
+```
+
+The same request as an HTTP call:
+
+```bash
+curl -X POST 'https://api.permit.io/v2/facts/{proj_id}/{env_id}/bulk/users' \
+  -H 'Authorization: Bearer API_SECRET_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "operations": [
+          { "key": "user-1", "email": "user1@example.com", "first_name": "Ada", "last_name": "Example", "attributes": {} },
+          { "key": "user-2", "email": "user2@example.com", "attributes": {} }
+        ]
+      }'
+```
+
+## Bulk replace users \{#4-bulk-replace-users}
+
+`bulkUserReplace()` replaces the data of many users in one request, for example their email or first name. The user `key` identifies each user and can't change. Each item in the `operations` array is a `UserCreate` object.
+
+```js
+await permit.api.users.bulkUserReplace([
+  { key: 'user-1', email: 'ada@example.com', first_name: 'Ada', last_name: 'Example' },
+  { key: 'user-2', email: 'grace@example.com' },
+]);
+```
+
+The same request as an HTTP call:
+
+```bash
+curl -X PUT 'https://api.permit.io/v2/facts/{proj_id}/{env_id}/bulk/users' \
+  -H 'Authorization: Bearer API_SECRET_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "operations": [
+          { "key": "user-1", "email": "user1@example.com", "first_name": "Ada", "last_name": "Example", "attributes": {} },
+          { "key": "user-2", "email": "user2@example.com", "attributes": {} }
+        ]
+      }'
+```
+
+## Bulk delete users \{#5-bulk-delete-users}
+
+`bulkUserDelete()` deletes many users in one request. Each string in the `idents` array is the key or ID of a user to delete.
+
+```js
+await permit.api.users.bulkUserDelete(['user-1', 'user-2']);
+```
+
+The same request as an HTTP call:
+
+```bash
+curl -X DELETE 'https://api.permit.io/v2/facts/{proj_id}/{env_id}/bulk/users' \
+  -H 'Authorization: Bearer API_SECRET_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{ "idents": ["user-1", "user-2"] }'
+```
+
+## Errors from bulk methods \{#6-possible-errors}
+
+| Error | Cause |
+|---|---|
+| `PermitApiError` | The Permit API returned an error status code, for example because the request has more items than the per-call limit. See [Bulk limits](/how-to/bulk-operations#bulk-limits). |
+| `PermitContextError` | The API context configured in the SDK client doesn't match the environment-level context that the endpoint requires. |
+
+## Related pages
+
+- [Perform bulk operations](/how-to/bulk-operations)
+- [Sync a user with the Node.js SDK](/sdk/nodejs/user/sync-user)
+- [List relationship tuples with the Node.js SDK](/sdk/nodejs/relationship-tuple/list-relationship-tuples)

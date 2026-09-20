@@ -1,37 +1,51 @@
 ---
-description: "Sync a user's identity and attributes to Permit.io on creation with the Go SDK."
+title: Sync a user with the Go SDK
+sidebar_label: SyncUser
+description: "Reference for Permit.Api.Users.SyncUser() in the Go SDK, which creates a user or updates the user if the key already exists."
 ---
 
-# SyncUser
+`Permit.Api.Users.SyncUser()` saves a user's identity and attributes to Permit.io. If no user with the key exists, `SyncUser` creates the user. If the user exists, `SyncUser` updates it. This reference is for Go developers who sync users from their authentication flow, for example when a user signs up or signs in. After the sync, the policy decision point (PDP) can evaluate permission checks for that user.
 
-This function is used to sync (save) a user's information to the Permit.io cloud and PDP (Policy Decision Point) upon user creation.
+`SyncUser` doesn't assign roles. To give the synced user a role, call [`Users.AssignRole`](/sdk/golang/user/AssignRole).
 
-:::note
-This function **should be** used for the initial creation of the user. This means that when you need to have the user synced between your authentication
-solution and Permit, this is the function you need to use.
+## `Users.SyncUser` signature
 
-Once the user has been synced with Permit, you **should not** use this sdk call to update the user's _role_.
+`func (u *Users) SyncUser(ctx context.Context, user models.UserCreate) (*models.UserRead, error)`
 
-Instead, you should use the **[assignRole](/sdk/golang/user/AssignRole)** function.
+## `Users.SyncUser` parameters \{#parameters}
 
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `ctx` | `context.Context` | Yes | The context of the request. |
+| `user` | `models.UserCreate` | Yes | The user to sync. Build it with `models.NewUserCreate(key)`. |
+
+## `UserCreate` fields for `Users.SyncUser` \{#payload}
+
+`Users.SyncUser` takes the same `UserCreate` struct as [`Users.Create`](/sdk/golang/user/Create#usercreate-payload):
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Key` | `string` | Yes | A unique ID by which Permit identifies the user. You pass the same key as the user in `Permit.Check()`. |
+| `Email` | `*string` | No | The email of the user. Set it with `SetEmail()`. |
+| `FirstName` | `*string` | No | The first name of the user. Set it with `SetFirstName()`. |
+| `LastName` | `*string` | No | The last name of the user. Set it with `SetLastName()`. |
+| `Attributes` | `map[string]interface{}` | No | User attributes that attribute-based access control (ABAC) policies evaluate. Set them with `SetAttributes()`. |
+
+## How `Users.SyncUser` decides between create and update
+
+1. `SyncUser` calls `Users.Get` with the key of the user.
+2. If the Permit API returns `NotFound`, `SyncUser` calls `Users.Create` with the struct you passed.
+3. If the user exists, `SyncUser` calls `Users.Update`. The update copies `Email`, `FirstName`, and `LastName` when they aren't empty, and copies `Attributes` when you set them.
+
+:::warning
+When the user exists and you set `Attributes`, the update replaces all the user's stored attributes with the map you pass. Attribute keys that aren't in the map are removed from the user, and ABAC policies no longer see them.
 :::
 
-### Parameters
-`ctx` -  The context of the request.
-`user` - An object that contains the information about the user. The payload is defined below.<br/>
+## Example: sync a user with `Users.SyncUser` \{#implementation}
 
-### Payload
-:::note
-Same as user object in [createUser](/sdk/golang/user/Create) function.
-:::
+The example uses a client named `Permit`, created with `permit.NewPermit()` as shown in [Check permissions with the Go SDK](/sdk/golang/quickstart-golang), and a `ctx` of type `context.Context`.
 
-`key` - A unique id by which Permit will identify the user for permission checks.
-
-You will later pass this Key to the `permit.check()` API. You can use anything for this Key - the user email, a UUID or anything else as long as it's unique on your end. The user key must be url-friendly (slugified).<br/><br/>
-`Email` - **optional** - The email of the user. If synced, will be unique inside the environment.<br/>
-`FirstName` - **optional** - First name of the user.<br/>
-`LastName` - **optional** - Last name of the user.<br/>
-`Attributes` - **optional** - Arbitrary user attributes that will be used to enforce attribute-based access control policies.<br/>
+Build the `UserCreate` struct with the key `user-key`, an email, a first and last name, and an `age` attribute:
 
 ```go
 user := models.NewUserCreate("user-key")
@@ -43,8 +57,27 @@ user.SetAttributes(map[string]interface{}{
 })
 ```
 
-### Implementation
+Pass the struct to `Users.SyncUser`:
 
 ```go
 newUser, err := Permit.Api.Users.SyncUser(ctx, *user)
 ```
+
+## `Users.SyncUser` return value and errors
+
+On success, `Users.SyncUser` returns a `*models.UserRead` for the created or updated user.
+
+If the call fails, `err` holds an `errors.PermitError` from the `github.com/permitio/permit-golang/pkg/errors` package. Its `StatusCode` field has the HTTP status, and its `ErrorCode` field has one of these codes:
+
+| `ErrorCode` | Cause |
+|---|---|
+| `UnprocessableEntityError` | HTTP 422: a field failed validation. |
+| `Unauthorized`, `ForbiddenAccess` | HTTP 401 or 403: the API key is invalid or has no access to the environment. |
+| `UnexpectedError` | A server error (HTTP 5xx) or a network error. |
+
+## Related user methods
+
+- [Assign a role to a user with the Go SDK](/sdk/golang/user/AssignRole)
+- [Create a user with the Go SDK](/sdk/golang/user/Create)
+- [Get a user with the Go SDK](/sdk/golang/user/Get)
+- [Sync users and assign roles](/how-to/sync-users)

@@ -1,43 +1,50 @@
 ---
 sidebar_position: 0
 title: Connect Your Authentication
-description: "Connect any authentication provider to Permit.io using the handoff point pattern to sync users from a JWT and assign roles."
+description: "Pick the integration guide for your authentication provider, or build a handoff point that syncs users from a verified JWT into Permit.io."
 ---
 
 import handoffPoint from "/static/ui-videos/authentication/user-sync-handoff-point.mp4";
 
-**Permit.io** enables simple authorization management by working **seamlessly** with most authentication providers.
-This integration allows for a smooth transition between verifying a user's identity and managing their access within your
-application. The process happens in a part we call the **"handoff point"** which occurs immediately after authentication and
-just before granting thr user access to the application.
+Connect your authentication provider to Permit.io so every signed-in user exists in Permit and gets the right roles. This page is for developers who add Permit to an application that already has sign-in. Find your provider below, or follow the steps for any other provider or a custom authentication system.
 
-This document outlines the steps required to ensure a successful integration, focusing on session management, JWT token issuance,
-user synchronization, and role assignment.
+For the concepts behind this page (the handoff point, the user key, and where to manage roles), read [How authentication connects to Permit.io](/authentication/permit-and-authentication).
 
-## Session Management and JWT Token Issuance
+## Prerequisites
 
-Upon successful authentication, two key components are created for the user: **a session** and a **JSON Web Token (JWT)**.
-The JWT is especially crucial as it encapsulates the user's unique identity. This token not only serves as a bearer of
-identity but also is important in you being able to synchronize the user's details inside of Permit.io and assigning them a specific
-role based on predefined policies.
+- A Permit.io account with a policy: roles, resources, and permissions. The [Quickstart](/quickstart) sets one up.
+- Your environment API key. See [Get your API key](/overview/get-api-key).
+- An application where users already sign in with your authentication provider.
 
-### The Handoff Point
+## Find the guide for your provider
 
+| Provider | Guide | What the guide covers |
+|---|---|---|
+| Auth0 | [Auth0 and Permit integration](/authentication/auth0/permit-integration) | Sync users and Auth0 roles at login in a Next.js app |
+| Auth0 | [Auth0 demo application](/authentication/auth0/auth0-demo-app) | Run the Next.js to-do demo that combines Auth0 and Permit |
+| Auth0 | [Sync Auth0 users and roles](/authentication/auth0/auth0-sync-script) | Export existing Auth0 users and import them with a Python script |
+| AWS Cognito | [Cognito and Permit integration](/authentication/cognito/permit-integration) | Verify Cognito tokens, sync users, and check permissions in a Node.js backend |
+| AWS Cognito | [Cognito demo application](/authentication/cognito/cognito-demo-app) | Run the vanilla JavaScript and Express demo |
+| Stytch | [Stytch and Permit integration](/authentication/stytch/permit-integration) | Add Stytch sign-in to Next.js, then create a tenant, sync the user, and assign a role |
+| Hanko | [Hanko and Permit](/authentication/hankopermit) | Passkey sign-in with role-based and attribute-based checks in a Next.js notes app |
+| Logto | [Logto and Permit](/authentication/logto) | Sync users with a Logto webhook and show UI based on permissions |
+| SuperTokens | [SuperTokens example](/authentication/supertokens) | Run an example Next.js app that syncs SuperTokens users at sign-up |
+| FusionAuth | [FusionAuth example](/authentication/fusionauth) | Explore an example Express app that syncs FusionAuth users |
+| Okta | [SCIM integration with Okta](/integrations/SCIM/OKTA) | Provision users and groups from Okta through SCIM |
+| Microsoft Entra ID | [SCIM integration with Entra ID](/integrations/SCIM/EntraID) | Provision users and groups from Entra ID through SCIM |
+| Keycloak | [Keycloak RBAC with Permit.io (blog)](https://www.permit.io/blog/implementing-dynamic-keycloak-rbac-with-permitio) | Map Keycloak users to Permit roles |
 
-<video controls>
+## Connect any other authentication provider
+
+If your provider isn't listed, or you run your own authentication, build a **handoff point**: middleware that runs right after authentication succeeds and before your application serves the user.
+
+<video controls aria-label="Video of the user sync handoff point between authentication and Permit authorization">
   <source src={handoffPoint} type="video/mp4" />
 </video>
 
-<br />
-<br />
+### 1. Verify the user's token
 
-The handoff point is a middleware layer that you should create to facilitate the transition from authentication to authorization.
-It operates as follows:
-
-1. **Authentication Confirmation:** The user's identity is confirmed by the authentication provider.
-2. **Session and JWT Issuance:** A session is established, and a JWT containing the user's unique identity is issued.
-3. **User Synchronization:** The JWT is used to sync the user's identity into Permit.io as a new user entity.
-4. **Role Assignment:** Based on the application's policy, a relevant role is assigned to the newly synchronized user.
+After sign-in, your authentication provider creates a session and issues a token, usually a JSON Web Token (JWT). In your backend, validate the token with the provider's SDK or its public keys. Don't trust a user ID that the browser sends without a verified token.
 
 :::tip Fun fact
 
@@ -45,55 +52,41 @@ The JWT format was standardized by the IETF in May 2015 as [RFC 7519](https://ww
 
 :::
 
-### User Synchronization and Role Assignment
+### 2. Pick the user key
 
-Permit.io requires the user's unique identity to be integrated into its system to manage authorization effectively.
-This integration can occur in real-time or in bulk via the Permit.io API.
+Read a stable, unique identifier from the verified token, such as the `sub` claim. Permit uses this value as the **user key**. Pass the same key to every sync call, role assignment, and permission check for that user.
 
-- **Real-time Synchronization:** At the handoff point, the user's identity is extracted from the JWT and synchronized with Permit.io,
-  where a corresponding user entity is created.
-- **Bulk Synchronization:** For scenarios requiring the synchronization of multiple users at once, Permit.io offers an API endpoint
-  to facilitate bulk user creation and role assignment.
+### 3. Sync the user to Permit
 
-#### API Endpoints
+At the handoff point, call `syncUser()` with the user key, and optionally the email, first name, last name, and attributes from the token. `syncUser()` creates the user if the key is new and updates the user if the key exists.
 
-- **Create User:** [Create User API Documentation](https://api.permit.io/v2/redoc#tag/Users/operation/create_user)
-- **Assign Role to User:** [Assign Role to User API Documentation](https://api.permit.io/v2/redoc#tag/Users/operation/assign_role_to_user)
+- SDK usage and parameters: [Sync users](/how-to/sync-users) and the [Node.js `syncUser` reference](/sdk/nodejs/user/sync-user).
+- API: [Create user](https://api.permit.io/v2/redoc#tag/Users/operation/create_user).
 
-### Monitoring Monthly Active Users
+### 4. Assign a role
 
-Permit.io measures usage through what we call **Monthly Active Users (MAUs)**, which are unique identities against which permissions are
-checked within a given month.
+A synced user with no role assignment gets a deny from every role-based check. Assign a role in a tenant (use the `default` tenant if you don't use multi-tenancy):
 
-:::note
-Regardless of the number of permission checks performed for a user per month, they are counted as a
-single MAU (single identity).
-:::
+- SDK: [Node.js `assignRole` reference](/sdk/nodejs/role/assign-role).
+- API: [Assign role to user](https://api.permit.io/v2/redoc#tag/Users/operation/assign_role_to_user).
 
-## Bulk User Synchronization with Permit.io
+If your provider already stores roles, map each provider role to a Permit role with the same key. Role keys are case-sensitive.
 
-Integrating an existing user base into Permit efficiently, especially when dealing with a significant number of users,
-requires a structured approach to bulk user synchronization. This method ensures that your users are seamlessly imported into
-Permit.io, enabling immediate application of authorization policies and role assignments.
+### 5. Verify the user in Permit
 
-### Understanding Bulk Synchronization
+Sign in to your application with a test user. Then open **Directory** in the [Permit dashboard](https://app.permit.io). The user appears with the key from step 2 and the role from step 4. Call `permit.check()` for an action that role allows. The check returns `true`.
 
-[Bulk synchronization](/how-to/bulk-operations#bulk-user-operations) involves uploading a large number of user identities to Permit.io in a single operation.
-This process is essential for applications transitioning to Permit.io for authorization management or when periodically
-syncing user databases to ensure all user records are up-to-date.
+## Import existing users in bulk
 
-### When to Use Bulk Synchronization
+The handoff point syncs users when they sign in. Users who don't sign in after you add the integration stay missing from Permit. Import them in one operation:
 
-- **Initial Integration:** When first integrating with Permit.io and you need to sync an existing user base.
-- **Periodic Updates:** To ensure that any changes in the user database (new users, role changes, etc.) are reflected in Permit.io.
+1. Export the users from your authentication provider, with the same identifier you use as the user key.
+2. Send them to the bulk create users endpoint, `POST https://api.permit.io/v2/facts/{proj_id}/{env_id}/bulk/users`, or call the bulk methods in an SDK. See [Bulk user operations](/how-to/bulk-operations#bulk-user-operations) for the request format and limits.
+3. Assign roles to the imported users. See [Bulk role assignment](/how-to/bulk-operations#bulk-role-assignment).
+4. Open **Directory** in the Permit dashboard and confirm the imported users appear with their roles.
 
-### Step-by-Step [Bulk Synchronization Process](/how-to/bulk-operations#bulk-user-operations)
+## Next steps
 
-1. **Prepare User Data:** Organize your user data, ensuring each user's unique identity and any relevant attributes (e.g., roles, permissions) are accurately represented.
-2. **Format Data:** Convert your user data into the format required by Permit.io's bulk API endpoint. This often involves structuring the data into JSON or another specified format.
-3. **API Call:** Utilize the Permit.io API to submit your bulk user data. The specific endpoint and method will be detailed in the API documentation. Ensure that your API request includes all necessary authentication and headers.
-
-   Example endpoint: `POST https://api.permit.io/v2/facts/{proj_id}/{env_id}/bulk/users`
-
-4. **Handle Responses:** Upon submitting your bulk upload, handle the API response. Success responses will confirm the data has been processed. Error responses should be reviewed to identify and correct any issues with the data or request.
-5. **Verify Synchronization:** After a successful upload, verify that the users have been correctly synchronized to Permit.io by performing a test query or using the Permit.io dashboard.
+- [How authentication connects to Permit.io](/authentication/permit-and-authentication): compare sync methods and role ownership models.
+- [Check permissions](/how-to/enforce-permissions/check): enforce the policy with `permit.check()`.
+- [SCIM overview](/integrations/SCIM/SCIM_overview): provision users from an identity provider without handoff code.

@@ -1,54 +1,66 @@
 ---
-title: Access Request MCP Overview
+title: Access Request MCP overview
 sidebar_label: Overview
-description: Learn how Permit.io can help you implement safe, human-reviewed decision-making in AI agent workflows using the Access Request MCP Server. This guide explains the HITL pattern, common risks in agentic systems, and how the Permit MCP architecture enables secure, policy-backed approvals for access and operations.
+description: "Learn how the Permit.io Access Request MCP server lets an AI agent request access and operation approvals that a human reviews, and when to add human approval to an agent."
 ---
 
-# Access Request MCP Overview
+Learn how the Permit.io Access Request MCP server lets an AI agent ask for access or for approval of a sensitive action, and leaves the decision to a human reviewer. This page is for AI agent builders who decide whether their agent needs human approval, and how the server fits into the agent.
 
-AI agents are no longer passive tools - they can trigger workflows, change infrastructure, and access sensitive resources. This autonomy introduces new risks:
+## Why AI agents need human approval \{#why-ai-agents-need-human-approval}
 
-- Agents may hallucinate actions or overreach their intended permissions.
-- Prompts can be vague or misleading, leading to unintended consequences.
-- Actions might lack proper audit trails or human approval.
+AI agents trigger workflows, change infrastructure, and read sensitive resources. That autonomy adds risks:
 
-**[Human-in-the-loop (HITL)](https://www.permit.io/blog/human-in-the-loop-for-ai-agents-best-practices-frameworks-use-cases-and-demo)** workflows solve this by inserting deliberate checkpoints where human reviewers must explicitly approve critical actions. 
+- An agent can hallucinate an action or act beyond the permissions its user intended.
+- A vague or misleading prompt can lead to an action nobody wanted.
+- An action can run without an audit trail or a human decision.
 
-Permit.io's Access Request MCP is a framework designed to enable AI agents with the ability to request sensitive actions, while allowing humans to remain the final decision-makers.
+A [human-in-the-loop (HITL)](https://www.permit.io/blog/human-in-the-loop-for-ai-agents-best-practices-frameworks-use-cases-and-demo) workflow adds checkpoints where a human reviewer must approve a critical action before the agent performs the action. The Access Request MCP server implements these checkpoints with Permit policies and Permit Elements. The server covers the secure external access perimeter of the [Four-Perimeter Framework](/ai-security/framework#secure-external-access).
 
-## What Is the Permit Access Request MCP?
+## What the Access Request MCP server does \{#what-is-the-permit-access-request-mcp}
 
-The **Permit.io Access Request MCP Server** bridges the gap between AI actions and human judgment, **enabling AI agents to** **ask for permission before executing sensitive tasks.**
+The Access Request MCP server is an open-source [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server, [permitio/permit-mcp](https://github.com/permitio/permit-mcp). The server gives an agent tools that call the Permit API to:
 
-The MCP server provides tools that let agents:
+- Create, list, approve, and deny **access requests**: a user asks for a role on a resource, for example read access to a restaurant's menu.
+- Create, list, approve, and deny **operation approvals**: a user asks for one-time approval of an action on a resource, for example ordering an expensive dish.
+- List the **resource instances** of a resource type, so the agent can pass a valid instance key to the other tools.
 
-- Propose access requests (e.g., “Can I access this document?”)
-- Submit operation approval requests (e.g., “Can I delete this resource?”)
-- Route these decisions to real human reviewers via UI or API
-- Act only once a decision has been made
+For the parameters of each tool, see the [tool reference](/ai-security/access-request-mcp/implementation-guide#available-tools--endpoints).
 
-With support for **fine-grained access control a**nd **real-time interrupt/resume patterns**, the MCP server becomes the foundation for **secure agent workflows**.
+### How an access request flows through Permit \{#how-an-access-request-flows}
 
-## When to Use HITL with Permit MCP
+1. A user asks the agent for something the user isn't allowed to do. A `permit.check()` call in your tool returns a denial from the policy decision point (PDP), and the agent tells the user that access is required.
+2. The agent calls the `create_access_request` tool with the user, the role, the resource instance, and a reason. Permit stores the request in a [User Management element](/embeddable-uis/element/user-management).
+3. A reviewer approves or denies the request: in the embedded element, through the Permit API, or by asking an agent to call `approve_access_request` or `deny_access_request`.
+4. If the reviewer approves, Permit assigns the requested role to the user. The next `permit.check()` for that user and resource allows the action.
 
-Use the Permit MCP when your agent:
+### How an operation approval flows through Permit \{#how-an-operation-approval-flows}
 
-- Operates in sensitive environments where actions must be logged and approved.
-- Interacts with multiple roles or users, and decisions require accountability.
-- Needs dynamic permissions, driven by user identity, context, or custom policies.
-- Cannot be fully trusted to act independently, especially in production.
+1. The agent calls the `create_operation_approval` tool with the user, the resource instance, and a reason.
+2. A user with the `_Reviewer_` role on the resource instance sees the request in the [Approval Management element](/embeddable-uis/element/approval-management) or lists the request with the `list_operation_approvals` tool.
+3. If the reviewer approves, Permit assigns the requesting user the `_Approved_` role on the resource instance, which grants the `operate` permission. See [Operation Approval](/embeddable-uis/element/operation-approval).
+4. Your tool checks the `operate` permission before the action runs. To make the approval one-time, your tool unassigns the `_Approved_` role after the action succeeds.
 
-Common use cases include:
+## When to use the Access Request MCP server \{#when-to-use-hitl-with-permit-mcp}
 
-- AI copilots for developers or security engineers
-- Customer support bots making account-level changes
-- Internal assistants triggering infrastructure updates
-- AI agents in regulated environments (e.g. SOC 2, HIPAA)
+Use the Access Request MCP server when your agent:
 
-## Explore the Full HITL Stack
+- Runs in an environment where sensitive actions must be logged and approved by a person.
+- Serves several users or roles, and each decision needs an accountable reviewer.
+- Needs permissions that change at runtime, based on user identity, context, or policy.
+- Isn't trusted to act on its own in production.
 
-[**Permit MCP Technical Implementation Guide**](/ai-security/access-request-mcp/implementation-guide) <br/>
-A detailed walkthrough of installing, configuring, and extending the Permit MCP Server.
+Common use cases:
 
-[**Building a Family Food Ordering CLI Tool With Permit MCP**](/ai-security/access-request-mcp/food-ordering-demo-example) <br/>
-A step-by-step tutorial demonstrating how HITL works in a real-world agentic system using Gemini, FastAPI, and the MCP server.
+- Coding or security assistants that request elevated access for developers or security engineers.
+- Customer support agents that make account-level changes.
+- Internal assistants that trigger infrastructure updates.
+
+To authorize every tool call between MCP clients and your MCP servers, without adding approval tools to the agent, use [Permit MCP Gateway](/permit-mcp-gateway).
+
+## Next steps \{#explore-the-full-hitl-stack}
+
+- [Add the Access Request MCP server to your agent](/ai-security/access-request-mcp/implementation-guide): install, configure, and run the server, and add its tools to your own MCP server.
+- [Food ordering demo](/ai-security/access-request-mcp/food-ordering-demo-example): build a family food ordering agent in which children request access and parents approve, with Gemini, LangGraph, FastAPI, and the Access Request MCP server.
+- [The Four-Perimeter Framework](/ai-security/framework): see where human approval fits among the other permission checks for AI agents.
+
+<NextStepCallout variant="agents" />

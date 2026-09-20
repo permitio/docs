@@ -1,104 +1,117 @@
 ---
 sidebar_position: 2
 title: "n8n Workflow with Linear MCP Gateway"
-description: "Use Permit.io's MCP Gateway to control which Linear MCP tools an n8n workflow can access — and revoke access in real time."
+description: "Connect an n8n workflow to the Linear MCP server through Permit MCP Gateway, and change which Linear tools the workflow can call without editing the workflow."
 ---
 
-# n8n Workflow with Linear MCP Gateway
+Connect an n8n workflow to the Linear Model Context Protocol (MCP) server through Permit MCP Gateway. The workflow creates a Linear issue for each new customer in Attio. You then lower the workflow's trust level in the gateway and watch the gateway block the same call. This tutorial is for admins and workflow builders who run automated agents against MCP servers.
 
-A walkthrough demonstrating how to set up Permit MCP Gateway so that you can trust automated workflows built with n8n.
+## Why route n8n through the gateway \{#problem-statement}
 
-## Problem Statement
+Workflow builders such as n8n can call external MCP servers with no person reviewing each call. Permit MCP Gateway checks every tool call the workflow makes against the trust level granted to the workflow, so you control which tools the workflow can use and can change that access at any time.
 
-Automated workflow builders like n8n allow you to connect to external MCPs — automated tools calling automated tools. But who is monitoring all of this? Where are the checks on the system?
+## Before you begin \{#before-you-begin}
 
-That is where Permit.io's MCP Gateway comes in. Using the MCP Gateway, you can control exactly which tools an agent or workflow can use.
+- A [Permit account](/quickstart/#1-create-a-permit-account).
+- A Permit MCP Gateway host with the Linear MCP server imported, and access granted to your user. Follow steps 1 and 2 of the [Linear MCP Gateway demo](/permit-mcp-gateway/demos/linear-mcp-gateway), or see [Set up hosts for your organization](/permit-mcp-gateway/host-setup).
+- An n8n instance where you can add the **MCP Client Tool** node.
+- An Attio workspace with an object that tracks customers, if you want to run the full workflow. Only the MCP Client Tool part of the workflow involves the gateway.
 
-This demo shows how to solve that by placing Permit.io's MCP Gateway in front of a n8n workflow.
+This tutorial uses the tool trust levels from the Linear demo: `save_issue` requires **High** trust, `list_issues` requires **Medium**, and your user's **Max Trust Level** on the Linear MCP server is **High**. If you imported Linear with different tool trust levels, substitute the level that covers `save_issue` wherever this tutorial says High.
 
-**Task:** Use Permit.io's MCP Gateway to allow an n8n workflow to access only specific tools of a Linear MCP.
+## The n8n workflow
 
-## Before You Begin
+The example workflow uses **Attio** (CRM) and **Linear** (project tracking). For every new sale recorded in an Attio object, the workflow creates a Linear issue.
 
-1. [Create a Permit.io Account](/quickstart/#1-create-a-permit-account)
-2. [Create a Permit MCP Gateway account](/permit-mcp-gateway/guide)
-3. [Add Linear MCP to your Account](/permit-mcp-gateway/demos/linear-mcp-gateway)
+The workflow has three nodes:
 
-## The n8n Workflow
+| n8n node | Name in the screenshot | What it does |
+| --- | --- | --- |
+| **Webhook** | Attio Item Added | Receives the `POST` that Attio sends when an item is added to the object. |
+| **HTTP Request** | Fetch Record Details | Reads the new item's data from the Attio API. |
+| **MCP Client Tool** | MCP Client | Calls Permit MCP Gateway to create a Linear issue with the item's data. |
 
-For this demo, assume you use two popular tools for work management: **Attio** (CRM) and **Linear** (project tracking). You have an Attio object that tracks all customers. For every new sale, you want to automatically create a Linear issue. Let's automate this with an n8n workflow.
+![n8n canvas with the Attio Item Added webhook node connected to a Fetch Record Details HTTP Request node and an MCP Client node](/img/mcpermit/n8n-linear-demo/workflow-overview.png)
 
-The workflow has three components:
+**Webhook** and **HTTP Request** are built-in n8n nodes, renamed on the canvas to describe their job, and they don't involve the gateway. The steps below cover the **MCP Client Tool** node, which n8n names "MCP Client" when you add it.
 
-1. **API Webhook Listener (Attio)** — listens for new items added to Attio
-2. **HTTP Fetcher** — retrieves the new item data from Attio
-3. **MCP Client** — calls the MCP Gateway to create a Linear issue with the item data
+## 1. Configure the MCP Client node in n8n \{#step-1--configure-the-mcp-client-in-n8n}
 
-![n8n workflow overview showing webhook, fetcher, and MCP client nodes](/img/mcpermit/n8n-linear-demo/workflow-overview.png)
+1. In your n8n workflow, add **MCP Client Tool** from the node selector on the right.
 
-Since this demo focuses on the MCP Gateway integration, we'll skip to component 3 — the MCP Client.
+   ![MCP Client Tool in the n8n node selector](/img/mcpermit/n8n-linear-demo/mcp-client-tool-selector.png)
 
-## Step 1 — Configure the MCP Client in n8n
+2. In the node's **Parameters** tab, leave **Server Transport** on **HTTP Streamable**. In **MCP Endpoint URL**, enter the gateway MCP URL of the host where you imported the Linear MCP server: `https://<your-subdomain>.agent.security/mcp`, which the host detail page in [app.agent.security](https://app.agent.security) shows. For **Authentication**, select **MCP OAuth2**, then open **Credential for MCP OAuth2 API** and select **Create new credential**.
 
-1. In your n8n workflow, grab **MCP Client** from the tool selector on the right.
+   ![MCP Client Tool parameters with the gateway MCP endpoint URL, MCP OAuth2 authentication, and the Create new credential option](/img/mcpermit/n8n-linear-demo/mcp-client-config.png)
 
-   ![MCP Client in the n8n tool selector](/img/mcpermit/n8n-linear-demo/mcp-client-tool-selector.png)
+3. In the credential dialog, leave **Use Dynamic Client Registration** on, enter the gateway MCP URL in **Server URL**, and select **Connect to MCP**. Dynamic client registration lets the gateway register n8n as an OAuth client without you creating one by hand.
 
-2. Insert the URL from the Linear MCP you created previously in the Permit MCP Gateway. For **Authentication**, select **MCP OAuth2** and then **Create New Credential**.
+   ![MCP OAuth2 API credential dialog with dynamic client registration on, the gateway URL in Server URL, and the Connect to MCP button](/img/mcpermit/n8n-linear-demo/create-credential.png)
 
-   ![MCP Client configuration with URL and authentication](/img/mcpermit/n8n-linear-demo/mcp-client-config.png)
+4. The Consent Service opens. Select the **Linear MCP** server for this workflow.
 
-3. In the **Create New Credential** modal, enter the MCP Endpoint URL again and press **Connect to MCP**.
+   ![Consent Service with the Linear MCP server selected](/img/mcpermit/n8n-linear-demo/consent-service-select.png)
 
-   ![Create New Credential modal with MCP endpoint URL](/img/mcpermit/n8n-linear-demo/create-credential.png)
+5. Sign in and authorize access to Linear. The **Connect MCP Server** screen then shows the **Trust Level** slider, your **Consent Duration**, and every Linear tool with the trust level it requires and whether this consent allows it.
 
-4. This brings you to the Consent Service screen to select which MCP to include for this workflow. Select the **Linear MCP**.
+   Drag the **Trust Level** slider to **High**, because `save_issue` requires High trust in this setup. `save_issue` moves from denied to allowed in the tool list. Leave **Consent Duration** on **Forever**, which is the default and doesn't expire, then select **Accept**. The slider stops at your **Max Trust Level**, shown as **Max: High** above the slider. For how the consent screen maps trust levels to tools, see [Consent Service](/permit-mcp-gateway/consent-service).
 
-   ![Consent Service screen showing Linear MCP selection](/img/mcpermit/n8n-linear-demo/consent-service-select.png)
+   ![Connect MCP Server consent screen with the Trust Level slider, Consent Duration options, and the Linear tool list showing each tool's required trust level](/img/mcpermit/n8n-linear-demo/tool-import.png)
 
-5. You will be prompted to sign in and grant access to Linear. Then you will be asked to import and assign trust levels for all of Linear's tools. This is where you directly control what n8n can do.
+## 2. Configure the Linear action \{#step-2--configure-the-linear-action}
 
-   ![Tool import screen with trust level assignment](/img/mcpermit/n8n-linear-demo/tool-import.png)
+1. In the MCP Client Tool node, open the **Tool** field, keep **From list**, and select `save_issue`. The list holds the Linear tools the gateway exposes to this connection.
 
-## Step 2 — Configure the Linear Action
+   ![The Tool field in the MCP Client Tool node with save_issue selected from the list of Linear tools](/img/mcpermit/n8n-linear-demo/select-save-issue.png)
 
-1. In the MCP Client config area, n8n now shows all the imported Linear tools. Select **save_issue**.
+2. Set the Linear **team** for the issue, then map the data from Attio. This example uses the customer name and sale amount for the issue title and description.
 
-   ![Selecting save_issue from imported Linear tools](/img/mcpermit/n8n-linear-demo/select-save-issue.png)
+   ![save_issue fields mapped to Attio customer data](/img/mcpermit/n8n-linear-demo/issue-config.png)
 
-2. Define the **team** for the issue. Then pass along whatever data you need — for this demo, we use the customer name and sale amount for the Linear issue title and description.
+## 3. Test the workflow \{#step-3--test-the-workflow}
 
-   ![Configuring issue fields with customer data](/img/mcpermit/n8n-linear-demo/issue-config.png)
+Add an item to the Attio object. With the High trust level you granted in [step 1](#step-1--configure-the-mcp-client-in-n8n), the gateway allows `save_issue`, the workflow runs, and Linear gets a new issue.
 
-## Step 3 — Test the Workflow
+Expected result: every node in the n8n execution shows a green check, and the new issue appears in the Linear team you selected, with the title and description built from the Attio item.
 
-As long as the trust level is set appropriately for this user/agent, every time a new item is added to the Attio object, a Linear issue will be created automatically.
+![n8n execution with a green check on the webhook, HTTP Request, and MCP Client nodes](/img/mcpermit/n8n-linear-demo/workflow-complete.png)
 
-![Completed n8n workflow execution](/img/mcpermit/n8n-linear-demo/workflow-complete.png)
+![Linear issue created from the Attio item, with the customer name in the title](/img/mcpermit/n8n-linear-demo/linear-issue-created.png)
 
-![Linear issue created from Attio data](/img/mcpermit/n8n-linear-demo/linear-issue-created.png)
+![Attio record whose creation triggered the n8n workflow](/img/mcpermit/n8n-linear-demo/attio-item.png)
 
-![Attio item that triggered the workflow](/img/mcpermit/n8n-linear-demo/attio-item.png)
+## 4. Change the workflow's trust level \{#step-4--adjust-trust-levels-in-real-time}
 
-## Step 4 — Adjust Trust Levels in Real Time
+To change what the n8n workflow can do on the Linear MCP server, change the agent's trust level in the Permit MCP Gateway admin dashboard:
 
-If at any time you want to change what n8n can do with the Linear MCP, go to the Permit MCP Gateway dashboard and toggle the trust level.
+1. Open [**Agents**](https://app.agent.security/agents) and select the `n8n` agent.
+2. On the **Overview** tab, find the Linear MCP server under **MCP Server Permissions**, next to the email address of the user who ran the consent flow.
+3. Open the trust dropdown on that row and select **Low Trust**.
 
-![Permit MCP Gateway dashboard showing trust level controls](/img/mcpermit/n8n-linear-demo/trust-level-dashboard.png)
+The gateway applies the new trust level to the workflow's next tool call, with no re-consent and no change in n8n. See [Modifying agent trust levels](/permit-mcp-gateway/managing-humans-and-agents#modifying-agent-trust-levels).
 
-![Setting trust level to Low for the workflow](/img/mcpermit/n8n-linear-demo/trust-level-low.png)
+![Agent Users list on the dashboard Agents page, with the n8n agent and its client ID among the connected MCP clients](/img/mcpermit/n8n-linear-demo/trust-level-dashboard.png)
 
-For example, setting the trust level to **Low** causes the Linear MCP to fail execution — the MCP Gateway blocks the action.
+![Trust dropdown on the Linear server row with Low Trust, Medium Trust, and High Trust options](/img/mcpermit/n8n-linear-demo/trust-level-low.png)
 
-![n8n execution log showing blocked MCP action](/img/mcpermit/n8n-linear-demo/execution-blocked.png)
+Add another Attio item. Expected result: the MCP Client Tool node fails with `MCP error -32004`, the JSON-RPC code the gateway returns for a permission denial, and the message names `save_issue`. No Linear issue is created, and the denial appears in the agent's **Audit Logs** tab.
 
-## Summary
+![n8n node output showing MCP error -32004 Permission denied for tool save_issue](/img/mcpermit/n8n-linear-demo/execution-blocked.png)
 
-This demo shows how Permit.io's MCP Gateway gives you real-time control over what automated n8n workflows can do with external MCPs like Linear — without any changes to the underlying MCP server or n8n workflow logic.
+## Results \{#summary}
 
-| Trust Level | `save_issue` Result |
+| Trust level | `save_issue` result |
 |-------------|-------------------|
-| High | Allowed — issue created |
-| Low | Blocked — MCP Gateway denies the action |
+| High | Allowed: the issue is created |
+| Low | Blocked: Permit MCP Gateway denies the call |
+
+You changed what the n8n workflow can do on the Linear MCP server from the gateway, with no change to the Linear MCP server or the n8n workflow.
+
+## Next steps
+
+- [Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop): require admin approval before the workflow creates an issue.
+- [Audit logs](/permit-mcp-gateway/audit-logs): review the workflow's allowed and denied calls.
+- [Manage humans and agents](/permit-mcp-gateway/managing-humans-and-agents): revoke the workflow's access.
 
 <NextStepCallout variant="agents" />

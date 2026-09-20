@@ -1,11 +1,28 @@
 ---
-title: Python SDK Examples
-description: "See Python SDK examples for creating resources, roles, tenants, and users, and for checking permissions."
+title: Manage policy and check permissions with the Python SDK
+sidebar_label: Python SDK examples
+description: "Create a Permit client, manage resources, roles, tenants, users, and role assignments, handle API errors, and check permissions with the Python SDK."
 ---
 
-# Python SDK Examples
+This page collects short Python SDK examples for the most common calls: create a Permit client, manage resources, roles, tenants, and users, assign roles, handle API errors, and check permissions. It is for backend developers who have installed the `permit` package and want the call and argument shape for each task. To install the SDK and run a first check, see [Check permissions with the Python SDK (asyncio)](/sdk/python/quickstart-python).
 
-## Init the SDK
+The `Permit` class from `from permit import Permit` is asynchronous. Every method returns a coroutine, so run the examples with `await` inside an `async` function. For code that doesn't use `asyncio`, import `Permit` from `permit.sync` instead and call the same methods without `await`. See [Check permissions with the Python SDK (sync)](/sdk/python/quickstart_python_sync).
+
+## Prerequisites
+
+- The `permit` package installed. See [Check permissions with the Python SDK (asyncio)](/sdk/python/quickstart-python).
+- An API key for the environment. See [Get your API key](/overview/get-api-key).
+- A running policy decision point (PDP) for permission checks. See [Run the PDP](/overview/run-pdp).
+
+## Create a Permit client \{#init-the-sdk}
+
+Create one `Permit` client and reuse it across your application.
+
+| Argument | Description |
+|---|---|
+| `token` | API key of the Permit environment. The API key selects the project and environment of every call. |
+| `pdp` | Address of the PDP that `permit.check()` calls, for example `http://localhost:7766` for a PDP container. |
+| `log` | Logger settings. `enable` turns SDK logs on (default `False`). `level` sets the log level (default `"info"`). |
 
 ```py
 from permit import Permit
@@ -20,9 +37,13 @@ permit = Permit(
 )
 ```
 
-## Resources
+## Manage resources \{#resources}
+
+A resource is a type of object in your application, such as `document`, with the actions that policies grant on it.
 
 ### Create a resource
+
+`permit.api.resources.create()` takes a resource object and returns a `ResourceRead` object. The `key` and `name` fields and the `actions` dictionary are required. Each key of `actions` is an action key. The `attributes` dictionary defines resource attributes for attribute-based access control (ABAC) policies.
 
 ```py
 from permit import ResourceRead
@@ -51,6 +72,8 @@ document: ResourceRead = await permit.api.resources.create(
 
 ### Update a resource
 
+`permit.api.resources.update()` takes the resource key and an object with the fields to change, and returns the updated `ResourceRead` object. The SDK sends a `PATCH` request, so fields that you omit keep their values. The example changes the description of the `document` resource and sets its actions.
+
 ```py
 from permit import ResourceRead
 
@@ -59,7 +82,7 @@ resource_after_changes: ResourceRead = await permit.api.resources.update(
     "document",
     # updated fields
     {
-        "description": "wat",
+        "description": "a document in the document store",
         "actions": {
             "find": {}
         }
@@ -67,9 +90,13 @@ resource_after_changes: ResourceRead = await permit.api.resources.update(
 )
 ```
 
-### List all resources
+### List resources \{#list-all-resources}
+
+`permit.api.resources.list()` returns a list of `ResourceRead` objects. The method takes optional `page` and `per_page` arguments. `per_page` defaults to 100.
 
 ```py
+from typing import List
+
 from permit import ResourceRead
 
 resources: List[ResourceRead] = await permit.api.resources.list()
@@ -77,7 +104,7 @@ resources: List[ResourceRead] = await permit.api.resources.list()
 
 ### Get a resource
 
-Get a resource with key `document`:
+`permit.api.resources.get()` takes a resource key and returns a `ResourceRead` object. The example gets the resource with the key `document`:
 
 ```py
 from permit import ResourceRead
@@ -85,7 +112,9 @@ from permit import ResourceRead
 resource: ResourceRead = await permit.api.resources.get("document")
 ```
 
-## Error handling
+## Handle API errors \{#error-handling}
+
+If the Permit API returns an error status code, the SDK raises a `PermitApiError`. Read the HTTP status code from `status_code`. A missing object returns status code 404, and a create call with an existing key returns status code 409. The SDK also raises the subclasses `PermitNotFoundError` for 404 and `PermitAlreadyExistsError` for 409, which you can catch directly.
 
 ```py
 from permit import Permit, PermitApiError
@@ -113,9 +142,11 @@ except PermitApiError as e:
         ...
 ```
 
-## Roles
+## Manage roles \{#roles}
 
 ### Create a role
+
+`permit.api.roles.create()` takes a role object and returns a `RoleRead` object. Each permission uses the format `resource:action`, for example `document:read`. Create the resource before the role.
 
 ```py
 from permit import RoleRead
@@ -130,35 +161,39 @@ admin: RoleRead = await permit.api.roles.create(
 )
 ```
 
-## Tenants
+## Manage tenants \{#tenants}
 
 ### Create a tenant
+
+`permit.api.tenants.create()` takes a tenant object with a `key` and a `name`, and returns a `TenantRead` object. A tenant is an isolated group of users and resources, such as one customer organization.
 
 ```py
 from permit import TenantRead
 
 tenant: TenantRead = await permit.api.tenants.create(
     {
-        "key": "tesla",
-        "name": "Tesla Inc",
-        "description": "The car company",
+        "key": "acme",
+        "name": "Acme Inc",
+        "description": "An example customer",
     }
 )
 ```
 
-## Users
+## Sync users \{#users}
 
 ### Create or update a user (sync user)
+
+`permit.api.users.sync()` creates the user if the key doesn't exist in the environment, or replaces the user data if the key exists. The method returns a `UserRead` object. The `key` field is required. Pass the same key to `permit.check()`. For when and how to sync users, see [Sync users](/how-to/sync-users).
 
 ```py
 from permit import UserRead
 
 user: UserRead = await permit.api.users.sync(
     {
-        "key": "auth0|elon",
-        "email": "elonmusk@tesla.com",
-        "first_name": "Elon",
-        "last_name": "Musk",
+        "key": "auth0|user-1",
+        "email": "user1@example.com",
+        "first_name": "Ada",
+        "last_name": "Example",
         "attributes": {
             "age": 50,
             "favorite_color": "red",
@@ -167,41 +202,48 @@ user: UserRead = await permit.api.users.sync(
 )
 ```
 
-## Role Assignments
+## Assign and list roles \{#role-assignments}
 
 ### Assign a role to a user in a tenant
+
+`permit.api.users.assign_role()` takes an object with the `user`, `role`, and `tenant` keys, and returns a `RoleAssignmentRead` object. Sync the user and create the role and the tenant before you assign the role.
 
 ```py
 ra = await permit.api.users.assign_role(
     {
         # the user key
-        "user": "auth0|elon",
+        "user": "auth0|user-1",
         # the role key
         "role": "viewer",
         # the tenant key
-        "tenant": "tesla",
+        "tenant": "acme",
     }
 )
 ```
 
 ### List role assignments
 
+`permit.api.role_assignments.list()` returns a list of `RoleAssignmentRead` objects. Filter the list with the keyword arguments `user_key`, `role_key`, `tenant_key`, `resource_key`, and `resource_instance_key`. The `user_key`, `role_key`, and `tenant_key` arguments accept one key or a list of keys. The method also takes `page` and `per_page` (default 100). For more filters, see [List role assignments](/how-to/enforce-permissions/list-role-assignments).
+
 ```py
 assignments = await permit.api.role_assignments.list(
-    tenant="tesla",
-    role="viewer",
+    tenant_key="acme",
+    role_key="viewer",
 )
 ```
 
-You can also filter for multiple roles:
+To filter by more than one role, pass a list:
+
 ```py
 assignments = await permit.api.role_assignments.list(
-    tenant="tesla",
-    role=["viewer", "editor"],
+    tenant_key="acme",
+    role_key=["viewer", "editor"],
 )
 ```
 
-## Checking Permissions
+## Check permissions \{#checking-permissions}
+
+`permit.check()` takes a user, an action, and a resource, sends the check to the PDP, and returns `True` or `False`. Pass the user as a key string, and the resource as a resource key string or a dictionary with `type` and `tenant`. The code comments in the example list the conditions that a role-based access control (RBAC) policy needs to return `True`.
 
 ```py
 from permit import Permit
@@ -217,7 +259,7 @@ permit = Permit(...)
 # the checked action on the checked resource
 permitted = await permit.check(
     # the user key
-    "auth0|elon",
+    "auth0|user-1",
     # the action
     "create",
     # the resource
@@ -225,7 +267,7 @@ permitted = await permit.check(
         # the type of the resource (resource.key)
         "type": "document",
         # the tenant that contains the resource
-        "tenant": "tesla"
+        "tenant": "acme"
     },
 )
 
@@ -234,3 +276,12 @@ if permitted:
 else:
     print("denied")
 ```
+
+To confirm the result, open the audit log in the Permit dashboard. The check appears with the user, action, resource, and decision.
+
+## Next steps
+
+- [Sync users](/how-to/sync-users)
+- [Check permissions](/how-to/enforce-permissions/check)
+- [Create resources and roles with a Python policy script](/sdk/python/sync-policy-script/sync-policy)
+- [Python SDK on GitHub](https://github.com/permitio/permit-python)

@@ -1,39 +1,42 @@
 ---
 sidebar_position: 1
-title: Overview
-description: "Enforce permissions on a GraphQL API with Permit by mapping resources and actions in resolvers, schema directives, data sources, or middleware."
+title: Enforce permissions in a GraphQL API
+sidebar_label: Overview
+description: "Compare the places you can check Permit permissions in a GraphQL API: resolvers, schema directives, data sources, and server plugins."
 ---
 
-## GraphQL Integration
+Understand where to add Permit.io permission checks in a GraphQL API, and what each option costs to build and maintain. This page is for backend developers who serve a GraphQL API and need to control which users can run each query and mutation. For a working implementation, see [Add Permit permission checks to Apollo Server](/integrations/GraphQL/apollo_server).
 
-The utilization of GraphQL APIs for retrieving information from different datastores and microservices has gained widespread popularity.
-In order to ensure appropriate access control, applications or services providing GraphQL APIs often require the ability to manage the users who can execute queries, mutations, and other actions.
-With Permit it becomes effortless to develop detailed and situational policies that can be utilized to enforce GraphQL query authorization.
+## Map GraphQL operations to resources and actions \{#graphql-integration}
 
-### Resource and actions mappings
+Keep policy out of your GraphQL code by describing each operation as a resource and an action. Your server tells Permit what is happening, for example "user `john@permit.io` runs `get` on `launch`", and the Permit policy decides whether the user can do it. You change who can do what in the policy, without changing the server code.
 
-We recommend decoupling policy and code and interfacing them with a resource and actions mapping - i.e. the application describes via resources and action what is happening, and the authorization layer can then use the policy to make decisions. The rest of this guide covers various ways you can perform this mapping with ease.
+### Why a resource and action mapping \{#resource-and-actions-mappings}
 
-#### Why you shouldn't use solutions like graphql-directive-auth
+The GraphQL server maps operations, fields, or data source calls to Permit resources and actions, then calls `permit.check()` with the user, the action, and the resource. The options in [Choose where to check permissions](#ways-to-enforce-permissions-into-your-graphql-api) differ in where the mapping lives.
 
-While great for authentication solutions like [graphql-directive-auth](https://github.com/graphql-community/graphql-directive-auth) commit a terrible sin - they couple policy as code, mixing in roles, attributes and other policy level aspects into the application itself, making future changes for both the app and the authorization layer extremely hard to do.
-A resource and action mapping solves just that friction.
+### Directive libraries that put roles in the schema \{#why-you-shouldnt-use-solutions-like-graphql-directive-auth}
 
-### Ways to enforce permissions into your GraphQL API
+Authorization directive libraries such as [graphql-directive-auth](https://github.com/graphql-community/graphql-directive-auth) write roles into the schema, for example a directive that requires the `admin` role on a field. Role names then live in your application code. Changing who can access a field means changing and redeploying the schema. A resource and action mapping keeps role names and rules in the Permit policy instead.
 
-When you need to integrate permissions into your GraphQL API you can do it in multiple ways, which can be mixed and matched.
+## Choose where to check permissions \{#ways-to-enforce-permissions-into-your-graphql-api}
 
-#### Add permission checks to your GraphQL resolvers
+You can combine these options in one server:
 
-One simple way would be to add permit check in the resolver function of your GraphQL API.
-This way while simple to implement can be cumbersome to maintain and scale as the number of resolvers increase - but provides fine grained control.
-This is the REST equivalent of route level permission checks.
+| Option | Where the check runs | Trade-off |
+|---|---|---|
+| Resolvers | In each resolver function | Fine-grained, but every resolver needs its own check |
+| Schema directives | On schema fields, through a directive your server implements | Scales with the schema, but you edit the schema |
+| Data sources | Between the GraphQL server and the database | Checks follow the database schema, not the GraphQL types |
+| Server plugins or middleware | Once per request, from the operation name or type | One place for all checks, based on a mapping |
 
-#### Add permission mapping via middleware and GraphQL schema
+### Check permissions in resolvers \{#add-permission-checks-to-your-graphql-resolvers}
 
-Another way would be to add resource and action mapping to your GraphQL schema via directives (and of course adding these directives to your GraphQL server)
-This way is more scalable and easier to maintain, but requires you to edit (i.e. decorate) your GraphQL schema.
-It would look something like this:
+Call `permit.check()` in each resolver function. Each resolver gets fine-grained control, and each new resolver needs a new check, so the checks become harder to maintain as the number of resolvers grows. Resolver checks are the GraphQL equivalent of route-level checks in a REST API.
+
+### Map fields with schema directives \{#add-permission-mapping-via-middleware-and-graphql-schema}
+
+Add a directive with a resource and an action to schema fields, and implement the directive in your GraphQL server so it calls `permit.check()`. Permit doesn't provide the `@permit` directive: the following schema shows the mapping, and your server supplies the directive implementation.
 
 ```graphql
 type Book {
@@ -48,66 +51,48 @@ type Author {
 }
 ```
 
-#### Add permission checks to your Data sources
+### Check permissions in data sources \{#add-permission-checks-to-your-data-sources}
 
-Another option is to add the checks in the layer between your GraphQL server and the underlying data source.
-While less correlated to your GraphQL objects it allows you to map authorization to the underlying DB schema - which creates more coupling, so think twice ;-) .
-This is the REST equivalent of function level permission checks (just before calling the DB).
+Add the check in the data source layer, right before the database call. The checks map to the database schema instead of your GraphQL types, which couples authorization to how you store data. Data source checks are the GraphQL equivalent of function-level checks before a database call in a REST API.
 
-In Apollo-server it would look like this:
+The following Apollo Server data source checks whether the user can `get` a `product` before loading it. `permit` is an initialized Permit client, and `userKey` is the user key from the verified request token:
 
 ```javascript
 import DataLoader from 'dataloader';
 
 class ProductsDataSource {
-  private dbConnection;
-
-  constructor(dbConnection) {
+  constructor(dbConnection, permit, userKey) {
     this.dbConnection = dbConnection;
+    this.permit = permit;
+    this.userKey = userKey; // the user key from the verified request token
+    this.batchProducts = new DataLoader(async (ids) => {
+      const productList = await this.dbConnection.fetchAllKeys(ids);
+      return ids.map((id) => productList.find((product) => product.id === id));
+    });
   }
-
-  private batchProducts = new DataLoader(async (ids) => {
-    const productList = await this.dbConnection.fetchAllKeys(ids);
-    return ids.map((id) => productList.find((product) => product.id === id));
-  });
 
   async getProductFor(id) {
-    // permission check - id, action, resource
-     if (permit.check( JWT.id, "get", {type:"product", attributes: {id: id} }){
-       return this.batchProducts.load(id);
-     }
+    // permission check - user, action, resource
+    const allowed = await this.permit.check(this.userKey, "get", { type: "product", attributes: { id } });
+    if (!allowed) {
+      throw new Error("Not allowed");
+    }
+    return this.batchProducts.load(id);
   }
 }
-});
 ```
 
-#### Add permission checks to your GraphQL using Middleware/Plugins
+### Check permissions in a server plugin \{#add-permission-checks-to-your-graphql-using-middlewareplugins}
 
-Another way would be to add permissions to your GraphQL using Middleware/Plugins.
-This way requires you to have a mapping object that maps the GraphQL schema to the Permit policy.
+Check every request in one server plugin or middleware. The plugin reads the operation from the request and looks up its resource and action, in one of two ways:
 
-```javascript
-const PermissionMap = {
-	login: { resource: "user", action: "login" },
-	logout: { resource: "user", action: "logout" },
-	me: { resource: "user", action: "get" },
-	launches: { resource: "launch", action: "getall" },
-	getlaunch: { resource: "launch", action: "get" },
-};
-```
+- **Mapping object.** A map from operation name to a resource and an action, for example `launches` to the `getall` action on the `launch` resource.
+- **Operation type.** The operation name is the resource, and the action is `write` for a mutation or `read` for a query.
 
-You can also detect the resource and if this is a query or mutation from the GraphQL context, and manage the mapping accordingly.
+Both plugins, with setup and verification steps, are in [Add Permit permission checks to Apollo Server](/integrations/GraphQL/apollo_server).
 
-```javascript
-      async didResolveOperation (context) {
-        const op = context.operationName
-        var user = await getUserFromJWT("");
-        isMutation = context.operation.operation === 'mutation'
-        const allowed = await permit.check(user, isMutation? "write": "read", op.toLowerCase()) // this will look like "user:write:launches" or "user:read:launches"
-        if (!allowed) {
-          throw new Error("Not allowed");
-        }
-    }
-```
+## Next steps
 
-Check out [this tutorial](/integrations/GraphQL/apollo_server) for an implementation of plugin approach for [Apollo Server](https://www.apollographql.com/docs/apollo-server/).
+- [Add Permit permission checks to Apollo Server](/integrations/GraphQL/apollo_server)
+- [Check permissions with permit.check()](/how-to/enforce-permissions/check)
+- [Configure your first RBAC policy](/overview/configure-your-first-rbac-policy)

@@ -1,100 +1,175 @@
 ---
-title: Nexus PDP — Deployment
+title: Deploy Nexus PDP
 sidebar_label: Deployment
-description: Deployment requirements, health and readiness probes, logging, and the security model for the Nexus PDP.
+description: "Run Permit Nexus PDP with Docker or Kubernetes, meet its storage, memory, port, probe, and shutdown requirements, and verify the deployment."
 sidebar_position: 5
 ---
 
-# Deploying the Nexus PDP
+Run Permit Nexus PDP (`permitio/pdp-v3`), a self-hosted policy decision point (PDP), with Docker or on Kubernetes, and verify that it answers permission checks. This page lists the storage, memory, port, probe, and shutdown requirements, gives a runnable command and a pod spec, and covers the Nexus PDP logs and security properties an operator needs. For what Nexus PDP is, see [Permit Nexus PDP](/concepts/pdp/nexus-pdp).
 
-Operational requirements, observability surfaces, and the security model for the [Nexus PDP](./nexus-pdp.mdx).
+## Prerequisites
 
----
+- Nexus PDP enabled for your Permit account. Nexus PDP is in early access as of September 2026; to request access, [book a call with Permit](https://www.permit.io/demo).
+- The API key of the Permit environment the Nexus PDP serves. See [Get your API key](/overview/get-api-key).
+- A container platform that provides persistent volumes, such as Kubernetes.
 
 ## Deployment requirements
 
-The Nexus PDP has real operational requirements that the container PDP does not. Read these before deploying.
+Nexus PDP has operational requirements that the container PDP (the Edge PDP image `permitio/pdp-v2`) does not have. Meet each requirement before you send traffic to a Nexus PDP.
 
-**Persistent storage is mandatory.** Both the embedded database directory and the event store must survive restarts. On ephemeral storage, every restart becomes a full cold start — minutes of startup, and a full snapshot transfer each time.
+| Requirement | Setting | What happens if you skip it |
+| --- | --- | --- |
+| Image | `permitio/pdp-v3`, pinned to a specific tag | An unpinned image can pull a release with renamed configuration variables. See [Nexus PDP configuration reference](/concepts/pdp/nexus-pdp-configuration). |
+| One container per environment | Set `PDP_API_KEY` to the API key of one Permit environment | Nexus PDP has no multi-environment mode. The API key binds the container to exactly one environment. |
+| Persistent storage | Mount a persistent volume at `/var/lib/edge-pdp`, which holds the embedded database and the event store at default paths | On ephemeral storage, every restart runs a full cold start with a snapshot transfer of your whole data set. |
+| Memory | 4 GiB to start | At default storage-engine settings, a container with a few hundred MiB is killed for running out of memory (OOM) at startup. See [Nexus PDP resource footprint](/concepts/pdp/nexus-pdp-how-it-works#resource-footprint). |
+| Volume permissions | The volume is writable by user ID and group ID `10001` | Nexus PDP runs as the non-root user `10001` and cannot write its database or event store. |
+| Exposed ports | `7000` (authorization API) and `7001` (health) only | Other ports bind to loopback inside the container and are not reachable from outside. |
+| Termination grace period | `terminationGracePeriodSeconds: 40` or higher | 40 seconds is the sum of the default shutdown budgets `EDGE_DRAIN_TIMEOUT_SECS` (10) and `EDGE_CHILD_TERMINATION_TIMEOUT_SECS` (30). With a shorter grace period, Kubernetes kills the NATS leaf node before its on-disk event store finishes flushing. |
+| Liveness probe | `GET /health` on port `7001` | A liveness probe on port `7000` fails during the cold start and restarts the container. See [Health and readiness](#health-and-readiness). |
+| Readiness probe | `GET /health/ready` on port `7001` | Traffic reaches a Nexus PDP that cannot answer yet. |
+| Startup probe | Enough time for a cold start of your data set | A cold start takes longer as your data grows. A short startup probe restarts a first boot that is still loading data. |
 
-**Set `terminationGracePeriodSeconds` to at least 40.** That is the combined shutdown budget for draining and for stopping the child processes, at default settings. If the grace period is too short, the container is killed mid-flush and the durable event store is corrupted — forcing a cold start on the next boot.
+## Run Nexus PDP with Docker
 
-**Set a generous startup probe.** Cold start can take minutes. Point liveness at `:7001/health` and readiness at `:7001/health/ready`, and give startup enough headroom that a first boot is not killed as a hang.
+Replace `<tag>` with a specific `permitio/pdp-v3` release tag, and set `PERMIT_API_KEY` in your shell to the API key of the environment this container serves. The command maps the authorization API to host port `7766`, keeps the health port on `7001`, and stores the embedded database in the named volume `nexus-data`:
 
-**Run one container per Permit environment.** The API key binds the container to exactly one environment; there is no multi-environment mode.
+```bash
+docker run -d --name nexus-pdp \
+  -p 7766:7000 -p 7001:7001 \
+  -e PDP_API_KEY="$PERMIT_API_KEY" \
+  -v nexus-data:/var/lib/edge-pdp \
+  --memory 4g \
+  permitio/pdp-v3:<tag>
+```
 
-**Memory: start at 4 GiB.** See [Resource footprint](./nexus-pdp-how-it-works.mdx#resource-footprint) for tuning.
+## Kubernetes pod settings for Nexus PDP
 
-**Expose ports `7000` and `7001` only.** Everything else binds to loopback inside the container.
+This pod-spec excerpt sets the ports, probes, memory request, volume, and shutdown budget from the requirements table. `fsGroup: 10001` makes the mounted volume writable by the non-root user that Nexus PDP runs as. Create the `permit-env-api-key` secret with the environment API key, size the `nexus-pdp-data` claim for your data set, and add a startup probe with enough time for a cold start:
 
-**Runs as non-root** (uid/gid `10001`). Ensure your mounted volumes are writable by that user.
+```yaml
+terminationGracePeriodSeconds: 40
+securityContext:
+  fsGroup: 10001
+containers:
+  - name: nexus-pdp
+    image: permitio/pdp-v3:<tag>
+    ports:
+      - containerPort: 7000 # authorization API
+      - containerPort: 7001 # health
+    resources:
+      requests:
+        memory: 4Gi
+    env:
+      - name: PDP_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: permit-env-api-key
+            key: PDP_API_KEY
+    livenessProbe:
+      httpGet: { path: /health, port: 7001 }
+    readinessProbe:
+      httpGet: { path: /health/ready, port: 7001 }
+    volumeMounts:
+      - name: nexus-data
+        mountPath: /var/lib/edge-pdp
+volumes:
+  - name: nexus-data
+    persistentVolumeClaim:
+      claimName: nexus-pdp-data
+```
 
-:::tip Running locally on macOS
-Port `7000` collides with AirPlay Receiver on macOS. Map it to a different host port, for example `-p 7766:7000`, and point your SDK at `http://localhost:7766`.
+:::tip Run Nexus PDP locally on macOS
+The macOS AirPlay Receiver uses port `7000`. Map the Nexus PDP authorization API to another host port, for example `-p 7766:7000`, and set your SDK's PDP URL to `http://localhost:7766`.
 :::
 
----
+## Verify a Nexus PDP deployment
+
+1. Send `GET /health/ready` to the health port, `7001`: `curl -i http://localhost:7001/health/ready`. Nexus PDP returns HTTP `200` when every component that gates readiness is up, and HTTP `503` while any of them is still starting. A cold start can take minutes on a large data set, so retry until the response is `200`.
+2. Point an SDK at the authorization port and run a permission check. With the port mapping in [Run Nexus PDP with Docker](#run-nexus-pdp-with-docker), the PDP URL is `http://localhost:7766`. See [Check permissions](/how-to/enforce-permissions/check). A decision that matches your policy confirms that Nexus PDP has your policy and data.
 
 ## Health and readiness
 
-Health is served on the **management port (`7001`)**, which is where all probes belong:
+Nexus PDP serves health endpoints on the management port, `7001`. Point every probe at port `7001`.
 
-| Endpoint | Auth | Behavior |
+| Endpoint | Authentication | Behavior |
 | --- | --- | --- |
-| `GET /health` | None | Always `200`. Reports per-component status. Answers throughout startup. |
-| `GET /health/ready` | None | `200` only when every gating component is up, otherwise `503`. |
-| `GET /health/detail` | `PDP_API_KEY` bearer | Full diagnostic detail per component. |
+| `GET /health` | None | Always returns `200` and the status of each component. Answers during startup, including a cold start. |
+| `GET /health/ready` | None | Returns `200` only when every component that gates readiness is up, and `503` otherwise. |
+| `GET /health/detail` | Bearer token equal to `PDP_API_KEY` | Returns full diagnostic detail for each component. |
 
-Wire **liveness** to `:7001/health` and **readiness** to `:7001/health/ready`. Nine components gate readiness — the control-plane link, each of the four sync planes, the embedded database, OPA, and both loopbacks.
+Nine components gate readiness: the control-plane link (`nats_leaf`), the four sync planes (`wal_mirror`, `kv_source`, `policy_files_source`, `policy_data_source`), the embedded database (`embedded_db`), Open Policy Agent (OPA) (`opa`), and both loopback servers (`query_loopback`, `bundle_server`).
 
-:::warning Probe `7001`, never `7000`
-The authorization port (`7000`) also answers `GET /health` — and `GET /healthy`, an alias kept so tooling written for the container PDP keeps working. Neither is a substitute for the management port:
+:::warning Probe port 7001, not port 7000
+The Nexus PDP authorization port, `7000`, also answers `GET /health` and `GET /healthy`. Nexus PDP keeps `/healthy` so tooling written for the container PDP works. Don't point probes at port `7000`:
 
-- There is **no `/health/ready` on port `7000`**. A readiness probe pointed at `:7000/health/ready` gets a `404` and the pod never becomes ready.
-- Port `7000` does not open at all until the PDP is ready, so any probe against it **fails for the entire cold start** — which can be minutes. A liveness probe there will kill the container before it ever finishes starting.
+- Port `7000` has no `/health/ready` endpoint. A readiness probe on `:7000/health/ready` gets `404`, and the pod never becomes ready.
+- Port `7000` opens only after Nexus PDP is ready. A liveness probe on port `7000` fails during the whole cold start, and Kubernetes restarts the container before it finishes starting.
 
-Port `7001` answers from the moment the process starts, which is exactly what makes it the safe probe target.
+Port `7001` answers from the moment the Nexus PDP process starts.
 :::
 
-`/health/detail` is where you diagnose a lagging or stale PDP: it reports child-process restart counts and exit codes, the PDP's position in the change stream against the control plane's oldest retained change, whether the PDP is currently **serving stale** data and for how long, and whether decision-log shipping is healthy.
+### Diagnose a stale or lagging Nexus PDP \{#diagnose-a-stale-nexus-pdp}
 
-:::note Staleness never blocks decisions
-Neither staleness nor decision-log failures gate readiness. A PDP that cannot ship its audit logs keeps answering authorization queries — the design deliberately refuses to trade the primary function for the secondary one.
+Call `GET /health/detail` on port `7001` with the header `Authorization: Bearer <PDP_API_KEY>`. The response reports:
+
+- restart counts and exit codes for the OPA and NATS leaf node child processes,
+- the Nexus PDP's position in the change stream compared with the oldest change the control plane still holds,
+- whether the Nexus PDP is serving stale data, and for how long,
+- whether decision-log shipping is configured and working.
+
+:::note Staleness and decision-log failures do not gate Nexus PDP readiness
+A Nexus PDP that serves stale data, or that cannot ship decision logs, stays ready and keeps answering authorization queries.
 :::
-
----
 
 ## Logs
 
-Structured logs go to stdout at `INFO` by default; `RUST_LOG` overrides (`info,edge_pdp=debug` is a good verbose setting). Both child processes' output is captured and re-emitted on the main log stream with attribution and correct log levels, so container logs are the single place to look.
+Nexus PDP writes structured logs to stdout at the `info` level by default. Set `RUST_LOG` to change the level: `info,edge_pdp=debug` adds debug logs from Nexus PDP itself. Nexus PDP captures the output of OPA and the NATS leaf node and writes it to the same log stream, labeled with the source process and log level, so the container logs contain all output.
 
-:::warning Child debug levels expose data
-The child processes have their own log levels, and turning them all the way up exposes data: the control-plane client logs raw message payloads at `trace` — which means **your authorization data** — and the policy engine logs authorization request and response bodies at `debug`. Use these only for short, deliberate debugging sessions, and never leave them on in production.
-:::
+Raising the log level of the OPA or NATS child processes writes authorization data into the container logs. For the variables that control those levels and what each level exposes, see [Nexus PDP child process logging](/concepts/pdp/nexus-pdp-configuration#child-process-logging).
 
 ### Decision logs
 
-Decision logs ship from the OPA child directly to Permit over HTTPS, batched, with a bounded in-memory buffer. They require **both** that decision logging is enabled for your environment in Permit **and** that the PDP's local opt-out is not set — the local setting can only turn logging off, never on.
+The OPA process in Nexus PDP sends decision logs to Permit in batches over HTTPS, with a bounded in-memory buffer. Nexus PDP ships decision logs only when both conditions are true:
 
----
+- Decision logging is enabled for the environment in Permit.
+- `EDGE_DECISION_LOG_OPT_OUT` is not set to `true` on the container.
 
-## Security model
+`EDGE_DECISION_LOG_OPT_OUT` can only turn decision logging off. It cannot turn logging on for an environment where Permit has it off.
 
-**Requests are authenticated against the container's own key.** The bearer token on an authorization request is compared, in constant time, against the container's `PDP_API_KEY`. Permit's API is **never** contacted to authenticate or authorize a request — the code that could do so is not compiled into this binary at all.
+## Security properties to plan your deployment around \{#security-model}
 
-**One container serves exactly one environment.** The environment is fixed at startup from the API key. A valid key for a *different* environment does not authenticate, and there is no code path by which a caller can steer a request at data outside the container's own environment.
+Four properties of the container decide how you place, scope, and isolate a Nexus PDP.
 
-**Credentials never reach the child processes.** Both OPA and the NATS leaf are started with a cleared environment; only the specific variables each one needs are re-added. Credential files are written `0600` with protections against symlink attacks from other containers sharing the volume, and are referenced by path rather than inlined into any generated config.
+| Property | What it means for your deployment |
+|---|---|
+| [Request authentication](#request-authentication) | Every caller needs the container's own `PDP_API_KEY`. Treat the key as a shared secret between the container and the services that query it. |
+| [One environment per container](#one-environment) | Run one container per Permit environment, and route each service to the container for its environment. |
+| [Child process isolation](#child-process-environment) | Variables you set on the container do not all reach OPA and the NATS leaf node. Set Nexus PDP variables, not OPA or NATS variables. |
+| [Blast radius](#blast-radius) | A compromised container exposes one environment. Apply the network policy and secret scope of that environment to it. |
 
-**The blast radius of a compromised PDP is one environment's data.** It holds no credential that grants access to any other environment, and no ability to reach Permit's management API.
+### Request authentication uses the container's own API key \{#request-authentication}
 
----
+Nexus PDP compares the bearer token on each authorization request, in constant time, with the container's `PDP_API_KEY`. The Nexus PDP binary does not include a Permit API client, so Nexus PDP never contacts the Permit API to authenticate or authorize a request.
 
-## Related documentation
+### One Nexus PDP container serves one environment \{#one-environment}
 
-- [Nexus PDP](./nexus-pdp.mdx) — overview
-- [Architecture](./nexus-pdp-architecture.mdx) — what runs inside the container and the request path
-- [How It Works](./nexus-pdp-how-it-works.mdx) — sync, consistency, cold start, and resource profile
-- [Feature Parity](./nexus-pdp-feature-parity.mdx) — capability comparison against the container PDP
-- [Configuration](./nexus-pdp-configuration.mdx) — environment variable reference (beta)
-- [Monitoring PDPs](/how-to/monitoring-pdps) — fleet visibility in the Permit dashboard
+Nexus PDP fixes its environment at startup from `PDP_API_KEY`. A valid API key for a different environment does not authenticate against the container, and a caller cannot direct a request at data outside the container's environment.
+
+### Child processes start with a cleared environment \{#child-process-environment}
+
+Nexus PDP starts OPA and the NATS leaf node with an empty environment, except for `PATH`, and then adds only the variables each child process needs. OPA receives `PDP_API_KEY` to authenticate to the query loopback server. The NATS leaf node does not receive `PDP_API_KEY`.
+
+Nexus PDP writes credential files with `0600` permissions, creates them without following symbolic links, and references them by path in generated configuration files.
+
+### A compromised Nexus PDP exposes one environment \{#blast-radius}
+
+A Nexus PDP container holds the data and credentials of its own environment only. An attacker who controls one Nexus PDP container gets that environment's authorization data, not data from other environments.
+
+## Next steps \{#related-documentation}
+
+- [Nexus PDP configuration reference](/concepts/pdp/nexus-pdp-configuration): environment variables for storage, ports, logging, and memory
+- [How Nexus PDP syncs data](/concepts/pdp/nexus-pdp-how-it-works): sync, consistency, cold start, and sizing
+- [Nexus PDP architecture](/concepts/pdp/nexus-pdp-architecture): the processes and ports inside the container
+- [Nexus PDP feature parity](/concepts/pdp/nexus-pdp-feature-parity): supported endpoints and capabilities
+- [Monitor PDPs](/how-to/monitoring-pdps): PDP fleet visibility in the Permit dashboard

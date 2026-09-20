@@ -1,168 +1,146 @@
 ---
-title: Nexus PDP — How It Works
+title: How Nexus PDP syncs data
 sidebar_label: How It Works
-description: How the Nexus PDP keeps its local copy in sync, what consistency that gives you, how cold start and warm resume differ, and what it costs to run.
+description: "Learn how Permit Nexus PDP keeps its local copy of policy and data current, what consistency it guarantees, how cold start works, and how to size memory and disk."
 sidebar_position: 3
 ---
 
-# How the Nexus PDP Works
+This page explains how Permit Nexus PDP, a self-hosted policy decision point (PDP), receives policy and data changes from Permit's control plane, what consistency that gives your application, and how to size the container. It is for operators and architects who run Nexus PDP. For what Nexus PDP is, see [Permit Nexus PDP](/concepts/pdp/nexus-pdp).
 
-How the [Nexus PDP](./nexus-pdp.mdx) keeps its local copy of your policy and authorization data current, what consistency that gives you, and what it costs to run.
-
----
+In this page, the **container PDP** is the Edge PDP image `permitio/pdp-v2`, and the **control plane** is the Permit cloud service that sends policy and data updates to PDPs.
 
 ## How policy and data stay in sync
 
-The container's NATS leaf node holds a persistent link to Permit's control plane and **sources** four independent planes onto local, on-disk storage:
+The NATS leaf node inside the Nexus PDP container keeps a persistent connection to Permit's control plane. The NATS leaf node copies four independent streams, called planes, to local disk:
 
 | Plane | Carries |
 | --- | --- |
-| **Change stream** | Transactions of authorization facts — users, tenants, resource instances, relationship tuples |
-| **Policy files** | The compiled Rego bundle OPA evaluates |
+| **Change stream** | Transactions of authorization data: users, tenants, resource instances, and relationship tuples |
+| **Policy files** | The compiled Rego bundle that Open Policy Agent (OPA) evaluates |
 | **Policy schema** | Role and permission definitions from your policy |
-| **Snapshot** | A one-shot bulk transfer, used only during cold start |
+| **Snapshot** | A one-time bulk transfer of the whole data set, used only during a cold start |
 
-Each change arrives as a **transaction** — an ordered set of operations with a timestamp and a transaction ID — rather than as a "something changed, come and fetch it" signal. The data is in the message.
+Each change arrives as a transaction: an ordered set of operations with a timestamp and a transaction ID. The message contains the changed data, so Nexus PDP does not fetch anything from Permit after it receives a change.
 
-### Retention is per-PDP, and server-side
+### Change retention for each Nexus PDP \{#retention-is-per-pdp-and-server-side}
 
-Each PDP has its own durable position in the change stream. The control plane **retains a change until that specific PDP has acknowledged applying it** — so a PDP that is restarting, disconnected, or slow does not lose updates, and does not need to re-fetch its whole data set to catch up. Interest is held by the subscription's *existence*, not by an open connection; a PDP that is disconnected for minutes resumes exactly where it left off.
+Each Nexus PDP has its own durable position in the change stream. The control plane keeps a change until that Nexus PDP acknowledges that it applied the change. A Nexus PDP that restarts, disconnects, or falls behind resumes from its last acknowledged position and does not fetch its full data set again.
 
-### Self-healing
+### Gap detection and database rebuild \{#self-healing}
 
-Two background tasks keep the local copy honest:
+Two background tasks keep the local copy complete:
 
-- **A gap detector** compares the PDP's position in the change stream against the oldest change the control plane still holds. If the PDP has fallen so far behind that the stream can no longer bridge the difference, it signals for a rebuild.
-- **A rebuild orchestrator** then builds a fresh copy of the database **in a side directory** and swaps it in atomically.
+- **The gap detector** compares the Nexus PDP's position in the change stream with the oldest change the control plane still holds. If the Nexus PDP has fallen behind that oldest change, the stream cannot close the gap, and the gap detector requests a rebuild.
+- **The rebuild orchestrator** builds a new copy of the database in a separate directory, then swaps the new copy in atomically.
 
-Crucially, **the PDP keeps answering from the existing database while the rebuild runs**. The public port is never re-bound, no request is refused, and no decision waits on the rebuild. Staleness is surfaced on the health endpoint rather than turned into errors.
+While a rebuild runs, Nexus PDP answers requests from the existing database. The authorization port stays open, and Nexus PDP refuses no requests. The health endpoint reports that the Nexus PDP is serving stale data.
 
-:::info Design principle
-The Nexus PDP **serves stale before it serves nothing**. A control-plane outage costs you freshness, never availability — decisions keep flowing from the local copy indefinitely.
+:::info Nexus PDP serves stale data instead of no data
+When the control plane is unreachable, Nexus PDP keeps answering from its local copy for as long as the outage lasts. A control-plane outage affects data freshness, not the availability of decisions.
 :::
-
----
 
 ## Consistency
 
-Consistency is a property of the design rather than something you configure.
+Nexus PDP has one consistency model, with no settings to change. Three mechanisms combine:
 
-**Three mechanisms combine:**
+1. **A durable, ordered change stream.** The control plane sends changes in order on a persisted stream and keeps each change for each Nexus PDP until that Nexus PDP acknowledges it. A Nexus PDP that falls behind the oldest retained change rebuilds its database from a snapshot.
+2. **Order-independent application.** Each fact carries a timestamp and a transaction ID. Nexus PDP applies a write only if it is strictly newer than the stored value. Because of this rule, the final state does not depend on the order in which Nexus PDP applies changes, so Nexus PDP can apply several transactions concurrently without an older write replacing a newer one.
+3. **Atomic transactions.** Nexus PDP applies all operations in a transaction together, so a decision never reads half of a multi-part change.
 
-1. **A durably ordered log.** Changes are carried on an ordered, persisted stream. Nothing is dropped, and nothing is trimmed before every PDP that needs it has confirmed it.
+Together, these mechanisms mean that two Nexus PDPs in the same environment that applied the same set of changes hold the same state, whatever the order or timing of delivery. Applying a change a second time has no effect.
 
-2. **Order-independent application.** Each fact carries `(timestamp, transaction id)`, and a write is applied **only if it is strictly newer than what is already stored**. Because the merge rule is convergent, the final state does not depend on the order in which changes were applied — which is what makes it safe to apply several transactions concurrently without risking a stale write landing on top of a fresh one.
+:::note What the Nexus PDP consistency model guarantees
+The consistency model is eventual consistency with a convergent merge. Nexus PDPs converge on the same state, no update is lost, and replayed updates are safe.
 
-3. **Per-transaction atomicity.** All operations within a transaction are applied together, so a decision never observes half of a multi-part change.
+Nexus PDP does not provide read-your-own-writes. Nexus PDP only reads your data: a fact that you write through the Permit API becomes visible after the change reaches the Nexus PDP. If your application must read a write immediately, use the container PDP with the [local facts uploader](/how-to/manage-data/local-facts-uploader).
 
-Together these give **convergence by construction**: two PDPs in the same environment that have seen the same set of changes hold the same state, regardless of the order or timing in which they received them, and re-delivering a change that was already applied is a no-op.
-
-:::note What this does and does not guarantee
-The consistency model is **eventual, with a convergent merge**. It guarantees that PDPs converge, that no update is lost, and that replays are safe.
-
-It does **not** provide read-your-own-writes. The Nexus PDP is read-only with respect to your data: a fact written through Permit's API becomes visible once it propagates. If you need write-then-immediately-read semantics today, use the container PDP's [local facts uploader](/how-to/manage-data/local-facts-uploader).
-
-A PDP that restarts with a backlog becomes ready and begins serving while it is still catching up. Whether it is serving stale data, and by how long, is reported on the health endpoint.
+A Nexus PDP that restarts with a backlog of changes becomes ready and serves requests while it catches up. The `/health/detail` endpoint reports whether the Nexus PDP is serving stale data and for how long.
 :::
-
----
 
 ## Propagation latency
 
-The sync path is structurally shorter than the container PDP's:
+Nexus PDP delivers a change to the PDP in fewer steps than the container PDP:
 
 | | Container PDP (`pdp-v2`) | Nexus PDP (`pdp-v3`) |
 | --- | --- | --- |
-| Change notification | WebSocket notification | Push delivery on a durable per-PDP subscription |
-| Data fetch | **A second call back to Permit's API** | None — the change travels *in* the message |
-| Round trips per change | 2 or more | 1 |
-| Missed while offline | Reconnect, then re-fetch | Retained server-side; resumes at its exact position |
-| Calls to `api.permit.io` | Per update | **Never** |
+| Change notification | WebSocket notification | Push delivery on a durable subscription for each PDP |
+| Data fetch | A second request to the Permit API | None. The message contains the change. |
+| Round trips for each change | 2 or more | 1 |
+| Changes made while the PDP is offline | Reconnect, then fetch the data again | Kept by the control plane; the PDP resumes at its last position |
+| Requests to the Permit API to fetch data | One for each update | None |
 
-Removing the fetch leg removes both a round trip and a dependency: propagation no longer depends on the PDP being able to reach Permit's API, only on the event stream.
+Because Nexus PDP skips the fetch step, propagation depends only on the change stream, not on the PDP reaching the Permit API.
 
-:::caution Numbers not yet published
-Permit has not yet published measured propagation-latency figures for the Nexus PDP. The improvement described above is architectural. If you have a latency target to validate against, [talk to us](mailto:support@permit.io) before designing around a specific number.
+:::caution No published Nexus PDP propagation figures
+Permit has not published measured propagation latency for Nexus PDP. The table above compares the number of steps, not measured time. If you have a latency target, [book a call with Permit](https://www.permit.io/demo) before you design around a specific number.
 :::
-
----
 
 ## Cold start and warm resume
 
-The PDP decides which path to take from the state of its persistent volume.
+Nexus PDP chooses a startup path from the contents of its persistent volume.
 
-### Warm resume — a restart with an intact volume
+### Warm resume: restart with an intact volume \{#warm-resume--a-restart-with-an-intact-volume}
 
-The embedded database, the event store, and every subscription position are already on disk. The PDP reopens the database and resumes applying changes **from its last acknowledged position**. There is no snapshot transfer and no re-fetch.
+The embedded database, the event store, and every stream position are already on disk. Nexus PDP opens the database and resumes applying changes from its last acknowledged position, without a snapshot transfer and without fetching data again.
 
-This is the normal case for a pod restart, a rolling update, or a short disconnection — and it is the path that benefits most from the design, because a disconnected PDP's changes were retained for it rather than discarded.
+Warm resume covers pod restarts, rolling updates, and short disconnections, because the control plane kept the disconnected Nexus PDP's changes.
 
-### Cold start — first boot, or an unbridgeable gap
+### Cold start: first boot or a gap the stream cannot close \{#cold-start--first-boot-or-an-unbridgeable-gap}
 
-On a genuinely fresh PDP — or when the gap detector determines the change stream can no longer bridge the difference — the PDP requests a **snapshot** of its environment.
+Nexus PDP requests a snapshot of its environment in two cases: on first boot with an empty volume, and when the gap detector finds a gap that the change stream cannot close.
 
-The snapshot is not a stream of individual records. It is a set of **pre-built database files**, transferred in chunks, checksum-verified, and then **bulk-loaded directly into the storage engine** — bypassing the normal per-record write path entirely. The snapshot also carries the Rego bundle and policy schema, so a cold-started PDP comes up with policy and data together.
+The snapshot contains pre-built database files. Nexus PDP receives the files in chunks, verifies a SHA-256 checksum over the assembled payload, and loads the files directly into the storage engine instead of writing records one by one. The snapshot also carries the Rego bundle and the policy schema, so a cold-started Nexus PDP gets policy and data together.
 
-The boundary between the two is exact: the snapshot records the precise stream position it was cut at, and the PDP resumes the change stream from the very next change. Nothing is applied twice in a way that matters, and nothing is skipped.
+The snapshot records the change-stream position where Permit took it. Nexus PDP resumes the change stream from the next change, so no change is skipped, and a change applied twice has no effect.
 
-A checksum mismatch, a missing chunk, or an empty snapshot is **fail-closed** — the PDP refuses to come up on a partial data set rather than serving decisions against one.
+If the checksum does not match, a chunk is missing, or the snapshot is empty, the cold start fails. Nexus PDP does not start serving decisions from a partial data set.
 
-Bulk-loading pre-built database files is substantially faster than the container PDP's cold start, which fetches and applies its data set through the normal write path.
-
-:::tip Still give startup room
-A cold start transfers and loads your environment's entire data set, so it is not instant — how long depends on how much data your environment holds.
-
-Set a **generous startup probe** and let readiness, not liveness, gate traffic. The health endpoint answers throughout, and the authorization port does not open until the PDP is ready, so there is no window in which it accepts a request it cannot answer correctly.
+:::tip Give a Nexus PDP cold start time to finish
+A cold start transfers and loads your environment's whole data set, so it takes longer as your data grows. Configure a startup probe with enough time for your data set, and let the readiness probe gate traffic. The health endpoint on port `7001` answers during the whole cold start, and the authorization port `7000` opens only when Nexus PDP is ready. For probe settings, see [Nexus PDP health and readiness](/concepts/pdp/nexus-pdp-deployment#health-and-readiness).
 :::
 
----
+## Request handling at high volume \{#running-at-high-volume}
 
-## Running at high volume
+Nexus PDP avoids per-request work that depends on other systems:
 
-What makes the Nexus PDP suitable for high request rates is mostly what it *doesn't* do per request:
+- **No network hop in the decision path.** Every hop uses loopback or local disk.
+- **No control-plane request to authenticate.** Nexus PDP compares the request's bearer token with its own `PDP_API_KEY` in constant time.
+- **No dependency on Permit's availability for decisions.** A control-plane outage affects data freshness, not throughput or availability.
+- **Sync on separate tasks.** Change ingest runs on its own tasks, separate from request handling.
+- **The managed Cloud PDP's evaluation core.** Nexus PDP is built from the same authorization libraries as the managed Cloud PDP.
 
-- **No network in the decision path** — every hop is loopback or local disk.
-- **No control-plane call to authenticate** — the API key is verified against the PDP's own key in constant time. Permit's API is never contacted to authorize a request.
-- **No dependency on Permit's availability** — a control-plane outage affects freshness, not throughput or availability.
-- **Reads do not contend with syncing** — incoming changes are applied to the embedded database concurrently and independently of the request path.
-- **The same evaluation core as the managed Cloud PDP**, which is already tuned for large-scale checks.
-
-:::caution Numbers not yet published
-As with propagation latency, Permit has not published measured throughput figures for the Nexus PDP. The [Cloud PDP benchmarks](/concepts/pdp/cloud-pdp-benchmarks) measure a different deployment and should not be read as Nexus PDP numbers.
+:::caution No published Nexus PDP throughput figures
+Permit has not published measured throughput for Nexus PDP. The [Cloud PDP benchmarks](/concepts/pdp/cloud-pdp-benchmarks) measure the managed Cloud PDP, a different deployment, and are not Nexus PDP figures.
 :::
-
----
 
 ## Resource footprint
 
-The Nexus PDP changes **where** your authorization data lives, and that is the change that matters for sizing.
+Nexus PDP stores authorization data in a different place than the container PDP, which changes how you size the container.
 
 | | Container PDP (`pdp-v2`) | Nexus PDP (`pdp-v3`) |
 | --- | --- | --- |
-| Fact graph | In OPA's **in-memory** document | **On disk**, in an embedded database |
-| Memory vs. data size | Scales with your data set | Bounded by a configurable cache |
-| Processes | Rust API server + Python Horizon (OPAL client) + OPA | Rust binary + NATS leaf + OPA |
-| Python runtime | Required, for the OPAL client | Not present |
-| Persistent storage | Not required | **Required** |
+| Authorization data | In OPA's in-memory document | On disk, in an embedded database |
+| Memory as data grows | Grows with your data set | Limited by a cache size you configure |
+| Processes | Rust API server, Python OPAL client (Horizon), and OPA | Rust binary, NATS leaf node, and OPA |
+| Python runtime | Required, for the Open Policy Administration Layer (OPAL) client | Not present |
+| Persistent storage | Not required | Required |
 
-The architectural consequence is that **memory stops scaling linearly with your data set**. On the container PDP the fact graph is raw JSON held in memory, which [OPA documents](https://www.openpolicyagent.org/docs/policy-performance) as costing roughly **20x** what the same data occupies in a compact on-disk form. On the Nexus PDP the data set lives on disk in exactly that compact form, and memory is governed by the database's cache size, which you set.
+On the container PDP, your authorization data is raw JSON in memory. The [OPA policy performance documentation](https://www.openpolicyagent.org/docs/policy-performance) states that raw JSON in OPA uses about 20 times the memory of the same data in a compact on-disk form. On Nexus PDP, the data set lives on disk in a compact form, and memory depends on the storage engine's cache sizes, which you set.
 
-:::caution Size generously to start, then tune
-The Nexus PDP's **default** configuration is not tuned for a small footprint. It inherits cloud-scale storage-engine defaults — a 512 MiB block cache and a 256 MiB write buffer — so a container given only a few hundred MiB will be OOM-killed on startup. Permit currently sizes it at **4 GiB** of memory.
+:::caution Start Nexus PDP with 4 GiB of memory
+The default storage-engine settings of Nexus PDP target large workloads: a 512 MiB block cache and 256 MiB write buffers. If you give the container a memory limit of a few hundred MiB, the container is killed for running out of memory (OOM) at startup. Give the Nexus PDP container 4 GiB of memory to start.
 
-A smaller footprint is possible by tuning the storage engine's cache and write-buffer sizes — see [Storage engine](./nexus-pdp-configuration.mdx#storage-engine). Benchmark against your own data set before committing to a size.
+To run Nexus PDP with less memory, lower the cache and write-buffer sizes in [Nexus PDP storage engine settings](/concepts/pdp/nexus-pdp-configuration#storage-engine), then load test against your own data set before you choose a size.
 :::
 
 ### Disk
 
-Two paths must be on persistent storage — the embedded database and the event store. Size for **roughly twice your data set**, plus headroom: during a rebuild, two generations of the database exist side by side until the new one is swapped in.
+Two Nexus PDP paths must be on persistent storage: the embedded database (`EDGE_DB_PATH`) and the event store (`EDGE_DATA_DIR`). Plan for about twice the size of your data set, plus headroom. During a rebuild, the old and new database copies exist on disk together until Nexus PDP swaps in the new copy.
 
----
+## Next steps \{#related-documentation}
 
-## Related documentation
-
-- [Nexus PDP](./nexus-pdp.mdx) — overview
-- [Architecture](./nexus-pdp-architecture.mdx) — what runs inside the container and the request path
-- [Feature Parity](./nexus-pdp-feature-parity.mdx) — capability comparison against the container PDP
-- [Deployment](./nexus-pdp-deployment.mdx) — requirements, observability, and the security model
-- [Configuration](./nexus-pdp-configuration.mdx) — environment variable reference (beta)
+- [Permit Nexus PDP](/concepts/pdp/nexus-pdp): what Nexus PDP is and when to choose it
+- [Nexus PDP architecture](/concepts/pdp/nexus-pdp-architecture): the processes and ports inside the container
+- [Nexus PDP feature parity](/concepts/pdp/nexus-pdp-feature-parity): supported endpoints and capabilities
+- [Deploy Nexus PDP](/concepts/pdp/nexus-pdp-deployment): storage, probes, logs, and the security model
+- [Nexus PDP configuration reference](/concepts/pdp/nexus-pdp-configuration): environment variables

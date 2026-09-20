@@ -1,37 +1,57 @@
 ---
 title: Connecting Agents
 sidebar_label: Connecting Agents
-description: Route an agent's outbound traffic through the HTTP Egress Proxy — shell, Docker, and Kubernetes setup, the proxy access token, HTTPS interception, and the doctor diagnostic.
+description: Route an AI agent's outbound traffic through the HTTP Egress Proxy from a shell, Docker, or Kubernetes, set up HTTPS interception, and check the connection with asg proxy doctor.
 sidebar_position: 6
 ---
 
-# Connecting Agents
+This guide is for developers who run AI agents and need the agents' outbound HTTP and HTTPS traffic to go through the HTTP Egress Proxy. It covers a local shell, Docker, Kubernetes, HTTPS interception, and diagnostics.
 
-The proxy uses the standard `HTTP_PROXY` / `HTTPS_PROXY` convention, so most HTTP client libraries route through it automatically once the environment is set. Connecting an agent has two parts: **the environment variables** that point traffic at the gateway, and **a proxy access token** the agent presents to authenticate.
+Connecting an agent takes two things:
 
-## The pieces
+- **Proxy environment variables** that send the agent's traffic to the gateway. The proxy uses the standard `HTTP_PROXY` and `HTTPS_PROXY` convention, so most HTTP client libraries use it once the variables are set.
+- **A proxy access token** that the agent presents on every request.
 
-| Piece | What it is |
+## Prerequisites
+
+- Proxy mode enabled for your host and an API workflow that allows the domains your agent calls. See the [HTTP Egress Proxy quick start](/permit-mcp-gateway/http-egress-proxy/quickstart).
+- The [`asg` CLI](/permit-mcp-gateway/http-egress-proxy/cli#install) installed.
+
+## What an agent needs to connect \{#the-pieces}
+
+| Item | Description |
 | --- | --- |
-| `HTTP_PROXY` / `HTTPS_PROXY` | Point your agent's outbound HTTP and HTTPS at the gateway. |
-| `NO_PROXY` | Hosts that should bypass the proxy (e.g. localhost). |
-| Proxy access token | A short-lived, workflow-bound token the agent presents to the proxy. Minted with [`asg proxy token create`](./quickstart.mdx#4-mint-a-workflow-bound-agent-token) or the [consent flow](./authorization.mdx#human-consent), and referenced via a token file. |
+| `HTTP_PROXY`, `HTTPS_PROXY` | Send the agent's outbound HTTP and HTTPS traffic to the gateway. |
+| `NO_PROXY` | Hosts that bypass the proxy, for example `localhost`. |
+| Proxy access token | A short-lived, workflow-bound token the agent presents to the proxy. Mint it with [`asg proxy token create`](/permit-mcp-gateway/http-egress-proxy/quickstart#4-mint-a-workflow-bound-agent-token) or the [consent flow](/permit-mcp-gateway/http-egress-proxy/authorization#human-consent). The agent reads it from a token file. |
 
-You rarely set these by hand — `asg proxy env` and `asg proxy container-config` generate them for you.
+`asg proxy env`, `asg proxy container-config`, and `asg run` generate these values, so you rarely set them by hand.
 
-## Shell / local process
+## Connect an agent in a local shell \{#shell--local-process}
+
+You have two options for a local agent process.
+
+### Launch the agent with asg run
+
+[`asg run`](/permit-mcp-gateway/http-egress-proxy/cli#launch-an-agent-with-asg-run) gets a workflow-bound token through browser consent, embeds the token in the proxy URL, and starts the agent as a child process with the proxy environment set. The agent's code does not need to handle the token. Use this option when a person starts the agent from their machine.
+
+### Export the proxy environment
+
+Mint a token with `asg proxy token create`, then export the proxy environment into the current shell:
 
 ```bash
 eval "$(asg proxy env acme)"
 ```
 
-This exports `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, and `AGENT_SECURITY_PROXY_TOKEN_FILE` (the path to the token file) into the current shell. Mint the token first (step 4 of the [Quick Start](./quickstart.mdx)) at the path `asg proxy env` expects — `$HOME/.agent-security/tokens/<subdomain>.token` — or point `AGENT_SECURITY_PROXY_TOKEN_FILE` at wherever you wrote it.
+The command exports `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, and `AGENT_SECURITY_PROXY_TOKEN_FILE`. `AGENT_SECURITY_PROXY_TOKEN_FILE` points to `$HOME/.agent-security/tokens/<subdomain>.token`. Write the token to that path, or set `AGENT_SECURITY_PROXY_TOKEN_FILE` to the path where you wrote it.
 
-Routing traffic through the proxy is only half of it: every request must also carry `Proxy-Authorization: Bearer <token>`. Exporting the env does **not** authenticate your requests — your HTTP client has to read the token from `$AGENT_SECURITY_PROXY_TOKEN_FILE` and send that header (or launch the agent with [`asg run`](./cli.mdx), which injects the token into the proxy URL for you). Without it the proxy answers `407`.
+The exported variables do not authenticate requests. Your agent's HTTP client must read the token from `$AGENT_SECURITY_PROXY_TOKEN_FILE` and send it on every request in the `Proxy-Authorization: Bearer <token>` header. Without the header, the proxy returns `407`.
 
-## Docker and Kubernetes
+To check the connection, send a test request as shown in [Verify the allow-list](/permit-mcp-gateway/http-egress-proxy/quickstart#6-verify-the-allow-list). A host in your workflow returns the upstream's response. A host outside your workflow returns `403` from the proxy.
 
-Generate ready-to-use container configuration:
+## Connect an agent in Docker or Kubernetes \{#docker-and-kubernetes}
+
+Generate container configuration for your platform:
 
 ```bash
 # Docker env file or Compose snippet.
@@ -42,15 +62,25 @@ asg proxy container-config acme --format docker-compose
 asg proxy container-config acme --format k8s-configmap
 ```
 
-Mount or reference the emitted configuration in your agent's container so the proxy variables are present in its environment. Supply the proxy token through your platform's normal secret mechanism (a mounted file or secret), and point `AGENT_SECURITY_PROXY_TOKEN_FILE` at it.
+Then configure the agent's container:
+
+1. Mount or reference the generated configuration so the proxy variables are set in the container's environment.
+2. Supply the proxy token through your platform's secret mechanism, for example a mounted Kubernetes Secret.
+3. Set `AGENT_SECURITY_PROXY_TOKEN_FILE` to the path of the mounted token file.
 
 ## HTTPS interception
 
-By default the proxy handles HTTPS in **passthrough** mode: it authenticates and authorizes the connection against the domain's **tunnel rule** (the `all`-method, path-less rule — see [Workflows & Rules](./egress-rules.mdx#https-needs-a-tunnel-rule)), but the encrypted tunnel is forwarded opaquely — the proxy does not see the request path or body, and it can't inject a credential or scrub the response inside the tunnel.
+By default, the proxy handles HTTPS in **passthrough** mode. The proxy authenticates the connection and authorizes it against the domain's tunnel rule, which is the rule with method class `all` and no path. See [HTTPS needs a tunnel rule](/permit-mcp-gateway/http-egress-proxy/egress-rules#https-needs-a-tunnel-rule). The proxy then forwards the encrypted tunnel without reading it. In passthrough mode, the proxy cannot see the request path or body, inject a credential, or scrub the response.
 
-To apply **full** governance to HTTPS — path-level rules, credential injection, and response scrubbing inside the encrypted connection — switch the domain's **tunnel rule** to **intercept** mode. You set TLS mode in the [dashboard](https://app.agent.security) workflow editor (**CLIs / APIs → Workflows**, open the workflow, edit the tunnel rule, set **TLS mode** to **Intercept (decrypt + inject credential)**). TLS mode is read from the tunnel rule, so setting it on a path- or method-scoped rule has no effect.
+To apply path-level rules, credential injection, and response scrubbing to HTTPS, switch the domain's tunnel rule to **intercept** mode:
 
-In intercept mode the proxy terminates the agent's TLS using a **certificate authority issued for your host** and re-applies every check to the decrypted request. For your agent to trust those connections, it must trust that CA certificate — manage it with the CLI:
+1. In the [dashboard](https://app.agent.security), go to **CLIs / APIs → Workflows** and open the workflow.
+2. Edit the domain's tunnel rule.
+3. Set **TLS mode** to **Intercept (decrypt + inject credential)**.
+
+The proxy reads TLS mode only from the tunnel rule. Setting TLS mode on a path-scoped or method-scoped rule has no effect.
+
+In intercept mode, the proxy terminates the agent's TLS connection with a certificate authority (CA) issued for your host, and runs every check on the decrypted request. The agent must trust that CA certificate, or its TLS connections through the proxy fail. Manage the CA with the `asg` CLI:
 
 ```bash
 # Inspect your host's interception CA.
@@ -66,34 +96,34 @@ asg proxy ca trust-shell acme
 asg proxy ca rotate acme --grace-days 7
 ```
 
-:::note Choosing a mode
-Use **passthrough** when domain-level control is enough, or for very large uploads, downloads, and long-lived streaming connections. Use **intercept** when you need path-level rules, credential injection, or response scrubbing on HTTPS traffic. Mode is decided by the rule that authorizes the tunnel, so in practice it's **per domain** for HTTPS — you can mix passthrough and intercept across domains.
+:::note Choosing passthrough or intercept mode
+Use **passthrough** when domain-level control is enough, and for very large uploads, downloads, and long-lived streaming connections. Use **intercept** when you need path-level rules, credential injection, or response scrubbing on HTTPS. The tunnel rule decides the mode, so for HTTPS the mode is set per domain. One workflow can use passthrough for some domains and intercept for others.
 :::
 
-## Diagnose with `doctor`
+## Diagnose with doctor
 
-When something isn't connecting, run the built-in diagnostic:
+When an agent's traffic does not reach the upstream, run the built-in diagnostic:
 
 ```bash
 asg proxy doctor acme
 ```
 
-`doctor` checks, end to end:
+`asg proxy doctor` checks:
 
-- Gateway reachability
-- Whether the proxy is enabled for the host
-- How many credentials are configured
-- Your local proxy environment variables
-- The interception CA's status and expiry, and whether your environment trusts it
-- The token file's permissions and the token's expiry
-- When [agent identity](./security.mdx#agent-identity-and-drift-protection) is enabled: whether the agent has registered a session — and whether that session is **drift-blocked**, in which case the check fails with the re-approval link that clears it
+- Gateway reachability.
+- Whether proxy mode is enabled for the host.
+- The number of stored credentials.
+- Your local proxy environment variables.
+- The interception CA's status and expiry, and whether your environment trusts the CA.
+- The token file's permissions and the token's expiry.
+- When [agent identity](/permit-mcp-gateway/http-egress-proxy/security#agent-identity-and-drift-protection) is enabled, whether the agent registered a session and whether the session is drift-blocked. A drift-blocked session fails the check and shows the re-approval link that clears the block.
 
-Each check reports **pass**, **warn**, or **fail**; anything that isn't a pass carries a suggested fix. `doctor` exits `0` (clean), `1` (operator-fixable failure), or `2` (gateway fault), so it's safe to gate CI on — and it's the first thing to run whenever an agent's traffic isn't behaving.
+Each check reports **pass**, **warn**, or **fail**. A check that does not pass includes a suggested fix.
 
----
+`asg proxy doctor` exits with `0` when all checks pass, `1` for a failure you can fix, and `2` for a gateway fault. You can use the exit code to gate a CI pipeline.
 
-## What's next
+## Next steps \{#whats-next}
 
-- [**Quick Start**](./quickstart.mdx) — the end-to-end setup these commands fit into.
-- [**Security**](./security.mdx) — what the proxy enforces on the traffic you route through it.
-- [**The `asg` CLI**](./cli.mdx) — full command reference.
+- [HTTP Egress Proxy quick start](/permit-mcp-gateway/http-egress-proxy/quickstart): the end-to-end setup these commands fit into.
+- [Security](/permit-mcp-gateway/http-egress-proxy/security): what the proxy enforces on traffic you route through it.
+- [The `asg` CLI](/permit-mcp-gateway/http-egress-proxy/cli): the command reference, including `asg run`.

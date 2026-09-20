@@ -1,38 +1,49 @@
 ---
-title: "On-Premises Deployment"
-description: "Deploy Permit Platform in your air-gapped environment"
+title: "On-premises deployment"
+sidebar_label: "On-Premises Deployment"
+description: "Learn what the self-hosted Permit Platform runs in your cluster, and find the pages to prepare, install, operate, and troubleshoot it."
 sidebar_position: 1
 ---
 
-:::info Enterprise Only
-This section is only relevant to Enterprise customers who acquired an on-prem license.
+Run the full Permit Platform, including the control plane and the policy decision points (PDPs), inside your own Kubernetes or OpenShift cluster. This section is for operators who install and run the self-hosted platform. To decide whether you need a full on-premises deployment, see [Deployment options](/concepts/deployment-options).
+
+:::info Enterprise on-premises license required
+The on-premises installer is available to Enterprise customers with an on-premises license. To get a license, [contact Permit.io](https://www.permit.io/demo).
 :::
 
-# On-Premises Deployment
+## When to deploy on-premises \{#what-is-on-premises-deployment}
 
-## What is On-Premises Deployment?
+Choose a full on-premises deployment when:
 
-On-premises deployment allows you to run the complete Permit authorization platform within your own infrastructure, ideal for organizations requiring:
+- Your network is air-gapped. The installer package includes the platform's container images as `.tar` files, so the cluster does not pull images from the internet.
+- Your data residency or compliance requirements don't allow policies, users, or decision logs to leave your infrastructure.
+- Your security policy requires you to operate every authorization component yourself.
 
-- **Air-gapped environments** - No internet connectivity required
-- **Data sovereignty** - Complete control over where data resides
-- **Custom compliance requirements** - Meet regulatory standards
-- **Enhanced security** - Full control over the authorization infrastructure
+In the default hybrid deployment, Permit runs the control plane in its cloud and you run only the PDPs. The on-premises deployment moves the control plane into your cluster as well.
 
-## Understanding the Architecture
+## Set up the platform in order \{#quick-navigation}
 
-### What is a PDP (Policy Decision Point)?
+1. [Prepare the prerequisites](/how-to/deploy/on-prem/prerequisites): cluster size, tools, Git repository, network, and storage.
+2. [Install the platform](/how-to/deploy/on-prem/installation), or follow the [quick start](/how-to/deploy/on-prem/quick-start) for a default installation.
+3. [Deploy PDPs](/how-to/deploy/on-prem/pdp-deployment) next to your applications.
+4. [Manage the platform](/how-to/deploy/on-prem/management): configuration, upgrades, backups, and scaling.
+5. [Troubleshoot problems](/how-to/deploy/on-prem/troubleshooting), and look up commands and settings in the [reference](/how-to/deploy/on-prem/reference).
 
-The **Policy Decision Point (PDP)** is the core component that makes authorization decisions in real-time. It:
+## How the on-premises platform works \{#understanding-the-architecture}
 
-- **Syncs authorization policies** from the control plane to maintain an up-to-date local cache
-- **Evaluates permissions** using Open Policy Agent (OPA) for high-performance decisions
-- **Handles authorization requests** from your applications without external dependencies
-- **Operates independently** once policies are synced, ensuring low latency
+### Policy decision point (PDP) \{#what-is-a-pdp-policy-decision-point}
 
-**Learn more**: [PDP Concepts](/concepts/pdp/overview) | [GitHub Repository](https://github.com/permitio/PDP)
+The policy decision point (PDP) answers authorization checks from your applications. Each PDP:
 
-### Architecture Overview
+- Receives policies and data from the control plane over the Open Policy Administration Layer (OPAL) and keeps a local copy.
+- Evaluates each check with Open Policy Agent (OPA) against that local copy.
+- Answers checks from the local copy, so a check doesn't make a request to the control plane.
+
+See the [PDP overview](/concepts/pdp/overview) and the [PDP repository on GitHub](https://github.com/permitio/PDP).
+
+### Architecture diagram \{#architecture-overview}
+
+The control plane, the PDPs, and your applications all run in your infrastructure. Policy Sync connects the control plane to your Git repository, and the OPAL server sends policy updates to the PDPs:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -83,68 +94,51 @@ The **Policy Decision Point (PDP)** is the core component that makes authorizati
 └───────────────────────────────────────────────────────────────────┘
 ```
 
-### Deployment Components
+### Platform components \{#deployment-components}
 
-The on-premises deployment includes:
+The control plane installs as three Helm releases in one namespace. PDPs install separately.
 
-| **Permit Platform (Control Plane)** | |
-|--------------------------------------|---------------------------------------------|
-| **Frontend** | Web UI dashboard and management interface |
-| **Backend Services** | REST API, policy management, and core services (~20+ microservices) |
-| **OPAL Server** | Open Policy Administration Layer for policy distribution |
-| **Policy Sync** | Git repository synchronization for policy-as-code |
+| Layer | Component | Role |
+|---|---|---|
+| Control plane | Frontend | Web UI for managing policies, users, and environments |
+| Control plane | Backend services | REST API, policy management, and background workers |
+| Control plane | OPAL server | Distributes policy and data updates to PDPs |
+| Control plane | Policy Sync | Syncs policies with your Git repository over SSH |
+| Infrastructure | PostgreSQL | Stores policies, users, and configuration. Runs with a read replica and PgBouncer connection pooling. |
+| Infrastructure | Redis | Cache |
+| Infrastructure | RabbitMQ | Message queue for asynchronous work |
+| Infrastructure | OpenSearch | Stores decision logs |
+| Infrastructure | Keycloak | Sign-in for the Permit Platform UI |
+| Data plane | PDP pods | Answer authorization checks. Deployed with a separate Helm chart. |
+| Data plane | OPA | Policy engine inside each PDP |
 
-| **Infrastructure Services** | |
-|-----------------------------|---------------------------------------------|
-| **PostgreSQL** | Primary database for policies, users, and configuration (with read replicas) |
-| **Redis** | High-performance caching layer |
-| **RabbitMQ** | Message queue for asynchronous operations |
-| **OpenSearch** | Decision logs storage and analytics |
-| **Keycloak** | Identity and access management |
+The [installation guide](/how-to/deploy/on-prem/installation#what-the-install-script-does) lists each service the installer deploys.
 
-| **Policy Decision Points (PDP)** | |
-|----------------------------------|---------------------------------------------|
-| **PDP Pods** | Distributed authorization decision engines (deployed via separate Helm chart) |
-| **OPA (Open Policy Agent)** | Policy evaluation engine embedded in each PDP |
+### Supported platforms \{#platform-requirements}
 
-### Platform Requirements
+- Kubernetes: Amazon EKS, Google GKE, Azure AKS, or a self-managed cluster.
+- Red Hat OpenShift: OpenShift Container Platform (OCP), Red Hat OpenShift Service on AWS (ROSA), or OpenShift Dedicated.
+- Kind, for local development and testing only.
 
-The platform supports multiple deployment environments:
-- **Kubernetes/OpenShift** - Container orchestration (Red Hat OpenShift, EKS, GKE, AKS, or Kind)
-- **Air-gapped installation** - No internet connection required post-setup
-- **High availability** - Multiple replicas for critical services
+See [cluster sizing](/how-to/deploy/on-prem/prerequisites#server-specifications) for node counts and versions.
 
-## Security
+## Security controls you configure \{#security}
 
-The Permit Platform includes enterprise-grade security features for on-premises deployments:
+| Control | How the platform implements it | Where to configure it |
+|---|---|---|
+| TLS | Self-signed certificates, your own certificate, or TLS terminated outside the cluster | [Configure TLS certificates](/how-to/deploy/on-prem/installation#tlsssl-certificates) |
+| Generated credentials | The installer generates the database, RabbitMQ, and Keycloak passwords and stores them in Kubernetes secrets and in `values.yaml` | [Read the completion message](/how-to/deploy/on-prem/installation#installation-complete-message) |
+| Platform sign-in | Keycloak authenticates users of the Permit Platform UI | [Sign in to the platform](/how-to/deploy/on-prem/installation#verify-web-access) |
+| Git access | Policy Sync authenticates to your repository with an SSH deploy key | [Set up the Git repository](/how-to/deploy/on-prem/prerequisites#git-repository-setup-required) |
+| PDP authentication | Each PDP connects to the control plane with an API key | [Deploy PDPs](/how-to/deploy/on-prem/pdp-deployment) |
+| Namespace isolation | All platform components run in one Kubernetes namespace, `permit-platform` by default | [Installer options](/how-to/deploy/on-prem/installation#tlscertificate-options) |
 
-- **TLS/SSL Encryption** - HTTPS for all external communications
-- **Encryption at Rest** - PostgreSQL data encryption for policies and configurations
-- **Secrets Management** - Kubernetes secrets for SSH keys, API tokens, and credentials
-- **RBAC & IAM** - Role-based access control via integrated Keycloak
-- **Network Isolation** - Components run in isolated Kubernetes namespace
-- **SSH Key Authentication** - Secure Git repository access for policy-as-code
-- **API Key Authentication** - Secure PDP-to-Control-Plane communication
-- **Audit Logging** - Complete decision logs stored in OpenSearch
+:::warning OpenSearch Dashboards has no authentication
+The installer exposes OpenSearch Dashboards at `/opensearch/` on the frontend domain without a sign-in. Anyone who can reach the domain can read decision logs. Restrict network access to the ingress. See [Access the platform dashboards](/how-to/deploy/on-prem/installation#additional-services).
+:::
 
-For detailed security configuration and operational best practices, see the [Installation Guide](/how-to/deploy/on-prem/installation) and [Management Guide](/how-to/deploy/on-prem/management).
+## Get help \{#support}
 
-## Quick Navigation
+Email support@permit.io, or ask in the [Permit community on Slack](https://io.permit.io/slack).
 
-- **[Quick Start](/how-to/deploy/on-prem/quick-start)** - Get running in 10-15 minutes
-- **[Prerequisites](/how-to/deploy/on-prem/prerequisites)** - Prepare your environment
-- **[Installation](/how-to/deploy/on-prem/installation)** - Detailed deployment options
-- **[Deploying PDP](/how-to/deploy/on-prem/pdp-deployment)** - Deploy additional PDPs
-- **[Management](/how-to/deploy/on-prem/management)** - Day-to-day operations
-- **[Troubleshooting](/how-to/deploy/on-prem/troubleshooting)** - Common issues and solutions
-- **[Reference](/how-to/deploy/on-prem/reference)** - Complete command reference
-
-## Support
-
-- 📧 **Email**: support@permit.io
-- 💬 **Slack**: [Join our community](https://io.permit.io/slack)
-
----
-
-Ready to get started? Begin with the [Quick Start Guide](/how-to/deploy/on-prem/quick-start) →
 <NextStepCallout variant="enterprise" />

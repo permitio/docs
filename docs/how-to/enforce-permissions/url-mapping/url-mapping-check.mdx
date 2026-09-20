@@ -1,7 +1,8 @@
 ---
 sidebar_position: 1
-title: Simple URL Mapping Check
-description: "Map HTTP URLs to resources and actions using simple path parameters, then check permissions through the PDP."
+title: Check permissions by URL with simple URL mapping
+sidebar_label: Simple URL mapping check
+description: "Map HTTP methods and URL templates to resources and actions, then ask the PDP whether a user can call a URL with the /allowed_url endpoint."
 ---
 
 <style>
@@ -12,47 +13,51 @@ description: "Map HTTP URLs to resources and actions using simple path parameter
 `}
 </style>
 
-import TimelineWrapper from "@site/src/components/timeline/TimelineWrapper";
-import TimelineStep from "@site/src/components/timeline/TimelineStep";
+Check whether a user can call an HTTP URL, without translating the URL into a resource and an action in your code. This page is for developers who enforce permissions at the API layer, such as a gateway or middleware. You map each HTTP method and URL template to a Permit resource and action, then send the request URL to the policy decision point (PDP), which finds the matching rule and runs a standard permission check.
 
+## How URL mapping works \{#overview}
 
-The Simple URL Mapping Permissions Check is a powerful feature that allows you to control access to your application's endpoints based on URLs. 
+A URL mapping rule links an HTTP method and a URL to a resource and an action. When the PDP receives a URL check:
 
-## Overview
+1. The PDP finds the mapping rules with the same HTTP method (case-insensitive) and a URL that matches the request URL.
+2. When several rules match, the PDP uses the rule with the highest priority.
+3. The PDP extracts the values of URL variables, such as `{customer_id}`, and passes them to the check as resource attributes.
+4. The PDP checks whether the user can perform the rule's action on the rule's resource in the given tenant, and returns the decision.
 
-URL Mapping in Permit.io enables you to:
-- Map HTTP URLs to specific resources and actions within your application
-- Control access based on URL patterns and HTTP methods
-- Extract parameters from URLs for use in permission rules
-- Implement flexible and maintainable URL-based access control
+For URL patterns that need regular expressions, see [Regex URL mapping check](/how-to/enforce-permissions/url-mapping/regex-url-mapping-check).
 
-This feature is available through the URL Mapping UI & PDP. You can access the URL Mapping UI inside the Permit App [here](https://app.permit.io/url-mapping).
+## Prerequisites
 
-![URL Mapping UI](/img/url-mapping/ui.png)
+- A Permit.io policy with the resources and actions your URLs map to ([Configure your first RBAC policy](/overview/configure-your-first-rbac-policy))
+- Docker, to run a container PDP version 0.2.19 or later
+- Your environment API key ([Get your API key](/overview/get-api-key))
 
-## Simple URL Mapping
+## Write a URL template \{#basic-concepts}
 
-Simple URL Mapping uses a straightforward `{var}` syntax to define path parameters in your URLs. This approach is ideal for basic URL patterns where you need to extract simple path parameters.
+A simple mapping rule URL is a template. Put a variable in curly braces, `{var}`, in place of a path segment or a query parameter value. For example, `https://example.com/v1/{customer_id}/payments` matches `https://example.com/v1/123/payments` and `https://example.com/v1/456/payments`. One template rule covers every customer, instead of one rule per customer.
 
-### Basic Concepts
+The PDP compares a template to the request URL segment by segment:
 
-In the URL Mapping UI, you can set variables as part of the URL using the following syntax: `{var1}`. This feature is called templating the URL, and it's beneficial to reduce the overall number of mapping rules required.
+- Each literal segment must equal the request segment, including the scheme and host.
+- A `{var}` segment matches any single segment, and the PDP passes its value as the `var` resource attribute.
+- The template and the request URL must have the same number of segments.
+- A query parameter in the template must be present in the request URL. A `{var}` query value matches any value.
 
-For example, you might set up a URL like this: `example.com/v1/{customer_id}/payments`.
+## 1. Create a URL mapping rule \{#setting-up-simple-url-mapping}
 
-In this case, `{customer_id}` is a placeholder that will be replaced with the actual customer ID during the request. This strategy allows you to use a single mapping rule for all customers, rather than needing a separate rule for each customer.
+Create mapping rules in the [URL Mapping screen](https://app.permit.io/url-mapping) of the Permit dashboard.
 
-### Setting Up Simple URL Mapping
+![URL Mapping screen in the Permit dashboard, listing configured mapping rules](/img/url-mapping/ui.png)
 
-The mapping rules feature in the URL Mapping UI links HTTP URLs to particular resources and actions within the Permit.io platform. These rules are essential for controlling access and permissions on your website or application.
+Each rule sets the HTTP method, the URL template, the resource, and the action.
 
-![Mapping Rules Example](/img/url-mapping/mapping-rules.png)
+![Mapping rules that link HTTP methods and URL templates to Permit resources and actions](/img/url-mapping/mapping-rules.png)
 
-By correctly setting up mapping rules, you can ensure that requests are correctly routed and that users only have access to the resources that they are authorized to view or modify.
+To create rules with the Permit API instead, see [Create a regex mapping rule with the API](/how-to/enforce-permissions/url-mapping/regex-url-mapping-check#setting-up-regex-url-mapping). For a simple template rule, leave out `url_type`.
 
-### Checking Permissions
+## 2. Run the PDP \{#checking-permissions}
 
-To use the URL Mapping Permissions Check, you must first start your PDP. 
+URL checks run on a container PDP. Start one with your environment API key:
 
 ```bash
 docker run -it \
@@ -62,13 +67,11 @@ docker run -it \
   permitio/pdp-v2:latest
 ```
 
-:::info
-Simple URL mapping is supported in PDP version 0.2.19 or higher
-:::
+Simple URL mapping requires PDP version 0.2.19 or later.
 
-Currently, checking permissions using URL Mapping is available through the endpoint `/allowed_url` on the PDP. The SDKs will be updated to support this feature soon.
+## 3. Check a URL
 
-Here's an example of a payload to `localhost:7766/allowed_url` (assuming you're running the PDP locally):
+Send the user, the HTTP method, the full request URL, and the tenant to the PDP's `POST /allowed_url` endpoint. This example assumes the PDP runs locally on port `7766`:
 
 ```bash
 curl --location 'http://localhost:7766/allowed_url' \
@@ -85,4 +88,18 @@ curl --location 'http://localhost:7766/allowed_url' \
 }'
 ```
 
-You can see more details about the payload in the [PDP API Reference](/api/pdp-api-reference)
+In Java, call `permit.checkUrl(user, httpMethod, url, tenant)` instead. The other SDKs don't have a URL check function, so call the `/allowed_url` endpoint over HTTP. For the full request and response schema, see the [PDP API reference](/api/pdp-api-reference).
+
+## Verify the URL check result
+
+The response contains an `allow` field:
+
+- `"allow": true` means the user can perform the mapped action on the mapped resource.
+- `"allow": false` with a `debug.reason` of `Matched mapping rule not found for the requested URL and HTTP method` means no rule matches the URL and method. Compare the URL, including scheme, host, and segment count, and the HTTP method with your mapping rules.
+- `"allow": false` without that reason means a rule matched, and the policy denies the action.
+
+## Next steps
+
+- [Match complex URLs with regex URL mapping](/how-to/enforce-permissions/url-mapping/regex-url-mapping-check)
+- [Check permissions with permit.check()](/how-to/enforce-permissions/check)
+- [Deploy the PDP to production](/how-to/deploy/deploy-to-production)

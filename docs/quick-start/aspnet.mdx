@@ -1,140 +1,143 @@
 ---
-title: Implementing Fine-grained Authorization in ASP.NET Application
-description: "Add fine-grained authorization to an ASP.NET application with Permit.io, from policy setup to role assignment and enforcement."
+title: Add fine-grained authorization to a .NET app
+description: "Build a .NET HTTP server in C# that syncs users to Permit.io, assigns roles, and allows or denies requests with permit.Check() against a local PDP."
 sidebar_position: 9
 ---
 
 import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
 
-Integrate fine-grained authorization into your ASP.NET application to build enterprise-grade systems where users can perform actions and access resources based on precisely defined permissions.
+Build a C# HTTP server for a blogging platform that registers users in Permit.io and allows only users with the **Author** role to create posts. This tutorial is for .NET backend developers who want to enforce Permit.io policies from their request handlers. The example uses `HttpListener` from the .NET class library, so it runs as a console project without the ASP.NET Core pipeline.
 
-<br />
+When you finish, your app has two endpoints:
 
-This guide shows you how to add fine-grained authorization to an ASP.NET application using Permit.io. You will set up a policy for creating posts and comments, register users, assign them roles (like Author, Moderator, or Reader), and enforce permissions directly in your app's endpoints.
-
-By the end, you will have a working example where only authorized users can access protected endpoints, and you will understand how to integrate Permit.io into your own ASP.NET applications.
+| Endpoint | What it does |
+|---|---|
+| `POST /register` | Syncs a user to Permit.io and assigns the user the **Reader** role in the `default` tenant |
+| `POST /posts` | Calls `permit.Check()` and returns `403` unless the user in the request body has permission to `create` a `Post` |
 
 ## Prerequisites
 
-- [ASP.NET](https://dotnet.microsoft.com/en-us/apps/aspnet) application
-- [Docker](https://www.docker.com/) (for running the PDP server)
-- [Node.js](https://nodejs.org/en) (for installing and running the Permit CLI)
-- [Permit.io](https://www.permit.io) account (Follow [this](/quickstart) guide to create an account)
+- A Permit.io account. See [Create a Permit.io account](/quickstart).
+- The [.NET SDK](https://dotnet.microsoft.com/en-us/download) and a console project, for example one created with `dotnet new console`.
+- [Node.js](https://nodejs.org/en) and npm, to install the Permit CLI.
+- [Docker](https://www.docker.com/), to run the policy decision point (PDP) container.
 
-## Policy Configuration
+## 1. Configure the policy in Permit \{#policy-configuration}
 
-Before integrating Permit.io with your ASP.NET application, you need to configure a policy. If you already have a policy configured, you can skip this section and proceed directly to the [integration guide](#integration-guide).
-
-<details open>
-<summary>Configure Policy in Permit</summary>
+Create the blogging platform policy with the Permit CLI. If your environment already has a policy with a `Post` resource and an **Author** role that can `create` posts, skip to [2. Get your API key](#2-get-your-api-key).
 
 <TimelineWrapper>
 <TimelineStep>
 
-### Installing the Permit CLI
+### Install the Permit CLI \{#installing-the-permit-cli}
 
-First, install the [Permit CLI](https://github.com/permitio/permit-cli). The Permit CLI is a command-line tool that allows you to create policies, run the PDP server, and perform other tasks. To install the CLI, run the following command in your terminal:
+The [Permit CLI](/how-to/permit-cli) creates policies and runs the PDP from your terminal. Install the CLI with npm:
 
 ```bash
 npm install -g @permitio/cli
 ```
 
-Once the installation is complete, run `permit` to confirm the installation.
+Run `permit` to confirm that the CLI is installed.
 
 </TimelineStep>
 <TimelineStep>
 
-### Authenticating the CLI
+### Sign in with the Permit CLI \{#authenticating-the-cli}
 
-To use the CLI, authenticate it with your Permit account. Run:
+Authenticate the CLI with your Permit.io account:
 
 ```bash
 permit login
 ```
 
-This command opens a browser window and prompts you to log in with your Permit account. After logging in, the CLI is authenticated and ready to use. This also logs you into the default environment (a project can have multiple environments).
-
-You can change the environment by running `permit env select` and then selecting the environment you want to use.
+The command opens a browser window where you sign in. After you sign in, the CLI uses your default environment. To use a different environment, run `permit env select` and choose the environment.
 
 </TimelineStep>
 <TimelineStep>
 
-### Creating a policy with a template
+### Apply the blogging platform template \{#creating-a-policy-with-a-template}
 
-The Permit CLI offers various templates to create a policy with predefined roles and resources using best practices. This simplifies policy creation compared to starting from scratch.
+Permit CLI templates create a policy with predefined resources, roles, and rules. To see the available templates, run `permit env template list`. The template source files are in the [Permit CLI repository](https://github.com/permitio/permit-cli/tree/main/source/templates).
 
-To check the available templates, run `permit template list`. You can also visit the [Permit CLI repo](https://github.com/permitio/permit-cli/tree/main/source/templates) to see the templates and the actual terraform code for each template.
+![Terminal output of the Permit CLI template list command showing the available policy templates](/img/quick-start-guide/permit-template-list.png)
 
-![permit template list](/img/quick-start-guide/permit-template-list.png)
-
-Use the **blogging-platform** template to create the policy. This template helps you set up a policy for a blogging platform with roles and resources. The policy is explained in detail in the next step.
-
-To apply the template, run the following command:
+Apply the **blogging-platform** template to your environment:
 
 ```bash
-permit template apply --template blogging-platform
+permit env template apply --template blogging-platform
 ```
 
-You will see a success message in the terminal.
+The CLI prints a success message when the template is applied.
 
 </TimelineStep>
 <TimelineStep>
 
-### Understanding and accessing the policy from the dashboard
+### Review the policy in the Policy Editor \{#understanding-and-accessing-the-policy-from-the-dashboard}
 
-Next, go to the Permit dashboard, select your project, and click on the **Policy** tab in the left sidebar. You will see the policy you just created.
+In the [Permit dashboard](https://app.permit.io), select your project and open the **Policy** screen.
 
-![permit policy](/img/quick-start-guide/policy-editor-dash.png)
+![Permit Policy Editor showing the Post and Comment resources with permissions for the Admin, Reader, Author, and Premium Reader roles](/img/quick-start-guide/policy-editor-dash.png)
 
-- For the blog application, there are two resources: **Posts** and **Comments**. Depending on the role and action, the user will have access to the resource. New users accessing the blog are assigned the **Reader** role and have permission to read posts.
-- As users become **Authors**, they gain access to create and update blog posts and manage comments.
-- There is also a relationship between **Post** and **Comment** resources: the person who creates a post automatically becomes a **Comment Moderator**.
-- A **Free Post** resource set filters non-premium posts, allowing **Readers** to access only free content. This is a ReBAC setup.
+The blogging-platform template creates:
 
-This setup combines ABAC and ReBAC to enforce flexible and secure permissions. You can easily add or remove permissions by checking or unchecking them in the policy editor.
+| Policy element | What the template defines |
+|---|---|
+| Resources | `Post` (with a `premium` boolean attribute) and `Comment`, each with `create`, `read`, `update`, and `delete` actions |
+| Roles | **Admin** (all actions), **Author** (create and read posts, read comments), **Reader** (create and read comments), and **Premium Reader** (read posts and comments) |
+| Relationship | A `Post` is the parent of its `Comment` instances. An **Author** of a post instance becomes a **Moderator** of the comments on that post. This rule is relationship-based access control (ReBAC). |
+| Resource set | **Free Post** contains posts where `premium` is `false`. **Readers** can read free posts. This rule is attribute-based access control (ABAC). |
+
+This tutorial uses one rule from the policy: the **Author** role can `create` a `Post`, and the **Reader** role cannot. To change which role can perform an action, check or clear the box in the Policy Editor.
 
 </TimelineStep>
 </TimelineWrapper>
 
-</details>
+## 2. Get your API key
 
-## Integration Guide
+Your .NET app and the PDP authenticate with Permit.io with your environment API key. Copy the API key of the environment where you applied the template. See [Get your API key](/overview/get-api-key).
 
-Now that you have a policy configured, you can integrate Permit.io with your ASP.NET application. The following steps will guide you through the integration process.
+:::warning Keep the API key out of your code
+Anyone with the environment API key can change that environment's policy through the Permit API. Load the key from an environment variable, and don't commit it.
+:::
+
+## 3. Run the PDP \{#setting-up-the-pdp-server}
+
+The PDP evaluates each permission check against your policy. Start a PDP container with the Permit CLI:
+
+```bash
+permit pdp run
+```
+
+The command starts the PDP in Docker and prints the container ID and name. The PDP listens on port `7766`, so your app connects to it at `http://localhost:7766`.
+
+![Terminal output of permit pdp run showing the PDP container details](/img/quick-start-guide/create-pdp.png)
+
+The Free Post resource set is an ABAC rule, and the Cloud PDP doesn't evaluate ABAC rules, so run the container PDP for this policy. To run the container with `docker run` instead, or to check that the PDP is healthy, see [Run the PDP](/overview/run-pdp).
+
+## 4. Build the .NET app \{#integration-guide}
+
+All the C# code in this section goes in `Program.cs`, inside the `HttpServer` class.
 
 <TimelineWrapper>
 <TimelineStep>
 
-### Getting the API key
+### Install the .NET SDK \{#installing-the-net-sdk}
 
-To get the API key:
-
-1. Click on **Projects** in the left sidebar.
-2. Click on the three dots for the environment you want to use.
-3. Click on **Copy API Key** and store it in a safe place. You will use this API key to authenticate your application with Permit.io. If you have any difficulty getting the API key, follow this [guide](/overview/connecting-your-app/#1-get-your-permit-environment-api-key).
-
-Once you have the API key, proceed to integrate Permit.io with your ASP.NET application.
-
-</TimelineStep>
-<TimelineStep>
-
-### Installing the .NET SDK
-
-Once you have an ASP.NET application ready (or you can create a new one for this guide), install the Permit .NET SDK. To install the SDK, run the following command in your terminal:
+In your project directory, add the Permit .NET SDK package:
 
 ```bash
 dotnet add package Permit
 ```
 
-Read more about the .NET SDK [here](/sdk/dotnet/quickstart-dotnet).
+For all SDK options, see [Check permissions with the .NET SDK](/sdk/dotnet/quickstart-dotnet).
 
 </TimelineStep>
 <TimelineStep>
 
-### Setting up the ASP.NET application with Permit.io
+### Create the server and the Permit client \{#setting-up-the-aspnet-application-with-permitio}
 
-Start by creating a new ASP.NET application. Create a new file called `Program.cs` and add the following code to it.
+Replace the contents of `Program.cs` with the following code:
 
 ```csharp
 // Program.cs
@@ -160,7 +163,7 @@ namespace PermitOnboardingApp
         public static string pdpUrl = Environment.GetEnvironmentVariable("PDP_URL") ?? "http://localhost:7766";
         public static Permit permit = new Permit(
             clientToken,
-            "http://localhost:7766",
+            pdpUrl,
             "default",
             true
         );
@@ -203,16 +206,22 @@ namespace PermitOnboardingApp
 }
 ```
 
-The Permit SDK is initialized with the `PERMIT_API_KEY` (the API key you copied from the Permit dashboard) and the `PDP_URL` (the URL of the PDP server). You will set these up later.
+The `HttpServer` class creates a `Permit` client and routes requests:
 
-`HandleIncomingConnections` is the main function that handles the incoming connections and routes the requests to the appropriate endpoints. `HandleRegister` and `HandlePosts` are the endpoints for registering a user and creating a post respectively.
+| Request | Handler |
+|---|---|
+| `POST /register` | `HandleRegister` |
+| `POST /posts` | `HandlePosts` |
+| Any other request | Returns `404` with `"Not found"` |
+
+The Permit client reads the API key from the `PERMIT_API_KEY` environment variable. Set that variable to your environment API key from [2. Get your API key](#2-get-your-api-key). The client connects to the PDP at the address in the `PDP_URL` environment variable, and uses `http://localhost:7766`, the address from [3. Run the PDP](#setting-up-the-pdp-server), when `PDP_URL` isn't set.
 
 </TimelineStep>
 <TimelineStep>
 
-### Main and helper functions
+### Add the Main method and the JSON helper \{#main-and-helper-functions}
 
-Add the following code to the `HttpServer` class:
+Add the following methods inside the `HttpServer` class:
 
 ```csharp
 // Program.cs
@@ -238,15 +247,14 @@ public static void Main(string[] args)
 }
 ```
 
-- `Main` function starts the server and listens for incoming connections.
-- `SendJsonAsync` is a helper function to send a JSON response.
+`Main` starts an `HttpListener` on `http://localhost:8000/` and waits for requests. `SendJsonAsync` writes an object to the response as JSON and closes the response.
 
 </TimelineStep>
 <TimelineStep>
 
-### Registering a new user
+### Add the /register handler \{#registering-a-new-user}
 
-To register a user, create an endpoint that registers a user inside the `HttpServer` class.
+Add the following code inside the `HttpServer` class. `HandleRegister` syncs the user to Permit.io with `permit.Api.SyncUser()`, then assigns the user the **Reader** role in the `default` tenant with `permit.Api.AssignRole()`.
 
 ```csharp
 // Program.cs
@@ -288,63 +296,14 @@ public static async Task HandleRegister(HttpListenerRequest req, HttpListenerRes
 }
 ```
 
-This handler creates a `/register` endpoint that allows new users to register for the blog application and assigns them the **Reader** role, giving them access to read posts.
+The handler returns `400` when `email`, `first_name`, or `last_name` is missing. The user's email address is the user key in Permit.io. `HandlePosts` passes the same key to `permit.Check()`.
 
 </TimelineStep>
 <TimelineStep>
 
+### Add the /posts handler \{#limiting-the-access-to-the-resource}
 
-### Testing the registration process
-
-To demonstrate the registration process, use the `curl` command to make a request to the `/register` endpoint. Register two users **John** and **Emma**. Both of these users will be automatically assigned the **Reader** role.
-
-![curl create user](/img/quick-start-guide/dotnet-register-user.png)
-
-As shown in the image above, the users are created successfully and you receive information about the users in the response, such as `id`, `project_id`, `key`, etc.
-
-In the next step, we will assign **John** with the **Author** role to allow them to create a post.
-
-</TimelineStep>
-<TimelineStep>
-
-### Giving the user access to the resource
-
-By default, users are assigned the **Reader** role. To allow John to create posts, assign him the **Author** role:
-
-1. Select **Directory** from the left sidebar in the Permit dashboard.
-2. Beside the user, click on the **Add Instance Role** button.
-3. Select tenant **(default)** from the dropdown.
-4. Select the **Author** role and **Save** button.
-
-You will verify this later when you check the access.
-
-![user access](/img/quick-start-guide/user-access.png)
-
-</TimelineStep>
-<TimelineStep>
-
-### Setting up the PDP server
-
-At this point, your application is ready with the user synced and the policy created. To enforce the policy, use [Permit's PDP](/concepts/pdp/overview) (Policy Decision Point) to check if the user has access to the resource. First, set up the PDP.
-
-Run the following command to spin up your environment PDP in a Docker container:
-
-```bash
-permit pdp run
-```
-
-After you run the above command, you will see output with information such as container ID, name, etc.
-
-![permit pdp run](/img/quick-start-guide/create-pdp.png)
-
-The PDP server runs on port `7766` by default. You can change the port if needed. Finally, update the `PDP_URL` environment variable in your application.
-
-</TimelineStep>
-<TimelineStep>
-
-### Limiting the access to the resource
-
-Add the following code to the `HttpServer` class:
+Add the following code inside the `HttpServer` class. `HandlePosts` asks the PDP whether the user key in the `user` field of the request body can `create` a `Post`:
 
 ```csharp
 // Program.cs
@@ -373,38 +332,104 @@ public static async Task HandlePosts(HttpListenerRequest req, HttpListenerRespon
 }
 ```
 
-Since the blog application can have various elements like creating a post, commenting, editing, etc., create a new endpoint `/posts` to demonstrate access control. Only users with the **Author** role can create a post.
+The handler returns `"User is permitted"`, or `403` with `"User is not permitted"`. The handler returns `400` when the `user` field is missing. To protect other endpoints, such as commenting or editing, change the `action` and `resource` values.
 
-You can use the same pattern to protect other endpoints, such as commenting, editing, or accessing premium content, by adjusting the action and resource values accordingly.
+:::note
+In a production app, take the user key from your authenticated session. This example reads the user key from the request body so that you can test the endpoint with `curl`.
+:::
 
 </TimelineStep>
 <TimelineStep>
 
-### Checking the access
+### Start the .NET app
 
-Now, check the policy enforcement. Since you have added the **John** user as an **Author**, you can check if the user has **create** access to the **Post** resource. To do this, use the `curl` command to make a request to the `/posts` endpoint.
+Set the environment variables and start the app, replacing `<YOUR_API_KEY>` with your API key:
 
-![curl check access](/img/quick-start-guide/dotnet-user-permitted.png)
+```bash
+export PERMIT_API_KEY=<YOUR_API_KEY>
+export PDP_URL=http://localhost:7766
+dotnet run
+```
 
-As shown in the image above, the user is permitted to access the resource. 
-
-Now, check the access for **Emma**. Since she is not assigned the **Author** role, she should not be able to create a post and access the resource.
-
-![curl check access](/img/quick-start-guide/dotnet-user-not-permitted.png)
-
-As shown in the image above, the user is not permitted to access the resource. This is how you can enforce policies using Permit.io with ASP.NET.
+The app prints `Listening for connections on http://localhost:8000/`.
 
 </TimelineStep>
 </TimelineWrapper>
 
-## Conclusion
+## 5. Test the permission check \{#checking-the-access}
 
-In this guide, you learned how to integrate Permit.io with ASP.NET. You created a simple ASP.NET application that syncs users and tenants with Permit.io. You also created endpoints to check whether users can access resources. You used the Permit SDK to enforce policies and check authorization. You also set up the PDP server locally using Docker.
+Register two users, give one of them the **Author** role, and confirm that the PDP allows only that user to create a post.
 
-## Further Reading
+<TimelineWrapper>
+<TimelineStep>
 
-- [.NET SDK Documentation](/sdk/dotnet/quickstart-dotnet) - Explore advanced features and API methods
-- [Building RBAC Policies](/how-to/build-policies/rbac/building-rbac-policy) - Create and manage role-based authorization policies
-- [Deploy to Production](/how-to/deploy/deploy-to-production) - Best practices for production deployment
+### Register two users \{#testing-the-registration-process}
+
+In a second terminal, register John and Emma:
+
+```bash
+curl -X POST http://localhost:8000/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "john@example.com", "first_name": "John", "last_name": "Doe"}'
+
+curl -X POST http://localhost:8000/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "emma@example.com", "first_name": "Emma", "last_name": "Den"}'
+```
+
+Each request returns HTTP `201` with `"message": "User registered and role assigned"`, the synced user under `user`, and the Reader role assignment under `role_assignment`.
+
+</TimelineStep>
+<TimelineStep>
+
+### Assign John the Author role \{#giving-the-user-access-to-the-resource}
+
+Both users have the **Reader** role, which can't create posts. Give John the **Author** role in the Permit dashboard:
+
+1. Open the **Directory** screen and select `john@example.com` to open the **Edit User** panel.
+2. Under **Permissions Per Tenant**, select the **Default Tenant**.
+3. In **Top Level Access**, add the **Author** role.
+4. Click **Save**.
+
+![Edit User panel in the Permit Directory with Reader and Author roles under Top Level Access for john@example.com](/img/quick-start-guide/user-access.png)
+
+For other ways to assign roles, including the API and SDK, see [Sync users](/how-to/sync-users).
+
+</TimelineStep>
+<TimelineStep>
+
+### Check that John can create a post and Emma can't
+
+Send a `POST /posts` request for John:
+
+```bash
+curl -X POST http://localhost:8000/posts \
+  -H "Content-Type: application/json" \
+  -d '{"user": "john@example.com"}'
+```
+
+The PDP allows the request because John has the **Author** role. The app returns `{"message":"User is permitted"}`.
+
+Send the same request for Emma:
+
+```bash
+curl -X POST http://localhost:8000/posts \
+  -H "Content-Type: application/json" \
+  -d '{"user": "emma@example.com"}'
+```
+
+The PDP denies the request because Emma has only the **Reader** role. The app returns HTTP `403` with `{"message":"User is not permitted"}`.
+
+Each check also appears in the **Audit Log** screen of the Permit dashboard, with the user, action, resource, and decision.
+
+</TimelineStep>
+</TimelineWrapper>
+
+## Next steps \{#further-reading}
+
+- [Check permissions with the .NET SDK](/sdk/dotnet/quickstart-dotnet): SDK installation, configuration, and more permission check examples.
+- [Check permissions with permit.check()](/how-to/enforce-permissions/check): check against tenants, resource instances, and attributes.
+- [Build RBAC policies](/how-to/build-policies/rbac/building-rbac-policy): create roles and permissions for your own resources.
+- [Deploy the PDP to production](/how-to/deploy/deploy-to-production): run the PDP next to your services.
 
 <NextStepCallout variant="production" />

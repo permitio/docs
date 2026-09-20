@@ -1,60 +1,72 @@
 ---
 sidebar_position: 2
-title: Bulk Check
-description: "Validate multiple permission requests in a single call with Permit's bulkCheck() function."
+title: Check many permissions with bulk check
+sidebar_label: Bulk check
+description: "Send several permission checks to the PDP in one call with permit.bulkCheck() and read one boolean result per check."
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
 import CodeBlock from "../../../src/components/code-block/CodeBlock";
 
-The permit `bulkCheck()` function allows you to validate multiple permission requests in a single call.
+Send several permission checks to the policy decision point (PDP) in one request with `permit.bulkCheck()`. This page is for developers who already call [`permit.check()`](/how-to/enforce-permissions/check) and need several decisions in the same request handler.
 
----
+## Prerequisites
 
-For some use cases, you might need to perform multiple `check()` calls at once.
-To support that, Permit provides a `bulkCheck` function that allows you to validate multiple permission requests in a single call.
-In its basic form, the bulk `check()` function accepts the same parameters as the `check()` function, but in an array.
+- A Permit SDK client connected to a PDP ([Run the PDP](/overview/run-pdp))
+- Familiarity with the arguments of [`permit.check()`](/how-to/enforce-permissions/check)
+
+## Run a bulk check
+
+Each item in the bulk check takes the same `user`, `action`, and `resource` arguments as `permit.check()`. Pass the items as an array (a list in Java and Python, variadic `CheckRequest` values in Go).
+
+| SDK | Function |
+|---|---|
+| Node.js | `permit.bulkCheck(checks, context?)` |
+| Python | `permit.bulk_check(checks, context=None)` |
+| Java | `permit.bulkCheck(List<CheckQuery> checks)` |
+| Go | `permit.BulkCheck(requests ...CheckRequest)` |
 
 <CodeBlock folderPath="/bulk-check" />
 
-## Use Cases
+The SDK sends all items to the PDP in one request. To call the PDP without an SDK, use the `POST /allowed/bulk` endpoint described in the [PDP API reference](/api/pdp-api-reference).
 
-Below are some examples of the use cases that require the use of the `bulkCheck()` function:
+## Read the bulk check result
 
-### Latency Sensitive Applications
+`bulkCheck()` returns an array of booleans. The result at index `i` is the decision for the check at index `i`. In the Node.js example, a result of `[true, false, false, true]` means Anna can read contracts, Anna can't create documents, John can't sign contracts, and Jane can authorize invoices.
 
-The most basic usage of a `bulkCheck` is to save time when multiple check calls are needed in one scope.
-For example, assuming we have an API endpoint that performs multiple actions on a resource, we can use the `bulkCheck` function to check all the permissions at once.
+## Use cases \{#use-cases}
+
+### Reduce latency when a handler needs several checks \{#latency-sensitive-applications}
+
+When one API endpoint performs several actions, send all the checks in one bulk call instead of one `permit.check()` call per action. One request to the PDP replaces several round trips.
 
 <CodeBlock folderPath="/bulk-check/latency-applications" />
 
-### Multiple Policy Models
+### Combine ReBAC and ABAC checks for one operation \{#multiple-policy-models}
 
-In some cases, we want to perform ReBAC and ABAC checks for the same operations.
-For example, if `edit` is a premium feature in our application (with ABAC) and we also want to check if the user has access to `edit` a document (with ReBAC), we can use the `bulkCheck` function to check both permissions at once.
+Some operations depend on two policy models. In this example, a user can `edit` a document when a relationship-based access control (ReBAC) role on the document grants `edit`, or when an attribute-based access control (ABAC) rule grants `edit` to the user's subscription tier. The bulk check sends both checks at once, and the code allows the edit when either result is `true`.
 
 <CodeBlock folderPath="/bulk-check/multiple-policy-models" />
 
-### Data Filtering
+### Filter a list of resources \{#data-filtering}
 
-Data filtering is where we have a collection of data, and we want to filter it based on the permissions of the user.
-While there are more efficient ways to perform data filtering with Permit, mapping multiple permissions checks to a single `bulkCheck` call can be useful in some cases.
+To return only the items a user can read, map each item to a check, run one bulk check, and keep the items whose result is `true`. For other filtering approaches, see [Data filtering](/how-to/enforce-permissions/data-filtering).
 
 <CodeBlock folderPath="/bulk-check/data-filtering" />
 
----
+## Raise the PDP query timeout for large bulk checks \{#set-timeout}
 
-### Set Timeout
+A bulk check takes longer to evaluate than a single check. When evaluation exceeds the PDP's query timeout, the PDP returns a timeout error instead of decisions. The `PDP_OPA_CLIENT_QUERY_TIMEOUT` environment variable sets the timeout in seconds. The default is `1`.
 
-Bulk checking is more performance-intensive than regular checking and also takes more time, which can lead to an OPA timeout.
-To address this issue, you can increase the query timeout for the PDP and add more CPU to your virtual machine.
-
-If for example you want a 10 second timeout, you can set the environment variable as follows:
+To allow 10 seconds, set the variable on the PDP container:
 
 ```bash
 PDP_OPA_CLIENT_QUERY_TIMEOUT=10
 ```
 
-For more information on system requirements and performance optimization, you can check [this documentation.](/how-to/deploy/deploy-to-production#system-requirements-and-performance-optimization)
+If bulk checks still time out, give the PDP more CPU. See [PDP_OPA_CLIENT_QUERY_TIMEOUT](/concepts/pdp/configuration#pdp_opa_client_query_timeout) and [System requirements and performance optimization](/how-to/deploy/deploy-to-production#system-requirements-and-performance-optimization).
 
+## Next steps
+
+- [Check a permission across all tenants](/how-to/enforce-permissions/all-tenants-check)
+- [Filter data by permission](/how-to/enforce-permissions/data-filtering)
+- [Get all permissions of a user](/how-to/enforce-permissions/user-permissions)

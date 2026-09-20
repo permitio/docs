@@ -1,30 +1,29 @@
 ---
 sidebar_position: 4
-title: Data Filtering
-description: "Filter query results by permission using boolean query filtering, PDP-level filtering, or source-level partial evaluation."
+title: Filter data by permission
+sidebar_label: Data filtering
+description: "Filter a list of objects down to the ones a user is allowed to act on, with FilterObjects() in Go and filter_objects() in Python, and compare the other data filtering approaches Permit supports."
 ---
 
-Implementing data filtering within access control represents a different approach to managing permissions.
-Instead of merely granting or denying access, it curates what users see, tailoring the data to their individual permissions.
-This method ensures not only secure access but also optimized data delivery.
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
-When working to filter data (e.g. data coming from databases), there are two main types of authorization:
+Return only the data a user is allowed to see, instead of a single allow or deny decision. This page is for backend developers who query lists of records, such as documents or projects, and must drop the records a user can't access. The shortest path is `FilterObjects()` in the Go SDK and `filter_objects()` in the Python SDK: pass the records you fetched, get back the allowed subset.
 
-1. **Boolean Query Filtering**: This involves checking whether a query should be allowed to execute. Here, the query is translated from SQL to a policy (e.g., using an Abstract Syntax Tree (AST) for SQL, or such as this [simple parser for Couchbase N1QL](https://www.couchbase.com/blog/permit-io-couchbase-access-control/)). Essentially, the query is mapped to resources and actions, and these are enforced with a standard check.
+## Prerequisites
 
-2. **Data Filtering from Queries**: This has four subtypes:
+- A Permit SDK client connected to a policy decision point (PDP) ([Run the PDP](/overview/run-pdp))
+- A policy with resource instances or attributes that decide which records a user can access
+- Your environment API key ([Get your API key](/overview/get-api-key))
 
-   - **Application-Level Filtering**: In this method, the whole data is fetched from the DB and then uses a set of boolean results obtained from the Policy Decision Point (PDP) through [bulk checks](/how-to/enforce-permissions/bulk-check).
-   - **PDP-Level Filtering**: In this method, the data is fetched from the DB, and then use the `filterObjects` function [(see below)](#pdp-level-filtering), which returns a subset of the objects passed to it based on the policy.
-   - **PDP-Level Filtering Based on the Information Graph**: This method involves returning pre-filtered objects based on data synchronized with the PDP in advance. It includes functions like [`getUserPermissions`](/how-to/enforce-permissions/user-permissions) (which returns all objects a user has access to) and [`getAuthorizedUsers`](/how-to/enforce-permissions/authorized-users) (which returns all users who have access to a specific resource). In this method, the allowed objects returned from the authorization graph are added to the DB query before making the query.
-   - **Source-Level Filtering (in the Database)**: Also known as Partial Evaluation, where the PDP returns a query basis (e.g., SQL) that is sent or appended to an existing query and sent to the database, which returns the relevant data pre-filtered. This capability exists in [Open Policy Agent (OPA) under the `compile` API](https://www.openpolicyagent.org/docs/latest/rest-api/#compile-api) and is already available within Permit's PDP. In this method the DB query is modified before being executed against the DB.
-     - [Simplified Partial-evaluation](https://youtu.be/wgNhtbqW-hs?t=238), is an upcoming feature in advanced stages of release, which includes built-in translation to SQL.
+## Filter a list of objects with the SDK \{#pdp-level-filtering}
 
+`FilterObjects()` in Go and `filter_objects()` in Python take a user, an action, a request context, and the resources to filter. Both send one bulk check to the PDP and return the resources the user can perform the action on, in the order you passed them. Resources the policy denies are left out of the returned list, so the returned list is usually shorter than the list you passed.
 
+In both samples, replace `<YOUR_API_KEY>` with your environment API key, and replace the `document` and `folder` resources with resources from your own policy.
 
-
-## PDP-Level Filtering
-Below is a simple use example to use `permit.filterObjects`
+<Tabs groupId="code-snippets">
+<TabItem value="golang" label="Go">
 
 ```go
 package main
@@ -38,13 +37,13 @@ import "github.com/permitio/permit-golang/pkg/enforcement"
 
 func main() {
 	// Create permit client
-	permitConfig := config.NewConfigBuilder("").Build()
-	permit := p.New(permitConfig)
+	permitConfig := config.NewConfigBuilder("<YOUR_API_KEY>").Build()
+	permit := p.NewPermit(permitConfig)
 
 	requestContext := map[string]string{
 		"source": "docs",
 	}
-	user := enforcement.UserBuilder("john@doe.com").Build()
+	user := enforcement.UserBuilder("john@permit.io").Build()
 	var action enforcement.Action = "read"
 	resourcesToCheck := []enforcement.ResourceI{
 		enforcement.ResourceBuilder("document").WithID("document-1").WithTenant(enforcement.DefaultTenant),
@@ -59,7 +58,8 @@ func main() {
 	if err != nil {
 		fmt.Printf("Error enforcing permissions: %s", err)
 	} else {
-		// The response indexes correspond to the request indexes
+		// allowedResources holds only the resources the policy allows, in the order they were passed
+		fmt.Printf("%d of %d resources allowed\n", len(allowedResources), len(resourcesToCheck))
 		for i, resource := range allowedResources {
 			fmt.Printf("%d. User '%s' is PERMITTED to '%s' a '%s' with id '%s'\n",
 				i, user.Key, action, resource.GetType(), resource.GetID(),
@@ -70,4 +70,72 @@ func main() {
 
 ```
 
+</TabItem>
+<TabItem value="python" label="Python">
 
+```python
+import asyncio
+from permit import Permit
+
+permit = Permit(
+    token="<YOUR_API_KEY>",
+    pdp="http://localhost:7766",
+)
+
+
+async def main():
+    user = {"key": "john@permit.io"}
+    resources = [
+        {"type": "document", "key": "document-1", "tenant": "default"},
+        {"type": "folder", "key": "folder-1", "tenant": "default"},
+        {"type": "document", "key": "document-2", "tenant": "default"},
+        {"type": "document", "key": "document-3", "tenant": "default"},
+    ]
+
+    allowed = await permit.filter_objects(
+        user=user,
+        action="read",
+        context={"source": "docs"},
+        resources=resources,
+    )
+
+    print(f"{len(allowed)} of {len(resources)} resources allowed")
+    for i, resource in enumerate(allowed):
+        print(f"{i}. User '{user['key']}' is PERMITTED to 'read' a '{resource['type']}' with key '{resource['key']}'")
+
+
+asyncio.run(main())
+```
+
+</TabItem>
+</Tabs>
+
+## Verify the filter result
+
+Both samples first print how many of the four resources the policy allows, then one line per allowed resource. With a policy that gives John `read` on `document-1` and `document-3` only, the output is:
+
+```text
+2 of 4 resources allowed
+0. User 'john@permit.io' is PERMITTED to 'read' a 'document' with id 'document-1'
+1. User 'john@permit.io' is PERMITTED to 'read' a 'document' with id 'document-3'
+```
+
+`0 of 4 resources allowed` means the policy denies `read` on all four resources for John. Check that the user, the resource keys, and the tenant in the sample match facts that exist in your environment, and that the policy grants `read` on those instances.
+
+## Other data filtering approaches
+
+Both `FilterObjects()` and `filter_objects()` send one check per record that your query already returned, so they suit result sets you page or limit. When the result set is too large to check record by record, keep unauthorized records out of the query itself with one of the following approaches.
+
+| Approach | Where filtering happens | How it works | Permit functions |
+|---|---|---|---|
+| Application-level filtering | Your application, after the query | Fetch the records, send one bulk check for all of them, and keep the records whose result is `true`. | [`permit.bulkCheck()`](/how-to/enforce-permissions/bulk-check#data-filtering) |
+| Pre-filtering from the permissions graph | Your application, before the query | Ask the PDP which objects the user can access, and add the allowed keys to the query's `WHERE` clause. | [`getUserPermissions()`](/how-to/enforce-permissions/user-permissions), [`authorized_users()`](/how-to/enforce-permissions/authorized-users) |
+| Source-level filtering (partial evaluation) | The database | Ask Open Policy Agent (OPA) for the conditions a record must meet, translate the conditions into a query filter, and run the filtered query. | OPA's [Compile API](https://www.openpolicyagent.org/docs/latest/rest-api/#compile-api), through the PDP's [exposed OPA port](/how-to/deploy/deploy-to-production#exposing-opa-within-the-pdp) |
+
+Data filtering answers which records a user may act on. A different question is whether a query may run at all: map the query to a resource and an action, then run a single [`permit.check()`](/how-to/enforce-permissions/check). For an example that parses a Couchbase N1QL query into resources and actions, see the [Permit.io and Couchbase access control post](https://www.couchbase.com/blog/permit-io-couchbase-access-control/).
+
+## Next steps
+
+- [Check many permissions with bulk check](/how-to/enforce-permissions/bulk-check)
+- [Get all permissions of a user](/how-to/enforce-permissions/user-permissions)
+- [List the users authorized on a resource](/how-to/enforce-permissions/authorized-users)

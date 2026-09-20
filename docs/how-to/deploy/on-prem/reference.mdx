@@ -1,35 +1,58 @@
 ---
-title: "Reference Documentation"
-description: "Command reference and configuration options for Permit Platform"
+title: "On-Premises Reference"
+sidebar_label: "Reference"
+description: "Installer flags, Helm releases, kubectl commands, and values.yaml configuration keys for a self-hosted Permit Platform."
 ---
 
-:::info Enterprise Only
-This section is only relevant to Enterprise customers who acquired an on-prem license.
+:::info Enterprise on-premises license required
+The on-premises installer is available to Enterprise customers with an on-premises license. To get a license, [contact Permit.io](https://www.permit.io/demo).
 :::
 
-# Reference Documentation
+This page lists the installer flags, the Helm releases, the `kubectl` commands, and the `values.yaml` configuration keys of a self-hosted Permit Platform. It is for operators who install and configure the platform. For the installation procedure, see the [installation guide](/how-to/deploy/on-prem/installation). For step-by-step procedures such as upgrades, backups, support bundles, and uninstalling, see the [management guide](/how-to/deploy/on-prem/management).
 
-Reference materials for Permit Platform on-premise deployment.
+## Installer command reference \{#installation-command-reference}
 
-## Installation Command Reference
+The installer is `scripts/install-permit-platform.sh` in the installer package. Run it from the package root. Pass exactly one target flag on every run.
 
-### Basic Installation
+| Flag | Effect |
+|---|---|
+| `--gke` | Deploy to an existing Kubernetes cluster in your current `kubectl` context: Google GKE, Amazon EKS, Azure AKS, or self-managed. The installer skips cluster creation and image loading and pulls the images from `global.imageRegistry`. The installer accepts this flag, but `--help` doesn't list it. |
+| `--openshift` | Deploy to an OpenShift cluster, such as Red Hat OpenShift Service on AWS (ROSA) or OpenShift Container Platform (OCP). |
+| `--kind` | Create a local Kind cluster named `permit-platform-on-prem` for development, load the images into it, install an NGINX ingress controller, and generate self-signed certificates. |
+| (no target flag) | Run the Kind steps: create the `permit-platform-on-prem` Kind cluster and read the image tag from that cluster's control-plane container. Unlike `--kind`, the installer does not install the NGINX ingress controller or generate certificates. |
+| `-n`, `--namespace NAMESPACE` | Install into `NAMESPACE`. Default: `permit-platform`. |
+| `--generate-tls` | Generate TLS certificates. |
+| `--skip-tls-check` | Skip the TLS check. Use it when TLS terminates outside the cluster ingress, for example at a cloud load balancer or with cert-manager. |
+| `--skip-images` | Don't load images from the package. Required when the images are already in your private registry. |
+| `--skip-openshift-registry` | On OpenShift, don't configure the internal OpenShift registry. Use it with a custom registry. |
+| `--dry-run` | Show what the installer would deploy without applying it. |
+| `--yes` | Confirm a Keycloak schema migration without a prompt. Required for non-interactive runs when the Keycloak version changes. |
+| `-h`, `--help` | Print the installer help. |
+
+:::warning A run without a target flag fails on an existing cluster
+The `--help` output lists a run without a target flag as the production Kubernetes target, and the installer logs `Deployment Target: Production Kubernetes (EKS/GKE/AKS)`. The script then runs the Kind path: it tries to create a Kind cluster and to read the backend image tag from a container named `permit-platform-on-prem-control-plane`. On an existing EKS, AKS, GKE, or self-managed cluster, the installation fails at those steps. Pass `--gke` for every existing Kubernetes cluster, whichever cloud runs it.
+:::
+
+`--openshift` and `--kind` can't be combined. Run `./scripts/install-permit-platform.sh --help` to see the flags of your package version, and compare them with the flags in this table before you script a run.
+
+### Basic installation \{#basic-installation}
+
+The shortest run on an existing Kubernetes cluster, plus the command that prints the flags of your package version:
 
 ```bash
-# Standard production Kubernetes installation
-./scripts/install-permit-platform.sh
+# Existing Kubernetes cluster (GKE, EKS, AKS, or self-managed)
+./scripts/install-permit-platform.sh --gke
 
 # Get help and see all options
 ./scripts/install-permit-platform.sh --help
 ```
 
-### Deployment Targets
+### Deployment targets \{#deployment-targets}
+
+One command per target. Pass exactly one of these flags:
 
 ```bash
-# Production Kubernetes (EKS, AKS, on-premise)
-./scripts/install-permit-platform.sh
-
-# Google Kubernetes Engine (GKE)
+# Existing Kubernetes cluster (GKE, EKS, AKS, or self-managed)
 ./scripts/install-permit-platform.sh --gke
 
 # OpenShift (ROSA, OCP)
@@ -39,48 +62,49 @@ Reference materials for Permit Platform on-premise deployment.
 ./scripts/install-permit-platform.sh --kind
 ```
 
-### TLS Certificate Options
+### TLS certificate options \{#tls-certificate-options}
+
+On an existing Kubernetes cluster, the installer expects you to provide TLS through `values.yaml` (see [Ingress and TLS configuration](#ingress-and-tls-configuration)) or through your infrastructure. Kind and OpenShift installations generate self-signed certificates.
 
 ```bash
 # Auto-generate certificates (mkcert/OpenSSL)
-./scripts/install-permit-platform.sh --generate-tls
+./scripts/install-permit-platform.sh --gke --generate-tls
 
 # Skip TLS configuration (external termination)
-./scripts/install-permit-platform.sh --skip-tls-check
+./scripts/install-permit-platform.sh --gke --skip-tls-check
 
 # Use custom certificates (configure in values.yaml)
-./scripts/install-permit-platform.sh
+./scripts/install-permit-platform.sh --gke
 ```
 
-### Advanced Options
+### Advanced options \{#advanced-options}
 
 ```bash
 # Custom namespace
-./scripts/install-permit-platform.sh --namespace my-namespace
+./scripts/install-permit-platform.sh --gke --namespace my-namespace
 
 # Preview without applying
-./scripts/install-permit-platform.sh --dry-run
+./scripts/install-permit-platform.sh --gke --dry-run
 
 # Skip image loading (REQUIRED when using pushed images to private registry)
-./scripts/install-permit-platform.sh --skip-images
+./scripts/install-permit-platform.sh --gke --skip-images
 
 # OpenShift with custom registry
-./scripts/install-permit-platform.sh --openshift --skip-openshift-registry
+./scripts/install-permit-platform.sh --openshift --skip-openshift-registry --skip-images
 ```
 
-### When to Use --skip-images Flag
+### When to use the --skip-images flag \{#when-to-use---skip-images-flag}
 
-**Use `--skip-images` when:**
-- ✅ Images are already pushed to your private registry (GKE/GAR, Artifactory, Harbor, ECR, ACR)
-- ✅ Re-running installation after initial image load
-- ✅ Testing Helm chart changes without reloading images
+| Situation | Use `--skip-images` |
+|---|---|
+| You pushed the images to a private registry (Google Artifact Registry, Artifactory, Harbor, Amazon ECR, Azure ACR) | Yes |
+| You run the installer again after the images were loaded once | Yes |
+| You test Helm chart changes and don't need to reload images | Yes |
+| First installation from the `tar.gz` package | No |
+| Kind cluster, where the installer loads images into the Docker daemon | No |
+| Docker Hub images that aren't loaded yet | No |
 
-**Do NOT use `--skip-images` when:**
-- ❌ First-time installation from tar.gz package
-- ❌ Images need to be loaded to Docker daemon (Kind clusters)
-- ❌ Using Docker Hub and images aren't pre-loaded
-
-**Example workflows:**
+Push the images with `scripts/push-images-to-registry.sh` before you install with `--skip-images`. The full registry workflow is in the [installation guide](/how-to/deploy/on-prem/installation#step-35-push-images-to-private-registry-gke-example).
 
 ```bash
 # Workflow 1: GKE with Google Artifact Registry
@@ -90,99 +114,27 @@ Reference materials for Permit Platform on-premise deployment.
 # Workflow 2: Artifactory with imagePullSecrets
 ./scripts/push-images-to-registry.sh artifactory.company.com/permit-platform
 kubectl create secret docker-registry registry-credentials --docker-server=artifactory.company.com ...
-./scripts/install-permit-platform.sh --skip-images
+./scripts/install-permit-platform.sh --gke --skip-images
 
-# Workflow 3: Standard K8s, first install with local tar files
-./scripts/install-permit-platform.sh  # NO --skip-images flag
+# Workflow 3: OpenShift, first install with the internal registry (loads the local tar files)
+./scripts/install-permit-platform.sh --openshift  # NO --skip-images flag
 ```
 
-## Kubernetes Management Commands
+## Helm releases \{#helm-chart-architecture}
 
-### Pod and Service Management
+### Three releases from one chart \{#three-phase-deployment}
 
-```bash
-# Check all pods status
-kubectl get pods -n permit-platform
+The installer deploys the `charts/permit-platform` chart three times, as three Helm releases, in this order:
 
-# Check services and endpoints
-kubectl get services -n permit-platform
-
-# View deployment status
-kubectl get deployments -n permit-platform
-
-# Check ingress configuration
-kubectl get ingress -n permit-platform
-```
-
-### Log Viewing
-
-```bash
-# View backend logs
-kubectl logs -n permit-platform deployment/permit-backend-v2
-
-# View frontend logs
-kubectl logs -n permit-platform deployment/permit-frontend
-
-# View authentication logs
-kubectl logs -n permit-platform deployment/keycloak
-
-# View database logs
-kubectl logs -n permit-platform deployment/postgres
-
-# View all logs
-kubectl logs -n permit-platform --all-containers=true
-```
-
-### Service Management
-
-```bash
-# Restart specific deployment
-kubectl rollout restart deployment/permit-backend-v2 -n permit-platform
-
-# Restart all deployments
-kubectl rollout restart deployment -n permit-platform
-
-# Scale services
-kubectl scale deployment permit-backend-v2 -n permit-platform --replicas=3
-kubectl scale deployment celery-general -n permit-platform --replicas=2
-
-# Check rollout status
-kubectl rollout status deployment/permit-backend-v2 -n permit-platform
-```
-
-### Troubleshooting Commands
-
-```bash
-# Check events for issues
-kubectl get events -n permit-platform --sort-by='.lastTimestamp'
-
-# Describe problematic pods
-kubectl describe pod <pod-name> -n permit-platform
-
-# Check resource usage
-kubectl top pods -n permit-platform
-kubectl top nodes
-
-# Check persistent volumes
-kubectl get pv,pvc -n permit-platform
-
-# Check secrets
-kubectl get secrets -n permit-platform
-```
-
-## Helm Chart Architecture
-
-### Three-Phase Deployment
-
-The Permit Platform uses **3 separate Helm charts** deployed in sequence:
-
-| Chart | Purpose | Components |
+| Release | Layer | Contents |
 |-------|---------|------------|
-| **`third-party-services`** | Infrastructure layer | PostgreSQL, Redis, OpenSearch, RabbitMQ, Keycloak |
-| **`migrations`** | Database initialization | Schema setup, indices, initial data |
-| **`permit-platform`** | Application layer | All 35 Permit services (backend, frontend, OPAL, etc.) |
+| `third-party-services` | Infrastructure | PostgreSQL, PgBouncer, Redis, OpenSearch, OpenSearch Dashboards, RabbitMQ, Keycloak |
+| `migrations` | Database initialization | The `permit-migrations` job: schema setup, indices, initial data |
+| `permit-platform` | Application | Permit services: backend API, frontend, Open Policy Administration Layer (OPAL) server and relays, workers, and policy sync |
 
-### Managing Individual Charts
+### Manage releases individually \{#managing-individual-charts}
+
+The installer sets extra `--set` flags on each release. To apply a configuration change, run the installer again, as described in [Apply configuration changes](/how-to/deploy/on-prem/management#applying-configuration-changes).
 
 ```bash
 # View all installed charts
@@ -200,13 +152,89 @@ helm status third-party-services -n permit-platform
 helm status migrations -n permit-platform
 ```
 
-## Configuration Reference
+## kubectl quick reference \{#kubernetes-management-commands}
 
-### Complete values.yaml Configuration Options
+Every `kubectl` command below uses the default namespace, `permit-platform`. Replace it with your namespace if you installed with `--namespace`. For the procedures that use these commands, with the result each one should produce, see [Run daily operations](/how-to/deploy/on-prem/management#daily-operations).
 
-The `charts/permit-platform/values.yaml` file provides extensive customization options for your deployment:
+### Pods, services, and ingress \{#pod-and-service-management}
 
-### Global Configuration
+| Command | What it shows |
+|---|---|
+| `kubectl get pods -n permit-platform` | Every pod with its ready count and status. Service pods show `Running`; migration job pods show `Completed`. |
+| `kubectl get services -n permit-platform` | The services and their cluster IP addresses and ports |
+| `kubectl get deployments -n permit-platform` | Each deployment's ready, up-to-date, and available replica counts |
+| `kubectl get ingress -n permit-platform` | The ingress, its class, its hosts, and its address |
+
+### Logs \{#log-viewing}
+
+| Command | What it shows |
+|---|---|
+| `kubectl logs -n permit-platform deployment/permit-backend-v2` | Logs of the Permit API service |
+| `kubectl logs -n permit-platform deployment/permit-frontend` | Logs of the Permit frontend |
+| `kubectl logs -n permit-platform deployment/keycloak` | Logs of Keycloak, the identity provider that handles sign-in |
+| `kubectl logs -n permit-platform deployment/postgres` | Logs of the PostgreSQL deployment |
+| `kubectl logs -n permit-platform --selector=app --all-containers=true --prefix --tail=-1` | Logs of every pod that carries an `app` label. `kubectl logs` needs a pod name or a selector; without one, the command fails. |
+
+Add `--previous` to read the logs of a container that crashed and restarted, and `-f` to follow a log stream.
+
+### Restarts and scaling \{#service-management}
+
+| Command | Effect |
+|---|---|
+| `kubectl rollout restart deployment/permit-backend-v2 -n permit-platform` | Restarts one deployment |
+| `kubectl rollout restart deployment -n permit-platform` | Restarts every deployment in the namespace |
+| `kubectl scale deployment permit-backend-v2 -n permit-platform --replicas=3` | Sets the replica count of one deployment |
+| `kubectl rollout status deployment/permit-backend-v2 -n permit-platform` | Waits for the rollout and reports whether it succeeded |
+
+:::warning kubectl scale and kubectl patch don't survive the next installer run
+The installer and `helm upgrade` render each deployment from `values.yaml` again, which resets replica counts and resource values you set with `kubectl`. Put a permanent change in `values.yaml` and run the installer again. See [Scale services](/how-to/deploy/on-prem/management#scaling-operations).
+:::
+
+### Diagnostics \{#troubleshooting-commands}
+
+| Command | What it shows |
+|---|---|
+| `kubectl get events -n permit-platform --sort-by='.lastTimestamp'` | Namespace events, oldest first, including failed image pulls and scheduling failures |
+| `kubectl describe pod <pod-name> -n permit-platform` | One pod's containers, image, probes, conditions, and recent events |
+| `kubectl top pods -n permit-platform`, `kubectl top nodes` | Current CPU and memory usage. Both need the Kubernetes Metrics Server in the cluster. |
+| `kubectl get pv,pvc -n permit-platform` | Persistent volumes and claims, with their phase and capacity |
+| `kubectl get secrets -n permit-platform` | The secrets in the namespace, including `global-infrastructure-secret` |
+
+## values.yaml configuration reference \{#configuration-reference}
+
+### How values.yaml works \{#complete-valuesyaml-configuration-options}
+
+All platform settings live in `charts/permit-platform/values.yaml` in the installer package. The installer behaves as follows:
+
+- It stops with an error while `global.frontendDomain` is `CHANGEME_FRONTEND_DOMAIN`.
+- It replaces the `CHANGEME_*_PASSWORD` placeholders with generated passwords and saves the original file as `values.yaml.backup.<timestamp>`.
+- On later runs, it reuses the passwords already stored in the `global-infrastructure-secret` secret.
+
+The `values.yaml` in your installer package is the source of truth for default values, storage sizes, and image tags. Defaults change between package versions. The blocks below show the structure and example values, not the defaults of your version. Helm ignores keys that the chart templates don't read, so compare any key you set with your package's `values.yaml`.
+
+To see the images and tags running in your cluster, run `kubectl get deployments -n permit-platform -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.template.spec.containers[*].image}{"\n"}{end}'`.
+
+### Key sections \{#key-sections}
+
+| Section | Controls |
+|---|---|
+| `global.frontendDomain` | The domain users open. Required. |
+| `global.imageRegistry`, `global.imagePullPolicy`, `global.imagePullSecrets` | Where the cluster pulls images from, and the pull secrets to use. `push-images-to-registry.sh` sets `imageRegistry`. |
+| `global.postgres`, `global.redis`, `global.rabbitmq` | Connection settings (host, port, username, password) that Permit services use to reach the infrastructure services. |
+| `global.keycloak` | Keycloak admin username, admin password, and database password. |
+| `ingress` | Ingress class, annotations, and TLS certificate. |
+| `openshift` | OpenShift service account, Security Context Constraint (SCC), route termination, and security contexts. |
+| `thirdPartyServices.<service>` | The infrastructure deployments (`postgres`, `pgbouncer`, `redis`, `opensearch`, `opensearchDashboards`, `rabbitmq`, `keycloak`): `enabled`, `image`, `tag`, `persistence.size`, and `resources`. PostgreSQL also accepts `config` tuning parameters and a `readReplica`. OpenSearch also accepts `ism` and `indexSettings`. PgBouncer also accepts pool settings. See [Connection pooling and performance tuning](#performance-tuning-options). |
+| `migrations` | The migrations job: `enabled`, `image`, `tag`, and `resources` |
+| `secrets` | Whether the release creates the platform secrets (`enabled`), and the backend secret's `name` and its `LOCAL_JWT_KEY`, `OPAL_MASTER_TOKEN`, and `PDP_TESTER_TOKEN` values under `secrets.permitBackendSecret` |
+| `permitServices.<service>` | The Permit deployments: `enabled`, `replicas`, `image`, `tag`, and `resources`. |
+| `permitServices.policySync` | The policy Git repository URL (`policyRepoUrl`) and SSH deploy key (`sshPrivateKey`). |
+
+`global.postgres` and `thirdPartyServices.postgres` configure different things. `global.postgres` holds the connection settings that Permit services use. `thirdPartyServices.postgres` configures the PostgreSQL deployment itself: image, storage, resources, and tuning.
+
+### Global configuration \{#global-configuration}
+
+If your registry needs authentication (for example, Artifactory or Harbor), create the `docker-registry` secret before you install, and list its name in `imagePullSecrets`. Google Artifact Registry on GKE, Amazon ECR on EKS, and Azure ACR on AKS authenticate through the cluster nodes and don't need a pull secret.
 
 ```yaml
 global:
@@ -224,7 +252,7 @@ global:
   imagePullPolicy: "IfNotPresent"  # Always, Never, IfNotPresent
 
   # Note: The push-images-to-registry.sh script automatically updates this field
-  # when you push images to your private registry. See installation guide Step 3.5.
+  # when you push images to your private registry. See the installation guide, Step 4.
 
   # Image pull secrets for private registries (optional)
   # Required for registries that need authentication (Artifactory, Harbor, private registries)
@@ -269,14 +297,6 @@ global:
     username: "permit"
     password: "CHANGEME_RABBITMQ_PASSWORD"  # Auto-generated if not set
     
-  # OpenSearch configuration
-  opensearch:
-    enabled: true
-    host: "opensearch"
-    port: 9200
-    username: "admin"
-    password: "CHANGEME_OPENSEARCH_PASSWORD"  # Auto-generated if not set
-    
   # Keycloak authentication
   keycloak:
     enabled: true
@@ -284,14 +304,15 @@ global:
     port: 8080
     adminUsername: "admin"
     adminPassword: "CHANGEME_KEYCLOAK_ADMIN_PASSWORD"  # Auto-generated
-    realm: "permit-platform"
-    clientId: "permit-backend"
-    clientSecret: "permit-client-secret"
     db:
       password: "CHANGEME_KEYCLOAK_DB_PASSWORD"  # Auto-generated
 ```
 
-### OpenShift-Specific Configuration
+The chart templates read `global.postgres`, `global.redis`, and `global.rabbitmq` connection settings, and `adminUsername`, `adminPassword`, and `db.password` under `global.keycloak`.
+
+### OpenShift configuration \{#openshift-specific-configuration}
+
+Set `openshift.enabled: true` for OpenShift deployments, or install with `--openshift`.
 
 ```yaml
 openshift:
@@ -316,7 +337,16 @@ openshift:
     defaultFsGroup: null
 ```
 
-### Ingress and TLS Configuration
+### Ingress and TLS configuration \{#ingress-and-tls-configuration}
+
+The ingress routes `global.frontendDomain` to the `permit-frontend` service. When `ingress.tls.enabled` is `true` and a certificate is set, the chart creates a TLS secret named by `ingress.tls.secretName`. The installer sets `secretName` to `permit-frontend-tls`.
+
+Provide the certificate in one of two ways:
+
+| Option | Keys | Behavior |
+|---|---|---|
+| Inline certificate | `ingress.tls.certificate.cert`, `ingress.tls.certificate.key` | The chart writes the values into the secret's `data` field as they are. Kubernetes expects base64-encoded values in `data`. |
+| Certificate files | `ingress.tls.certificateFiles.certFile`, `ingress.tls.certificateFiles.keyFile` | The chart reads the files with Helm `.Files.Get`, so the paths are relative to the `charts/permit-platform` directory. `--generate-tls` sets these keys. |
 
 ```yaml
 ingress:
@@ -344,7 +374,13 @@ ingress:
       keyFile: "/path/to/key.pem"
 ```
 
-### Third-Party Services Configuration
+### Third-party services configuration \{#third-party-services-configuration}
+
+The chart builds each image reference as `<global.imageRegistry>/<image>:<tag>`. The example values below show one package version. Image versions, storage sizes, and resource values change between packages, so read the current values in your package's `values.yaml`.
+
+The chart reads `persistence.size` for PostgreSQL, Redis, OpenSearch, and RabbitMQ. The chart doesn't set a storage class, so the persistent volume claims use the cluster's default storage class. The Keycloak database claim, `keycloak-postgres-pvc`, requests a fixed 5Gi.
+
+Size PostgreSQL storage for your data volume. Size OpenSearch storage for your audit log volume and the retention set in `ism.transitions.toDelete`. OpenSearch rolls over the audit log index when the index reaches `ism.rollover.minSize` or `ism.rollover.minAge`.
 
 ```yaml
 thirdPartyServices:
@@ -357,7 +393,6 @@ thirdPartyServices:
     persistence:
       enabled: true
       size: "10Gi"  # Minimum, 20Gi+ for production
-      storageClass: ""  # Use default if empty
     resources:
       requests:
         memory: "512Mi"
@@ -439,9 +474,6 @@ thirdPartyServices:
   keycloak:
     enabled: true
     image: "quay.io_keycloak_keycloak_20.0.5"
-    persistence:
-      enabled: true
-      size: "5Gi"
     resources:
       requests:
         memory: "1Gi"
@@ -451,7 +483,13 @@ thirdPartyServices:
         cpu: "1000m"
 ```
 
-### Permit Platform Services Configuration
+A change to the Keycloak image version triggers a one-way Keycloak schema migration. Read the [upgrade warning](/how-to/deploy/on-prem/management#platform-updates) before you change it.
+
+### Permit services configuration \{#permit-platform-services-configuration}
+
+Each Permit service under `permitServices` accepts `enabled`, `replicas`, `image`, `tag`, and `resources`. The OPAL server tag below is an example. Use the tag in your package's `values.yaml`.
+
+`sshPrivateKey` must be a multi-line block that starts with `|`. The chart fails to render when the key is on one line. The chart reads `enabled`, `replicas`, `image`, `tag`, `resources`, `policyRepoUrl`, and `sshPrivateKey` under `policySync`. Under `backend.env`, the chart reads only the authentication and frontend URL overrides (`AUTH0_DOMAIN`, `AUTH0_ISSUER`, `AUTH0_JWKS_ENDPOINT`, `AUTH0_SSL_VERIFY`, `AUTH0_USERINFO_ENDPOINT`, and `FRONTEND_PUBLIC_URL`), so other variables such as `LOG_LEVEL` have no effect.
 
 ```yaml
 permitServices:
@@ -468,9 +506,6 @@ permitServices:
       limits:
         memory: "2Gi"
         cpu: "1000m"
-    env:  # Environment variable overrides
-      LOG_LEVEL: "INFO"
-      ENABLE_MONITORING: "true"
       
   # Frontend application
   frontend:
@@ -508,8 +543,6 @@ permitServices:
       -----BEGIN OPENSSH PRIVATE KEY-----
       [Your SSH private key content]
       -----END OPENSSH PRIVATE KEY-----
-    branch: "main"  # Git branch to sync from
-    syncInterval: "60s"  # How often to check for updates
     
   # Celery workers
   celeryGeneral:
@@ -524,144 +557,58 @@ permitServices:
         cpu: "500m"
 ```
 
-### Advanced Configuration Options
+### Keys the chart doesn't read \{#advanced-configuration-options}
 
-```yaml
-# Database migrations
-migrations:
-  enabled: true
-  runOnInstall: true
-  runOnUpgrade: true
-  
-# Security contexts
-securityContext:
-  runAsNonRoot: true
-  runAsUser: 1000
-  fsGroup: 1000
-  
-# Resource quotas (optional)
-resourceQuota:
-  enabled: false
-  limits:
-    cpu: "100"
-    memory: "200Gi"
-    persistentvolumeclaims: "20"
-    
-# Network policies (optional)
-networkPolicy:
-  enabled: false
-  ingress:
-    - from:
-      - namespaceSelector:
-          matchLabels:
-            name: permit-platform
-            
-# Monitoring and observability (optional)
-monitoring:
-  enabled: false
-  prometheus:
-    enabled: false
-    port: 9090
-  grafana:
-    enabled: false
-    port: 3000
-```
+The `values.yaml` file in the installer package contains keys that the chart templates never read. Setting one has no effect, and no error tells you so. Use the alternative in the last column instead.
 
-### Performance Tuning Options
+| Key the chart ignores | What it looks like it does | What to do instead |
+|---|---|---|
+| `migrations.runOnInstall`, `migrations.runOnUpgrade` | Control whether the migrations job runs | Nothing. The installer runs the migrations job on every install and upgrade. The chart does read `migrations.enabled`, `migrations.image`, `migrations.tag`, and `migrations.resources`. |
+| Top-level `securityContext.runAsNonRoot`, `securityContext.runAsUser`, `securityContext.fsGroup` | Set pod security contexts for every service | On OpenShift, set `openshift.securityContext`. See [OpenShift configuration](#openshift-specific-configuration). |
+| `resourceQuota` | Apply a namespace resource quota | Create a Kubernetes `ResourceQuota` object in the namespace yourself. |
+| `networkPolicy` | Apply network policies | Create Kubernetes `NetworkPolicy` objects in the namespace yourself. |
+| `monitoring.prometheus`, `monitoring.grafana` | Deploy Prometheus and Grafana | Deploy your monitoring stack separately. |
+| Top-level `pgBouncer` | Tune connection pooling | Set `thirdPartyServices.pgbouncer` instead, with the lowercase `b`. See [Connection pooling with PgBouncer](#performance-tuning-options). |
+| `autoscaling` | Configure horizontal pod autoscaling | Set `replicas` per service. See [Scale services](/how-to/deploy/on-prem/management#scaling-operations). |
+| `backup`, `restore` | Schedule and restore backups | Follow the procedure in [Back up and restore](/how-to/deploy/on-prem/management#backup-and-recovery). The chart creates no scheduled backups. |
 
-```yaml
-# Connection pooling
-pgBouncer:
-  enabled: true
-  maxClientConnections: 200
-  defaultPoolSize: 25
-  minPoolSize: 10
-  reservePoolSize: 5
-  
-# Horizontal Pod Autoscaling
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 10
-  targetCPUUtilization: 80
-  targetMemoryUtilization: 80
-```
+### Connection pooling and performance tuning \{#performance-tuning-options}
 
-### Backup and Recovery Configuration
+The chart has no dedicated performance-tuning section. Tune the platform through the keys it does read.
 
-```yaml
-backup:
-  enabled: false
-  schedule: "0 2 * * *"  # Daily at 2 AM
-  retention: 30  # Days to keep backups
-  storageLocation: "s3://backup-bucket/permit"
-  
-restore:
-  enabled: false
-  backupName: ""  # Specific backup to restore from
-```
+PgBouncer pools connections to PostgreSQL. The chart reads these keys under `thirdPartyServices.pgbouncer`:
 
-## Uninstallation
+| Key | Controls | Chart default when unset |
+|---|---|---|
+| `enabled` | Whether the chart deploys PgBouncer | Set it in `values.yaml` |
+| `poolMode` | The PgBouncer pool mode | `transaction` |
+| `defaultPoolSize` | Server connections per user and database pair | `50` |
+| `maxClientConn` | Client connections PgBouncer accepts | `200` |
+| `maxDbConnections` | Server connections per database | Set it in `values.yaml` |
+| `ignoreStartupParameters` | Startup parameters PgBouncer ignores | Set it in `values.yaml` |
+| `image`, `tag`, `resources` | The PgBouncer image and its CPU and memory | Set them in `values.yaml` |
 
-### Complete Removal
+Tune the rest of the platform through these keys:
 
-```bash
-# Remove all 3 Helm releases (the platform uses 3 separate charts)
-helm uninstall permit-platform -n permit-platform 2>/dev/null || true        # 35 Permit services
-helm uninstall migrations -n permit-platform 2>/dev/null || true             # Database schema
-helm uninstall third-party-services -n permit-platform 2>/dev/null || true   # PostgreSQL, Redis, OpenSearch, etc.
+| To tune | Set |
+|---|---|
+| PostgreSQL memory, connections, and checkpoints | `thirdPartyServices.postgres.config`. See [Third-party services configuration](#third-party-services-configuration). |
+| A PostgreSQL read replica and its storage | `thirdPartyServices.postgres.readReplica`: `enabled`, `persistence`, `resources`, and `nodeAntiAffinity` |
+| CPU and memory per service | `resources` under `thirdPartyServices.<service>` or `permitServices.<service>` |
+| Throughput of a Permit service | `replicas` under `permitServices.<service>` |
+| Audit log index size and retention | `thirdPartyServices.opensearch.ism` and `thirdPartyServices.opensearch.indexSettings.auditLogs` |
 
-# Delete namespace (removes all resources)
-kubectl delete namespace permit-platform
+### Backup and recovery configuration \{#backup-and-recovery-configuration}
 
-# Clean up persistent volumes (careful!)
-kubectl get pv | grep permit-platform
-kubectl delete pv $(kubectl get pv -o jsonpath='{.items[?(@.spec.claimRef.namespace=="permit-platform")].metadata.name}')
-```
+The chart doesn't read `backup` or `restore`, and it creates no scheduled backups. Back up the platform with the commands in [Back up and restore](/how-to/deploy/on-prem/management#backup-and-recovery), and schedule them with your own job runner.
 
-### Selective Removal
+## Uninstall and support \{#uninstallation}
 
-```bash
-# Remove only platform services (keep data)
-helm uninstall permit-platform -n permit-platform
+The uninstall procedure is in [Uninstall Permit Platform](/how-to/deploy/on-prem/management#uninstallation). The support bundle procedure is in [Collect a support bundle](/how-to/deploy/on-prem/management#support-bundle).
 
-# Remove specific deployments
-kubectl delete deployment permit-backend-v2 -n permit-platform
-kubectl delete deployment permit-frontend -n permit-platform
-```
+## Next steps
 
-## Support Information
-
-### Diagnostic Collection
-
-Create comprehensive diagnostic bundle for support:
-
-```bash
-{
-  echo "=== CLUSTER INFO ==="
-  kubectl cluster-info
-  echo "=== PERMIT PLATFORM PODS ==="
-  kubectl get pods -n permit-platform -o wide
-  echo "=== RECENT EVENTS ==="
-  kubectl get events -n permit-platform --sort-by='.lastTimestamp' | tail -20
-  echo "=== SERVICES ==="
-  kubectl get svc,ingress -n permit-platform
-  echo "=== STORAGE ==="
-  kubectl get pv,pvc -n permit-platform
-} > permit-support-bundle.txt
-```
-
-### Log Collection
-
-```bash
-# Collect all pod logs
-kubectl logs -n permit-platform --all-containers=true --selector=app!=postgres > all-logs.txt
-
-# Collect specific service logs
-kubectl logs -n permit-platform deployment/permit-backend-v2 > backend-logs.txt
-kubectl logs -n permit-platform deployment/keycloak > auth-logs.txt
-```
-
----
-
-**Need help?** Contact support@permit.io with your diagnostic bundle and system information, or [join our Slack community](https://io.permit.io/slack).
+- [Install Permit Platform](/how-to/deploy/on-prem/installation)
+- [Apply configuration changes and run day-2 operations](/how-to/deploy/on-prem/management)
+- [Fix common on-premises errors](/how-to/deploy/on-prem/troubleshooting)
+- [Deploy a PDP in your on-premises cluster](/how-to/deploy/on-prem/pdp-deployment)

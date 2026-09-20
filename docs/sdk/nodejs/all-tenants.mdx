@@ -1,46 +1,99 @@
 ---
-title: All Tenants Check Examples
-description: "Check whether a user has permission for an action across all tenants with the Node.js SDK."
+title: Check a permission in all tenants with the Node.js SDK
+sidebar_label: All-tenants check
+description: "Find every tenant in which a user can perform an action on a resource with permit.checkAllTenants() in the Node.js SDK or the PDP all-tenants endpoint."
 ---
 
-# Node.js All Tenants Check Examples
+`permit.checkAllTenants()` asks the policy decision point (PDP) in which tenants a user can perform an action on a resource, and returns those tenants. This reference is for Node.js developers of multi-tenant applications who need the list of tenants a user can act in, without one `permit.check()` call per tenant. For the concepts and examples in other languages, see [Check a permission in all tenants](/how-to/enforce-permissions/all-tenants-check).
 
+## Prerequisites
 
-### 1. Perform All Tenants Check
+- A `permit` client created with an API key for the environment. See [Create a Permit client](/sdk/nodejs/quickstart-nodejs#3-create-a-permit-client).
+- A container PDP. The Cloud PDP doesn't support the all-tenants check. See [Run the PDP](/overview/run-pdp) and [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+- Users with role assignments in one or more tenants.
 
-To validate permissions irrespective of the tenant, you can use the permit.AllTenantsCheck function. This function determines if a user has permissions for a specified action
-on a resource across all tenants, the response will be a list of tenants in which the user is allowed to perform the request.
-:::note
-You can also find information about the All tenants check in the [PDP API Reference](/api/pdp-api-reference).
+## `checkAllTenants` signature \{#method-signature}
+
+| Method | Signature |
+|---|---|
+| `permit.checkAllTenants` | `checkAllTenants(user: IUser \| string, action: string, resource: IResource \| string, context?: Context, sdk?: string): Promise<TenantDetails[]>` |
+
+## `checkAllTenants` parameters \{#parameters}
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `user` | `IUser` or `string` | Yes | User key, or a user object with `key` and optional `attributes`. |
+| `action` | `string` | Yes | Action to check, for example `read`. |
+| `resource` | `IResource` or `string` | Yes | Resource type key, or a resource object with `type` and optional `attributes`. The PDP evaluates the check in every tenant, so it ignores a tenant in the resource. |
+| `context` | `Context` | No | Extra context for the policy evaluation. Defaults to `{}`. |
+| `sdk` | `string` | No | SDK identifier sent to the PDP. Defaults to `node`. |
+
+## Example: call `permit.checkAllTenants()`
+
+This example asks the PDP in which tenants the user `employee1` can `read` a `document`, and prints the tenant keys:
+
+```js
+const { Permit } = require('permitio');
+
+const permit = new Permit({
+  token: process.env.PERMIT_API_KEY,
+  pdp: 'http://localhost:7766',
+});
+
+const main = async () => {
+  const tenants = await permit.checkAllTenants({ key: 'employee1' }, 'read', 'document');
+  console.log(tenants.map((tenant) => tenant.key));
+};
+
+main();
+```
+
+`permit.checkAllTenants()` resolves to one `TenantDetails` object per tenant in which the policy allows the action. With one allowing tenant named `default`, the script prints `[ 'default' ]`, and with no allowing tenant it prints `[]`.
+
+:::warning permit.checkAllTenants() throws in permitio 2.7.6
+In `permitio` 2.7.6, `Enforcer.checkAllTenants()` passes the `Authorization` header and the `user`, `action`, and `resource` fields as the request body, instead of passing the header in the request configuration and the fields at the top level of the body. The PDP receives a request with no `Authorization` header and answers `401 Unauthorized`, so the method logs `Error fetching all tenants:` and rethrows the error. The method also reads an `allowedTenants` field from the response, while the PDP returns `allowed_tenants`.
+
+Until a release fixes the method, call the PDP `/allowed/all-tenants` endpoint directly, as shown in [Example: call the PDP all-tenants endpoint](#example-call-the-pdp-all-tenants-endpoint), or run the check per tenant with `permit.check()`.
 :::
 
+## Example: call the PDP all-tenants endpoint
 
-To perform this check, send a GET request to the `/allowed/all-tenants` endpoint with the following parameters:
-
-- **user**: The identifier of the user for whom you want to check permissions.
-- **action**: The action to check permission for (e.g., read, write, delete).
-- **resource**: The resource type on which the action is being performed.
-- **context**: Additional context information for the permission check (optional).
-- **sdk**: The identifier for the SDK making the request.
+The SDK method sends a `POST` request to the `/allowed/all-tenants` endpoint of the PDP. The PDP listens on port 7766 by default. You can call the endpoint directly with the same fields: `user`, `action`, `resource`, and `context`. Replace `<YOUR_API_KEY>` with the environment API key you ran the PDP with. See the [PDP API reference](/api/pdp-api-reference) for the endpoint schema.
 
 ```bash
 curl 'http://localhost:7766/allowed/all-tenants' \
-  -X GET \
-  -H 'Authorization: Bearer API_SECRET_KEY' \
-  -D '{ "user": "employee1", "action": "read", "resource": "document", "context": {}, "sdk": "node" }'
-Upon successful completion, the API returns a response indicating whether the user is allowed to perform the specified action across all tenants.
+  -X POST \
+  -H 'Authorization: Bearer <YOUR_API_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{ "user": { "key": "employee1" }, "action": "read", "resource": { "type": "document" }, "context": {} }'
 ```
 
-### 2. Example Response
-If the user is permitted, the response will indicate success along with a message confirming the permission:
+## `checkAllTenants` return value \{#return-value}
 
-```bash
+`permit.checkAllTenants()` resolves to an array of `TenantDetails` objects, one for each tenant in which the PDP allows the action. Each object has the tenant `key` and the tenant `attributes`. An empty array means the user can't perform the action in any tenant.
+
+The PDP endpoint returns an object with an `allowed_tenants` array. Each item holds the decision fields of a regular check and a `tenant` object with `key` and `attributes`.
+
+```json
 {
-  "allowed": true,
-  "message": "User 'employee1' is permitted to read the document across all tenants."
+  "allowed_tenants": [
+    {
+      "allow": true,
+      "tenant": {
+        "key": "default",
+        "attributes": {}
+      }
+    }
+  ]
 }
 ```
 
-If the user is not permitted, the response will indicate denial of permission.
+If the PDP request fails, `permit.checkAllTenants()` logs the error and rethrows it, so wrap the call in `try`/`catch` and decide there whether a failed lookup denies access.
 
+To confirm the endpoint works, run the `curl` command in [Example: call the PDP all-tenants endpoint](#example-call-the-pdp-all-tenants-endpoint) against a running container PDP. The response lists one entry per tenant in which the policy allows the action.
 
+## Related pages
+
+- [Check a permission in all tenants](/how-to/enforce-permissions/all-tenants-check)
+- [Check permissions with the Node.js SDK](/sdk/nodejs/quickstart-nodejs)
+- [PDP API reference](/api/pdp-api-reference)

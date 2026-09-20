@@ -1,26 +1,70 @@
 ---
-title: No permission found for user to this action on this resource
-description: "Fix the no permission found error by assigning the missing permission to the user's role via the dashboard, API, or SDK."
+title: No role grants the permission (no_permission)
+description: "Fix a no_permission decision, where the user has roles in the tenant but none of those roles grants the checked action on the resource type."
 ---
 
-You encountered this error because either your user account lacks the appropriate role to carry out the desired action, or the existing
-role needs additional permissions.
+A denied decision with the code `no_permission` means the user has at least one role in the tenant, but none of those roles grants the checked action on the resource type. This page is for developers who find this code in a decision log and need to fix the policy or the check.
 
-## A solution to the issue
+## What the no_permission reason means
 
-### Assigning Permissions via the Permit Web Application
+The policy decision point (PDP) writes this code in the role-based access control (RBAC) part of the decision log's debug details (`debug.rbac`). The debug details appear when [Debug Mode](/how-to/use-audit-logs/debug-mode) is on.
 
-Utilize the [Policy Editor](https://app.permit.io/policy-editor) in the Permit web application to allocate this permission to a user role.
-Simply select the appropriate action for the desired resource and click 'save' to propagate the changes to the PDP.
+| Field | Value |
+|---|---|
+| `code` | `no_permission` |
+| `reason` | `user '<user-key>' does not have any role that grants him the '<action>' permission on resources of type '<resource-type>'` |
+| `support_link` | A link to `/errors/no_permission` on docs.permit.io |
 
-### Assign Permissions to User Roles via the API
+The PDP runs its RBAC checks in a fixed order and reports the first one that fails. When you see `no_permission`, the earlier checks passed:
 
-To delegate this permission to a user role using the API, refer to the [redoc documentation](https://api.permit.io/v2/redoc#tag/Role-Assignments/operation/assign_role).
+1. The resource type exists.
+2. The action is defined on the resource type.
+3. The tenant exists.
+4. The user is synced to Permit.
+5. The user has at least one role in the tenant.
 
-### Assign Permissions to User Roles via the SDK
+Only the last step failed: no role that the user holds in this tenant has the action checked in the policy.
 
-Assign this permission to user roles using our SDKs. Links for reference:
+## Causes of no_permission
 
-- [Python SDK](/sdk/python/usage-example#role-assignments)
-- [Node SDK](/sdk/nodejs/role/assign-role)
-- [Browse other SDK's](/sdk/sdks-overview)
+| Cause | How to confirm | Fix |
+|---|---|---|
+| The role exists, but the policy doesn't grant it the action on this resource type. | In the **Policy Editor**, the checkbox for this role, resource, and action is clear. | [Grant the action to the role](#assigning-permissions-via-the-permit-web-application). |
+| The user holds the right role in a different tenant, not the tenant in the check. | In the **Directory** screen, the user's role assignment lists another tenant. | [Assign the role in the checked tenant](/how-to/use-audit-logs/errors/no_role_in_tenant). |
+| The check uses a different action key than the one the policy grants, for example `edit` instead of `update`. | The action in the `reason` differs from the action you granted in the Policy Editor. | Send the action key the policy grants in `permit.check()`. |
+| You expected an attribute-based access control (ABAC) rule to grant the action, and that rule also denied the request. | The decision log also has `debug.abac` details. | Read the ABAC code, for example [no_matching_rules](/how-to/use-audit-logs/errors/no_matching_rules). |
+
+## Fix no_permission \{#a-solution-to-the-issue}
+
+### Grant the action to the role in the Policy Editor \{#assigning-permissions-via-the-permit-web-application}
+
+1. Open the [Policy Editor](https://app.permit.io/policy-editor) in the Permit dashboard.
+2. Find the column for the role and the row for the resource type and action from the `reason`.
+3. Select the checkbox, then click **Save**.
+
+For a full walkthrough of granting permissions to roles, see [Building an RBAC policy](/how-to/build-policies/rbac/building-rbac-policy#assigning-permissions-to-actions).
+
+### Grant the action to the role with the API \{#assign-permissions-to-user-roles-via-the-api}
+
+Call the [Assign permissions to role](https://api.permit.io/v2/redoc#tag/Roles/operation/assign_permissions_to_role) endpoint with the permission in the `<resource-type>:<action>` form. For a resource role, use [Assign permissions to resource role](https://api.permit.io/v2/redoc#tag/Resource-Roles/operation/assign_permissions_to_resource_role).
+
+### Grant the action to the role with an SDK \{#assign-permissions-to-user-roles-via-the-sdk}
+
+Update the role's permissions with an SDK:
+
+- [Update a role with the Node.js SDK](/sdk/nodejs/role/update-role)
+- [Create a role with permissions in the Python SDK](/sdk/python/usage-example#roles)
+- [All SDKs](/sdk/sdks-overview)
+
+## Confirm the fix
+
+1. Run the same `permit.check()` call again with the same user, action, resource, and tenant. To run the check from a terminal, use [`permit pdp check`](/how-to/permit-cli/permit-cli-pdp#permit-pdp-check).
+2. Open the [Audit Log](https://app.permit.io/audit-log) and select the new decision.
+
+The decision is **Allow**, and `debug.rbac.reason` names the role that grants the permission.
+
+## Related pages
+
+- [Audit log types and decision logs](/how-to/use-audit-logs/types-and-filtering#decision-logs)
+- [Check permissions with permit.check()](/how-to/enforce-permissions/check)
+- [No roles for the user in this tenant (no_role_in_tenant)](/how-to/use-audit-logs/errors/no_role_in_tenant)

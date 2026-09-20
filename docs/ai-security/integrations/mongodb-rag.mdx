@@ -1,498 +1,348 @@
 ---
-title: MongoDB RAG Integration
+title: Build a secure RAG API with MongoDB Atlas and Permit.io
 sidebar_label: MongoDB RAG
-description: Step-by-step guide to building a secure Retrieval-Augmented Generation (RAG) system with MongoDB, Permit.io, and LangChain, enforcing access control at every layer.
+description: "Run a retrieval-augmented generation API with MongoDB Atlas Vector Search, LangChain, and Permit.io that retrieves only the documents a user's department can read."
 ---
 
-import TimelineWrapper from "../../../src/components/timeline/TimelineWrapper";
-import TimelineStep from "../../../src/components/timeline/TimelineStep";
+Run an example retrieval-augmented generation (RAG) API that answers questions only from documents the requesting user is allowed to read. This tutorial is for AI agent builders who use MongoDB Atlas as a vector store. The example applies the RAG data protection perimeter of the [Four-Perimeter Framework](/ai-security/framework) with a relationship-based access control (ReBAC) policy in Permit.io, and the source is in [permitio/permit-mongodb-secure-rag](https://github.com/permitio/permit-mongodb-secure-rag).
 
-# MongoDB RAG Integration
+## How the secure RAG API works \{#how-permissions-work}
 
-**MongoDB RAG Integration** lets you build a secure Retrieval-Augmented Generation (RAG) system using MongoDB, Permit.io, and LangChain. This guide walks you through setting up a policy-enforced AI agent that retrieves and generates responses based on user identity and permissions—ensuring agents only access data they're authorized to see.
+1. Each Markdown file in the `docs/` folder has frontmatter with `department`, `author`, and `confidential`.
+2. A file watcher syncs each file to MongoDB Atlas and stores an OpenAI embedding in the `vector_embedding` field.
+3. A sync job creates each document as a `document` resource instance in Permit, with the file's department as its `parent`.
+4. A user is a `member` of a department. Permit derives the `reader` role on every document whose parent is that department, and `reader` grants `read`.
+5. When a query arrives, the LangChain app asks the policy decision point (PDP) which `document` IDs the user can `read`, and filters the Atlas vector search to those IDs.
+6. OpenAI generates the answer from the allowed documents only.
 
-:::info
-This guide uses Permit.io's [Four Perimeter Model for AI Access Control](/ai-security/framework) to ensure:
-- Only eligible users can interact with your AI agent
-- Sensitive data is protected based on user roles
-- External actions are never triggered without authorization
-- Outputs are policy-compliant before reaching the user
-:::
+The policy decides access by department. The `confidential` attribute is synced to Permit, but no rule in the example uses it.
 
-By the end, you'll have a fully operational, policy-governed RAG pipeline with attribute-based authorization.
+![Architecture diagram: the file watcher syncs docs to MongoDB Atlas, the LangChain app gets permitted document IDs from the Permit PDP, runs a filtered vector search in Atlas, and sends the results to OpenAI](/img/ai-security/integrations/mongodb/1.png)
 
-## Prerequisites & Tools
+### Project structure
 
-| Tool / Service | Purpose |
+| Folder or file | Purpose |
 | --- | --- |
-| [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) | Vector database for document storage & search |
-| [Permit.io](https://www.permit.io/) | Authorization-as-a-service with policy-based access control |
-| [OpenAI](https://platform.openai.com/account/api-keys) | LLM API for embeddings & generation |
-| Docker & Docker Compose | To run all services locally |
-| Python 3.11+ | For running setup scripts |
+| `docs/` | Markdown documents grouped by department |
+| `watcher/` | Syncs docs to MongoDB and generates embeddings |
+| `scripts/` | Creates the ReBAC model, departments, users, and document instances in Permit |
+| `app/` | The LangChain API, served with FastAPI |
+| `Dockerfile*` | Docker images for the services |
 
-:::tip Project Code
-The full source code is available here: [permitio/permit-mongodb-secure-rag](https://github.com/permitio/permit-mongodb-secure-rag)
+## Prerequisites \{#prerequisites--tools}
+
+| Tool or service | Purpose |
+| --- | --- |
+| [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) cluster (the free M0 tier works) | Stores documents and embeddings, runs vector search |
+| [Permit.io account](https://app.permit.io/) and an environment API key ([Get your API key](/overview/get-api-key)) | Stores the ReBAC policy |
+| [OpenAI API key](https://platform.openai.com/account/api-keys) | Embeddings and answer generation |
+| Docker and Docker Compose | Run the PDP and the example services |
+| Python 3.11 or later | Run the setup scripts outside Docker (optional) |
+
+Use a Permit environment that doesn't already have `document` or `department` resources. The sync job creates them, and it fails if they exist.
+
+## 1. Set up MongoDB Atlas \{#mongodb-atlas-setup}
+
+1. In MongoDB Atlas, create a project and a cluster.
+2. Open **Browse Collections**. Create a database named `secure_rag` with a collection named `documents`.
+3. Open **Search Indexes** (or **Atlas Search**), click **Create Search Index**, and select **Vector Search**.
+4. Select the `secure_rag.documents` collection and the JSON editor. Name the index `vector_index`. The LangChain app queries an index with that name. Paste this definition:
+
+   ```json
+   {
+     "fields": [
+       {
+         "type": "vector",
+         "path": "vector_embedding",
+         "numDimensions": 1536,
+         "similarity": "cosine"
+       },
+       {
+         "type": "filter",
+         "path": "metadata.department"
+       },
+       {
+         "type": "filter",
+         "path": "document_id"
+       }
+     ]
+   }
+   ```
+
+   | Field | Purpose |
+   | --- | --- |
+   | `vector_embedding` | Stores the document embedding. `1536` is the dimension count of the OpenAI embedding model the watcher calls. Set it to the dimension count of your model if you change the model. `cosine` is the similarity metric. |
+   | `metadata.department` | Lets vector search pre-filter by department |
+   | `document_id` | Lets vector search filter to the document IDs Permit allows |
+
+5. Click **Save**. Wait until the index status is **READY**.
+6. Open the **Indexes** tab of `secure_rag.documents` and click **Create Index** (not **Create Search Index**). Create a unique index on `document_id`, which the watcher uses to find and update each document. Use these settings:
+
+   | Setting | Value |
+   | --- | --- |
+   | Field | `document_id` |
+   | Type | `1 (asc)` |
+   | Create unique index | Checked |
+   | Index name | `document_id_index` |
+   | Create TTL | Unchecked |
+
+7. Click **Connect** on the cluster, choose **Connect your application**, and copy the connection string. Replace the username and password placeholders with your Atlas database user's credentials. The string has this form:
+
+   ```text
+   mongodb+srv://<username>:<password>@cluster0.mongodb.net/secure_rag?retryWrites=true&w=majority
+   ```
+
+## 2. Clone the project \{#quickstart}
+
+Clone the repository:
+
+```bash
+git clone https://github.com/permitio/permit-mongodb-secure-rag.git
+cd permit-mongodb-secure-rag
+```
+
+### Environment variables in the .env file \{#environment-variables}
+
+Create a `.env` file in the project root. Docker Compose passes these values to every service:
+
+```env
+MONGODB_URI=<your-mongodb-uri>
+OPENAI_API_KEY=<your-openai-api-key>
+PERMIT_API_KEY=<your-permit-api-key>
+PERMIT_PDP_URL=http://permit-pdp:7000
+```
+
+| Variable | Value |
+| --- | --- |
+| `MONGODB_URI` | The Atlas connection string from [Set up MongoDB Atlas](#mongodb-atlas-setup) |
+| `OPENAI_API_KEY` | Your OpenAI API key |
+| `PERMIT_API_KEY` | Your Permit environment API key |
+| `PERMIT_PDP_URL` | `http://permit-pdp:7000`, the PDP address inside the Docker Compose network |
+
+Anyone with your environment API key can change that environment's policy through the Permit API. Keep `.env` out of version control.
+
+## 3. Start the services \{#running-the-project}
+
+Start all services with Docker Compose:
+
+```bash
+docker-compose up --build
+```
+
+Docker Compose starts these services in order:
+
+| Service | What it does |
+| --- | --- |
+| `permit-pdp` | Runs the Permit PDP. Port 7000 in the container is published on `localhost:7766`. |
+| `file-watcher` | Syncs the Markdown files in `docs/` to MongoDB, generates their embeddings, and watches for changes |
+| `permit-sync` | Runs `scripts/setup_all.py` once, after `file-watcher` finishes its first sync. See [What permit-sync creates in Permit](#permitio-policy-setup). |
+| `langchain-app` | Starts the RAG API on `http://localhost:8000` after `permit-sync` completes successfully |
+
+Verify that the API and its dependencies are up:
+
+```bash
+curl -s http://localhost:8000/health
+```
+
+The response reports MongoDB and Permit separately:
+
+```json
+{ "status": "ok", "mongodb": true, "permit": true }
+```
+
+`"status": "degraded"` with `"mongodb": false` points at `MONGODB_URI`. `"permit": false` points at `PERMIT_API_KEY` or the `permit-pdp` container.
+
+:::warning
+If `permit-sync` fails, for example because the resources already exist in your Permit environment, the container exits with an error and `langchain-app` doesn't start. Check the `permit-sync` logs, and use a Permit environment without `document` and `department` resources.
 :::
 
-## Quickstart
+## 4. Query the RAG API \{#test-the-rag-query-api}
 
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Set Up Vector Search in MongoDB Atlas**
-    
-      - Create a new project and cluster (Free M0 tier is fine).
-      - Create a **secure_rag** database and **documents** collection.
-      - Go to **Search Indexes** → **Create Search Index** → **Vector Search**.
-      - Paste the following JSON in the configuration:
-    
-    
-    ```json
-    {
-      "fields": [
-        {"numDimensions": 1536, "path": "vector_embedding", "similarity": "cosine", "type": "vector"},
-        {"path": "metadata.department", "type": "filter"},
-        {"path": "document_id", "type": "filter"}
-      ]
-    }
-    ```
-    
-      - Click Save and wait for the index to build.
-    
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Clone the Project & Add Your .env File**
-    
-      - Clone the repo:
-    
-    
-    ```bash
-    git clone https://github.com/permitio/permit-mongodb-secure-rag.git
-    cd permit-mongodb-secure-rag
-    ```
-    
-      - Create a `.env` file in the root and add your credentials:
-    
-    
-    ```env
-    MONGODB_URI=<your-mongodb-uri>
-    OPENAI_API_KEY=<your-openai-api-key>
-    PERMIT_API_KEY=<your-permit-api-key>
-    PERMIT_PDP_URL=http://permit-pdp:7000
-    ```
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Run Everything**
-    
-      - Start all services with Docker Compose:
-    
-    
-    ```bash
-    docker-compose up --build
-    ```
-  </TimelineStep>
-</TimelineWrapper>
-
-:::info This Will:
-- Start the Permit PDP locally
-- Sync markdown docs to MongoDB
-- Generate embeddings for each document
-- Sync metadata, users, departments & ReBAC policies to Permit.io
-- Start the LangChain FastAPI server
-:::
-
-
-## Test the RAG Query API
-
-Query endpoint:
+Send a query about the finance budget as the marketing user `user_marketing_1`:
 
 ```bash
 curl -X POST http://localhost:8000/query \
  -H "Content-Type: application/json" \
- -d '{"query": "Tell me about 2026 budget", "user_id": "user_marketing_1"}'
+ -d '{"query": "Tell me about the 2024 budget forecast", "user_id": "user_marketing_1"}'
 ```
 
-Try querying as:
-- `carol` → `user_marketing_1` (viewer in marketing)
-- `alice` → `user_engineering_1` (viewer in engineering)
+The response is a JSON object with `answer` and `sources`. The budget document is `docs/finance/budget_2024.md` and `user_marketing_1` is a member of the marketing department, so the PDP never returns that document's ID and the answer names the documents the user can read instead:
 
-## Project Structure
+```json
+{
+  "answer": "No documents match your query due to permission restrictions. You only have access to documents: ['marketing_plan_f5230544', 'product_roadmap_98e953e2'].",
+  "sources": []
+}
+```
 
-| Folder/File | Purpose |
-| --- | --- |
-| `docs/` | Markdown documents grouped by department |
-| `watcher/` | Syncs docs to MongoDB & triggers embedding generation |
-| `scripts/` | Permit ReBAC setup (policies, departments, users) |
-| `app/` | LangChain API logic (FastAPI powered) |
-| `Dockerfile*` | Docker setup for each service |
+Run the same query as `user_finance_1`, a member of the finance department:
 
-## How Permissions Work
+```bash
+curl -X POST http://localhost:8000/query \
+ -H "Content-Type: application/json" \
+ -d '{"query": "Tell me about the 2024 budget forecast", "user_id": "user_finance_1"}'
+```
 
-- Each markdown file contains frontmatter metadata (e.g., department, confidential)
-- This metadata is synced to Permit.io as resource instances
-- When a user makes a query, LangChain asks Permit.io which documents they can access
-- MongoDB vector search filters based on permitted IDs only
-- The final response is generated using OpenAI from **only** allowed docs
+The finance user gets an answer built from the budget document, and `sources` lists it:
 
-## Architecture Diagram
-
-![](/img/ai-security/integrations/mongodb/1.png)
-
-## In-Depth Project Overview
-
-Secure RAG combines Retrieval-Augmented Generation with Role-Based Access Control (ReBAC) to ensure that an AI agent only retrieves and generates responses from data a user is authorized to access. This project integrates:
-
-- **MongoDB Atlas**: Stores documents and their embeddings for RAG, with vector search and database indexing for efficient retrieval.
-- **Permit.io**: Manages access control using a ReBAC model to enforce permissions based on user identity and department.
-- **LangChain**: Provides the framework for building the RAG pipeline, connecting MongoDB for retrieval and OpenAI for generation.
-- **Docker Compose**: Orchestrates the services (MongoDB, Permit PDP, LangChain app, and file-watcher).
-
-## Key Features
-
-- **Secure Retrieval**: Retrieves only documents a user is permitted to access, based on their identity and department.
-- **File Syncing**: A file-watcher service monitors the docs directory for changes and syncs Markdown files to MongoDB.
-- **Policy Tagging**: Syncs document metadata to Permit.io as resource instances with attributes like department and confidential.
-- **Immediate RAG Availability**: Newly added files are synced to MongoDB and immediately available for RAG queries.
-
-## MongoDB Atlas Setup
-
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Create a MongoDB Atlas Cluster**
-
-      - Sign up/login to MongoDB Atlas.
-      - Create a new cluster (e.g., Cluster0) in your preferred region (e.g., AWS Singapore).
-      - Use the free tier (M0 Sandbox) for this demo.
-    
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Create the Database and Collection**
-    
-      - In your cluster, go to the **Collections** tab.
-      - Create a database named `secure_rag`.
-      - Add a collection named `documents`.
-    
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Set Up Vector Search Index**
-    
-      - Go to the **Atlas Search** tab in your cluster.
-      - Click **Create Search Index** and select **Vector Search**.
-      - Use the JSON editor to create an index named `vector_index` with the following configuration:
-    
-    
-    ```json
+```json
+{
+  "answer": "The 2024 budget forecasts total revenue of $11,750K against total expenses of $9,450K, with revenue growing 22% and expenses growing 18%.",
+  "sources": [
     {
-      "fields": [
-        {
-          "type": "vector",
-          "path": "vector_embedding",
-          "numDimensions": 1536,
-          "similarity": "cosine"
-        },
-        {
-          "type": "filter",
-          "path": "metadata.department"
-        },
-        {
-          "type": "filter",
-          "path": "document_id"
-        }
-      ]
+      "document_id": "budget_2024_986f89f7",
+      "filename": "budget_2024.md",
+      "department": "finance",
+      "author": "emma",
+      "confidential": true,
+      "snippet": "# Budget Forecast 2024\n\n## Executive Summary\n\nThe 2024 budget focuses on sustainable growth while maintaining profitability..."
     }
-    ```
-    
-    :::info component info
-    - `vector_embedding`: Field storing document embeddings (1536 dimensions for OpenAI embeddings).
-    - `cosine`: Similarity metric for vector search.
-    - `metadata.department`: Enables pre-filtering by department.
-    :::
-
-  </TimelineStep>
-  <TimelineStep stepNumber={4}>
-    **Set Up Database Index on `document_id`**
-    
-      - Click **Next** and **Create Index**. Wait for the index status to show as "READY".
-      - Go to the **Indexes** tab in the `secure_rag.documents` collection.
-      - Click **Create Index** (not "Create Search Index").
-    
-
-    **Use the following configuration:**
-
-```
-Field: document_id
-Type: 1 (asc)
-Options:
-- Check "Create unique index".
-- Index name: document_id_index.
-- Leave "Create TTL" unchecked.
+  ]
+}
 ```
 
-    
-      - Click **Create Index**.
-    
-    
-    This index improves performance for lookups and updates on `document_id`, which is used as a unique identifier.
-  </TimelineStep>
-  <TimelineStep stepNumber={5}>
-    **Get the MongoDB Connection URL**
-    
-      - In the Atlas UI, click **Connect** on your cluster.
-      - Choose **Connect your application**.
-      - Copy the connection string - e.g:
-      ```
-      mongodb+srv://&lt;username&gt;:&lt;password&gt;@cluster0.mongodb.net/secure_rag?retryWrites=true&w=majority
-      ```
-    
-      - Replace `&lt;username&gt;` and `&lt;password&gt;` with your Atlas credentials.
-    
-  </TimelineStep>
-</TimelineWrapper>
+OpenAI generates `answer`, so its wording differs between runs. `sources` and `document_id` don't: `utils/document_ids.py` derives each `document_id` from the file's path, so the IDs above are the IDs in your environment.
 
-## Permit.io Policy Setup
-To enable authorization in our RAG, we have to configure policy rules in Permit.io. 
-For the sake of this tutorial, we will set up a [Relationship-based Access Control (ReBAC)](/how-to/build-policies/rebac/overview) model that includes implicit permissions granted using role derivations.
+The sync job creates these users:
 
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Sign Up/Login to Permit.io**
-    
-    - Go to [Permit.io](http://app.permit.io/) and sign up or log in.
-    - Create a new project (e.g., SecureRAGDemo).
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Define Resources and Roles**
-    
-    - Go to the **Policy Editor** in the Permit.io UI.
-    - Define the following resources and roles:
-      - Resource: `department` (no actions needed)
-      - Resource: `document` (action: `read`)
-      - Role: `viewer` (permission: `document:read`)
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Create Department Instances**
-    
-    - Go to **Resources** > **department**.
-    - Click **Create Resource Instance**.
-    - Set the key to `engineering`, the tenant to `default`, and add the attribute name: "Engineering Department".
-    - Repeat for:
-      - `department:marketing` (Attributes: name: "Marketing Department")
-      - `department:finance` (Attributes: name: "Finance Department")
-  </TimelineStep>
-  <TimelineStep stepNumber={4}>
-    **Create Users**
-    
-    - Go to the **Users** tab.
-    - Click **Create User**.
-    - Set the key to `alice`, and the email to `alice@example.com`.
-    - Repeat for `bob` (`bob@example.com`).
-  </TimelineStep>
-  <TimelineStep stepNumber={5}>
-    **Assign Roles to Users**
-    
-    - Go to **Role Assignments**.
-    - Click **Assign Role**.
-    - Select user `alice`, role `viewer`, and resource `department:engineering`.
-    - Repeat for `bob` with `department:marketing`.
-  </TimelineStep>
-  <TimelineStep stepNumber={6}>
-    **Define Role Derivations**
-    
-    - Go to the **Policy Editor**.
-    - Add a role derivation to inherit permissions:
-      - If a user has the `viewer` role in `department:X`, they inherit `document:read` for documents where the department is the parent of the document.
-      - Example: User with `viewer` in `department:engineering` can read all documents where `department:engineering` is the parent.
-  </TimelineStep>
-  <TimelineStep stepNumber={7}>
-    **Get Permit API Key and PDP URL**
-    
-    - Go to **Settings** > **API Keys** in Permit.io.
-    - Generate an API key and copy it.
-    - The PDP URL is typically `http://permit-pdp:7000` (as defined in `docker-compose.yml`).
-  </TimelineStep>
-</TimelineWrapper>
+| User key | Name | Department membership |
+| --- | --- | --- |
+| `user_engineering_1` | Alice | `department:engineering` |
+| `user_engineering_2` | Bob | `department:engineering` |
+| `user_marketing_1` | Carol | `department:marketing` |
+| `user_finance_1` | Dave | `department:finance` |
 
+A `user_id` that doesn't exist in Permit gets the answer "You are not authorized to access this resource." and an empty `sources` array.
 
-## Automating Your Permit.io Setup with Scripts
+## What permit-sync creates in Permit \{#permitio-policy-setup}
 
-If you prefer to automate the setup of resources, roles, departments, users, and relationships in Permit.io, you can use the provided scripts instead of configuring everything manually via the UI. After running these scripts, you'll only need to define the role derivation manually in the Permit.io UI.
+`scripts/setup_all.py` runs four scripts. Open the Permit dashboard after `permit-sync` finishes to see the results.
 
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Install Script Dependencies** <br/>
-    The scripts require the `permit` package. Install it using:
+| Script | Creates |
+| --- | --- |
+| `setup_rebac.py` | Resources `document` (action `read`) and `department` (action `view`). The relation `parent` from `department` to `document`. The resource roles `department#member` (grants `view`) and `document#reader` (grants `read`). The role derivation: a `member` of a department is a `reader` of each document that department is `parent` of. |
+| `setup_departments.py` | Resource instances `department:engineering`, `department:marketing`, and `department:finance` in the `default` tenant, each with a `name` attribute |
+| `setup_users.py` | The four users in [Query the RAG API](#test-the-rag-query-api), each assigned `member` on their department |
+| `sync_documents.py` | A `document` resource instance for each Markdown file, with `author`, `confidential`, `department`, and `title` attributes, and a `parent` relationship tuple from the file's department |
 
-      ```bash
-      pip install permit
-      ```
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Set Environment Variables for Scripts** <br/>
-    Ensure `PERMIT_API_KEY` and `PERMIT_PDP_URL` are set in your `.env` file:
+For a walkthrough of the same model in the dashboard, see the [ReBAC overview](/how-to/build-policies/rebac/overview).
 
-      ```env
-      PERMIT_API_KEY=<your-permit-api-key>
-      PERMIT_PDP_URL=http://permit-pdp:7000
-      ```
-    :::info Permit API Key
-    You can get the `PERMIT_API_KEY` from the Permit.io UI under **Settings > API Keys**.
-    :::
+### Build the ReBAC model in the dashboard \{#build-the-rebac-model-in-the-dashboard}
 
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Run the Setup Scripts**
-    
-    - Set Up ReBAC Model: <br/>
-      Run `setup_rebac.py` to define resources (`department`, `document`), roles (`viewer`), and relationships:
+To create the same model by hand in a Permit environment you don't use with `permit-sync`:
 
-        ```bash
-        python setup_rebac.py
-        ```
-    - Create Departments: <br/>
-      Run `setup_departments.py` to create department instances (`department:engineering`, `department:marketing`, `department:finance`):
+1. In the **Policy** screen, create a `department` resource with the `view` action and a `document` resource with the `read` action.
+2. On `document`, add a relation named `parent` with `department` as the subject resource.
+3. Create the resource role `member` on `department` and grant it the `view` action. Create the resource role `reader` on `document` and grant it the `read` action.
+4. On `document#reader`, add a role derivation from `member` on the `department` linked by `parent`.
+5. Create the department instances `department:engineering`, `department:marketing`, and `department:finance` in the `default` tenant, each with a `name` attribute such as `Engineering Department`.
+6. Create the four users from [Query the RAG API](#test-the-rag-query-api) and assign each one the `member` role on their department instance:
 
-        ```bash
-        python setup_departments.py
-        ```
-    - Create Users and Assign Roles: <br/>
-      Run `setup_users.py` to create users (`alice`, `bob`) and assign roles (e.g., `alice` as `viewer` in `department:engineering`):
+   | User key | Email | Role assignment |
+   | --- | --- | --- |
+   | `user_engineering_1` | `alice@example.com` | `member` on `department:engineering` |
+   | `user_engineering_2` | `bob@example.com` | `member` on `department:engineering` |
+   | `user_marketing_1` | `carol@example.com` | `member` on `department:marketing` |
+   | `user_finance_1` | `dave@example.com` | `member` on `department:finance` |
 
-        ```bash
-        python setup_users.py
-        ```
-  </TimelineStep>
-  <TimelineStep stepNumber={4}>
-    **Manually Define Role Derivation in Permit.io UI**
-    
-    - The scripts set up resources, roles, and relationships, but you need to define the role derivation manually.
-    - Go to the **Policy Editor** in the Permit.io UI.
-    - Add a role derivation:
-      - Resource: `document`
-      - Role: `viewer`
-      - Condition: User has role `viewer` in `department` AND `department` is `parent` of `document`.
-    :::info
-    This ensures that a user with the `viewer` role in a department (e.g., `department:engineering`) can read documents where that department is the parent.
-    :::
-  </TimelineStep>
-  <TimelineStep stepNumber={5}>
-    **Verify Setup** <br/>
-    In the Permit.io UI, check:
-      - **Resources > department** for department instances.
-      - **Resources > document** for document instances (after syncing documents).
-      - **Users** for `alice` and `bob` with their role assignments.
-      - **Policy Editor** for role derivation.
-  </TimelineStep>
-</TimelineWrapper>
+7. Create a `document` instance for each file and a `parent` relationship tuple from its department. `scripts/sync_documents.py` shows the exact keys and attribute values.
 
-### Environment Variables
+Verify the model in **Directory > Instances**: each `document` instance lists its department under **Relations**, and the role assignment of `user_engineering_1` reads `member` on `department:engineering`.
 
-**Create a .env File**: <br/>
-In the project root, create a `.env` file with the following variables:
+## Run the setup scripts outside Docker \{#automating-your-permitio-setup-with-scripts}
 
-```
-MONGODB_URI=<your-mongodb-atlas-uri>
-OPENAI_API_KEY=<your-openai-api-key>
-PERMIT_API_KEY=<your-permit-api-key>
-PERMIT_PDP_URL=http://permit-pdp:7000
+Run the scripts yourself when you change the model, or when you run the services without Docker Compose. The scripts are in the `scripts/` folder and read `PERMIT_API_KEY` and `PERMIT_PDP_URL` from the environment.
 
-```
+1. Install the Permit SDK:
 
-## Running the Project
+   ```bash
+   pip install permit
+   ```
 
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Clone the Repository**
-    Clone the repo and navigate to the project directory:
-      ```bash
-      git clone https://github.com/permitio/permit-mongodb-secure-rag.git
-      cd permit-mongodb-secure-rag
-      ```
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Install Dependencies**
-    
-    - For Dockerized services, dependencies are installed automatically when you build the containers.
-    - For manual scripts, install dependencies with:
+2. Set the environment variables. Outside the Docker Compose network the PDP answers on the published port, `7766`, not on `permit-pdp:7000`. Get the `PERMIT_API_KEY` from **Settings > API Keys** in the Permit dashboard.
 
-      ```bash
-      pip install -r requirements.embeddings.txt
-      pip install -r requirements.txt
-      ```
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Spin Up Services with Docker Compose** <br/>
-    Start all services:
+   ```env
+   PERMIT_API_KEY=<your-permit-api-key>
+   PERMIT_PDP_URL=http://localhost:7766
+   ```
 
-      ```bash
-      docker-compose up --build
-      ```
-    
-    :::info
-    This will start:
-    - `permit-pdp`: Permit.io Policy Decision Point
-    - `file-watcher`: Monitors the `docs` directory and syncs files to MongoDB
-    - `langchain-app`: The Secure RAG API, accessible at `http://localhost:8000`
-    :::
-  </TimelineStep>
-  <TimelineStep stepNumber={4}>
-    **Sync Documents to Permit.io**
-    
-    - The file-watcher will sync docs to MongoDB automatically.
-    - To sync docs to Permit.io, run:
+3. Create the ReBAC model, including the role derivation:
 
-      ```bash
-      python sync_documents.py
-      ```
-    - Update the `file_path` in `sync_documents.py` to the document you want to sync (e.g., `./docs/engineering/api_design.md`).
-  </TimelineStep>
-  <TimelineStep stepNumber={5}>
-    **Generate Embeddings for Documents** <br/>
-    Run the following to generate embeddings for all documents and store them in MongoDB:
+   ```bash
+   python scripts/setup_rebac.py
+   ```
 
-      ```bash
-      python generate_embeddings.py --all
-      ```
-  </TimelineStep>
-  <TimelineStep stepNumber={6}>
-    **Test the Secure RAG API** <br/>
-    Query the API with a user ID to test Secure RAG:
+4. Create the department instances:
 
-      ```bash
-      curl -X POST http://localhost:8000/query \
-        -H "Content-Type: application/json" \
-        -d '{"query": "What is API design?", "user_id": "alice"}'
-      ```
-    `alice` (engineering) can access engineering docs; `bob` (marketing) cannot.
-  </TimelineStep>
-</TimelineWrapper>
+   ```bash
+   python scripts/setup_departments.py
+   ```
 
-## Final Thoughts & Resources
+5. Create the users and their department memberships:
 
-:::tip How Permissions Enable Secure RAG
+   ```bash
+   python scripts/setup_users.py
+   ```
 
-**User Identity**: 
-- The API receives a `user_id` (e.g., alice) in the query request.
+   The script creates `user_engineering_1`, `user_engineering_2`, `user_marketing_1`, and `user_finance_1`.
 
-**Permission Checks**:
-- The LangChain app queries Permit.io to determine which documents alice can read.
-- Permit.io evaluates the ReBAC policy and returns a list of accessible document IDs.
+6. Check the dashboard: `department` and `document` instances under **Directory**, the users and their role assignments, and the role derivation on `document` in the **Policy** screen.
 
-**Filtered Retrieval**:
-- LangChain queries MongoDB Atlas, filtering by the permitted document IDs and the user's query (e.g., "What is API design?").
-- MongoDB performs a vector search on the `vector_embedding` field to retrieve relevant documents.
+### Run the pipeline step by step
 
-**Answer Generation**:
-- The retrieved documents are passed to OpenAI to generate a context-aware answer.
-- Only content from permitted documents is used in the response.
+The `file-watcher` and `permit-sync` containers run the document sync and the embedding generation for you. Run them yourself to see each stage, or after you add documents to `docs/` while the services are down. Start from a checkout and running services, as in [Clone the project](#quickstart) and [Start the services](#running-the-project).
 
-This ensures that sensitive data is only accessible to authorized users, making the RAG system secure.
+1. Install the script dependencies. Docker builds install the service dependencies for you.
 
-::: 
+   ```bash
+   pip install -r requirements.txt
+   pip install -r requirements.watcher.txt
+   ```
 
-For more information and to deepen your understanding, check out these resources:
+2. Sync documents to Permit. `sync_documents.py` syncs every Markdown file under `./docs` when you run it directly:
 
-- [MongoDB Secure RAG Example (GitHub Repo)](https://github.com/permitio/permit-mongodb-secure-rag)
-- [LangChain Documentation](https://python.langchain.com/docs/)
-- [MongoDB Atlas Vector Search Docs](https://www.mongodb.com/docs/atlas/atlas-search/vector-search/)
-- [Relationship-based Access Control (ReBAC) Overview](/how-to/build-policies/rebac/overview)
-- Got Questions? Join the [Permit.io Slack Community](https://io.permit.io/blog-slack)
+   ```bash
+   python scripts/sync_documents.py
+   ```
+
+3. Generate embeddings for all documents in MongoDB. The script stores each embedding in the `vector_embedding` field:
+
+   ```bash
+   python scripts/generate_embeddings.py --all
+   ```
+
+4. Query the API as `user_engineering_1`, a member of engineering:
+
+   ```bash
+   curl -X POST http://localhost:8000/query \
+     -H "Content-Type: application/json" \
+     -d '{"query": "What is API design?", "user_id": "user_engineering_1"}'
+   ```
+
+   `sources` holds the engineering API design document:
+
+   ```json
+   {
+     "answer": "The API design guidelines require REST-based design with appropriate HTTP methods, versioning in the URL path, and JWT or OAuth 2.0 authentication.",
+     "sources": [
+       {
+         "document_id": "api_design_546b025f",
+         "filename": "api_design.md",
+         "department": "engineering",
+         "author": "dave",
+         "confidential": false,
+         "snippet": "# API Design Guidelines\n\n## Core Principles\n\n1. **REST-based Design**..."
+       }
+     ]
+   }
+   ```
+
+   Run the same query as `user_marketing_1` to confirm the filter: a member of marketing gets no content from `docs/engineering/api_design.md` and an empty `sources` array.
+
+## Next steps \{#final-thoughts--resources}
+
+- Read how the four perimeters fit together in the [Four-Perimeter Framework](/ai-security/framework).
+- Learn how relations and role derivations work in the [ReBAC overview](/how-to/build-policies/rebac/overview).
+- Filter other data sources by permission with [data filtering](/how-to/enforce-permissions/data-filtering).
+- Read the [MongoDB Atlas Vector Search documentation](https://www.mongodb.com/docs/atlas/atlas-search/vector-search/).
+- Ask questions in the [Permit Slack community](https://io.permit.io/slack).

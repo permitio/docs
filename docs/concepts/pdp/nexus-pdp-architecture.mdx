@@ -1,56 +1,54 @@
 ---
-title: Nexus PDP — Architecture
+title: Nexus PDP architecture
 sidebar_label: Architecture
-description: What runs inside the Nexus PDP container, which component is responsible for what, and the path a single authorization request takes.
+description: "Learn which processes run inside the Permit Nexus PDP container, which ports they use, and the path an authorization request takes."
 sidebar_position: 2
 ---
 
-# Nexus PDP Architecture
+This page describes the processes inside the Permit Nexus PDP container, a self-hosted policy decision point (PDP), and the path one authorization request takes through them. Operators use it to plan network exposure and health probes, and to troubleshoot a Nexus PDP deployment. For what Nexus PDP is and when to choose it, see [Permit Nexus PDP](/concepts/pdp/nexus-pdp).
 
-What runs inside the [Nexus PDP](./nexus-pdp.mdx) container, which component is responsible for what, and the path a single authorization request takes.
+Nexus PDP runs every component in one container. The container exposes two listeners: the authorization API and the health endpoint.
 
-Everything runs inside one container. The only externally exposed listeners are the authorization API and the health endpoint.
-
-![Architecture of the Nexus PDP: your app and orchestrator on the left, the single Nexus PDP container holding the authorization API, OPA, the health server, the query and bundle loopbacks, the embedded database, the change-ingest worker and the NATS leaf, with Permit.io and your policy store on the right](/images/pdp/nexus-pdp-architecture.svg)
+![Nexus PDP architecture diagram. Your application and orchestrator are on the left. The single Nexus PDP container holds the authorization API, OPA, the health server, the query and bundle loopback servers, the embedded database, the change-ingest worker, and the NATS leaf node. Permit.io and your policy store are on the right.](/images/pdp/nexus-pdp-architecture.svg)
 
 <p style={{textAlign: "center", fontSize: "0.9em", color: "var(--pm-text-muted)", marginTop: "-0.5em"}}>
   Click the diagram to enlarge it.
 </p>
 
-:::note Reading the diagram
-The diagram labels the change stream by its internal name, the **WAL** (write-ahead log). `LOCAL_WAL` is this container's own durable copy of it. Elsewhere in these pages it is called the *change stream*.
+:::note Names in the Nexus PDP architecture diagram
+The diagram labels the change stream with its internal name, WAL (write-ahead log). `LOCAL_WAL` is the container's durable local copy of the change stream. Other Nexus PDP pages call it the change stream.
 :::
 
----
+## Components inside the Nexus PDP container \{#what-runs-where}
 
-## What runs where
+Nexus PDP runs one Rust process that supervises two child processes: Open Policy Agent (OPA) and a NATS messaging server running as a leaf node.
 
 | Component | Kind | Role |
 | --- | --- | --- |
-| **Authorization API** | In-process | The public REST surface on port `7000`. Opens **only once the PDP is ready**. |
-| **OPA policy engine** | Supervised child process | Evaluates Rego. Bound to loopback only — never reachable from outside the container. |
-| **Embedded database** | In-process (SurrealDB over RocksDB) | Your environment's fact graph — users, tenants, resource instances, relationships — **on disk**. |
-| **NATS leaf node** | Supervised child process | Durable, on-disk event store. Holds the link to Permit's control plane. |
-| **Change ingest and repair** | In-process task | Applies incoming changes to the embedded database; detects and repairs gaps. |
-| **Query / bundle loopbacks** | In-process | Serve OPA its graph data and its policy bundle over `127.0.0.1`. |
-| **Health and readiness** | In-process | Port `7001`. Answers throughout startup, including a long cold start. |
+| **Authorization API** | In-process server | Serves the public REST API on port `7000`. Opens only after Nexus PDP is ready. |
+| **OPA policy engine** | Supervised child process | Evaluates the Rego policy. Listens on loopback only, so nothing outside the container can reach OPA. |
+| **Embedded database** | In-process (SurrealDB on RocksDB) | Stores your environment's authorization data on disk: users, tenants, resource instances, and relationships. |
+| **NATS leaf node** | Supervised child process | Keeps the durable on-disk event store and holds the connection to Permit's control plane. |
+| **Change ingest and repair** | In-process tasks | Apply incoming changes to the embedded database, detect gaps in the change stream, and rebuild the database when a gap cannot be closed. |
+| **Query and bundle loopback servers** | In-process servers | Serve OPA its relationship data and its policy bundle over `127.0.0.1`. |
+| **Health and readiness server** | In-process server | Serves health endpoints on port `7001`. Answers from process start, including during a long cold start. |
 
-### Ports
+### Ports used by Nexus PDP \{#ports}
 
 | Port | Bound to | Purpose |
 | --- | --- | --- |
-| `7000` | All interfaces | Authorization API — the only port your services need |
-| `7001` | All interfaces | Health and readiness — the port your orchestrator probes |
-| `7002` | Loopback | Query loopback: serves OPA its graph data |
-| `7003` | Loopback | Bundle loopback: serves OPA its Rego bundle |
+| `7000` | All interfaces | Authorization API. The only port your services call. |
+| `7001` | All interfaces | Health and readiness endpoints. The port your orchestrator probes. |
+| `7002` | Loopback | Query loopback server: serves OPA its relationship data |
+| `7003` | Loopback | Bundle loopback server: serves OPA its Rego bundle |
 | `8181` | Loopback | OPA |
-| `4222` / `8222` | Loopback | NATS leaf client and monitoring |
+| `4222` and `8222` | Loopback | NATS leaf node client port and monitoring port |
 
-Only `7000` and `7001` are exposed by the container image. Everything else is reachable solely from inside it.
+The container image exposes only ports `7000` and `7001`. The other ports accept connections only from inside the container. To change ports `7000` and `7001`, see [Nexus PDP storage and port settings](/concepts/pdp/nexus-pdp-configuration#storage-and-ports).
 
----
+## Decision path for a Nexus PDP authorization request \{#the-decision-path}
 
-## The decision path
+An authorization request passes through these hops inside the Nexus PDP container:
 
 ```
 client → :7000 authorization API
@@ -59,27 +57,23 @@ client → :7000 authorization API
        → embedded database (local disk)
 ```
 
-Every hop is loopback or local disk. **No step in answering an authorization query contacts Permit's API**, by construction — the Nexus PDP has no control plane other than its event stream, and cannot reach `api.permit.io` for a decision even if it wanted to.
+Each hop uses the loopback interface or local disk. Nexus PDP does not contact the Permit API to answer or authenticate a request, because the Nexus PDP binary does not include a Permit API client. The NATS connection to the control plane carries data updates only.
 
-This is also what separates policy evaluation from graph traversal. OPA evaluates the Rego policy, but whenever that policy needs to know whether a user reaches a resource through a chain of roles and relationships, it calls out to the query loopback, which answers from the embedded database. Relationship queries run against a database built for them rather than against a JSON document held in memory.
+OPA evaluates the Rego policy. When the policy needs to know whether a user reaches a resource through a chain of roles and relationships, OPA calls the query loopback server, which answers from the embedded database. Relationship queries run against a database built for them, not against a JSON document in memory.
 
----
+## Request path and sync path in Nexus PDP \{#separation-of-duties}
 
-## Separation of duties
+Nexus PDP separates serving decisions from keeping data current, so data sync never blocks a decision:
 
-The container is deliberately split so that the thing serving decisions is never blocked by the thing keeping data fresh:
+- **The request path** (authorization API, OPA, query loopback server, embedded database) reads from the embedded database.
+- **The sync path** (NATS leaf node, change ingest, gap detector, rebuild orchestrator) writes to the embedded database on its own tasks.
 
-- **The request path** — authorization API, OPA, query loopback, embedded database — only ever reads.
-- **The sync path** — NATS leaf, change ingest, gap detector, rebuild orchestrator — only ever writes, on its own tasks.
+The two paths meet only at the embedded database. As a result, a control-plane outage stops data updates but not decisions, and Nexus PDP keeps answering while a database rebuild runs. For the sync path in detail, see [How Nexus PDP syncs data](/concepts/pdp/nexus-pdp-how-it-works#how-policy-and-data-stay-in-sync).
 
-They meet at the embedded database, which is why a control-plane outage costs freshness but never availability, and why a rebuild can run underneath a PDP that is still answering. See [How It Works](./nexus-pdp-how-it-works.mdx) for what happens along the sync path.
+## Next steps \{#related-documentation}
 
----
-
-## Related documentation
-
-- [Nexus PDP](./nexus-pdp.mdx) — overview
-- [How It Works](./nexus-pdp-how-it-works.mdx) — sync, consistency, cold start, and resource profile
-- [Feature Parity](./nexus-pdp-feature-parity.mdx) — capability comparison against the container PDP
-- [Deployment](./nexus-pdp-deployment.mdx) — requirements, observability, and the security model
-- [Configuration](./nexus-pdp-configuration.mdx) — environment variable reference (beta)
+- [Permit Nexus PDP](/concepts/pdp/nexus-pdp): what Nexus PDP is and when to choose it
+- [How Nexus PDP syncs data](/concepts/pdp/nexus-pdp-how-it-works): sync, consistency, cold start, and sizing
+- [Nexus PDP feature parity](/concepts/pdp/nexus-pdp-feature-parity): supported endpoints and capabilities
+- [Deploy Nexus PDP](/concepts/pdp/nexus-pdp-deployment): storage, probes, logs, and the security model
+- [Nexus PDP configuration reference](/concepts/pdp/nexus-pdp-configuration): environment variables

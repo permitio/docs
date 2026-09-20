@@ -1,24 +1,60 @@
 ---
-title: User not synced error
-description: "Fix the user not synced error by syncing the user to Permit via the dashboard, API, or SDK before checking permissions."
+title: User not synced (user_not_synced)
+description: "Fix a user_not_synced decision, where the user key in the permission check doesn't match any user synced to Permit."
 ---
 
-This error arises when attempting to check permissions for a user that hasn't been synchronized with your application. This commonly
-occurs if a user is created within your authentication provider dashboard but hasn't yet been synced to Permit. Please note that the user
-key is case-sensitive—ensure its accuracy.
+A denied decision with the code `user_not_synced` means the user key in the permission check doesn't match any user in the environment, so the user has no role assignments. This page is for developers who find this code in a decision log and need to sync the user or fix the user key in the check.
 
-## A solution to the issue
+## What the user_not_synced reason means
 
-### Sync the user to permit with Permit web application
+The policy decision point (PDP) writes this code in the role-based access control (RBAC) part of the decision log's debug details (`debug.rbac`). The debug details appear when [Debug Mode](/how-to/use-audit-logs/debug-mode) is on.
 
-Navigate to our [Users Management Screen](https://app.permit.io/user-management) within the Permit web application. Here, you can create and
-verify if the user is synchronized.
+| Field | Value |
+|---|---|
+| `code` | `user_not_synced` |
+| `reason` | `user '<user-key>' is not synced and therefore has no known role assignments` |
+| `support_link` | A link to `/errors/user_not_synced` on docs.permit.io |
 
-### Sync the user to permit with the API
+The PDP runs this check after it confirms that the resource type, the action, and the tenant exist. The PDP compares user keys exactly, so `John@permit.io` and `john@permit.io` are different users. The decision log's `request.user.synced` field is `false` for this user.
 
-Use our [API](https://api.permit.io/v2/redoc#tag/Users/operation/create_user) to both create and synchronize the user with Permit.
+## Causes of user_not_synced
 
-### Sync the user to permit with the SDK
+| Cause | How to confirm | Fix |
+|---|---|---|
+| Your app authenticates the user, but never syncs the user to Permit. | The user key from the `reason` is missing from the **Directory** screen. | [Sync the user](#sync-the-user-to-permit-with-the-sdk). |
+| The check sends a different identifier than the key the user was synced with, for example an email instead of the user ID from your identity provider. | The **Directory** screen has the user under another key. | Send the synced user key in `permit.check()`. |
+| The user key has a different case than the synced key. | The keys differ only in case. | Send the user key with the exact case. |
+| The check runs against a different environment than the one where you synced the user. | The user appears in the **Directory** screen of another environment. | Use the API key of the environment that has the user. See [Get your API key](/overview/get-api-key). |
 
-Leverage the SDK to create and synchronize the user to Permit. Explore [Python SDK](/sdk/python/usage-example#create-or-update-a-user-sync-user),
-[Node SDK](/sdk/nodejs/user/sync-user), and [additional SDKs](/sdk/sdks-overview) for details.
+## Fix user_not_synced \{#a-solution-to-the-issue}
+
+Sync the user during sign-up or sign-in, right after your identity provider authenticates the user. Include the user's role assignments in the sync, or the next check returns [no_user_roles](/how-to/use-audit-logs/errors/no_user_roles). For when and how to sync, see [Sync users](/how-to/sync-users).
+
+### Sync the user with an SDK \{#sync-the-user-to-permit-with-the-sdk}
+
+Call `permit.api.users.sync()` or the equivalent in your SDK:
+
+- [Sync a user with the Node.js SDK](/sdk/nodejs/user/sync-user)
+- [Create or update a user with the Python SDK](/sdk/python/usage-example#create-or-update-a-user-sync-user)
+- [Sync a user with any SDK](/how-to/sync-users#via-the-sdks)
+
+### Sync the user with the API \{#sync-the-user-to-permit-with-the-api}
+
+Call the [Create user](https://api.permit.io/v2/redoc#tag/Users/operation/create_user) endpoint with the user `key`, or [Replace user](https://api.permit.io/v2/redoc#tag/Users/operation/replace_user) to create or update the user. For a complete request, see [Create a user with the API](/how-to/sync-users#via-the-api).
+
+### Add the user in the Permit dashboard \{#sync-the-user-to-permit-with-permit-web-application}
+
+To test a single user, add the user in the [Directory](https://app.permit.io/user-management) screen. See [Add a user in the Permit dashboard](/how-to/sync-users#via-the-user-management-screen).
+
+## Confirm the fix
+
+1. Run the same `permit.check()` call again with the same user, action, resource, and tenant. To run the check from a terminal, use [`permit pdp check`](/how-to/permit-cli/permit-cli-pdp#permit-pdp-check).
+2. Open the [Audit Log](https://app.permit.io/audit-log) and select the new decision.
+
+The `debug.rbac.code` is no longer `user_not_synced`, and `request.user.synced` is `true`.
+
+## Related pages
+
+- [Sync users](/how-to/sync-users)
+- [No roles for the user (no_user_roles)](/how-to/use-audit-logs/errors/no_user_roles)
+- [Check permissions with permit.check()](/how-to/enforce-permissions/check)

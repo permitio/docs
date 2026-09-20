@@ -1,58 +1,60 @@
 ---
-title: "Change Organization Tier (Trial to Enterprise)"
-description: "How to change an organization's tier from Trial to Enterprise by updating the PostgreSQL database"
+title: "Change an Organization's Tier from Trial to Enterprise"
+sidebar_label: "Change Organization Tier (Trial to Enterprise)"
+description: "Check that the on-premises installer set your organizations to Enterprise tier, and change an organization's tier in PostgreSQL when it didn't."
 ---
 
-# Change Organization Tier from Trial to Enterprise
+This page is for operators of a self-hosted Permit Platform whose organization still shows the Trial tier. It explains how the installer sets the tier, how to check that the installer did it, and how to change the tier in the PostgreSQL database by hand.
 
-## Automatic Configuration (Recommended)
+## How the installer sets the tier \{#automatic-configuration-recommended}
 
-**As of the latest version**, the on-premise installer **automatically sets all organizations to Enterprise tier** during the migration process. This happens automatically when you:
-- Install Permit Platform for the first time
-- Upgrade an existing installation
+The migrations job, `permit-migrations`, sets every organization to Enterprise tier each time the installer runs, on first installation and on every upgrade. The job sets both tier fields:
 
-The migration job automatically ensures:
 - `is_enterprise = true`
 - `usage_limits.billing_tier = "enterprise"`
 
-**No manual database updates are required** for new installations or upgrades!
+In most installations, no manual change is needed. To confirm that the job updated your organizations, search its logs while the job still exists in the namespace:
 
-## Manual Configuration (Legacy/Troubleshooting)
+- `Enterprise tier applied to <N> organization(s)` means the update ran.
+- `Enterprise tier update skipped: <error>` means the update failed and the job continued. Fix the error, or change the tier manually as described in [Change the tier manually](#manual-configuration-legacytroubleshooting).
 
-If you need to manually change an organization's tier (for older installations or troubleshooting), this guide explains how to update the PostgreSQL database directly. This will remove the trial countdown message and update the tier badge in the UI.
+Run `kubectl logs -n permit-platform job/permit-migrations | grep -i "enterprise tier"` to find these messages.
 
-## Overview
+## Tier fields in the database \{#overview}
 
-The organization tier is controlled by two database fields:
-1. **`is_enterprise`** - Controls Enterprise feature access and the tier badge display
-2. **`usage_limits.billing_tier`** - Controls the billing/subscription status and trial countdown
+The organization's tier is stored in two columns of the `v2.v2_organization` table. Update both columns to change the tier.
 
-Both fields must be updated to fully change from Trial to Enterprise.
+| Column | Type | Controls |
+|---|---|---|
+| `is_enterprise` | boolean | Enterprise feature access and the tier badge |
+| `usage_limits.billing_tier` | string inside a JSONB object | Billing status and the trial countdown message |
 
-## Prerequisites
+## Prerequisites \{#prerequisites}
 
-- Access to the Kubernetes cluster where Permit Platform is deployed
-- `kubectl` configured with appropriate permissions
-- PostgreSQL pod running in the namespace
+- `kubectl` access to the namespace where Permit Platform runs. The commands use the default namespace, `permit-platform`.
+- A running PostgreSQL pod in that namespace.
+- A recent database backup. See [Create backups](/how-to/deploy/on-prem/management#creating-backups).
 
-## Step-by-Step Instructions
+## Change the tier manually \{#manual-configuration-legacytroubleshooting}
 
-### 1. Connect to the PostgreSQL Pod
+Use this procedure when the migrations job didn't update an organization, for example because the update was skipped or the installation predates the automatic update.
 
-First, identify your PostgreSQL pod name:
+### 1. Find the PostgreSQL pod \{#1-connect-to-the-postgresql-pod}
+
+List the pods and copy the name of the `postgres` pod:
 
 ```bash
 kubectl get pods -n permit-platform | grep postgres
 ```
 
-You should see output like:
+The output looks like this:
 ```
 postgres-c94f7f6fd-tj55t   1/1     Running   0          2d
 ```
 
-### 2. Check Current Organization Status
+### 2. Check the organization's current tier \{#2-check-current-organization-status}
 
-Connect to the database and check the current organization settings:
+Replace `<postgres-pod-name>` with the pod name and `<org-name>` with the organization name:
 
 ```bash
 kubectl exec -n permit-platform <postgres-pod-name> -- \
@@ -67,13 +69,11 @@ Example output:
  8cdcc192-0ba3-472f-8691-87d765af715f | gke-test | f             | {"mau": 5000, "tenants": 50, "billing_tier": "trial"}
 ```
 
-**Key indicators of Trial status:**
-- `is_enterprise: f` (false)
-- `usage_limits` contains `"billing_tier": "trial"`
+The organization is on Trial tier when `is_enterprise` is `f` (false) and `usage_limits` contains `"billing_tier": "trial"`. Copy the `id` value for the next step.
 
-### 3. Update Organization to Enterprise Tier
+### 3. Set the organization to Enterprise tier \{#3-update-organization-to-enterprise-tier}
 
-Run the following command to update both fields simultaneously:
+Update both fields in one statement. Replace `<organization-uuid>` with the `id` from the previous step:
 
 ```bash
 kubectl exec -n permit-platform <postgres-pod-name> -- \
@@ -84,7 +84,7 @@ kubectl exec -n permit-platform <postgres-pod-name> -- \
    WHERE id = '<organization-uuid>';"
 ```
 
-**Example:**
+For example:
 ```bash
 kubectl exec -n permit-platform postgres-c94f7f6fd-tj55t -- \
   psql -U permit -d permit -c \
@@ -94,14 +94,16 @@ kubectl exec -n permit-platform postgres-c94f7f6fd-tj55t -- \
    WHERE id = '8cdcc192-0ba3-472f-8691-87d765af715f';"
 ```
 
-You should see:
+PostgreSQL confirms that one row changed:
 ```
 UPDATE 1
 ```
 
-### 4. Verify the Changes
+`UPDATE 0` means no organization has that `id`. Check the value and run the statement again.
 
-Verify that both fields were updated correctly:
+### 4. Verify the change in the database \{#4-verify-the-changes}
+
+Run the query from step 2 again:
 
 ```bash
 kubectl exec -n permit-platform <postgres-pod-name> -- \
@@ -116,25 +118,15 @@ Expected output:
  8cdcc192-0ba3-472f-8691-87d765af715f | gke-test | t             | {"mau": 5000, "tenants": 50, "billing_tier": "enterprise"}
 ```
 
-**Verify:**
-- `is_enterprise: t` (true) ✓
-- `usage_limits` contains `"billing_tier": "enterprise"` ✓
+The change is saved when `is_enterprise` is `t` (true) and `usage_limits` contains `"billing_tier": "enterprise"`.
 
-### 5. Check the UI
+### 5. Verify the change in the Permit frontend \{#5-check-the-ui}
 
-Refresh your browser or clear the cache to see the changes:
+Hard refresh the Permit frontend in your browser. The tier badge shows Enterprise, and the trial countdown message is gone. If the page still shows the Trial tier, see [Changes not visible in the frontend](#changes-not-visible-in-ui).
 
-**Before:**
-- Badge: "PRO"
-- Message: "14 days left in Pro Trial"
+## Set the PRO tier instead \{#alternative-update-to-pro-tier}
 
-**After:**
-- Badge: "ENTERPRISE"
-- Message: (no trial countdown)
-
-## Alternative: Update to PRO Tier
-
-To update to PRO tier instead of Enterprise:
+To set an organization to PRO tier, set `is_enterprise` to `false` and `billing_tier` to `"pro"`:
 
 ```bash
 kubectl exec -n permit-platform <postgres-pod-name> -- \
@@ -145,17 +137,23 @@ kubectl exec -n permit-platform <postgres-pod-name> -- \
    WHERE id = '<organization-uuid>';"
 ```
 
-Note: Set `is_enterprise = false` for PRO tier, `is_enterprise = true` for Enterprise tier.
+:::warning The installer resets PRO organizations to Enterprise
+The migrations job sets every organization whose tier isn't Enterprise to Enterprise. The next installer run or upgrade changes a PRO organization back to Enterprise.
+:::
 
-## Understanding the Database Fields
+## Database field reference \{#understanding-the-database-fields}
 
-### `is_enterprise` (boolean)
-- **`false`** - Organization has PRO tier features
-- **`true`** - Organization has Enterprise tier features
-- Controls feature flags and tier badge display
+### `is_enterprise` (boolean) \{#is_enterprise-boolean}
 
-### `usage_limits` (JSONB)
-Contains various limits and billing information:
+| Value | Tier |
+|---|---|
+| `true` | Enterprise |
+| `false` | PRO or Trial, depending on `usage_limits.billing_tier` |
+
+### `usage_limits` (JSONB) \{#usage_limits-jsonb}
+
+`usage_limits` holds the organization's limits and its billing tier. The comments in the example explain each field:
+
 ```json
 {
   "mau": 5000,           // Monthly Active Users limit
@@ -164,52 +162,54 @@ Contains various limits and billing information:
 }
 ```
 
-The `billing_tier` field specifically controls:
-- Trial countdown messages
-- Billing status in the UI
-- Upgrade prompts
+`billing_tier` accepts `"trial"`, `"pro"`, or `"enterprise"`. The trial countdown message in the frontend depends on `billing_tier`.
 
-## Important Notes
+## Rules for editing the tier fields \{#important-notes}
 
-1. **Both fields are required** - Changing only `is_enterprise` will not remove the trial countdown
-2. **UI refresh needed** - You may need to clear browser cache or hard refresh to see changes
-3. **Backup recommended** - Consider backing up the database before making changes
-4. **Case sensitive** - The tier values are lowercase: `"trial"`, `"pro"`, `"enterprise"`
+- **Update both fields.** If you change only `is_enterprise`, the trial countdown message stays.
+- **Use lowercase tier values.** Write `"trial"`, `"pro"`, and `"enterprise"` in lowercase.
+- **Back up first.** A wrong `WHERE` clause changes other organizations. See [Create backups](/how-to/deploy/on-prem/management#creating-backups).
+- **Refresh the browser.** The frontend can show the old tier until you hard refresh or sign in again.
 
-## Troubleshooting
+## Troubleshooting \{#troubleshooting}
 
-### Changes not visible in UI
-- Hard refresh the browser (Ctrl+Shift+R or Cmd+Shift+R)
-- Clear browser cache
-- Log out and log back in
+### Changes not visible in the frontend \{#changes-not-visible-in-ui}
 
-### Cannot find organization
-List all organizations to find the correct name or ID:
+- Hard refresh the browser: `Ctrl+Shift+R` on Windows and Linux, `Cmd+Shift+R` on macOS.
+- Clear the browser cache.
+- Sign out and sign in again.
+
+### Organization not found \{#cannot-find-organization}
+
+List all organizations to find the correct name or `id`:
 ```bash
 kubectl exec -n permit-platform <postgres-pod-name> -- \
   psql -U permit -d permit -c \
   "SELECT id, name, key, is_enterprise FROM v2.v2_organization;"
 ```
 
-### Permission denied
-Ensure you have proper kubectl permissions and the PostgreSQL user has write access.
+### Permission denied \{#permission-denied}
 
-## Database Schema Reference
+A `kubectl exec` permission error means your Kubernetes user can't exec into pods in the namespace. Ask your cluster administrator for `pods/exec` access. A PostgreSQL permission error means the database user in the command lacks write access to `v2.v2_organization`.
 
-**Table:** `v2.v2_organization`
+## Database schema reference \{#database-schema-reference}
 
-**Key Columns:**
-- `id` (uuid) - Primary key
-- `name` (text) - Organization name
-- `key` (text) - Organization key
-- `is_enterprise` (boolean) - Enterprise tier flag
-- `usage_limits` (jsonb) - Usage limits and billing tier
-- `settings` (jsonb) - Additional settings
-- `created_at` (timestamp with time zone)
-- `updated_at` (timestamp with time zone)
+Table: `v2.v2_organization`
 
-## See Also
+| Column | Type | Description |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `name` | text | Organization name |
+| `key` | text | Organization key |
+| `is_enterprise` | boolean | Enterprise tier flag |
+| `usage_limits` | jsonb | Usage limits and billing tier |
+| `settings` | jsonb | Additional settings |
+| `created_at` | timestamp with time zone | Creation time |
+| `updated_at` | timestamp with time zone | Last update time |
 
-- [On-Premise Installation Guide](./installation.mdx)
-- [On-Premise Troubleshooting](./troubleshooting.mdx)
-- [On-Premise Reference](./reference.mdx)
+## Related pages \{#see-also}
+
+- [Install Permit Platform on-premises](/how-to/deploy/on-prem/installation)
+- [Back up and upgrade the platform](/how-to/deploy/on-prem/management)
+- [Fix common on-premises errors](/how-to/deploy/on-prem/troubleshooting)
+- [Look up installer flags and values.yaml keys](/how-to/deploy/on-prem/reference)

@@ -1,483 +1,553 @@
 ---
-title: OpenAI Prompt Filtering Integration
+title: Filter AI prompts with OpenAI classification and Permit.io
 sidebar_label: OpenAI Prompt Filtering
-description: Learn how to implement dynamic access control by combining OpenAI's natural language classification with Permit.io's policy enforcement. This guide shows how to build a secure AI system that interprets user requests and enforces permissions in real time.
+description: "Classify free-text prompts into resource types and attributes with OpenAI, then check each classified request against Permit.io policies from Node.js."
 ---
 
-import TimelineWrapper from "../../../src/components/timeline/TimelineWrapper";
-import TimelineStep from "../../../src/components/timeline/TimelineStep";
+Classify a user's free-text prompt into a structured access request with OpenAI, then check that request with `permit.check()` before your app answers. This tutorial is for AI agent builders who write Node.js and need to decide whether a chat user can see what they ask for. It applies the prompt filtering perimeter of the [Four-Perimeter Framework](/ai-security/framework).
 
-# OpenAI Prompt Filtering Integration
+A chat interface receives open-ended requests like these:
 
-As AI interfaces let users interact with systems through chat instead of fixed APIs, requiring dynamic, real-time access control. 
-<br/>
-Using tools like GPT-4, users can request actions using open-ended language like:
+```text
+- "What's the IATA rate for this hotel?"
+- "Help me diversify my investment portfolio"
+- "Show me my financial data for Q1"
 ```
-- “What’s the IATA rate for this hotel?”
-- “Help me diversify my investment portfolio”
-- “Show me my financial data for Q1”
-```
-These requests look harmless on the surface, but some should be restricted while others are fine for public users. 
-The challenge is: <br/> **How do you decide which is which and enforce it?**
 
-This tutorial demonstrates how to combine **OpenAI's GPT models** for intent classification with **Permit.io's ABAC policies** for real-time access decisions
+Some of these requests are fine for every user, and some need a specific role. A prompt has no endpoint or parameter that a rule can match, so the app first turns it into a resource type, a resource key, attributes, and an action.
 
-You'll learn how to classify free-form user prompts into structured access control requests and validate them using Permit's [Policy Decision Point (PDP)](/concepts/pdp/overview).
+## What you build \{#what-youll-build}
 
-## What You'll Build
+A Node.js project with three files:
 
-This Node.js based implementation:
-
-- **Classifies user prompts** using OpenAI
-- **Builds structured permission requests** with attributes
-- **Evaluates access** in real-time
-
-You'll apply these techniques to two example domains:
-
-- **Hotel Rate Access**
-    Determine if a user can access IATA, premium, or public hotel pricing based on their attributes.
-    
-- **Financial Advice Access**
-    Control access to AI-generated financial advice by validating user opt-in or advisor role.
-    
-
-:::info
-This guide uses two of [Four Perimeter Model for AI Access Control](/ai-security/framework). <br/>
-These ensure:
-- Only eligible users can interact with your AI agent
-- Outputs are policy-compliant before reaching the user
-:::
-
-By the end of this guide, you'll have a fully functioning access control system that dynamically adapts to the user's intent—no hardcoded rules, or brittle endpoint matching.
-
-## Tools & Prerequisites
-
-| Tool / Service | Usage |
+| File | Contents |
 | --- | --- |
-| [Node.js](https://nodejs.org/) | JavaScript runtime for executing the app |
-| [Permit.io](https://www.app.permit.io/) | Fine-grained access control and policy management |
-| [OpenAI API](https://openai.com/) | LLM-powered prompt understanding and classification |
-| [Docker](https://www.docker.com/) | For running the Permit PDP locally |
+| `src/classifier.js` | The `AccessClassifier` class, which sends the prompt to OpenAI and returns JSON with `resourceType`, `resourceKey`, `attributes`, and `action` |
+| `src/permit.js` | The Permit client and the `checkAccess` function, which turns that JSON into a Permit resource and calls `permit.check()` on a policy decision point (PDP) |
+| `index.js` | The entry script, which runs five prompts through both modules and prints each decision |
 
-### Required Credentials
+The example covers two domains:
 
-You'll need the following secrets set in your environment:
+| Domain | Resource types | Rule |
+| --- | --- | --- |
+| Hotel rates | `HotelType` with the `rateType` attribute (`IATA`, `premium`, `public`) | Every role sees public rates. `premium_user` also sees premium rates, and `iata_agent` also sees IATA rates. |
+| Financial requests | `FinancialAdvice`, `FinancialData` | `viewer` sees financial data. Only `ai_advisor` receives AI-generated financial advice. |
+
+A policy decision point (PDP) is the Permit service that evaluates each permission check against your policy. This tutorial runs one as a local Docker container.
+
+The source this tutorial is based on is in the [permit-prompt-filtering repository](https://github.com/permitio/permit-prompt-filtering), which keeps the entry script in `server.js` instead of `index.js`.
+
+## Prerequisites \{#tools--prerequisites}
+
+| Tool or service | Purpose |
+| --- | --- |
+| [Node.js](https://nodejs.org/) | Runs the app |
+| [Permit.io account](https://app.permit.io/) and an environment API key ([Get your API key](/overview/get-api-key)) | Stores the policy |
+| [OpenAI API key](https://platform.openai.com/) | Classifies prompts |
+| [Docker](https://www.docker.com/) | Runs the PDP locally |
+
+### Required credentials
+
+Create a `.env` file in the project root and add these values:
 
 ```env
 OPENAI_API_KEY=<your_openai_key>
 PERMIT_API_KEY=<your_permit_api_key>
-PDP_URL=http://localhost:7766  # or your Cloud PDP URL
-```
-
-:::tip
-For a [PDP setup guide](/concepts/pdp/overview/), see Permit PDP Overview
-:::
-
-:::info
-Your PERMIT_API_KEY is available [in the Permit.io dashboard](https://app.permit.io/settings/api-keys)
-:::
-
-We recommend creating a `.env` file in the root of your project for local development:
-
-```bash
-touch .env
-```
-
-Then populate it:
-
-```env
-OPENAI_API_KEY=sk-...
-PERMIT_API_KEY=your_permit_key_here
 PDP_URL=http://localhost:7766
+OPENAI_MODEL=gpt-4o-mini
 ```
 
-These values will be automatically loaded using `dotenv`.
+| Variable | Required | Value |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | Yes | Your OpenAI API key |
+| `PERMIT_API_KEY` | Yes | Your environment API key from the [Permit dashboard](https://app.permit.io/settings/api-keys) |
+| `PDP_URL` | Yes | Your Edge PDP, for example `http://localhost:7766`. The resource sets in this tutorial need an Edge PDP, so don't point `PDP_URL` at the Cloud PDP. See [Why this tutorial uses an Edge PDP](#why-this-tutorial-uses-an-edge-pdp). |
+| `OPENAI_MODEL` | No | The OpenAI model that classifies prompts. The classifier falls back to `gpt-4o-mini` when `OPENAI_MODEL` isn't set. |
+
+Both modules load `.env` with `dotenv`. Anyone with your environment API key can change that environment's policy through the Permit API, so keep `.env` out of version control.
 
 ### Dependencies
 
-From your project root, install the required packages:
+Install the packages from the project root:
 
 ```bash
 npm install openai permitio dotenv
 ```
 
-These libraries power:
-- OpenAI prompt classification (`openai`)
-- Permit.io policy evaluation (`permitio`)
-- Environment variable management (`dotenv`)
+| Package | Purpose |
+| --- | --- |
+| `openai` | Calls the OpenAI chat completions API to classify prompts |
+| `permitio` | The Permit Node.js SDK, which calls the PDP |
+| `dotenv` | Loads `.env` into `process.env` |
 
-With your project initialized and dependencies installed, you're ready to define your roles, resources, and policies in Permit.io.
+## How prompt filtering works
 
-## How Prompt Filtering Works
+A role check needs structured input: a user, an action, and a resource. A chat prompt is unstructured text. Prompt filtering puts a classifier between the two. The classifier maps the prompt to a resource type and attributes, and the PDP evaluates that structured request against your policy before the app processes the prompt.
 
-Traditional access control models fall short when building AI-driven applications, especially when users interact via natural language. Prompt filtering bridges the gap between **unstructured user input** and **structured policy enforcement** by classifying requests before they're processed.
+![Flow diagram: a user prompt goes to the OpenAI classifier, which returns a structured request that Permit checks before the app responds](/img/ai-security/integrations/openai/1.png)
 
-![](/img/ai-security/integrations/openai/1.png)
+### Why classify prompts with a large language model \{#why-is-ai-classification-important}
 
-### Why is AI Classification Important
+- **No keyword lists:** the classifier maps different phrasings of the same request to the same resource type, without regular expressions.
+- **Defaults for missing details:** the system prompt tells the classifier which value to use when the prompt doesn't name one, for example `rateType: "public"`.
+- **One classifier, several domains:** you configure the resource type and attributes per classifier instance.
 
-- **Natural Understanding** – OpenAI recognizes nuanced requests, even without structured syntax.
-- **Flexible Format** – Users can express their intent naturally, improving UX.
-- **Zero Hardcoding** – Avoids brittle regex or keyword maps.
-- **Multi-Use** – One classifier can handle different domains (e.g. travel, finance).
+A large language model (LLM) classifier can return a wrong resource type or attribute, and the PDP decides on whatever the classifier returns. If the classifier labels a premium-rate question as `rateType: "public"`, the PDP allows the request and the app answers with the public rate. Write the system prompt so a missing value defaults to the least privileged one, and check the [audit logs](#logs--observability) when a decision looks wrong.
 
-With that understanding in place, let's model our resources, roles, and policies in Permit.io.
+## Configure the policy in Permit \{#defining-policies-with-permitio}
 
-## Defining Policies with Permit.io
+Create the roles, resources, resource sets, and rules in the **Policy** screen of the [Permit dashboard](https://app.permit.io/).
 
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Define User Roles**
-    - Assign your users to roles that reflect what they're allowed to access:
-      - `iata_agent`: Can access IATA-specific hotel rates
-      - `premium_user`: Can access premium hotel rates
-      - `ai_advisor`: Can receive AI-generated financial advice
-      - `viewer`: Can access public data (default role)
-    - Go to **Directory → Roles** and create the above roles as follows:
-    
-    ![](/img/ai-security/integrations/openai/2.png)
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Define Resources**
-    
-    - These resources represent the types of information or functionality you're protecting:
-      - `HotelType` (attribute: `rateType`: `IATA`, `premium`, `public`)
-      - `FinancialData` (no attributes required)
-      - `FinancialAdvice` (no attributes required)
-    - Go to **Policy → Resources** and define each resource type along with any relevant attributes.
-    
-    ![](/img/ai-security/integrations/openai/3.png)
-    ![](/img/ai-security/integrations/openai/4.png)
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Group Resources into Sets**
-    
-    - Use resource sets to group resources by attributes:
-      - `iata_rates`: `HotelType` where `rateType == "IATA"`
-      - `premium_rates`: `HotelType` where `rateType == "premium"`
-      - `public_rates`: `HotelType` where `rateType == "public"`
-    - No condition is needed for `FinancialAdvice` or `FinancialData` — these are directly referenced in policy rules.
-    - You can set these up via **Policy → ABAC → Resource Sets.**
-    
-    ![](/img/ai-security/integrations/openai/5.png)
-  </TimelineStep>
-  <TimelineStep stepNumber={4}>
-    **Define Permission Rules**
-    
-    - Link user roles to the resource sets and actions:
-      - `viewer`: `public_rates`, `FinancialData`
-      - `premium_user`: `premium_rates`, `public_rates`
-      - `iata_agent`: `iata_rates`, `public_rates`
-      - `ai_advisor`: `FinancialAdvice`
-    - Set these up using the **Policy Matrix** or **Rules Editor**.
-    
-    ![](/img/ai-security/integrations/openai/6.png)
-  </TimelineStep>
-</TimelineWrapper>
+### 1. Create the roles \{#create-the-roles}
 
-## Running the PDP
+Open **Policy > Roles** and add these roles:
 
-<TimelineWrapper>
-  <TimelineStep stepNumber={1}>
-    **Pull the Permit.io PDP Docker Image** <br/>
-    Make sure Docker is installed, and pull the Permit.io PDP image:
-      ```bash
-      docker pull permitio/pdp-v2:latest
-      ```
-  </TimelineStep>
-  <TimelineStep stepNumber={2}>
-    **Run the PDP Container**
-      ```bash
-      docker run -it -p 7766:7000 \
-        --env PDP_DEBUG=True \
-        --env PDP_API_KEY=<YOUR_API_KEY> \
-        permitio/pdp-v2:latest
-      ```
-  </TimelineStep>
-  <TimelineStep stepNumber={3}>
-    **Connect Your Application to the PDP** <br/>
-    In your Node.js app, connect to the local PDP:
+| Role | Can access |
+| --- | --- |
+| `iata_agent` | IATA hotel rates |
+| `premium_user` | Premium hotel rates |
+| `ai_advisor` | AI-generated financial advice |
+| `viewer` | Public data |
 
-      ```js
-      const permit = new Permit({
-        token: process.env.PERMIT_API_KEY,
-        pdp: process.env.PDP_URL
-      });
-      ```
-  </TimelineStep>
-  <TimelineStep stepNumber={4}>
-    **Verify the Connection** <br/>
-    Check if the container is running:
-      ```bash
-      docker ps
-      ```
-    Look for PDP logs:
+![Roles tab listing the editor, admin, viewer, iata_agent, premium_user, and ai_advisor roles](/img/ai-security/integrations/openai/2.png)
 
-      ```bash
-      docker logs <container_id>
-      ```
-  </TimelineStep>
-</TimelineWrapper>
+### 2. Create the resources \{#create-the-resources}
 
-:::tip
-While Permit.io offers a [Cloud PDP](/concepts/pdp/overview#managed-cloud-pdp), we're using the Container PDP because:
-- It supports our role-based permissions
-- It provides faster response times for local development
-- It allows offline development and testing
-:::
+Open **Policy > Resources** and create:
 
-With the PDP running, your application can now make real-time permission checks against the policies we configured earlier.
+| Resource | Action | Attributes |
+| --- | --- | --- |
+| `HotelType` | `read` | `rateType` (String): `IATA`, `premium`, or `public` |
+| `FinancialData` | `read` | None |
+| `FinancialAdvice` | `read` | None |
 
-## Implementing the OpenAI-Powered Classifier
+![Resources tab of the Policy screen, used to create the HotelType, FinancialData, and FinancialAdvice resources](/img/ai-security/integrations/openai/3.png)
+![Resource form with the attribute settings for the rateType attribute](/img/ai-security/integrations/openai/4.png)
 
-Now that we've set up roles and policies in Permit.io, we can focus on how user prompts are dynamically classified and translated into structured access requests using OpenAI.
+### 3. Create the resource sets \{#create-the-resource-sets}
 
-This section walks through the logic behind the **AccessClassifier**, how it connects with Permit.io, and how it handles real-world access requests.
+Open **Policy > ABAC Rules** and create three ABAC resource sets on `HotelType`:
 
-### Classifier Core Responsibilities:
+| Resource set | Condition |
+| --- | --- |
+| `iata_rates` | `resource.rateType == "IATA"` |
+| `premium_rates` | `resource.rateType == "premium"` |
+| `public_rates` | `resource.rateType == "public"` |
 
-- **Understand natural language requests** (e.g., “What's the price of Hilton Budapest?”)
-- **Infer the intent and attributes** (e.g., `resourceType: HotelType`, `rateType: public`)
-- **Return a structured request object** for Permit to evaluate access
+`FinancialAdvice` and `FinancialData` don't need resource sets. The rules reference them directly.
 
-![](/img/ai-security/integrations/openai/7.png)
+![ABAC Rules tab with a resource set on HotelType defined by a rateType condition](/img/ai-security/integrations/openai/5.png)
 
-### Classifier Setup
+### 4. Grant permissions \{#grant-permissions}
 
-The `AccessClassifier` class is built around OpenAI's GPT-4 API. 
+In the **Policy Editor**, check `read` for these role and resource pairs:
 
-The classifier, designed for high adaptability, allows for the configuration of specific resource types or attributes, ensuring the system interprets a wide range of requests. 
+| Role | `read` on |
+| --- | --- |
+| `viewer` | `public_rates`, `FinancialData` |
+| `premium_user` | `premium_rates`, `public_rates` |
+| `iata_agent` | `iata_rates`, `public_rates` |
+| `ai_advisor` | `FinancialAdvice` |
+
+![Policy Editor with read checked for each role on its resources and resource sets](/img/ai-security/integrations/openai/6.png)
+
+### 5. Create test users \{#create-test-users}
+
+In the **Directory** screen, create the users that the test code checks and assign each user a role in the `default` tenant. See [Sync users](/how-to/sync-users).
+
+| User key | Role |
+| --- | --- |
+| `iata_agent_1` | `iata_agent` |
+| `premium_user_001` | `premium_user` |
+| `regular_user_1` | `viewer` |
+| `regular_user_2` | `viewer` |
+
+If a user key doesn't exist in Permit, the PDP denies every check for that user.
+
+## Run the PDP \{#running-the-pdp}
+
+1. Pull the PDP image:
+
+   ```bash
+   docker pull permitio/pdp-v2:latest
+   ```
+
+2. Run the PDP container. Replace `<YOUR_API_KEY>` with your environment API key:
+
+   ```bash
+   docker run -it -p 7766:7000 \
+     --env PDP_DEBUG=True \
+     --env PDP_API_KEY=<YOUR_API_KEY> \
+     permitio/pdp-v2:latest
+   ```
+
+3. Verify the PDP answers its health check:
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' http://localhost:7766/healthy
+   ```
+
+   A healthy PDP prints `200`. The PDP serves the same check on `/health` and `/ready`, and the check needs no API key. See [Verify the PDP is healthy](/how-to/deploy/deploy-to-production#pdp-health-check-endpoints).
+
+4. If the health check doesn't print `200`, read the container logs. Find the container ID, then print its logs:
+
+   ```bash
+   docker ps
+   docker logs <container_id>
+   ```
+
+   A wrong `PDP_API_KEY` shows as an authentication error in the logs, and every `permit.check()` call fails.
+
+### Why this tutorial uses an Edge PDP
+
+The resource sets `iata_rates`, `premium_rates`, and `public_rates` match on a resource attribute, which is attribute-based access control (ABAC). The [Cloud PDP](/concepts/pdp/overview#managed-cloud-pdp) evaluates role-based access control (RBAC) and relationship-based access control (ReBAC), but not ABAC, so hotel rate checks on the Cloud PDP don't return the results in this tutorial. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities). A local container PDP also lets you develop without a network round trip to the Cloud PDP.
+
+## Build the OpenAI classifier \{#implementing-the-openai-powered-classifier}
+
+The `AccessClassifier` class turns a prompt into a structured request.
+
+### What the classifier does \{#classifier-core-responsibilities}
+
+- Reads a natural language request, such as "What's the price of Hilton Budapest?"
+- Infers the resource type and attributes, such as `resourceType: HotelType` and `rateType: public`
+- Returns a JSON object that the permission check uses
+
+![Diagram of the classifier turning a hotel price question into resourceType, resourceKey, attributes, and action](/img/ai-security/integrations/openai/7.png)
+
+### Configure a classifier instance \{#classifier-setup}
+
+The constructor takes an optional resource type and a list of attributes to look for. The class adds them to the system prompt it sends to OpenAI:
 
 ```js
-const classifier = new AccessClassifier(resourceType, attributes);
-
-// The system adapts based on what you pass:
-classifier('HotelType', ['rateType']) // For hotel rate requests
-classifier('FinancialAdvice') // For financial requests
-classifier(null, ['sensitivity']) // For generic attribute checking
-```
-
-The key to this flexibility is the system's prompt engineering. The prompts guide the classifier in interpreting user queries accurately and mapping them to the correct resource types and attributes. 
-
-Here's a simplified outline of its structure:
-
-```js
-class AccessClassifier {
-    constructor(resourceType = null, attributes = []) {
-        this.openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY
-        });
-        
-        this.resourceType = resourceType;
-        this.attributes = attributes;
-        this.systemPrompt = this.buildSystemPrompt();
-    }
-
-    buildSystemPrompt() {
-        // Base prompt explaining the classifier's job
-        let prompt = `You are a request classifier that understands user intent.
-Your job is to analyze requests and determine:
-1. The type of resource being requested
-2. Any relevant attributes of that resource
-3. The intent behind the request (data access vs advisory)
-
-Output format:
-{
-    "resourceType": "determined from context",
-    "resourceKey": "specific identifier",
-    "attributes": "relevant attributes if any",
-    "action": "usually read"
-}`;
-
-        // Add configuration-specific instructions
-        if (this.resourceType) {
-            prompt += `\n\nClassify requests specifically for: ${this.resourceType}`;
-        }
-
-        if (this.attributes.length) {
-            prompt += `\n\nLook for these attributes: ${this.attributes.join(', ')}`;
-        }
-
-        // Examples showing the classifier's flexibility
-        prompt += `\n\nExample classifications:
-[Request]: "Show me the data"
-[Output]: {
-    "resourceType": "determined by context",
-    "resourceKey": "data",
-    "attributes": {},
-    "action": "read"
-}
-
-[Request]: "I need access to X with Y permission"
-[Output]: {
-    "resourceType": "X",
-    "resourceKey": "identifier",
-    "attributes": {"permission": "Y"},
-    "action": "read"
-}`;
-
-        return prompt;
-    }
-}
-```
-
-Here is an example of the classifier's configurability and output:
-
-```js
-// The classifier adapts based on configuration
-const classifier = new AccessClassifier(resourceType, attributes);
-
-// Example usage with output
-const result = await classifier.classify("What's the price for Hilton?");
-// Returns structured data for permission check:
-{
-    resourceType: "HotelType",
-    resourceKey: "hilton",
-    attributes: {
-        rateType: "public"  // Inferred from context
-    },
-    action: "read"
-}
-```
-
-## Permission Check Implementation
-
-Once a request has been classified into structured attributes and resource types  (as shown in the diagram), the next step is to determine whether the user is authorized to perform the requested action.
-
-![](/img/ai-security/integrations/openai/8.png)
-
-This section explains how the `checkAccess` function ties everything together—taking a user's intent and enforcing policies based on roles and attributes.
-
-Let's see how our system processes requests:
-
-```js
-// First, create our domain-specific classifiers
+// A classifier for hotel rate requests, which reads the rateType attribute.
 const hotelClassifier = new AccessClassifier('HotelType', ['rateType']);
-const financeClassifier = new AccessClassifier('FinancialAdvice');
 
-// Example requests
-const request = "Show me my current portfolio value";
-const classification = await financeClassifier.classify(request);
-const allowed = await checkAccess('regular_user_1', classification);
+// A classifier for financial requests, which picks the resource type from the prompt.
+const financeClassifier = new AccessClassifier();
 ```
 
-### The `checkAccess` Function
+Pass a resource type when every prompt for that classifier maps to one resource type. Leave the resource type out when the classifier has to choose, as it does between `FinancialAdvice` and `FinancialData`.
 
-The `checkAccess` function takes a user ID and the classified request, constructs a resource object that Permit.io can understand, and evaluates permissions based on both roles and resource attributes. 
-
-When access is denied, it provides context-specific feedback about why the request failed.
-
-Here's the implementation:
+Save the module as `src/classifier.js`, in three parts. Start with the OpenAI client, the model constant, and the constructor. The constructor stores the resource type and the attribute list, then builds the system prompt once per instance:
 
 ```js
-async function checkAccess(userId, parsedRequest) {
-  try {
-    console.log('\n🔒 Checking Permission:');
-    console.log(`👤 User: ${userId}`);
-    console.log(`📑 Resource Type: ${parsedRequest.resourceType}`);
-    console.log(`🎯 Action: ${parsedRequest.action}`);
+const OpenAI = require('openai');
+require('dotenv').config();
 
-    let resource = {
-      type: parsedRequest.resourceType,
-      key: parsedRequest.resourceKey
-    };
+// Any chat completions model that supports JSON mode works here.
+const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
-    // Add attributes only if they exist
-    if (Object.keys(parsedRequest.attributes || {}).length > 0) {
-      resource.attributes = parsedRequest.attributes;
-      console.log('📋 Attributes:', parsedRequest.attributes);
-    }
+class AccessClassifier {
+  constructor(resourceType = null, attributes = []) {
+    this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    this.resourceType = resourceType;
+    this.attributes = attributes;
+    this.systemPrompt = this.buildSystemPrompt();
+  }
+```
 
-    try {
-      const permitted = await permit.check(
-        userId,
-        parsedRequest.action,
-        resource
-      );
+Add `buildSystemPrompt` to the same class body. The system prompt defines the output format, the allowed `rateType` values, the rule that a missing rate type becomes `public`, and the routing rules between `FinancialAdvice` and `FinancialData`:
 
-      if (permitted) {
-        console.log('✅ Access Granted');
-      } else {
-        // Log specific denial reason
-        if (parsedRequest.resourceType === 'HotelType') {
-          console.log('❌ Access Denied - Insufficient rate type permissions');
-        } else if (parsedRequest.resourceType === 'FinancialAdvice') {
-          console.log('❌ Access Denied - User not authorized for financial advice');
-        } else {
-          console.log('❌ Access Denied - Insufficient permissions');
-        }
-      }
+```js
+  buildSystemPrompt() {
+    const resourceLine = this.resourceType
+      ? `Classify every request as resource type: ${this.resourceType}`
+      : 'Choose the resource type from the request.';
 
-      return permitted;
-    } catch (checkError) {
-      if (checkError.message.includes('role')) {
-        console.error('❌ Role-based permission check failed:', checkError.message);
-      } else if (checkError.message.includes('attribute')) {
-        console.error('❌ Attribute-based permission check failed:', checkError.message);
-      } else {
-        console.error('❌ Permission check failed:', checkError.message);
-      }
-      throw checkError;
-    }
-  } catch (err) {
-    console.error("❌ Permission check failed:", err);
-    throw err;
+    const attributeLine = this.attributes.length
+      ? `Fill in these attributes: ${this.attributes.join(', ')}`
+      : 'Return an empty attributes object.';
+
+    const attributeFields = this.attributes
+      .map((attr) => `"${attr}": "value"`)
+      .join(', ');
+
+    return `You are a request classifier that maps a user request to an access request.
+
+${resourceLine}
+${attributeLine}
+
+Rules:
+- For HotelType, rateType is one of "IATA", "premium", or "public".
+- When the request does not name a rate type, use "public".
+- Use FinancialAdvice when the request asks for a recommendation, guidance, or a strategy.
+- Use FinancialData when the request asks for a current value, a statistic, or a status.
+
+Examples:
+"Show me IATA rates" -> HotelType with rateType "IATA"
+"What's the price?" -> HotelType with rateType "public"
+"How should I invest?" -> FinancialAdvice
+"Show my portfolio value" -> FinancialData
+
+Answer with JSON in this shape and nothing else:
+{
+  "resourceType": "${this.resourceType || 'HotelType, FinancialAdvice, or FinancialData'}",
+  "resourceKey": "identifier",
+  "attributes": {${attributeFields}},
+  "action": "read"
+}`;
+  }
+```
+
+End `src/classifier.js` with the `classify` method, the closing brace of the class, and the export:
+
+```js
+  async classify(userPrompt) {
+    const response = await this.openai.chat.completions.create({
+      model: MODEL,
+      messages: [
+        { role: 'system', content: this.systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0
+    });
+
+    return JSON.parse(response.choices[0].message.content);
   }
 }
+
+module.exports = AccessClassifier;
 ```
 
-## Testing the System
+`classify(userPrompt)` sends the system prompt and the user prompt to the OpenAI chat completions API with `temperature: 0` and `response_format: { type: 'json_object' }`, so the response body is always parsable JSON. `MODEL` defaults to `gpt-4o-mini`. Set `OPENAI_MODEL` to use a different model. The version in the example repository is [`src/classifier.js`](https://github.com/permitio/permit-prompt-filtering/blob/main/src/classifier.js).
 
-Now that we have the classifier and permission system set up, let's see it in action. We'll test different types of requests to demonstrate how the system:
+### Classifier output
 
-### Example: Classifying and Enforcing Access
+For a hotel classifier, `classify()` returns an object like the one in this block. Run the `await` call inside an `async` function:
 
 ```js
-const hotelClassifier = new AccessClassifier("HotelType", ["rateType"]);
-const request = "Show me the premium rate for Hilton";
+const classifier = new AccessClassifier('HotelType', ['rateType']);
 
-const classification = await hotelClassifier.classify(request);
-const allowed = await checkAccess("premium_user_001", classification);
+const result = await classifier.classify("What's the price for Hilton?");
+// result:
+// {
+//   resourceType: 'HotelType',
+//   resourceKey: 'hilton',
+//   attributes: { rateType: 'public' },
+//   action: 'read'
+// }
 ```
 
-**If the user is not in the `premium_user` role**, the access will be denied with a specific reason.
+## Check permissions on the classified request \{#permission-check-implementation}
 
-### Example: Financial Advice Check
+After the classifier returns a structured request, `checkAccess` builds a Permit resource from it and calls `permit.check()`.
+
+![Diagram of the permission check: the classified request becomes a Permit resource and the PDP returns allow or deny](/img/ai-security/integrations/openai/8.png)
+
+### The checkAccess function \{#the-checkaccess-function}
+
+`checkAccess` takes a user key and the classified request. It builds a resource with `type` and `key`, adds `attributes` when the classifier returned any, and calls `permit.check()`. When the PDP denies the request, the function logs a reason based on the resource type. Save the module as `src/permit.js`, in two parts.
+
+Start with the Permit client and the part of `checkAccess` that builds the resource. The client reads the API key and the PDP URL from the environment, so one client serves every check:
 
 ```js
-const financeClassifier = new AccessClassifier("FinancialAdvice");
-const adviceRequest = "How should I diversify my investments?";
+const { Permit } = require('permitio');
+require('dotenv').config();
 
-const classification = await financeClassifier.classify(adviceRequest);
-const allowed = await checkAccess("regular_user_2", classification);
+const permit = new Permit({
+  token: process.env.PERMIT_API_KEY,
+  pdp: process.env.PDP_URL
+});
+
+async function checkAccess(userId, parsedRequest) {
+  console.log('Checking permission:');
+  console.log(`  User: ${userId}`);
+  console.log(`  Resource type: ${parsedRequest.resourceType}`);
+  console.log(`  Action: ${parsedRequest.action}`);
+
+  const resource = {
+    type: parsedRequest.resourceType,
+    key: parsedRequest.resourceKey
+  };
+
+  // Send attributes only when the classifier returned any.
+  if (Object.keys(parsedRequest.attributes || {}).length > 0) {
+    resource.attributes = parsedRequest.attributes;
+    console.log('  Attributes:', parsedRequest.attributes);
+  }
 ```
 
-If the user lacks the `ai_advisor` or `opted_in` flag, the system returns an access denial message tailored to the resource type.
+End the same function body with the check itself, and export the client and the function. The `catch` block logs the error message and rethrows, so a connection failure doesn't reach the caller as a denial:
 
-## Logs & Observability
+```js
+  try {
+    const permitted = await permit.check(userId, parsedRequest.action, resource);
 
-During testing and production, Permit.io's [audit logs](/how-to/use-audit-logs/types-and-filtering) show each access request in real time, including:
+    if (permitted) {
+      console.log('  Access granted');
+    } else if (parsedRequest.resourceType === 'HotelType') {
+      console.log('  Access denied: the user has no permission for this rate type');
+    } else if (parsedRequest.resourceType === 'FinancialAdvice') {
+      console.log('  Access denied: the user is not authorized for financial advice');
+    } else {
+      console.log('  Access denied: insufficient permissions');
+    }
 
-- Allow or Deny outcomes
-- Evaluated roles and attributes
-- Matched conditions and resource sets
+    return permitted;
+  } catch (checkError) {
+    console.error(`  Permission check failed: ${checkError.message}`);
+    throw checkError;
+  }
+}
 
-These logs are accessible from the Permit.io dashboard and are especially useful for debugging policy issues and compliance reviews.
+module.exports = { permit, checkAccess };
+```
 
-## Final Thoughts & Resources
+Three details of `permit.check()` matter here:
 
-This guide demonstrated how to combine OpenAI's natural language understanding with Permit.io's attribute-based access control to create a dynamic and flexible access control system. Instead of hardcoding permission paths, we used AI to interpret user intent and evaluated permissions based on structured policies.
+- **Errors throw by default.** The Node.js SDK sets `throwOnError` to `true`, so a PDP that is unreachable or that rejects the API key makes `permit.check()` throw instead of returning `false`. The `catch` block logs the message and rethrows, which keeps a connection failure from looking like a denial.
+- **The check runs in the `default` tenant.** The SDK fills in the tenant `default` when the resource has none, which is why [Create test users](#create-test-users) assigns each role in the `default` tenant.
+- **The resource key can be any string.** The resource sets in this tutorial match on the `rateType` attribute that `checkAccess` sends with the request, not on a resource instance stored in Permit, so the `resourceKey` the classifier invents doesn't have to exist in your Permit directory.
 
-:::tip You should have a setup that:
-- **Classifies user prompts intelligently** using OpenAI's GPT models
-- **Enforces real-time access control** using Permit.io's PDP and ABAC policies
-- **Handles ambiguous or implicit requests gracefully**
-- **Supports multiple access types** (e.g. hotel rates, financial advice)
+The version in the example repository is [`src/permit.js`](https://github.com/permitio/permit-prompt-filtering/blob/main/src/permit.js).
 
-:::
+## Run the classifier and the policy together \{#testing-the-system}
 
-### Further Resources
+`index.js` ties the classifier, the Permit client, and `checkAccess` together. It creates one classifier per domain, runs five prompts, and prints the decision for each one. Save it in the project root, in three parts.
 
-- [Blog: AI Prompt Classification for Access Control](https://www.permit.io/blog/ai-prompt-classification-for-access-control)
-- [GitHub: Full Example Repo](https://github.com/permitio/permit-prompt-filtering)
-- Got Questions? Join the [Permit.io Slack Community](https://io.permit.io/blog-slack)
+Start with the imports and the two classifier instances. The hotel classifier is fixed to `HotelType` and reads `rateType`, and the finance classifier picks the resource type from the prompt:
+
+```js
+require('dotenv').config();
+
+const AccessClassifier = require('./src/classifier');
+const { checkAccess } = require('./src/permit');
+
+const hotelClassifier = new AccessClassifier('HotelType', ['rateType']);
+const financeClassifier = new AccessClassifier();
+```
+
+Add the five scenarios. Each entry names the classifier to use, the user key to check, and the prompt to classify:
+
+```js
+const scenarios = [
+  {
+    description: 'IATA agent asks for an IATA rate',
+    classifier: hotelClassifier,
+    userId: 'iata_agent_1',
+    prompt: 'Give me the IATA rate for Hilton Budapest tonight'
+  },
+  {
+    description: 'Viewer asks for an IATA rate',
+    classifier: hotelClassifier,
+    userId: 'regular_user_1',
+    prompt: 'Show me IATA rates for Marriott'
+  },
+  {
+    description: 'Premium user asks for a premium rate',
+    classifier: hotelClassifier,
+    userId: 'premium_user_001',
+    prompt: 'Show me the premium rate for Hilton Budapest'
+  },
+  {
+    description: 'Viewer asks for a portfolio value',
+    classifier: financeClassifier,
+    userId: 'regular_user_1',
+    prompt: 'Show me my current portfolio value'
+  },
+  {
+    description: 'Viewer asks for investment advice',
+    classifier: financeClassifier,
+    userId: 'regular_user_2',
+    prompt: 'How should I diversify my investments?'
+  }
+];
+```
+
+End `index.js` with the loop that classifies each prompt, checks it, and prints the decision. A failure in either step exits with code `1`:
+
+```js
+async function main() {
+  for (const scenario of scenarios) {
+    console.log(`\n=== ${scenario.description} ===`);
+
+    const classification = await scenario.classifier.classify(scenario.prompt);
+    console.log('Classification:', JSON.stringify(classification));
+
+    const allowed = await checkAccess(scenario.userId, classification);
+    console.log(`Result: ${allowed ? 'ALLOWED' : 'DENIED'}`);
+  }
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+```
+
+Run it with the PDP container running and the environment variables set:
+
+```bash
+node index.js
+```
+
+### Expected output \{#example-classifying-and-enforcing-access}
+
+```text
+=== IATA agent asks for an IATA rate ===
+Classification: {"resourceType":"HotelType","resourceKey":"hilton-budapest","attributes":{"rateType":"IATA"},"action":"read"}
+Checking permission:
+  User: iata_agent_1
+  Resource type: HotelType
+  Action: read
+  Attributes: { rateType: 'IATA' }
+  Access granted
+Result: ALLOWED
+
+=== Viewer asks for an IATA rate ===
+Classification: {"resourceType":"HotelType","resourceKey":"marriott","attributes":{"rateType":"IATA"},"action":"read"}
+Checking permission:
+  User: regular_user_1
+  Resource type: HotelType
+  Action: read
+  Attributes: { rateType: 'IATA' }
+  Access denied: the user has no permission for this rate type
+Result: DENIED
+
+=== Premium user asks for a premium rate ===
+Classification: {"resourceType":"HotelType","resourceKey":"hilton-budapest","attributes":{"rateType":"premium"},"action":"read"}
+Checking permission:
+  User: premium_user_001
+  Resource type: HotelType
+  Action: read
+  Attributes: { rateType: 'premium' }
+  Access granted
+Result: ALLOWED
+
+=== Viewer asks for a portfolio value ===
+Classification: {"resourceType":"FinancialData","resourceKey":"portfolio","attributes":{},"action":"read"}
+Checking permission:
+  User: regular_user_1
+  Resource type: FinancialData
+  Action: read
+  Access granted
+Result: ALLOWED
+
+=== Viewer asks for investment advice ===
+Classification: {"resourceType":"FinancialAdvice","resourceKey":"investments","attributes":{},"action":"read"}
+Checking permission:
+  User: regular_user_2
+  Resource type: FinancialAdvice
+  Action: read
+  Access denied: the user is not authorized for financial advice
+Result: DENIED
+```
+
+The `resourceKey` values come from the model, so they can differ between runs. The `resourceType`, the `attributes`, and the `Result` lines are what the policy depends on, and they stay the same for these five prompts.
+
+### Change a role to confirm the policy drives the decision \{#example-financial-advice-check}
+
+Assign the `ai_advisor` role to `regular_user_2` in the **Directory** screen, then run `node index.js` again. The last scenario prints `Access granted` and `Result: ALLOWED` while the other four stay the same. No code changed between the two runs, so the policy produced the different decision.
+
+## View decisions in the audit logs \{#logs--observability}
+
+Open [audit logs](/how-to/use-audit-logs/types-and-filtering) in the Permit dashboard to see each check. Each entry shows the user, action, resource, and whether the PDP allowed or denied the request. Use the audit logs to find out why a classified request was denied, for example when the classifier returned an unexpected `rateType`.
+
+## Next steps \{#final-thoughts--resources}
+
+- Read how prompt filtering fits with the other perimeters in the [Four-Perimeter Framework](/ai-security/framework).
+- Learn how resource sets and conditions work in [Build ABAC policies](/how-to/build-policies/abac/building-abac-policy).
+- Read more about `permit.check()` in [Check permissions](/how-to/enforce-permissions/check).
+- Run the full example from the [permit-prompt-filtering repository](https://github.com/permitio/permit-prompt-filtering), or read the [prompt classification post on the Permit blog](https://www.permit.io/blog/ai-prompt-classification-for-access-control).
+- Ask questions in the [Permit Slack community](https://io.permit.io/slack).

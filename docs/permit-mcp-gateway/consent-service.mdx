@@ -1,95 +1,96 @@
 ---
-title: Consent Service
+title: How the consent flow works
 sidebar_label: Consent Service
-description: The Consent Service is the user-facing component of Permit MCP Gateway where humans authenticate, select MCP servers, set trust levels, and authorize agents — the complete user journey explained.
+description: Learn how the Consent Service of Permit MCP Gateway signs users in, lets them choose an MCP server and a trust level, creates agent permissions in Permit, and manages the resulting session.
 sidebar_position: 5
 ---
 
-# Consent Service
+Learn what happens when a user connects an MCP client to Permit MCP Gateway: how the Consent Service signs the user in, lets the user choose an MCP server and a trust level, writes the agent's permissions to Permit, and starts a session. This page is for gateway admins and implementers who roll out the gateway, support users through consent, or debug a connection.
 
-The Consent Service is the user-facing component of Permit MCP Gateway where humans authenticate and grant permissions to their AI agents. It serves as the OAuth 2.1 Authorization Server hosted at each gateway subdomain (e.g., `acme-brave-coral-37.agent.security`).
+The Consent Service is the user-facing part of Permit MCP Gateway. It is the OAuth 2.1 authorization server for each gateway host, served at the host's subdomain, for example `acme-brave-coral-37.agent.security`. For the step-by-step setup that ends with a user's first consent, see [Complete the consent flow](/permit-mcp-gateway/guide#7-user-consent-flow).
 
-When a user connects an MCP client like Cursor or Claude Desktop for the first time, the Consent Service handles the entire authorization flow — from login through trust level selection to issuing the access token that lets the agent make tool calls.
+## The consent flow step by step \{#the-user-journey}
 
-## The user journey
+The consent flow runs the first time a user connects an MCP client, such as Cursor, Claude Desktop, VS Code, or Claude Code, to the gateway. The flow runs again when the session ends. See [Session lifecycle](#session-lifecycle).
 
-### 1. MCP client triggers OAuth
+### 1. The MCP client starts OAuth \{#1-mcp-client-triggers-oauth}
 
-When the user's MCP client (Cursor, Claude Desktop, VS Code, Claude Code) connects to the gateway for the first time, it receives a `401 Unauthorized` response. The client then discovers the OAuth endpoints via `/.well-known/oauth-authorization-server` (served by the Gateway, which returns metadata pointing to the Consent Service's authorization endpoints) and opens a browser window for the user to authenticate.
+The MCP client connects to the gateway and receives `401 Unauthorized`. The client reads the gateway's `/.well-known/oauth-authorization-server` metadata, which points to the Consent Service's authorization endpoints. The client then opens a browser window for the user.
 
-### 2. Login
+### 2. The user signs in \{#2-login}
 
-The user authenticates using whichever methods the admin has configured for this host — email/password, email OTP, passkeys, social providers (Google, GitHub, Microsoft), or enterprise SSO (SAML, OIDC).
+The user signs in with a method the admin turned on for the host: email and password, email one-time passcode (OTP), passkeys, Google, GitHub, or Microsoft OAuth, or SAML or OpenID Connect (OIDC) single sign-on (SSO). For each method and its setup, see the [Authentication methods reference](/permit-mcp-gateway/authentication-methods).
 
-![Consent flow — sign in](/img/agent-security/consent-flow/login.png)
+![Consent flow sign-in screen with the enabled sign-in methods](/img/agent-security/consent-flow/login.png)
 
-### 3. Server selection
+### 3. The user selects an MCP server \{#3-server-selection}
 
-After signing in, the consent screen shows a list of MCP servers the admin has [granted the user access to](/permit-mcp-gateway/guide#4-grant-user-access-to-mcp-servers). The user selects the server they want to connect to from this pre-approved list. If the admin has enabled **Dynamic MCPs** on the host, users also have the option to enter a custom MCP server URL — see [Platform: Dynamic MCPs](/permit-mcp-gateway/platform#dynamic-mcps) for details.
+The consent screen lists the MCP servers the admin [granted the user access to](/permit-mcp-gateway/guide#4-grant-user-access-to-mcp-servers). The user selects one server. When the admin turns on **Dynamic MCPs** for the host, the user can also enter a custom MCP server URL. See [Dynamic MCPs](/permit-mcp-gateway/platform#dynamic-mcps).
 
-![Consent flow — select MCP server](/img/agent-security/consent-flow/select-server.png)
+![Consent flow screen listing the MCP servers the user can connect to](/img/agent-security/consent-flow/select-server.png)
 
-:::note No servers?
-If the user has not been granted access to any MCP server by the admin, they will see an empty state and won't be able to proceed. The admin must [grant access](/permit-mcp-gateway/guide#4-grant-user-access-to-mcp-servers) first.
+:::note Empty server list
+If the admin hasn't granted the user access to any MCP server, the consent screen shows an empty state and the user can't continue. The admin [grants access](/permit-mcp-gateway/guide#4-grant-user-access-to-mcp-servers) first, and the user then reconnects.
 
-![Consent flow — empty state](/img/agent-security/consent-flow/empty-state.png)
+![Consent flow empty state when the user has no MCP server access](/img/agent-security/consent-flow/empty-state.png)
 :::
 
-After selecting a server, the Consent Service connects to verify the server is reachable and probes it to discover its available tools.
+After the user selects a server, the Consent Service connects to the server to check that it is reachable and to list its tools.
 
-![Consent flow — connecting to server](/img/agent-security/consent-flow/waiting-sync.png)
+![Consent flow screen while the Consent Service connects to the selected MCP server](/img/agent-security/consent-flow/waiting-sync.png)
 
-### 4. Upstream OAuth
+### 4. The user signs in to the upstream MCP server \{#4-upstream-oauth}
 
-If the selected MCP server requires authentication (e.g., GitHub, Linear), the user is redirected to the upstream provider to sign in and authorize access. This is handled transparently by the Consent Service:
+If the selected MCP server requires OAuth, such as GitHub or Linear, the Consent Service runs the upstream OAuth flow:
 
-1. The Consent Service probes the upstream server and receives a `401` indicating OAuth is required
-2. It discovers the upstream server's OAuth authorization server
-3. It registers as a client (via Dynamic Client Registration) or uses pre-configured credentials
-4. The user is redirected to the upstream provider to authorize
-5. On callback, the Consent Service exchanges the authorization code for tokens
-6. The upstream tokens are stored securely and used for all future tool calls proxied through the gateway
+1. The Consent Service connects to the upstream MCP server and receives `401`, which means the server requires OAuth.
+2. The Consent Service discovers the upstream server's OAuth authorization server.
+3. The Consent Service registers as an OAuth client through Dynamic Client Registration (DCR), or uses pre-configured client credentials.
+4. The browser redirects the user to the upstream provider to authorize access.
+5. On the callback, the Consent Service exchanges the authorization code for upstream tokens.
+6. The gateway stores the upstream tokens in the user's session and uses them for the user's tool calls to that server.
 
-![Consent flow — upstream OAuth redirect](/img/agent-security/consent-flow/oauth-redirect.png)
+![Consent flow redirect to the upstream OAuth provider](/img/agent-security/consent-flow/oauth-redirect.png)
 
-If the MCP server does not require OAuth, this step is skipped entirely.
+If the MCP server doesn't require OAuth, the flow skips this step.
 
-### 5. Trust level selection
+### 5. The user selects a trust level \{#5-trust-level-selection}
 
-The consent screen displays all discovered tools from the selected MCP server. As the user adjusts the trust level slider, each tool dynamically shows an **Allowed** or **Denied** badge based on its required trust level — giving the user a clear picture of what each level grants. The user chooses the trust level they want to grant their agent, up to the maximum level the admin configured:
+The consent screen lists the server's tools and a trust level slider. Each tool shows an **Allowed** or **Denied** badge for the selected trust level, so the user sees what the agent can call before accepting.
 
-| Trust level | What the agent can do |
+| Trust level | Tools the agent can call |
 | ----------- | --------------------- |
-| **Low** | Read-only tools (e.g., `get_issues`, `list_repos`) |
-| **Medium** | Low + write tools (e.g., `create_issue`, `send_message`) |
-| **High** | Low + medium + destructive tools (e.g., `delete_repo`, `remove_member`) |
+| **Low** | Read-only tools, for example `get_issues` or `list_repos` |
+| **Medium** | Low tools and write tools, for example `create_issue` or `send_message` |
+| **High** | Low, medium, and destructive tools, for example `delete_repo` or `remove_member` |
 
-The consent UI visually shows which tools are allowed and denied at each level. Trust levels above the admin-configured maximum are disabled — the user cannot select them.
+The slider shows all three levels. Levels above the max trust level the admin set for the user on this server are disabled, and the user can't select them.
 
-![Consent flow — set trust level and review tools](/img/agent-security/consent-flow/trust-level-slider.png)
+For a server the user added through Dynamic MCPs, the user can also change the trust level of individual tools, up to the max trust level.
 
-### 6. Authorize
+![Consent flow trust level slider with allowed and denied tools](/img/agent-security/consent-flow/trust-level-slider.png)
 
-The user clicks **Authorize Agent** to grant consent. This confirms the selected MCP server and trust level for the current agent (MCP client).
+### 6. The user accepts \{#6-authorize}
 
-### 7. Sync and redirect
+The user clicks **Accept** to grant consent for the selected MCP server and trust level to this agent (MCP client). **Deny** ends the flow without granting access.
 
-After the user authorizes, several things happen:
+### 7. The Consent Service saves permissions and returns to the client \{#7-sync-and-redirect}
 
-![Consent flow — processing consent](/img/agent-security/consent-flow/success-processing.png)
+![Consent flow screen while the consent is processed](/img/agent-security/consent-flow/success-processing.png)
 
-1. **Permissions sync to Permit** — the Consent Service creates the necessary relationships in Permit.io:
-   - An agent user is created (identified as `agent|{client_id}`)
-   - The agent is assigned a trust-level role (e.g., `linear-medium`) on the user's profile
-   - The user's existing profile-to-server relation (set by the admin) is verified as the trust ceiling
-2. **Session creation** — the Consent Service sends session data (upstream URL, tokens, trust level) to the Gateway via the Admin API, which stores it in Redis
-3. **Authorization code issued** — the Consent Service issues an OAuth authorization code
-4. **Token exchange** — the MCP client exchanges the code for a JWT access token
-5. **Redirect** — the user is redirected back to their MCP client, which can now make authorized tool calls
+After the user accepts:
 
-## What happens behind the scenes
+1. **Permit sync:** the Consent Service creates the agent user `agent|{client_id}` in Permit and assigns the agent a trust level role, such as `linear-medium`, on the user's profile. The request fails if the trust level is above the user's max trust level for the server.
+2. **Session creation:** the Consent Service sends the session data (upstream URL, upstream tokens, trust level) to the gateway, which stores the session in Redis. The Consent Service creates the session only after the Permit sync succeeds.
+3. **Authorization code:** the Consent Service issues an OAuth authorization code.
+4. **Token exchange:** the MCP client exchanges the code for a JSON Web Token (JWT) access token.
+5. **Redirect:** the browser returns the user to the MCP client, which can now call tools through the gateway.
 
-When a user goes through the consent flow, the Consent Service orchestrates multiple systems:
+**Result:** the agent appears on the **Agents** page of the gateway dashboard, and its tool calls appear on the agent's **Audit Logs** tab. See [Audit logs](/permit-mcp-gateway/audit-logs).
+
+## What the Consent Service does behind the screens \{#what-happens-behind-the-scenes}
+
+This sequence shows the calls between the browser, the Consent Service, the upstream MCP server, Permit, and the gateway during one consent flow:
 
 ```mermaid
 sequenceDiagram
@@ -123,57 +124,54 @@ sequenceDiagram
 
 ### Tool discovery
 
-When the user selects an MCP server, the Consent Service connects to the upstream server and calls `list_tools` to discover all available tools. Each tool is automatically classified into a trust level based on naming patterns — the same classification the admin saw during [MCP server import](/permit-mcp-gateway/platform#tool-auto-discovery-and-trust-level-classification). The consent screen then shows all tools with dynamic Allowed/Denied indicators that update as the user moves the trust level slider, so they can see exactly what each trust level grants before committing.
+When the user selects an MCP server, the Consent Service calls `list_tools` on the upstream server. The consent screen assigns each tool a trust level by the keywords in the tool name, the same classification the admin sees at [MCP server import](/permit-mcp-gateway/platform#tool-auto-discovery-and-trust-level-classification). The **Allowed** and **Denied** badges update as the user moves the trust level slider.
 
-### Permit relationship creation
+### Permit objects the consent flow uses \{#permit-relationship-creation}
 
-When the user accepts consent, the Consent Service creates the following in Permit.io:
+| Permit object | Created by | Purpose |
+| --- | --- | --- |
+| Agent user `agent\|{client_id}` | Consent Service, at consent | Represents the MCP client. |
+| Agent role on the profile, for example `linear-medium` | Consent Service, at consent | The trust level the user granted the agent on this server. |
+| User profile `user_profile:{user_id}` | Gateway admin dashboard, when the admin grants access | Represents the human. |
+| Profile-to-server relation, for example `medium` | Gateway admin dashboard, when the admin grants access | The user's max trust level on the server. The Consent Service checks the relation exists before it accepts consent. |
 
-- **Agent user**: `agent|{client_id}` — represents this specific MCP client
-- **User profile**: `user_profile:{user_id}` — the human's profile (created on first sign-in if it doesn't exist)
-- **Agent role on profile**: The agent is assigned a role like `linear-medium` on the user's profile, indicating it can use the Linear MCP server at medium trust
-- **Profile-to-server relation**: Confirms the human's access to the MCP server (set by the admin during [access granting](/permit-mcp-gateway/guide#4-grant-user-access-to-mcp-servers))
-
-The effective trust level for any tool call is `min(agent_role, profile_relation)` — the human's admin-granted max trust acts as a ceiling on what any agent can actually exercise. See [Architecture: Trust Ceiling](/permit-mcp-gateway/architecture#authorization-trust-ceiling-min-logic) for the full derivation.
+The agent's effective trust level on a tool call is the lower of the agent's role and the profile-to-server relation. The admin's max trust level caps what any agent can call. For the full model, see [How Permit MCP Gateway works with Permit.io](/permit-mcp-gateway/permit-integration#the-userprofile-indirection-rebac).
 
 ## Session lifecycle
 
-After the consent flow completes, the Gateway creates a session that persists across MCP client restarts. Sessions are stored in Redis and keyed by the agent's client ID and the user's subject.
+After the consent flow, the gateway keeps a session so the MCP client can reconnect without running consent again. The gateway stores the session in Redis, keyed by the agent's client ID and the user's subject.
 
 ### Session types
 
-The Gateway manages two distinct session layers:
-
 | Session type | Storage | Purpose |
 | ------------ | ------- | ------- |
-| **Transport session** | In-memory (Gateway) | Tracks the active MCP-over-HTTP connection. Recreated automatically on reconnect using the stored application session. |
-| **Application session** | Redis | Stores the upstream MCP URL, OAuth tokens, consented trust level, and server key. Persists across client restarts. |
+| **Transport session** | Gateway memory | Tracks the active MCP-over-HTTP connection. The gateway recreates the transport session on reconnect from the stored application session. |
+| **Application session** | Redis | Stores the upstream MCP server URL, upstream OAuth tokens, consented trust level, and server key. Survives MCP client restarts. |
 
 ### Session expiry
 
-The Gateway enforces two TTLs on application sessions:
-
-| Expiry type | Duration | What happens |
+| Event | When | What happens |
 | ----------- | -------- | ------------ |
-| **Soft TTL (inactivity)** | 30 days | If no tool calls are made for 30 days, the session is removed. Each tool call resets this timer, so actively used sessions do not expire. The user must re-consent to create a new session. |
-| **Hard TTL (absolute)** | 90 days | Maximum session lifetime regardless of activity. After 90 days the session is removed from Redis and the user must re-consent. |
-| **Manual revocation** | Immediate | An admin can revoke access from the [Agents](/permit-mcp-gateway/managing-humans-and-agents#revoking-an-individual-agent) or [Humans](/permit-mcp-gateway/managing-humans-and-agents#revoking-a-humans-access) page, which immediately invalidates the session. |
+| **Inactivity** | 90 days after the last tool call | Redis removes the application session. Each tool call resets the 90-day timer. The next connection runs the consent flow again. |
+| **Admin revocation** | Immediately | An admin revokes an [agent](/permit-mcp-gateway/managing-humans-and-agents#revoking-an-individual-agent) or a [human's access](/permit-mcp-gateway/managing-humans-and-agents#revoking-a-humans-access). The agent's next tool call to that server is denied. |
 
-:::info Session vs. consent permissions
-These TTLs apply to the **application session** (stored in Redis). Consent permissions (role assignments in Permit.io) persist independently — they are not affected by session expiry and remain active until explicitly revoked by an admin.
+:::info Session expiry doesn't remove permissions
+Session expiry removes the application session in Redis. The agent's role and the admin's access grants in Permit stay in place until an admin revokes them.
 :::
 
 ### Re-consent
 
-When a session expires or is revoked, the user goes through the consent flow again on their next connection. This is also how users **change their trust level** — disconnect the MCP server in their client, reconnect, and select a different trust level during the new consent flow.
+When a session expires or access is revoked, the user runs the consent flow again on the next connection.
 
-### Token refresh
+To change the trust level of an agent, the user disconnects the MCP server in the MCP client, reconnects, and selects a different trust level in the new consent flow. An admin can also change an agent's trust level on the **Agents** page. See [Manage humans and agents](/permit-mcp-gateway/managing-humans-and-agents).
 
-If the upstream MCP server issued OAuth tokens with a refresh token, the Gateway automatically refreshes the access token before it expires (within a 5-minute window). This happens transparently — the user does not need to re-authenticate with the upstream provider.
+### Upstream token refresh \{#token-refresh}
 
-## Pre-configured URLs
+If the upstream MCP server issued a refresh token, the gateway refreshes the upstream access token when it is within 5 minutes of expiry. The user doesn't sign in to the upstream provider again.
 
-Admins can create URLs that pre-select a specific MCP server in the consent flow by appending the `upstream_mcp` query parameter:
+## Pre-select an MCP server in the gateway URL \{#pre-configured-urls}
+
+Give users a gateway URL that pre-selects an MCP server in the consent flow. Add the `upstream_mcp` query parameter with the upstream server's URL:
 
 ```
 https://acme-brave-coral-37.agent.security/mcp?upstream_mcp=https://mcp.linear.app/mcp
@@ -181,30 +179,29 @@ https://acme-brave-coral-37.agent.security/mcp?upstream_mcp=https://mcp.linear.a
 
 When a user connects with this URL:
 
-1. The consent flow opens as usual (login is still required)
-2. The server selection step has the specified MCP server **pre-selected**
-3. The user proceeds directly to trust level selection
+1. The consent flow opens, and the user signs in.
+2. The server selection step has the MCP server pre-selected.
+3. The user continues to trust level selection.
 
-This is useful for:
-
-- **Team onboarding** — distribute a URL that points directly to the team's primary MCP server
-- **Per-server setup links** — include in onboarding docs or Slack messages
-- **Reducing friction** — skip the server selection step for users who need a specific server
+Use a pre-selecting URL in team onboarding docs or messages when a team uses one MCP server. The MCP server detail page in the gateway dashboard shows the upstream URL to use as the `upstream_mcp` value. For distributing these URLs, see [Pre-selected MCP server URLs](/permit-mcp-gateway/host-setup#pre-selected-mcp-server-urls).
 
 :::info Access still required
-The `upstream_mcp` parameter only pre-selects the server — it does not bypass access control. The user must still have been [granted access](/permit-mcp-gateway/guide#4-grant-user-access-to-mcp-servers) to the specified server by an admin. If they haven't, the pre-selection is ignored and they see only the servers they have access to.
+The `upstream_mcp` parameter only pre-selects the server. The user still needs an admin [access grant](/permit-mcp-gateway/guide#4-grant-user-access-to-mcp-servers) for that server. Without a grant, the consent flow ignores the parameter and lists only the servers the user can access.
 :::
-
-Admins can set up pre-configured URLs from the [Platform](/permit-mcp-gateway/platform) — the server detail page shows the upstream URL that can be used as the `upstream_mcp` value. See the [Host Setup Guide](/permit-mcp-gateway/host-setup#pre-selected-mcp-server-urls) for more on distributing these URLs to teams.
 
 ### Path-based server selection
 
-As an alternative to the `upstream_mcp` query parameter, you can use a **path-based URL** that routes directly to a specific static MCP server:
+A path-based URL routes to one imported MCP server by its server key:
 
 ```
 https://acme-brave-coral-37.agent.security/mcp/linear
 ```
 
-Where `linear` is the server key assigned during import. When using this URL, the MCP client connects directly to the specified server — the consent flow still runs (login + trust level selection), but the server selection step is bypassed entirely.
+In this URL, `linear` is the server key assigned at import. The consent flow still signs the user in and asks for a trust level, and it skips the server selection step. Use path-based URLs when each URL serves one MCP server.
 
-This is useful for distributing server-specific gateway URLs where each URL is dedicated to a single MCP server.
+## Next steps
+
+- [Authentication methods reference](/permit-mcp-gateway/authentication-methods): configure how users sign in.
+- [Manage humans and agents](/permit-mcp-gateway/managing-humans-and-agents): grant access, set max trust levels, and revoke agents.
+- [How Permit MCP Gateway works with Permit.io](/permit-mcp-gateway/permit-integration): the policy model behind trust levels.
+- [Audit logs](/permit-mcp-gateway/audit-logs): review the tool calls an agent makes after consent.

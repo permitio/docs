@@ -1,63 +1,128 @@
 ---
 sidebar_position: 2
 title: Permit and Cognito Demo
-description: "Run a demo app that uses AWS Cognito for authentication and Permit.io permit.check() calls for authorization."
+description: "Run a vanilla JavaScript and Express demo app that signs users in with Amazon Cognito and authorizes two actions with Permit.io permit.check() calls."
+sidebar_label: Demo Application
 ---
 
-## 1. Introduction
+Run a demo app that signs users in with Amazon Cognito and uses Permit.io to decide which of two actions each user can take. This page is for developers who want a working example before they add Permit to their own Cognito app. To add the integration to your own application, follow [Cognito and Permit integration](/authentication/cognito/permit-integration).
 
-### 1.1. The application
+:::warning Patch the sync route before you run the demo
+The `POST /api/sync` route in `standalone_be/index.mjs` of the [permitio/cognito-integration repository](https://github.com/permitio/cognito-integration) declares `payload` with `const` inside its `try` block and reads it after the block, so the call to `permit.api.syncUser()` throws a `ReferenceError` and no user reaches Permit. The route also reads `name` and `email` from a Cognito access token, which carries neither claim. Apply the corrected route in [2. Run the demo application](#2-run-the-demo-application) before you start the server, or the demo signs users in and then fails every permission check, because a user who doesn't exist in Permit has no roles.
+:::
 
-The demo application is a simple app that display the user information.
-Based on [this GitHub repository](https://github.com/sashee/cognito-auth-example) and [this article](https://advancedweb.hu/how-to-add-cognito-login-to-a-website/)
-The full code is available on [GitHub](https://github.com/permitio/cognito-integration).
+The demo is based on the [cognito-auth-example repository](https://github.com/sashee/cognito-auth-example) and the article [How to add Cognito login to a website](https://advancedweb.hu/how-to-add-cognito-login-to-a-website/). The full code is in the [permitio/cognito-integration repository](https://github.com/permitio/cognito-integration).
 
-### 1.2. Create the right resources and roles in Permit
+## What the demo app contains
 
-In our example, we will set up a simple Hello World application, so we will create a `hello` resource with the following actions:
+| Folder | What it runs |
+|---|---|
+| `frontend/` | A vanilla JavaScript page with a **Login** button and two action buttons. It signs the user in with the Cognito hosted login page and calls the backend. |
+| `standalone_be/` | An Express server on port 8000. It verifies Cognito tokens, syncs users to Permit, and protects the `POST /say_hello` and `POST /wave_hello` routes with `permit.check()`. |
 
-- say
-- wave
+The demo needs no policy decision point (PDP) of your own. `standalone_be/index.mjs` creates the Permit client with the address of the managed Cloud PDP, `https://cloudpdp.api.permit.io`.
 
-We will also create two roles:
+## Prerequisites
 
-- `admin` and `viewer`
+- An AWS account with an Amazon Cognito user pool and an app client. The app client needs the hosted login page enabled, no client secret (the browser exchanges the code without one), and `http://localhost:8181` as an allowed callback URL.
+- A [Permit.io account](https://app.permit.io/) and your environment API key. See [Get your API key](/overview/get-api-key).
+- Node.js and npm.
 
-Setting up roles and resources can be done through the [Permit dashboard](https://app.permit.io/policy-editor), by using the [Permit API](https://api.permit.io/v2/redoc#tag/Roles/operation/create_role), or with one of our SDKs: [Python](/sdk/python/usage-example/#create-a-role), [NodeJS](/sdk/nodejs/quickstart-nodejs#creating-a-new-role-with-permissions) and more. Additional SDKs are available in the SDK Reference section [inside the docs](/).
+## 1. Create the policy in Permit \{#12-create-the-right-resources-and-roles-in-permit}
 
-### 1.3. Set up the right permissions in Permit.io:
+Create the policy in the [Permit dashboard](https://app.permit.io/policy-editor), with the [Permit API](https://api.permit.io/v2/redoc#tag/Roles/operation/create_role), or with an SDK ([Python](/sdk/python/usage-example/#create-a-role), [Node.js](/sdk/nodejs/quickstart-nodejs#creating-a-new-role-with-permissions), or [another SDK](/sdk/sdks-overview)):
 
-- `admin` should have all the permissions for the `hello` resource.
-- `viewer` will only have the `wave` permission.
+1. Create a resource with the key `hello` and the actions `say` and `wave`.
+2. Create the roles `admin` and `viewer`.
+3. Allow `say` and `wave` for `admin`. Allow only `wave` for `viewer`. You can also use the [assign permissions API](https://api.permit.io/v2/redoc#tag/Roles/operation/assign_permissions_to_role).
 
-As noted earlier, these permissions can be set up through either the [Permit dashboard](https://app.permit.io/policy-editor) or by using the [Permit API](https://api.permit.io/v2/redoc#tag/Roles/operation/assign_permissions_to_role).
+## 2. Run the demo application \{#2-run-the-demo-application}
 
-## 2. Run the demo application
-
-### 2.1. Clone the demo application:
+1. Clone the demo application:
 
 ```bash
 git clone https://github.com/permitio/cognito-integration
 ```
 
-### 2.2. Put your Cognito credentials in the /standalone_be/.env file (you can see the .env.example file for reference)
+2. Open `standalone_be/index.mjs` and replace the `POST /api/sync` route with this corrected version, which keeps `payload` in scope after the `try` block, stops on an invalid token, and syncs only the `sub` claim that a Cognito access token carries:
 
-### 2.3. Put your Permit credentials in the .env file
+```js
+// /standalone_be/index.mjs
 
-You can get your Permit API Key from the [projects page](https://app.permit.io/projects) by clicking on the three dots on the top right of your environment and selecting `Copy API Key`.
-
-_![Get Permit API key](/img/onboarding/secret-key-1.png)_
-
-```bash
-PERMIT_API_KEY=<permit_api_key>
+app.post("/api/sync", async (req, res) => {
+  // payload is declared outside the try block, so it is still in scope below
+  let payload;
+  try {
+    payload = await verifier.verify(
+      req.headers.authorization?.split(" ")[1] // the JWT as string
+    );
+  } catch (error) {
+    res.status(403).send("Token not valid!");
+    return;
+  }
+  // the Cognito access token carries sub, but no name or email claim
+  const syncUser = await permit.api.syncUser({
+    key: payload.sub,
+  });
+  // To assign a role here, map Cognito groups to Permit roles and call:
+  // await permit.api.users.assignRole({
+  //     user: payload.sub,
+  //     role: caseSensitiveRoleKey,
+  //     tenant: caseSensitiveTenantKey, // if you don't use tenants, use 'default'
+  // });
+  res.status(200).send(syncUser);
+});
 ```
 
-## 3. How it works
+3. In the `standalone_be` folder, create a `.env` file based on `.env.example`, with your Cognito and Permit values:
 
-### 3.1. Cognito
+| Variable | Value |
+|---|---|
+| `USER_POOL_ID` | The ID of your Cognito user pool |
+| `CLIENT_ID` | The ID of your Cognito app client |
+| `PERMIT_TOKEN` | Your Permit environment API key |
 
-As we want to use Cognito for authentication, we will use the Cognito SDK to get each user's information and access token.
-On the frontend side, we have the `redirectToLogin` function to redirect the user to the Cognito login page if they are not logged in.
+```bash
+USER_POOL_ID=<your_user_pool_id>
+CLIENT_ID=<your_app_client_id>
+PERMIT_TOKEN=<permit_api_key>
+```
+
+To copy your Permit API key, open the [Projects page](https://app.permit.io/projects), click the three dots on your environment, and select **Copy API Key**.
+
+![Permit Projects page with the Copy API Key option in the environment menu](/img/onboarding/secret-key-1.png)
+
+4. In the `standalone_be` folder, run `npm install`, then `node index.mjs`. The server logs `Server listening on port 8000`.
+
+5. In the `frontend` folder, copy `config.example.js` to `config.js`. Set `cognitoLoginUrl` to your Cognito domain, in the form `https://<cognito-name>.auth.<region>.amazoncognito.com`, and `clientId` to your app client ID.
+
+6. Serve the `frontend` folder on port 8181 with any static file server, for example `npx http-server -p 8181`. The backend allows browser requests only from `http://localhost:8181`.
+
+## 3. Verify the demo \{#verify-the-demo}
+
+1. Open `http://localhost:8181`. With no Cognito tokens in the browser's local storage, `frontend/app.mjs` sends the browser to the Cognito hosted login page without waiting for a click on **Login**. Sign up or sign in there. Cognito returns the browser to `http://localhost:8181` with a `code` query parameter, the page exchanges the code for tokens, and it calls `POST /api/sync`.
+2. In the Permit dashboard, open **Directory**. A user appears whose key is the Cognito `sub` value of the account you signed in with. Assign the `viewer` role in the `default` tenant.
+3. In the demo app, click the first **Say hello (if you have permission)** button, which calls `POST /say_hello`. The browser shows an alert with `Failed to say hello`, because `viewer` can't `say`.
+4. Click the second button, which carries the same label and calls `POST /wave_hello`. The alert shows `Waved hello`.
+5. In Permit, assign the `admin` role to the user. Click the first button again. The alert shows `Said hello`.
+
+:::note Both action buttons carry the same label
+`frontend/index.html` labels both action buttons **Say hello (if you have permission)**. The first button in the page calls `/say_hello` and the second calls `/wave_hello`, so go by position, not by label.
+:::
+
+A successful sync logs one line in the browser console:
+
+```text
+User synced
+```
+
+If no user appears in step 2, open the browser console. A `403` response from `/api/sync` means the Cognito access token didn't verify, so check `USER_POOL_ID` and `CLIENT_ID` in `standalone_be/.env`. If the request to `/api/sync` never completes, the route still holds the unpatched code: the server runs Express 4, which doesn't turn a rejected async handler into a response, so the `ReferenceError` leaves the request open and prints an unhandled rejection in the server terminal.
+
+## 4. How the demo app works \{#3-how-it-works}
+
+### Cognito sign-in with the authorization code flow \{#31-cognito}
+
+On the frontend, the **Login** button calls `redirectToLogin`. The function sends the user to the Cognito hosted login page with the authorization code flow and PKCE (Proof Key for Code Exchange), which lets a browser app exchange the code without a client secret:
 
 ```js
 // app.mjs
@@ -72,7 +137,7 @@ const redirectToLogin = async () => {
 //...
 ```
 
-On the backend side, we have the `GET api/id` and `GET api/access` routes that validate the token and returns the user information.
+On the backend, the `GET /api/id` and `GET /api/access` routes verify the ID token and the access token with `CognitoJwtVerifier` from the `aws-jwt-verify` package, and return the token payload. The demo uses them to show the decoded tokens in its token table:
 
 ```js
 // standalone_be/index.mjs
@@ -96,19 +161,15 @@ app.get("/api/id", async (req, res) => {
 //...
 ```
 
-### 3.2. Permit sync users
+### When the demo syncs users to Permit \{#32-permit-sync-users}
 
-As we want to use Permit for authorization, we will use the Permit SDK to get users' permissions and check if they have the right ones.
-So we need to sync the users from Cognito to Permit.
-We will use the `syncUsers` function to sync the users from Cognito to Permit.
-This code will be called after each successful Cognito login by the frontend.
+Permit can only match a user to roles after the user exists in Permit. After Cognito redirects back with a `code` query parameter, the frontend exchanges the code for tokens and calls the backend sync route with the access token:
 
 ```js
 // /frontend/app.mjs
 //...
 if (searchParams.get("code") !== null) {
   //... get the tokens from Cognito
-  // After we got the tokens, we need to sync the user info with Permit
   const syncUser = await fetch("http://localhost:8000/api/sync", {
     method: "POST",
     headers: new Headers({ Authorization: `Bearer ${tokens.access_token}` }),
@@ -117,72 +178,14 @@ if (searchParams.get("code") !== null) {
 }
 ```
 
-On the backend side, we have the `POST api/sync` route that syncs the user from Cognito to Permit.
-If you want to add roles to the user, use the `permit.api.assignRoles(userKey, roleKey, tenantKey)` [function](/sdk/nodejs/role/assign-role/).
+The backend route verifies the access token and calls `permit.api.syncUser()` with the Cognito `sub` claim as the user key. It assigns no roles, so assign them in the Permit dashboard, or add a `permit.api.users.assignRole()` call as the comment in the corrected route shows. For the general pattern and where to run it in your own app, see [Sync Cognito users with Permit after login](/authentication/cognito/permit-integration#22-sync-cognito-with-permit-after-successful-login).
 
-```js
-// /standalone_be/index.mjs
+### How the demo checks permissions \{#33-permit-authorization}
 
-// init Permit
+Authorization runs only on the backend. The `POST /say_hello` and `POST /wave_hello` routes verify the ID token, then call `permit.check()` with the user's `sub` as the user key, the action (`say` or `wave`), and `hello` as the resource. A route answers HTTP 200 only when the token verifies and Permit allows the action, and HTTP 403 otherwise. For the same pattern written for your own routes, see [Check permissions on the backend](/authentication/cognito/permit-integration#22-enforce-permissions-with-permit).
 
-const permit = new Permit({
-  token: permitToken,
-  pdp: "https://cloudpdp.api.permit.io",
-});
+## Next steps
 
-app.post("/api/sync", async (req, res) => {
-  try {
-    const payload = await verifier.verify(
-      req.headers.authorization?.split(" ")[1] // the JWT as string
-    );
-  } catch (error) {
-    res.status(403).send("Token not valid!");
-  }
-  const syncUser = await permit.api.syncUser({
-    first_name: payload.name,
-    key: payload.sub,
-    email: payload.email,
-  });
-  // you can also assign role to a user here if you have mapping between Cognito groups and Permit roles
-  // with the assign role SDK method
-  // await permit.api.assignRole({
-  //     "key": cognitoUser.sub,
-  //     "role": caseSensitiveRoleKey,
-  //     "tenant": caseSensitiveTenantKey, // if you don't use tenants, use 'default'
-  // });
-  res.status(200).send(syncUser);
-});
-```
-
-### 3.3. Permit authorization
-
-Authorization is only done on the backend side, so we will use the `permit SDK` to check if the user has the right permissions for each request.
-In this example we have two action routes POST `/say_hello` and POST `/wave_hello` that will be protected by Permit.
-
-Only after successful cognito authentication and Permit authorization will the user be able to access these routes and get 200(successful) response.
-
-```js
-app.post("/say_hello", async (req, res) => {
-  try {
-    const payload = await verifierIdToken.verify(
-      req.headers.authorization?.split(" ")[1] // the JWT as string
-    );
-    // check the request body for the "message" property
-    const permitted = await permit.check(
-      payload.sub, // the user id
-      "say", // the action
-      "hello" // the resource
-    );
-    if (permitted) {
-      res.status(200).send("Permitted! to say hello");
-    } else {
-      res.status(403).send("Not permitted to say hello");
-    }
-  } catch (error) {
-    res.status(403).send("Token not valid!");
-  }
-});
-//... handle the request
-```
-
-[Check GitHub to see the full code.](https://github.com/permitio/cognito-integration)
+- [Cognito and Permit integration](/authentication/cognito/permit-integration): add the integration to your own application.
+- [Check permissions](/how-to/enforce-permissions/check): learn the full `permit.check()` signature.
+- [How authentication connects to Permit.io](/authentication/permit-and-authentication): the handoff point and the user key.

@@ -1,38 +1,84 @@
 ---
 sidebar_position: 2
-title: on Helm
-description: "Deploying PDP on Kubernetes (Helm)"
+title: Deploy the PDP on Kubernetes with Helm
+sidebar_label: on Helm
+description: "Install the Permit.io policy decision point (PDP) on a Kubernetes cluster with the official Helm chart, verify it is healthy, and connect your services to it."
 ---
 
-# Deploying PDP using helm
+Install the Permit.io policy decision point (PDP) on Kubernetes with the official `pdp` Helm chart. This page is for operators who run Kubernetes and want a PDP that services in the cluster can call.
 
-In this example, we will show you how to deploy the Permit PDP on Kubernetes using helm.
+The chart is published from the [permitio/PDP repository](https://github.com/permitio/PDP/tree/main/charts/pdp) at `https://permitio.github.io/PDP`. It creates these resources:
 
-Resources included in this example:
+| Resource | Name | Notes |
+|---|---|---|
+| Deployment | `permitio-pdp` | Runs the `permitio/pdp-v2` image, with a liveness probe on `/health` and a readiness probe on `/healthy`, both on port `7000`. |
+| Service | `permitio-pdp` | Listens on port `7766` and forwards to container port `7000`. |
+| Secret | `permitio-pdp-secret` | Holds the API key. The chart skips the Secret when you set `pdp.existingApiKeySecret`. |
+| PodDisruptionBudget | `permitio-pdp-pdb` | Created only when `pdp.replicas` is greater than `1`. |
 
-- Deployment
-- Service
-- Secret
+## Prerequisites
 
-## To deploy the PDP on Kubernetes, follow these steps:
+- A Kubernetes cluster, and `kubectl` configured for it.
+- [Helm](https://helm.sh/docs/intro/install/) installed.
+- Your environment API key. See [Get your API key](/overview/get-api-key).
 
-1. Add helm repo:
+## Install the PDP with Helm \{#to-deploy-the-pdp-on-kubernetes-follow-these-steps}
+
+1. Add the Permit PDP Helm repository:
 ```bash
 helm repo add pdp https://permitio.github.io/PDP
 ```
-2. In order to see all available versions and also make sure the helm repo added successfully:
+2. Confirm Helm added the repository, and list the chart versions:
 ```bash
 helm search repo pdp
 ```
-3. Make sure to replace API_KEY placeholder with your API KEY and perform helm install command:
+The output lists the `pdp/pdp` chart.
+
+3. Install the chart. Replace `<API_KEY>` with your environment API key:
 ```bash
 helm install pdp pdp/pdp --set pdp.ApiKey=<API_KEY> --create-namespace --namespace pdp --wait
 ```
+The command creates the `pdp` namespace, installs a release named `pdp`, and waits until the PDP pod is ready.
 
-Once the PDP is ready, you can start sending authorization requests to it.
+:::warning API key on the command line
+A key passed with `--set` stays in your shell history, and anyone who can run `helm get values` on the release can read it. To keep the key out of the command, create a Kubernetes Secret yourself and set `pdp.existingApiKeySecret.name` and `pdp.existingApiKeySecret.key` in a values file.
+:::
 
-## Interacting with the PDP
+## Verify the PDP is running \{#verify-the-pdp-is-running}
 
-To interact with the PDP **internally** (from inside the cluster), you can use the service name `permitio-pdp.<Your Namespace>.svc.cluster.local`.
+1. Run `kubectl get pods -n pdp`. The `permitio-pdp` pod shows `1/1` in the `READY` column and `Running` in the `STATUS` column.
+2. Run `kubectl port-forward svc/permitio-pdp 7766:7766 -n pdp`.
+3. In another terminal, send a `GET` request to `http://localhost:7766/health`. A healthy PDP returns HTTP `200` with `"status": "ok"`.
 
-To interact with the PDP **externally** (from outside the cluster), you must expose the service using a load balancer or an ingress of your choice.
+For what each health endpoint returns, see [Verify the PDP is healthy](/how-to/deploy/deploy-to-production#pdp-health-check-endpoints).
+
+## Connect to the PDP \{#interacting-with-the-pdp}
+
+From inside the cluster, services reach the PDP through the `permitio-pdp` Service on port `7766`:
+
+`http://permitio-pdp.<NAMESPACE>.svc.cluster.local:7766`
+
+Replace `<NAMESPACE>` with the namespace you installed the chart in (`pdp` in the example above). Set this URL as the PDP URL in your SDK. See [Connect your SDK to the PDP](/how-to/deploy/deploy-to-production#using-the-pdp).
+
+From outside the cluster, expose the `permitio-pdp` Service with a load balancer or an ingress. Anyone who can reach an exposed PDP can send it permission checks, so restrict access to your own services.
+
+## Common chart values \{#common-chart-values}
+
+Set values with `--set` or a values file. For the full list, see the chart's [values.yaml](https://github.com/permitio/PDP/blob/main/charts/pdp/values.yaml).
+
+| Value | Default | Purpose |
+|---|---|---|
+| `pdp.ApiKey` | Placeholder | Environment API key, stored in the `permitio-pdp-secret` Secret. |
+| `pdp.existingApiKeySecret.name`, `pdp.existingApiKeySecret.key` | Not set | Use an existing Secret for the API key instead. |
+| `pdp.port` | `7766` | Port of the `permitio-pdp` Service. |
+| `pdp.replicas` | `1` | Number of PDP pods. |
+| `pdp.image.tag` | `latest` | PDP image tag. Pin a version to control upgrades. |
+| `pdp.pdpEnvs` | `[]` | Extra PDP environment variables, as a list of `name` and `value` pairs. |
+| `pdp.debug_mode` | `false` | Sets `PDP_DEBUG=true` on the PDP. |
+
+## Next steps
+
+- [Size the PDP for production](/how-to/deploy/deploy-to-production#system-requirements-and-performance-optimization)
+- [Run the PDP in offline mode](/how-to/deploy/offline-mode)
+- [Monitor your PDPs](/how-to/monitoring-pdps)
+- [Deploy the PDP with Terraform](/how-to/deploy/cloud-hosts/terraform)
