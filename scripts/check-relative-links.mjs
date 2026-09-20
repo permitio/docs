@@ -22,7 +22,13 @@ function check(file) {
   fs.readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
     if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
     if (inFence) return;
-    for (const [, target] of line.matchAll(/\]\((\.{1,2}\/[^)\s#]*)(?:#[^)\s]*)?\)/g)) {
+    // Relative targets are either dot-prefixed (./page, ../dir/page) or bare
+    // (page, dir/page). Both resolve against the current URL in the browser.
+    // Anything starting with /, #, a scheme or mailto: is absolute and fine.
+    for (const [, raw] of line.matchAll(/\]\(([^)\s#][^)\s#]*)(?:#[^)\s]*)?\)/g)) {
+      // Markdown allows <angle-bracketed> targets; unwrap before judging.
+      const target = raw.replace(/^</, '').replace(/>$/, '');
+      if (/^(\/|[a-z][a-z0-9+.-]*:)/i.test(target)) continue;
       if (!ASSET.test(target.replace(/\/$/, ''))) problems.push(`${file}:${i + 1}  ${target}`);
     }
   });
