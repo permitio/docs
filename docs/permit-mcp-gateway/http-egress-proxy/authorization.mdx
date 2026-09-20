@@ -7,7 +7,7 @@ sidebar_position: 5
 
 This page is for operators and security teams who design egress access for AI agents. It explains how the HTTP Egress Proxy decides whether an agent's outbound request is allowed, how a person delegates access to an agent, and how revocation works.
 
-An outbound request passes through two independent gates, and both must allow it. The same model governs MCP tool calls in the Permit MCP Gateway, and both use the same Permit policy environment.
+An outbound request passes through two independent gates, and both must allow it. The same model governs Model Context Protocol (MCP) tool calls in the Permit MCP Gateway, and both use the same Permit policy environment.
 
 On this page, **the proxy** is the HTTP Egress Proxy, the component that decides each outbound request. **The gateway** is the Permit MCP Gateway that hosts the proxy and holds the host configuration, the workflows, and the stored credentials.
 
@@ -48,6 +48,18 @@ The rule declares the trust level a request must meet (its required trust). The 
 Each gateway host maps to a Permit environment, so you manage egress policies in the same place as your MCP policies. See [Permit.io integration](/permit-mcp-gateway/permit-integration).
 
 With two gates, an operator defines a workflow's domains and rules, and your central Permit policy decides which of those rules each agent may use.
+
+### One request through both gates \{#worked-example}
+
+Take the `ship_pr` workflow from [Workflows and rules](/permit-mcp-gateway/http-egress-proxy/egress-rules#how-a-workflow-is-structured). Its `*.github.com` domain has three rules: `open_tunnel` (method class `all`, no path, low trust), `read_repo` (`read`, low trust), and `push_commit` (`write`, medium trust). An agent holds a token bound to `ship_pr`, delegated by a person whose ceiling on `ship_pr` is medium, and the person consented at medium.
+
+The agent sends `POST https://api.github.com/repos/acme/app/git/refs`:
+
+1. **Gate 1, workflow match.** `api.github.com` matches the `*.github.com` domain. `POST` is in the `write` method class, so the request matches the `push_commit` rule. On an HTTPS domain in `intercept` mode, the `open_tunnel` rule authorizes the connection first, and the proxy then matches the decrypted request against `push_commit`.
+2. **Gate 2, Permit.io policy.** The proxy asks the Permit policy whether the agent holds a role that authorizes `push_commit`. The person's consent at medium granted that role, so the policy allows it.
+3. **Trust ceiling.** The requested level, medium, is not above the person's medium ceiling, so the proxy forwards the request to GitHub. An admin sets that ceiling per person and per workflow, as [Trust ceilings](#trust-ceilings) describes.
+
+Now take a person whose ceiling on `ship_pr` is low. Their consent caps at low, so the agent they authorize does not hold a role that authorizes the medium-trust `push_commit` rule, and gate 2 denies the same `POST` with HTTP `403`. A `DELETE` to that host matches no rule at all and is denied at gate 1, before any policy evaluation. For the exact request commands, response headers, and deny codes, see [Two requests against one workflow](/permit-mcp-gateway/http-egress-proxy/egress-rules#example-requests).
 
 ## Human consent and trust ceilings
 

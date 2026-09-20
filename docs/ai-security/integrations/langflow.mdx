@@ -19,7 +19,7 @@ You build three flows:
 - A [Permit.io account](https://app.permit.io/) and your environment API key. See [Get your API key](/overview/get-api-key).
 - Docker, to run an Edge policy decision point (PDP). The policies in this tutorial use attribute-based access control (ABAC), which the Cloud PDP doesn't evaluate. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
 - A Langflow instance. See the [Langflow installation guide](https://docs.langflow.org/get-started-installation).
-- The Permit components for Langflow. Langflow doesn't include them. Get the component files from the [permit-langflow-framework repository](https://github.com/permitio/permit-langflow-framework) and add them to Langflow as custom components. See [Custom components](https://docs.langflow.org/components-custom-components) in the Langflow docs. The `permit-langflow` 0.1.0 package on PyPI pins `langflow==1.1.4.post1`, so check the pin against your Langflow version before you install it.
+- The Permit components for Langflow. Langflow doesn't include them. Get the component files from the [permit-langflow-framework repository](https://github.com/permitio/permit-langflow-framework) and add them to Langflow as custom components. See [Custom components](https://docs.langflow.org/components-custom-components) in the Langflow docs. The `permit-langflow` 0.1.0 package on PyPI pins `langflow==1.1.4.post1`, so check the pin against your Langflow version before you install it. Two of the components need a patch before the flows can allow anything: see [Patch the components before you build the flows](#building-the-flows).
 - Python 3.9 or later, to generate the RS256-signed JSON Web Tokens (JWTs) and the JSON Web Key Set (JWKS) endpoint that the JWT Validator component needs. See [Create the test JWTs and the JWKS endpoint](#create-the-test-jwts-and-the-jwks-endpoint).
 - An OpenAI API key for the agent components, and an [Astra DB](https://www.datastax.com/products/datastax-astra) database with a `flights` collection for the Flight Search flow.
 
@@ -310,6 +310,13 @@ Permissions Check has two outputs, **Allowed** and **Denied**. When the PDP allo
 
 :::warning
 Permissions Check emits text, not a boolean. An If-Else set to **Operator** `equals` and **Match Text** `True` never matches either output, so every request takes the False branch and the allowed path never runs. Set **Operator** to `contains` and **Match Text** to `Permission granted`.
+:::
+
+:::danger Patch the components before you build the flows
+Two components in [permit-langflow-framework](https://github.com/permitio/permit-langflow-framework) don't reach the PDP as this page describes. Patch both in your copy of the component files, or the flows always deny.
+
+- **Permissions Check never calls the PDP.** `components/permissions_check.py` registers only `allowed_result` and `denied_result` as output methods, and sets `self._permission_result` inside `validate_auth()`, which no output method calls. `_permission_result` therefore keeps the `False` it gets in `__init__`, so **Allowed** stays empty and **Denied** fires for every user, whatever the policy says. Fix: `await self.validate_auth()` at the start of `allowed_result` and `denied_result`, and make both methods `async`.
+- **Data Protection raises on the PDP response.** `components/data_protection.py` iterates the return value of `permit.get_user_permissions()` as objects and reads `p.resource_id`. That method returns a dictionary, so the loop iterates its keys and the component raises `AttributeError: 'str' object has no attribute 'resource'`. Fix: read the resource keys out of the dictionary instead of iterating it as a list of objects.
 :::
 
 ## Flight Search flow \{#flight-search-flow}
