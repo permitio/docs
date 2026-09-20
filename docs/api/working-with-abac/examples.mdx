@@ -30,10 +30,12 @@ The time of the request belongs in the user set, not in the resource set: 5 PM i
 - An environment API key. See [Get your API key](/overview/get-api-key).
 - A `bicycle` resource with a `rent` action and an `owner` resource attribute of type string.
 - Three user attributes: `university` (string), `is_full_time` (boolean), and `current_hour` (number). See [Define attributes](/how-to/build-policies/abac/defining-attributes).
+- A user in the environment to run the final check for, for example `john@permit.io`. See [Sync users](/how-to/sync-users).
+- A running Edge PDP (policy decision point) and an SDK connected to it, for the final check. See [Run the PDP](/overview/run-pdp).
 
 ## 1. Create the user set \{#user-set}
 
-Create the user set with a `POST` request to the condition sets endpoint. The `allOf` operator requires all three conditions: the user studies at Stanford, studies full time, and sends a `current_hour` of 17 or later with the check.
+Create the user set with a `POST` request to the condition sets endpoint. The `allOf` operator requires all three conditions: the user studies at Stanford, studies full time, and sends a `current_hour` of 17 or later with the check. Replace `<YOUR_API_KEY>` with your environment API key, and `{proj_id}` and `{env_id}` with your project and environment keys.
 
 ```bash title="full_time_students_after_5"
 curl 'https://api.permit.io/v2/schema/{proj_id}/{env_id}/condition_sets' \
@@ -54,9 +56,11 @@ curl 'https://api.permit.io/v2/schema/{proj_id}/{env_id}/condition_sets' \
 }'
 ```
 
+The API returns HTTP 200 and the created set: the `key`, `name`, `type`, and `conditions` you sent, plus the `id` Permit assigned and the `organization_id`, `project_id`, `environment_id`, `created_at`, and `updated_at` fields. An HTTP 422 response means the body has an unknown operator or the wrong shape, and the response names the field that failed.
+
 ## 2. Create the resource set \{#resource-set}
 
-Create the resource set with a `POST` request to the same endpoint. `resource_id` ties the set to the `bicycle` resource, and the condition narrows it to the bicycles the university owns.
+Create the resource set with a `POST` request to the same condition sets endpoint, `POST /v2/schema/{proj_id}/{env_id}/condition_sets`. The `resource_id` field ties the set to the `bicycle` resource, and the condition narrows the set to the bicycles the university owns.
 
 ```bash title="university_bicycles"
 curl 'https://api.permit.io/v2/schema/{proj_id}/{env_id}/condition_sets' \
@@ -114,7 +118,45 @@ The response is an array with one rule. Each rule also carries the `id`, `key`, 
 ]
 ```
 
-To test the policy with real users and resources, run a permission check that passes the attributes the sets use. The check returns `true` for a full-time Stanford student, a `current_hour` of 17 or later, and a bicycle whose `owner` is `university`, and `false` when any of the three doesn't hold. For the call in each language, see [Check permissions](/how-to/enforce-permissions/check).
+Then run a permission check that passes the attributes the two sets read.
+
+:::warning ABAC checks need an Edge PDP
+The Cloud PDP does not evaluate ABAC condition sets. A check that depends on a user set or a resource set returns `false` there, with the `cloud_pdp_not_supporting_abac` denial code in the decision log. Send the check to an Edge PDP instead. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+:::
+
+Create the SDK client with your environment API key and the address of your Edge PDP:
+
+```javascript
+const { Permit } = require("permitio");
+
+const permit = new Permit({
+  token: "<YOUR_API_KEY>",
+  pdp: "http://localhost:7766",
+});
+```
+
+Run the check in your Node.js code. The call passes the three user attributes in the user argument and the `owner` resource attribute in the resource argument:
+
+```javascript
+const permitted = await permit.check(
+  {
+    key: "john@permit.io",
+    attributes: {
+      university: "Stanford",
+      is_full_time: true,
+      current_hour: 18,
+    },
+  },
+  "rent",
+  {
+    type: "bicycle",
+    tenant: "default",
+    attributes: { owner: "university" },
+  }
+);
+```
+
+`permitted` is `true`: the user matches `full_time_students_after_5`, the bicycle matches `university_bicycles`, and the rule grants `bicycle:rent` between them. Change `current_hour` to `9` and run the same check, and `permitted` is `false`, because the user no longer matches the user set. For the same call in other languages, see [Check permissions](/how-to/enforce-permissions/check).
 
 ## Next steps
 

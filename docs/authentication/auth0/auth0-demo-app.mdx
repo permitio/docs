@@ -18,19 +18,23 @@ To add the same integration to your own application, follow [Auth0 and Permit in
 
 ## 1. Create the policy in Permit \{#12-create-the-right-resources-in-permit}
 
-The demo app checks the `task` resource with the HTTP method of each request as the action. Create this policy in the [Permit dashboard](https://app.permit.io/policy-editor), with the [Permit API](https://api.permit.io/v2/redoc#tag/Roles/operation/create_role), or with an SDK ([Python](/sdk/python/usage-example/#create-a-role), [Node.js](/sdk/nodejs/quickstart-nodejs#creating-a-new-role-with-permissions), or [another SDK](/sdk/sdks-overview)):
+The demo app checks the `task` resource and passes the lowercase HTTP method of each request as the action. The task list sends `GET` to load the tasks, `POST` to add one, `PUT` to save an edited task, `PATCH` to tick the completed checkbox, and `DELETE` to remove a task, so the `task` resource needs all five actions.
 
-1. Create a resource with the key `task` and the actions `get`, `post`, and `delete`.
+Create this policy in the [Permit dashboard](https://app.permit.io/policy-editor), with the [Permit API](https://api.permit.io/v2/redoc#tag/Roles/operation/create_role), or with an SDK ([Python](/sdk/python/usage-example/#create-a-role), [Node.js](/sdk/nodejs/quickstart-nodejs#creating-a-new-role-with-permissions), or [another SDK](/sdk/sdks-overview)):
+
+1. Create a resource with the key `task` and the actions `get`, `post`, `put`, `patch`, and `delete`.
 2. Create the roles `admin`, `manager`, and `viewer`. Use lowercase keys. Role keys are case-sensitive and must match the role names in Auth0.
-3. Assign permissions:
+3. Assign the permissions this page uses:
 
-| Role | `get` | `post` | `delete` |
-|---|---|---|---|
-| `admin` | Allowed | Allowed | Allowed |
-| `manager` | Allowed | Allowed | Denied |
-| `viewer` | Allowed | Denied | Denied |
+| Role | `get` | `post` | `put` | `patch` | `delete` |
+|---|---|---|---|---|---|
+| `admin` | Allowed | Allowed | Allowed | Allowed | Allowed |
+| `manager` | Allowed | Allowed | Allowed | Allowed | Denied |
+| `viewer` | Allowed | Denied | Denied | Denied | Denied |
 
 You can also assign permissions with the [assign permissions API](https://api.permit.io/v2/redoc#tag/Roles/operation/assign_permissions_to_role).
+
+Leaving an action out of the `task` resource means no role allows it, so the matching request in the demo returns HTTP 403. Without the `put` and `patch` actions, editing a task and ticking its checkbox fail for every role.
 
 ## 2. Add the Auth0 roles claim \{#add-the-auth0-roles-claim}
 
@@ -68,16 +72,25 @@ PERMIT_SDK_TOKEN=<permit_api_key>
 
 4. Install the dependencies with `npm install`, then start the app with `npm run dev`. The app runs at `http://localhost:3000`, the value of `AUTH0_BASE_URL`.
 
+The demo needs no policy decision point (PDP) of your own. `pages/api/tasks.ts` creates the Permit client with the Cloud PDP address, `https://cloudpdp.api.permit.io`, so the checks run against Permit's managed PDP.
+
 ## 4. Verify the demo \{#verify-the-demo}
 
 1. In Auth0, create a user and assign the `manager` role.
 2. Open `http://localhost:3000` and sign in with that user. Auth0 sends the user to `/postLogin`, which syncs the user, then to the task list.
 3. In the Permit dashboard, open **Directory**. The user appears with the Auth0 user ID (`auth0|...`) as its key and the `manager` role in the `default` tenant.
 4. Add a task. The task appears in the list.
-5. Delete a task. The request fails, because `manager` can't `delete` tasks. The API returns HTTP 403.
-6. In **Directory**, assign the `admin` role to the user, and delete the task again. The delete succeeds.
+5. Delete a task. The request fails, because `manager` can't `delete` tasks. `DELETE /api/tasks` returns HTTP 403 with this body:
 
-If step 3 shows the user with no role, the `my_app_name/roles` claim was missing at sign-in. Add the Auth0 Action from step 2, then assign the role in **Directory** for the user who already signed in.
+```json
+{ "message": "forbidden" }
+```
+
+   The task list shows `forbidden` in a red alert at the top of the page, and the task stays in the list.
+
+6. In **Directory**, assign the `admin` role to the user, and delete the task again. The delete succeeds and the task disappears from the list.
+
+If step 3 shows the user with no role, the `my_app_name/roles` claim was missing at sign-in. Add the Auth0 Action from [2. Add the Auth0 roles claim](#add-the-auth0-roles-claim), then assign the role in **Directory** for the user who already signed in.
 
 ## How the demo app connects Auth0 to Permit \{#3-how-it-works}
 
@@ -157,7 +170,7 @@ export async function getServerSideProps({ req, res }: any) {
 
 The function does four things in order: it reads the Auth0 session, returns early when the user already exists in Permit, syncs the user with the Auth0 user ID (`sub`) as the user key, and assigns every role in the `my_app_name/roles` claim in the `default` tenant. It then redirects the user to the home page.
 
-Role keys must match exactly in Auth0 and Permit, because keys are case-sensitive. The version of this file in the repository calls the deprecated `permit.api.getUser()` and `permit.api.assignRole()` methods, and runs the role assignments inside a `.map()` callback that the redirect doesn't wait for. The block above uses the current `permit.api.users.get()` and `permit.api.users.assignRole()` methods and awaits each assignment. Compare with [pages/postLogin/index.tsx on GitHub](https://github.com/permitio/permit-next-todo-starter/blob/auth0-integration/pages/postLogin/index.tsx).
+Role keys must match exactly in Auth0 and Permit, because keys are case-sensitive. The version of `pages/postLogin/index.tsx` in the repository calls the deprecated `permit.api.getUser()` and `permit.api.assignRole()` methods, and runs the role assignments inside a `.map()` callback that the redirect doesn't wait for. The `getServerSideProps` block on this page uses the current `permit.api.users.get()` and `permit.api.users.assignRole()` methods and awaits each assignment. Compare with [pages/postLogin/index.tsx on GitHub](https://github.com/permitio/permit-next-todo-starter/blob/auth0-integration/pages/postLogin/index.tsx).
 
 ## Next steps
 

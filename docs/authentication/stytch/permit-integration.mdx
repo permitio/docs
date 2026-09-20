@@ -21,6 +21,7 @@ Add [Stytch](https://stytch.com) sign-in to a Next.js app (Pages Router), then c
 - A [Permit.io account](https://app.permit.io/) and your environment API key. See [Get your API key](/overview/get-api-key).
 - A Next.js project that uses the Pages Router. To create one, run `npx create-next-app@latest`.
 - The Permit Node.js SDK: `npm install permitio`.
+- A policy decision point (PDP) for the SDK to send checks to: the Cloud PDP at `https://cloudpdp.api.permit.io`, or a container PDP of your own. See [PDP overview](/concepts/pdp/overview).
 
 ## 1. Install the Stytch SDKs and set your API keys \{#step-1-install-stytch-sdks-and-configure-your-api-keys}
 
@@ -92,7 +93,7 @@ const Login = () => {
 };
 ```
 
-`REDIRECT_URL` is the full URL of the redirect page you create in [4. Create the redirect page](#step-4-handle-redirects-and-complete-the-authentication-flow). The value above matches a page at `pages/authenticate.js` on a development server. Stytch sends users to that URL after they click a magic link or finish OAuth, so add the same URL on the [Redirect URLs tab](https://stytch.com/docs/guides/dashboard/redirect-urls) of the Stytch dashboard, and change it to your deployed URL in production.
+`REDIRECT_URL` is the full URL of the redirect page you create in [4. Create the redirect page](#step-4-handle-redirects-and-complete-the-authentication-flow). The value `http://localhost:3000/authenticate` matches a page at `pages/authenticate.js` on a development server. Stytch sends users to that URL after they click a magic link or finish OAuth, so add the same URL on the [Redirect URLs tab](https://stytch.com/docs/guides/dashboard/redirect-urls) of the Stytch dashboard, and change it to your deployed URL in production.
 
 Add the `Login` component to your login page. The page sends users who are already signed in to `/profile`:
 
@@ -147,7 +148,7 @@ export default function RedirectPage() {
 }
 ```
 
-After Stytch creates the session, the login page from step 3 sends the signed-in user to `/profile`.
+After Stytch creates the session, the login page from [3. Add the Stytch login component](#step-3-add-a-stytchlogin-component) sends the signed-in user to `/profile`.
 
 ## 5. Protect frontend pages \{#step-5-grant-access-to-protected-frontend-content}
 
@@ -225,13 +226,19 @@ Permit evaluates a permission check against the roles assigned to the user. If t
 
 ## 7. Create the policy in Permit \{#permit-pre-sync-setup-guide}
 
-Create the roles, resources, and permissions that your app checks. The [Quickstart](/quickstart) shows how to create a workspace, roles, and resources, and how to assign permissions to roles.
+Create the resource, the role, and the permission that the Permit calls on this page use. In the [Permit dashboard](https://app.permit.io/policy-editor):
 
-This tutorial uses a role whose key is `AccountOwner`, displayed as Account Owner in the Policy Editor. The role can take the `view-all` action on an account resource, among other actions:
+1. Create a resource with the key `Account` and the action `view-all`.
+2. Create a role with the key `AccountOwner` and the display name Account Owner.
+3. Allow the `view-all` action on the `Account` resource for the `AccountOwner` role.
+
+The [Quickstart](/quickstart) walks through the same three screens in more detail.
+
+The Policy Editor shows a role's key next to its display name. This screenshot shows the Account Owner role in a larger policy, one with four resources, where the account resource carries the display name Current Account:
 
 ![Permit Policy Editor for the Account Owner role with view-all and other actions checked on the account resource](/ui-videos/authentication/stytch/account-owner-role.png)
 
-The screenshot shows the resource by its display name, Current Account. The SDK takes keys, not display names: the `permit.api.users.assignRole()` call in step 9 passes the role key `AccountOwner`, and the `permit.check()` call in step 10 passes the resource key, which this tutorial writes as `Account`. Use the keys of your own role and resource, which the Policy Editor shows under each name.
+Resource keys and role keys are case-sensitive, and the SDK takes keys, not display names. `permit.api.users.assignRole()` in [9. Sync the user at the handoff point](#creating-a-handoff-point-check) passes the role key `AccountOwner`, and `permit.check()` in [10. Verify the integration](#wrapping-up) passes the resource key `Account`. Replace both with the keys of your own role and resource.
 
 ## 8. Initialize the Permit SDK \{#importing-and-initializing-the-permit-object}
 
@@ -259,7 +266,9 @@ Run the Permit calls in the same `getServerSideProps` function as the Stytch ses
 
 ### The complete server-side handoff \{#fetching-the-stytch-userid}
 
-This version of the `pages/profile.js` server-side function from step 6 adds the three Permit calls. It reads the Stytch user ID and email, creates the user's tenant when it is missing, syncs the user, and assigns the role:
+This version of the `pages/profile.js` server-side function from [6. Protect server-side routes](#step-6-grant-access-to-protected-server-side-routes) adds the three Permit calls. It reads the Stytch user ID and email, creates the user's tenant when it is missing, syncs the user, and assigns the role.
+
+The top of `pages/profile.js` creates the Stytch client, creates the Permit client, and defines the `ensureTenant()` helper that the function calls:
 
 ```javascript
 // pages/profile.js
@@ -295,7 +304,12 @@ async function ensureTenant(tenantKey, tenantName) {
     throw error;
   }
 }
+```
 
+The same file exports `getServerSideProps`, which authenticates the Stytch session and then runs the three Permit calls:
+
+```javascript
+// pages/profile.js
 export async function getServerSideProps({ req }) {
   const redirectRes = {
     redirect: {
@@ -371,8 +385,8 @@ Each user in this example gets a tenant, so the user's data and role assignments
 
 ## 10. Verify the integration \{#wrapping-up}
 
-1. Sign in to your app with a new Stytch user.
-2. In the Permit dashboard, open **Directory** and select the tenant created for the user. The user appears with the Stytch user ID as its key and the `AccountOwner` role.
+1. Sign in to your app with a Stytch user who has never signed in before.
+2. In the Permit dashboard, open **Directory**. The tenant list holds a tenant whose key is that user's Stytch user ID and whose name is the user's email address. Select that tenant. One user appears in it, with the Stytch user ID as its user key and the `AccountOwner` role:
 
 ![Permit Directory showing a synced user with the AccountOwner role in the user's tenant](/ui-videos/authentication/stytch/user-synced.png)
 
@@ -385,7 +399,12 @@ const isPermitted = await permit.check(userId, "view-all", {
 });
 ```
 
-   `isPermitted` is `true`, because the `AccountOwner` role has `view-all` checked in the Policy Editor for that resource.
+   Log the result. The check returns `true`, because the `AccountOwner` role allows `view-all` on the `Account` resource:
+
+```javascript
+console.log(isPermitted);
+// true
+```
 
 4. Sign out and sign in again as the same user. The second sign-in succeeds and the Directory shows one user and one tenant, because `ensureTenant()` reuses the existing tenant instead of creating it again.
 5. Open the [Audit Log](https://app.permit.io/audit-log) screen in the Permit dashboard. The check from step 3 appears with the user key, the `view-all` action, the resource, the tenant, and `Allow` as the decision.

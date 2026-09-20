@@ -86,13 +86,13 @@ A role check needs structured input: a user, an action, and a resource. A chat p
 
 ![Flow diagram: a user prompt goes to the OpenAI classifier, which returns a structured request that Permit checks before the app responds](/img/ai-security/integrations/openai/1.png)
 
-### Why classify prompts with an LLM \{#why-is-ai-classification-important}
+### Why classify prompts with a large language model \{#why-is-ai-classification-important}
 
 - **No keyword lists:** the classifier maps different phrasings of the same request to the same resource type, without regular expressions.
 - **Defaults for missing details:** the system prompt tells the classifier which value to use when the prompt doesn't name one, for example `rateType: "public"`.
 - **One classifier, several domains:** you configure the resource type and attributes per classifier instance.
 
-An LLM classifier can return a wrong resource type or attribute, and the PDP decides on whatever the classifier returns. If the classifier labels a premium-rate question as `rateType: "public"`, the PDP allows the request and the app answers with the public rate. Write the system prompt so a missing value defaults to the least privileged one, and check the [audit logs](#logs--observability) when a decision looks wrong.
+A large language model (LLM) classifier can return a wrong resource type or attribute, and the PDP decides on whatever the classifier returns. If the classifier labels a premium-rate question as `rateType: "public"`, the PDP allows the request and the app answers with the public rate. Write the system prompt so a missing value defaults to the least privileged one, and check the [audit logs](#logs--observability) when a decision looks wrong.
 
 ## Configure the policy in Permit \{#defining-policies-with-permitio}
 
@@ -228,7 +228,7 @@ const financeClassifier = new AccessClassifier();
 
 Pass a resource type when every prompt for that classifier maps to one resource type. Leave the resource type out when the classifier has to choose, as it does between `FinancialAdvice` and `FinancialData`.
 
-The system prompt defines the output format, the allowed attribute values, and the routing rules between the finance resource types. Save this module as `src/classifier.js`:
+Save the module as `src/classifier.js`, in three parts. Start with the OpenAI client, the model constant, and the constructor. The constructor stores the resource type and the attribute list, then builds the system prompt once per instance:
 
 ```js
 const OpenAI = require('openai');
@@ -244,7 +244,11 @@ class AccessClassifier {
     this.attributes = attributes;
     this.systemPrompt = this.buildSystemPrompt();
   }
+```
 
+Add `buildSystemPrompt` to the same class body. The system prompt defines the output format, the allowed `rateType` values, the rule that a missing rate type becomes `public`, and the routing rules between `FinancialAdvice` and `FinancialData`:
+
+```js
   buildSystemPrompt() {
     const resourceLine = this.resourceType
       ? `Classify every request as resource type: ${this.resourceType}`
@@ -283,7 +287,11 @@ Answer with JSON in this shape and nothing else:
   "action": "read"
 }`;
   }
+```
 
+End `src/classifier.js` with the `classify` method, the closing brace of the class, and the export:
+
+```js
   async classify(userPrompt) {
     const response = await this.openai.chat.completions.create({
       model: MODEL,
@@ -329,7 +337,9 @@ After the classifier returns a structured request, `checkAccess` builds a Permit
 
 ### The checkAccess function \{#the-checkaccess-function}
 
-`checkAccess` takes a user key and the classified request. It builds a resource with `type` and `key`, adds `attributes` when the classifier returned any, and calls `permit.check()`. When the PDP denies the request, the function logs a reason based on the resource type. Save this module as `src/permit.js`:
+`checkAccess` takes a user key and the classified request. It builds a resource with `type` and `key`, adds `attributes` when the classifier returned any, and calls `permit.check()`. When the PDP denies the request, the function logs a reason based on the resource type. Save the module as `src/permit.js`, in two parts.
+
+Start with the Permit client and the part of `checkAccess` that builds the resource. The client reads the API key and the PDP URL from the environment, so one client serves every check:
 
 ```js
 const { Permit } = require('permitio');
@@ -356,7 +366,11 @@ async function checkAccess(userId, parsedRequest) {
     resource.attributes = parsedRequest.attributes;
     console.log('  Attributes:', parsedRequest.attributes);
   }
+```
 
+End the same function body with the check itself, and export the client and the function. The `catch` block logs the error message and rethrows, so a connection failure doesn't reach the caller as a denial:
+
+```js
   try {
     const permitted = await permit.check(userId, parsedRequest.action, resource);
 
@@ -390,7 +404,9 @@ The version in the example repository is [`src/permit.js`](https://github.com/pe
 
 ## Run the classifier and the policy together \{#testing-the-system}
 
-`index.js` ties the classifier, the Permit client, and `checkAccess` together. It creates one classifier per domain, runs five prompts, and prints the decision for each one. Save it in the project root:
+`index.js` ties the classifier, the Permit client, and `checkAccess` together. It creates one classifier per domain, runs five prompts, and prints the decision for each one. Save it in the project root, in three parts.
+
+Start with the imports and the two classifier instances. The hotel classifier is fixed to `HotelType` and reads `rateType`, and the finance classifier picks the resource type from the prompt:
 
 ```js
 require('dotenv').config();
@@ -400,7 +416,11 @@ const { checkAccess } = require('./src/permit');
 
 const hotelClassifier = new AccessClassifier('HotelType', ['rateType']);
 const financeClassifier = new AccessClassifier();
+```
 
+Add the five scenarios. Each entry names the classifier to use, the user key to check, and the prompt to classify:
+
+```js
 const scenarios = [
   {
     description: 'IATA agent asks for an IATA rate',
@@ -433,7 +453,11 @@ const scenarios = [
     prompt: 'How should I diversify my investments?'
   }
 ];
+```
 
+End `index.js` with the loop that classifies each prompt, checks it, and prints the decision. A failure in either step exits with code `1`:
+
+```js
 async function main() {
   for (const scenario of scenarios) {
     console.log(`\n=== ${scenario.description} ===`);

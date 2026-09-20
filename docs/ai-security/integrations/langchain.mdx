@@ -11,7 +11,7 @@ The finished app does four things in order:
 | Perimeter | What the app enforces | Component |
 | --- | --- | --- |
 | Prompt filtering | Only users who are 18 or older, opted in to AI, and have daily quota left can send a prompt | `LangchainJWTValidationTool`, `LangchainPermissionsCheckTool` |
-| Retrieval-augmented generation (RAG) data protection | The LLM only receives documents the user can `view` | `Permit.filter_objects` |
+| Retrieval-augmented generation (RAG) data protection | The large language model (LLM) only receives documents the user can `view` | `Permit.filter_objects` |
 | Secure external access | Only users who are 18 or older with `can_schedule` set can book an appointment | `LangchainPermissionsCheckTool` |
 | Response enforcement | The phrase "high blood pressure" is redacted from the answer | A custom LangChain output parser |
 
@@ -87,7 +87,9 @@ The `Settings` class in [Configuration settings](#configuration-settings) requir
 
 `LangchainJWTValidationTool` reads the `kid` header of the token, fetches the matching public key from `JWKS_URL`, and verifies an RS256 signature. The tool doesn't validate `aud`: PyJWT rejects a token that has an `aud` claim when no audience is passed, so leave `aud` out of the test token.
 
-Create `scripts/make_test_jwt.py`. The script creates an RSA key pair on the first run, writes the public key to `jwks/public/.well-known/jwks.json`, and prints a signed token for the `eligible` (`user-123`) or `ineligible` (`user-456`) test user:
+Create `scripts/make_test_jwt.py` in three parts. The finished script creates an RSA key pair on the first run, writes the public key to `jwks/public/.well-known/jwks.json`, and prints a signed token for the `eligible` (`user-123`) or `ineligible` (`user-456`) test user.
+
+Start the file with the imports, the key paths, and the claims of the two test users. The `attributes` object of each user carries the values that the `Eligible AI Users` and `Scheduling Eligible Users` sets evaluate:
 
 ```python
 # scripts/make_test_jwt.py
@@ -114,8 +116,11 @@ USERS = {
         "attributes": {"age": 16, "ai_opt_in": False, "daily_quota_remaining": 0, "can_schedule": False},
     },
 }
+```
 
+Append `load_or_create_key`. The function reuses `jwks/private_key.pem` when the file exists, so reruns keep signing with the key that the published JWKS holds, and writes a new 2048-bit key when the file is missing:
 
+```python
 def load_or_create_key():
     if PRIVATE_KEY_PATH.exists():
         return serialization.load_pem_private_key(PRIVATE_KEY_PATH.read_bytes(), password=None)
@@ -129,8 +134,11 @@ def load_or_create_key():
         )
     )
     return private_key
+```
 
+End the file with `main` and the entry point. `main` reads the user name from the first command-line argument and defaults to `eligible`, writes the public key as a JWKS with the `kid` that the token header carries, and prints the signed token:
 
+```python
 def main():
     user = USERS[sys.argv[1] if len(sys.argv) > 1 else "eligible"]
     private_key = load_or_create_key()
@@ -456,7 +464,7 @@ This perimeter uses:
 
 ### Add sample documents
 
-Create `src/perimeters/rag_security.py`. Each document stores its key (`id`), resource type, and ABAC attributes in its metadata. `get_relevant_documents` passes the key and attributes to `filter_objects` and keeps the documents whose keys come back:
+Create `src/perimeters/rag_security.py` in two parts. Start with the imports and the `RAGSecurityManager` constructor, which builds the FAISS index from three sample documents. Each document stores its key (`id`), its resource type, and its ABAC attributes in its metadata, and only `doc1` has `public` set to `true`:
 
 ```python
 # src/perimeters/rag_security.py
@@ -485,7 +493,11 @@ class RAGSecurityManager:
             )
         ]
         self.vectorstore = FAISS.from_documents(self.sample_docs, self.embeddings)
+```
 
+Append `get_relevant_documents` to the same class body, at one level of indentation, followed by the module-level `rag_security_manager` instance. The method retrieves the three nearest documents from FAISS, builds one resource dictionary per document, and returns the documents whose keys `filter_objects` allowed:
+
+```python
     async def get_relevant_documents(self, query: str, user: Dict[str, Any]) -> List[Document]:
         retriever = self.vectorstore.as_retriever(search_kwargs={"k": 3})
         docs = await retriever.ainvoke(query)
