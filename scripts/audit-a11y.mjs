@@ -7,7 +7,7 @@
  *   1. WCAG AA text contrast (4.5:1 normal text, 3.0:1 large text).
  *   2. Content clipped outside the viewport at mobile width.
  *
- * Ported from next-website/scripts/audit-a11y.mjs. Elements whose visible
+ * Ported from the www.permit.io website's a11y audit. Elements whose visible
  * colour comes from a clipped background gradient (`background-clip: text`
  * with a transparent `color`) cannot be measured from the `color` property —
  * reading it yields `transparent`, which computes to a false 1.05:1 failure.

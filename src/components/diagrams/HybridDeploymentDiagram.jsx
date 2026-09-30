@@ -3,7 +3,7 @@ import Link from "@docusaurus/Link";
 import DiagramFrame from "./DiagramFrame";
 import styles from "./diagrams.module.scss";
 
-// Ported from next-website/components/diagrams/HybridDeploymentDiagram.tsx.
+// Ported from the www.permit.io website's hybrid-deployment diagram.
 // Claims follow docs/overview/how-does-it-work.mdx (control plane in Permit's
 // cloud, PDPs in your network, OPAL keeps them in sync, decisions do not
 // depend on Permit's availability).

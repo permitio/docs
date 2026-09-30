@@ -1,6 +1,6 @@
 // Single source for links that leave the docs: navbar, footer, and any component
 // that points at the website, the app, or the community. Mirrors
-// next-website/components/layout/navbar-links.ts; change both together.
+// the www.permit.io website's navbar links; change both together.
 //
 // API_REFERENCE is the ReDoc URL the docs already use (the pre-split sidebar
 // header block and ~110 links in docs/**). api.permit.io/scalar also serves the
