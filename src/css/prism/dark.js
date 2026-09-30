@@ -1,5 +1,5 @@
 // Prism dark theme for code blocks, from the www.permit.io code palette
-// (next-website/styles/prism-theme.css). The website draws these colours on a
+// (its prism theme). The website draws these colours on a
 // warm #2a211f; here they sit on the dark code surface (--pm-code-bg =
 // --pm-surface-1, #0a0f22) and on a highlighted line (brand purple #875cff at
 // 16% over that surface = #1e1b45). Change both files together.

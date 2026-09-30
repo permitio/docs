@@ -130,7 +130,7 @@ A calm reading surface on the www.permit.io brand. Warm paper-like light surface
 
 The source of truth is code: `src/css/tokens.scss` (brand and semantic tokens, with every contrast ratio), `src/css/base/_infima.scss` (tokens mapped onto Infima), `src/css/base/_typography.scss` (type scale), `src/css/components/*` (one partial per surface) and `src/css/prism/{light,dark}.js` (syntax colours). The frontmatter above mirrors those files; when they disagree, the SCSS wins and this file is stale.
 
-**The Mirror Rule.** Brand tokens mirror `next-website/app/globals.css`. Change a brand value in both repos together, and record why here.
+**The Mirror Rule.** Brand tokens mirror the www.permit.io website's global stylesheet. Change a brand value in both places together, and record why here.
 
 ## Colors
 
