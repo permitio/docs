@@ -375,20 +375,22 @@ To turn on caching and set the TTL, see [Cache configuration](/concepts/pdp/conf
 
 The PDP implements the [OpenID AuthZen Authorization API 1.0](https://openid.github.io/authzen/), a standard API between policy enforcement points (PEPs) and PDPs. Any AuthZen client can send authorization requests to a Permit PDP.
 
-Every AuthZen endpoint requires the header `Authorization: Bearer <API key>`. Each AuthZen example uses two placeholders: replace `YOUR_API_KEY` with your environment API key, and `http://localhost:7766` with your PDP URL. On Nexus PDP, the bearer token is the Nexus PDP API key.
+The container PDP requires the header `Authorization: Bearer <API key>` on every AuthZen endpoint. Nexus PDP requires it on every AuthZen endpoint except discovery (`GET /.well-known/authzen-configuration`), which answers without a token. Each AuthZen example uses two placeholders: replace `YOUR_API_KEY` with your environment API key, and `http://localhost:7766` with your PDP URL. On Nexus PDP, the bearer token is the Nexus PDP API key.
 
-On the container PDP, a request that omits a required field, or that carries invalid JSON such as a trailing comma before a closing brace, gets HTTP `400` with the AuthZen error code `invalid_request`. A request with a missing or wrong bearer token gets HTTP `401` with the code `unauthorized`.
+AuthZen error responses carry an HTTP status and a description, not an AuthZen error code. The status depends on the PDP type:
 
-Nexus PDP does not return AuthZen error codes:
+| Request | Container PDP | Nexus PDP |
+| --- | --- | --- |
+| No `Authorization` header | `401`, plain text | `401`, JSON body `{"message":"Unauthorized"}` |
+| Wrong API key, or a header without the `Bearer` scheme | `403`, plain text | `401`, JSON body `{"message":"Unauthorized"}` |
+| Body that is not valid JSON | `400`, plain text | `400`, plain text |
+| Body that omits a required field or gives a field the wrong type | `422`, plain text | `422`, plain text |
+| No `Content-Type: application/json` header | `415`, plain text | `415`, plain text |
+| Body larger than 2 MB | `413`, plain text | `413`, plain text |
+| `/access/v1/evaluations` item without `subject`, `action`, or `resource`, and no top-level value for it | `400`, plain text | `400`, plain text |
+| `/access/v1/evaluations` with an empty `evaluations` array | `400`, plain text | `400`, JSON body `{"evaluations":[]}` |
 
-| Request | Nexus PDP response |
-| --- | --- |
-| Missing, malformed, or wrong bearer token | HTTP `401` with the JSON body `{"message":"Unauthorized"}` |
-| Body that is not valid JSON | HTTP `400` with a plain-text description |
-| Body that omits a required field or gives a field the wrong type | HTTP `422` with a plain-text description |
-| No `Content-Type: application/json` header | HTTP `415` with a plain-text description |
-
-Nexus PDP checks the request body before the bearer token, so a malformed request gets `400`, `415`, or `422` even when its token is wrong.
+The container PDP checks the bearer token before it reads the body, so a request with a wrong token gets `401` or `403` whatever its body. Nexus PDP parses the request body before it checks the bearer token, so a body that is not valid JSON, lacks a required field, has no JSON `Content-Type`, or is larger than 2 MB gets `400`, `422`, `415`, or `413` even when its token is wrong. The `/access/v1/evaluations` item checks run after the token check.
 
 | AuthZen operation | Method and path | Required body fields |
 | --- | --- | --- |
