@@ -40,6 +40,8 @@ Nexus PDP differs from the Edge PDP in four ways:
 
 Nexus PDP supports RBAC, ReBAC with role derivation, and multi-tenancy through the same check, bulk check, user permissions, authorized users, and AuthZen endpoints as the Edge PDP. Its capabilities match the managed Cloud PDP, running in your network. ABAC, policy as code, local facts, URL-based enforcement, and custom data sources require the Edge PDP. Both PDP types connect to the same Permit environment, so you can run them side by side. For the full comparison, see [Nexus PDP feature parity](/concepts/pdp/nexus-pdp-feature-parity).
 
+To connect an SDK to Nexus PDP, set the PDP URL to the address of its authorization API (`http://localhost:7766` with the Docker example in [Deploy Nexus PDP](/concepts/pdp/nexus-pdp-deployment)) and the SDK's `token` to the environment's [Nexus PDP API key](/concepts/pdp/nexus-pdp-deployment#prerequisites). Nexus PDP does not accept the environment API key.
+
 :::info Nexus PDP availability
 As of September 2026, Nexus PDP is in early access and Permit enables it per account. To request access, [book a call with Permit](https://www.permit.io/demo).
 :::
@@ -375,22 +377,25 @@ To turn on caching and set the TTL, see [Cache configuration](/concepts/pdp/conf
 
 The PDP implements the [OpenID AuthZen Authorization API 1.0](https://openid.github.io/authzen/), a standard API between policy enforcement points (PEPs) and PDPs. Any AuthZen client can send authorization requests to a Permit PDP.
 
-The container PDP requires the header `Authorization: Bearer <API key>` on every AuthZen endpoint. Nexus PDP requires it on every AuthZen endpoint except discovery (`GET /.well-known/authzen-configuration`), which answers without a token. Each AuthZen example uses two placeholders: replace `YOUR_API_KEY` with your environment API key, and `http://localhost:7766` with your PDP URL. On Nexus PDP, the bearer token is the Nexus PDP API key.
+The container PDP requires the header `Authorization: Bearer <API key>` on every AuthZen endpoint. Nexus PDP and the Cloud PDP require it on every AuthZen endpoint except discovery (`GET /.well-known/authzen-configuration`), which answers without a token. Each AuthZen example uses two placeholders: replace `YOUR_API_KEY` with your environment API key, and `http://localhost:7766` with your PDP URL. On Nexus PDP, the bearer token is the Nexus PDP API key.
 
 AuthZen error responses carry an HTTP status and a description, not an AuthZen error code. The status depends on the PDP type:
 
-| Request | Container PDP | Nexus PDP |
-| --- | --- | --- |
-| No `Authorization` header | `401`, plain text | `401`, JSON body `{"message":"Unauthorized"}` |
-| Wrong API key, or a header without the `Bearer` scheme | `403`, plain text | `401`, JSON body `{"message":"Unauthorized"}` |
-| Body that is not valid JSON | `400`, plain text | `400`, plain text |
-| Body that omits a required field or gives a field the wrong type | `422`, plain text | `422`, plain text |
-| No `Content-Type: application/json` header | `415`, plain text | `415`, plain text |
-| Body larger than 2 MB | `413`, plain text | `413`, plain text |
-| `/access/v1/evaluations` item without `subject`, `action`, or `resource`, and no top-level value for it | `400`, plain text | `400`, plain text |
-| `/access/v1/evaluations` with an empty `evaluations` array | `400`, plain text | `400`, JSON body `{"evaluations":[]}` |
+| Request | Container PDP | Nexus PDP | Cloud PDP |
+| --- | --- | --- | --- |
+| No `Authorization` header | `401`, plain text | `401`, JSON body `{"message":"Unauthorized"}` | `401`, JSON body `{"message":"Unauthorized"}` |
+| A header without the `Bearer` scheme | `403`, plain text | `401`, JSON body `{"message":"Unauthorized"}` | `401`, JSON body `{"message":"Unauthorized"}` |
+| Wrong API key | `403`, plain text | `401`, JSON body `{"message":"Unauthorized"}` | `403`, JSON body `{"message":"Forbidden"}` |
+| Body that is not valid JSON | `400`, plain text | `400`, plain text | `400`, plain text |
+| Body that omits a required field or gives a field the wrong type | `422`, plain text | `422`, plain text | `422`, plain text |
+| No `Content-Type: application/json` header | `415`, plain text | `415`, plain text | `415`, plain text |
+| Body larger than 2 MB | `413`, plain text | `413`, plain text | `413`, plain text |
+| `/access/v1/evaluations` item without `subject`, `action`, or `resource`, and no top-level value for it | `400`, plain text | `400`, plain text | `400`, plain text |
+| `/access/v1/evaluations` with an empty `evaluations` array | `400`, plain text | `400`, JSON body `{"evaluations":[]}` | `400`, JSON body `{"evaluations":[]}` |
 
-The container PDP checks the bearer token before it reads the body, so a request with a wrong token gets `401` or `403` whatever its body. Nexus PDP parses the request body before it checks the bearer token, so a body that is not valid JSON, lacks a required field, has no JSON `Content-Type`, or is larger than 2 MB gets `400`, `422`, `415`, or `413` even when its token is wrong. The `/access/v1/evaluations` item checks run after the token check.
+Nexus PDP and the Cloud PDP accept the scheme only as `Bearer` or `bearer`. Any other capitalization, such as `BEARER`, gets `401` even with the right API key. The container PDP accepts any capitalization. The Cloud PDP also answers requests over its rate limit with `429`; see [Cloud PDP rate limits](/concepts/pdp/cloud-pdp-capabilities#rate-limits).
+
+The container PDP checks the bearer token before it reads the body, so a request with a missing or wrong token gets `401` or `403` whatever its body. Nexus PDP and the Cloud PDP parse the request body before they check the bearer token, so a body that is not valid JSON, lacks a required field, has no JSON `Content-Type`, or is larger than 2 MB gets `400`, `422`, `415`, or `413` even when the token is missing or wrong. On every PDP type, the `/access/v1/evaluations` checks for an empty `evaluations` array and for items without `subject`, `action`, or `resource` run after the token check, so those requests get the token error when the token is missing or wrong.
 
 | AuthZen operation | Method and path | Required body fields |
 | --- | --- | --- |
