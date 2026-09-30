@@ -4,7 +4,7 @@ import styles from "./diagrams.module.scss";
 
 /**
  * Shared shell for coded architecture diagrams, ported from
- * next-website/components/diagrams/DiagramFrame.tsx. Diagrams are real markup,
+ * the www.permit.io website's diagram frame. Diagrams are real markup,
  * not images, so labels stay accurate, readable by screen readers and search,
  * and correct in both themes.
  *

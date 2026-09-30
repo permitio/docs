@@ -130,7 +130,7 @@ Use these terms, spelled this way.
 
 ## Content quality rules (technical-docs-writing)
 
-This section adds the stricter rules of the technical-docs-writing standard. Where it and the sections above disagree, the stricter rule wins, except for the owner decisions listed at the end of this section. The page-by-page scores live in `docs-content-audit.md` at the repo root.
+This section adds the stricter rules of the technical-docs-writing standard. Where it and the sections above disagree, the stricter rule wins, except for the owner decisions listed at the end of this section.
 
 ### One reader and one content type per page
 

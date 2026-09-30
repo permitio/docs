@@ -3,7 +3,7 @@ import Link from "@docusaurus/Link";
 import DiagramFrame, { DecisionReceipt } from "./DiagramFrame";
 import styles from "./diagrams.module.scss";
 
-// Ported from next-website/components/diagrams/DecisionFlowDiagram.tsx. Each
+// Ported from the www.permit.io website's decision-flow diagram. Each
 // stage title links to the docs page that explains that step.
 const STAGES = [
   {

@@ -3,9 +3,9 @@ import Link from "@docusaurus/Link";
 import DiagramFrame from "./DiagramFrame";
 import styles from "./diagrams.module.scss";
 
-// The request path of one MCP tool call through Permit MCP Gateway. Adapted
-// from next-website DefenseInDepthDiagram / AgenticIdentityDiagram; every
-// label follows docs/permit-mcp-gateway/architecture.mdx, consent-service.mdx,
+// The request path of one MCP tool call through Permit MCP Gateway. Adapted from
+// the www.permit.io website's defense-in-depth and agentic-identity diagrams;
+// every label follows docs/permit-mcp-gateway/architecture.mdx, consent-service.mdx,
 // permit-integration.mdx and audit-logs.mdx.
 const HOPS = [
   {
