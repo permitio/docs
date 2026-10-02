@@ -1,0 +1,241 @@
+---
+sidebar_position: 4
+title: Authorize MuleSoft API requests with Permit
+sidebar_label: MuleSoft x Permit
+description: "Call the Permit PDP from a MuleSoft Mule 4 flow or custom API policy, block denied requests with HTTP 403, and source decision attributes from external systems instead of aggregating them in Mule."
+---
+
+Authorize requests that pass through MuleSoft Anypoint with a Permit.io policy. This page is for integration developers who expose APIs through Mule 4 and want those APIs to ask Permit whether the caller can perform the request. Mule calls a policy decision point (PDP) that runs in your network, reads the `allow` field of the answer, and forwards or blocks the request.
+
+## How the MuleSoft integration works \{#overview}
+
+Mule acts as the policy enforcement point (PEP). For each request it protects, Mule sends a permission check to the PDP over HTTP. The PDP evaluates the check against the policy and data it holds locally, and answers with `"allow": true` or `"allow": false`. Mule forwards allowed requests to the backend and returns HTTP `403` for denied ones.
+
+Mule builds the check from the request it already has:
+
+| Check field | Where Mule gets the value |
+|---|---|
+| User | The authenticated identity, for example the `sub` claim of a validated JWT |
+| Action | The operation, or the HTTP method of the request |
+| Resource type and key | The API resource, and an ID from the path (`attributes.uriParams`) |
+| Tenant | A fixed value, a header, or a claim, depending on your tenant model |
+| Attributes and context | Values that exist only in the request, such as a channel header or a transaction amount |
+
+Attributes that live in other systems, such as a customer's segment in a CRM or a policy holder's region in a data warehouse, don't have to pass through Mule. The PDP can load them from the source system ahead of the request. See [Use attributes from external systems](#use-attributes-from-external-systems).
+
+## Choose where Mule enforces the check \{#choose-enforcement-point}
+
+| Enforcement point | How it works | Fits when |
+|---|---|---|
+| Application flow | An `http:request` to the PDP inside the API's own flow | Different APIs need different checks, or you start with one API |
+| Mule 4 custom API policy | A policy template that calls the PDP before `http-policy:execute-next`, applied from API Manager | Every API that a Mule runtime serves must run the same check without changes to each flow |
+| Omni Gateway (formerly Flex Gateway) custom policy | A policy written with the MuleSoft Policy Development Kit (PDK) that calls the PDP | Your APIs run behind Omni Gateway instead of a Mule runtime |
+
+All three send the same request to the PDP. Steps 1 to 5 use an application flow, because it is the shortest path to a working check. [Enforce the check on every API with a custom policy](#custom-policy) shows the same check in a custom policy.
+
+## Prerequisites
+
+- A Mule 4 application with an HTTP listener, deployed to a Mule runtime (Runtime Fabric, a customer-hosted runtime, or CloudHub 2.0)
+- Authentication in front of the flow, such as the MuleSoft [JWT Validation policy](https://docs.mulesoft.com/mule-gateway/policies-included-jwt-validation), so each request has a verified user identity
+- A Permit.io policy with resources and actions for your API operations ([Configure your first RBAC policy](/overview/configure-your-first-rbac-policy))
+- Your environment API key ([Get your API key](/overview/get-api-key))
+
+## 1. Run the PDP where the Mule runtime can reach it \{#run-the-pdp}
+
+Run an Edge PDP in the same network as the Mule runtime, so permission checks stay inside your network and don't make a round trip to Permit. The PDP keeps an outgoing connection to Permit's control plane to receive policy and data updates.
+
+| Mule deployment | Where to run the PDP |
+|---|---|
+| Runtime Fabric | As a Kubernetes deployment and service in the same cluster ([Deploy the PDP on Kubernetes with Helm](/how-to/deploy/cloud-hosts/helm)) |
+| Customer-hosted Mule runtime | As a container on the same host or in the same network ([Deploy the PDP to production](/how-to/deploy/deploy-to-production)) |
+| CloudHub 2.0 | In your own network, connected to the CloudHub private space over private networking such as a VPN or transit gateway |
+
+:::warning Use an Edge PDP for attribute-based policies
+The Cloud PDP evaluates role-based (RBAC) and relationship-based (ReBAC) policies only. It doesn't evaluate attribute-based (ABAC) policies, and it doesn't load data from external sources. If your API checks depend on attributes or external data, point Mule at an Edge PDP. A check that the Cloud PDP answers doesn't apply ABAC conditions or external data. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+:::
+
+Confirm that the Mule runtime can reach the PDP. From a host or pod in the Mule network, send `GET http://<PDP_HOST>:<PDP_PORT>/healthy`, where `<PDP_PORT>` is the port the PDP is published on (`7766` in the Docker examples, `7000` inside a pod). A healthy PDP returns HTTP `200`.
+
+## 2. Store the PDP address and API key in properties \{#store-credentials}
+
+Add the PDP address to your application's configuration properties, for example `config.yaml`:
+
+```yaml
+permit:
+  pdp:
+    host: "<PDP_HOST>"
+    port: "<PDP_PORT>"
+  urlBase: "https://api.example.com"
+```
+
+Put the API key in a separate secure properties file, for example `secure.yaml`, encrypted with the [Mule Secure Configuration Properties module](https://docs.mulesoft.com/mule-runtime/latest/secure-configuration-properties):
+
+```yaml
+permit:
+  apiKey: "![<ENCRYPTED_API_KEY>]"
+```
+
+Replace `<PDP_HOST>` and `<PDP_PORT>` with the address of the PDP from step 1, and `<ENCRYPTED_API_KEY>` with your environment API key encrypted with the module's tool. Mule reads values from the secure file with the `secure::` prefix, for example `p("secure::permit.apiKey")`. The `urlBase` property is used only by the [URL check](#check-by-url).
+
+:::warning The API key controls your environment's policy
+Anyone who can read the environment API key can change that environment's policy through the Permit API. Keep the key in an encrypted secure property, and don't commit it in plain text.
+:::
+
+## 3. Call the PDP from the flow \{#call-the-pdp}
+
+Add an HTTP Request configuration that points at the PDP:
+
+```xml
+<http:request-config name="Permit_PDP" responseTimeout="1000">
+  <http:request-connection host="${permit.pdp.host}" port="${permit.pdp.port}"/>
+</http:request-config>
+```
+
+In the flow, after authentication, send the check to the PDP's `POST /allowed` endpoint. The `target` attribute stores the PDP answer in `vars.authz`, so the flow's payload stays unchanged:
+
+```xml
+<http:request config-ref="Permit_PDP" method="POST" path="/allowed" target="authz">
+  <http:body><![CDATA[#[output application/json --- {
+    user: { key: authentication.properties.claims.sub },
+    action: "read",
+    resource: {
+      "type": "claim",
+      key: attributes.uriParams.claimId,
+      tenant: "default"
+    },
+    context: { channel: attributes.headers."x-channel" default "" }
+  }]]]></http:body>
+  <http:headers><![CDATA[#[{
+    "Authorization": "Bearer " ++ p("secure::permit.apiKey"),
+    "Content-Type": "application/json"
+  }]]]></http:headers>
+</http:request>
+```
+
+This example checks whether the user can `read` a `claim` resource. Replace the action, the resource type, the path parameter, and the tenant with the values of your API. `authentication.properties.claims.sub` reads the `sub` claim that the MuleSoft JWT Validation policy stores. If you authenticate another way, read the user key from where your authentication puts it.
+
+The PDP expects `user` as an object with a `key` field. To pass attributes that only exist in the request, add an `attributes` object to `user` or `resource`. See [Check an ABAC permission with attributes](/how-to/enforce-permissions/check#attributes).
+
+## 4. Block denied requests \{#block-denied-requests}
+
+Read the `allow` field and raise an error when the PDP denies the request:
+
+```xml
+<choice>
+  <when expression="#[vars.authz.allow == true]">
+    <logger level="DEBUG" message="Permit allowed the request"/>
+  </when>
+  <otherwise>
+    <raise-error type="APP:FORBIDDEN" description="Denied by Permit policy"/>
+  </otherwise>
+</choice>
+```
+
+Map the error to HTTP `403` in the flow's error handler. This example sets `vars.httpStatus`, which the error response of APIkit-generated listeners reads:
+
+```xml
+<error-handler>
+  <on-error-propagate type="APP:FORBIDDEN">
+    <set-variable variableName="httpStatus" value="403"/>
+    <set-payload value='#[output application/json --- { message: "Forbidden" }]'/>
+  </on-error-propagate>
+</error-handler>
+```
+
+If your listener doesn't read `vars.httpStatus`, set `statusCode` in the listener's `http:error-response` the same way.
+
+## 5. Verify the permission check \{#verify}
+
+1. Call the API as a user who has permission for the action on the resource. Mule forwards the request to the backend.
+2. Call the same API as a user without that permission. Mule returns HTTP `403`.
+3. Open **Audit Log** in the Permit dashboard. Each request appears as a decision with the user key, the action, and the resource. See [View and filter audit logs](/how-to/use-audit-logs/types-and-filtering).
+
+## Check by URL instead of resource and action \{#check-by-url}
+
+With URL mapping, Mule sends the request URL and HTTP method, and the PDP maps them to a resource and an action with rules you manage in Permit. Mule then needs no knowledge of the policy model, so one generic check can protect every API. See [Model endpoints as resources and actions](/integrations/gateways/overview#url-mapping) for the trade-offs.
+
+Create mapping rules in the [URL Mapping screen](https://app.permit.io/url-mapping), then send the check to `POST /allowed_url`:
+
+```xml
+<http:request config-ref="Permit_PDP" method="POST" path="/allowed_url" target="authz">
+  <http:body><![CDATA[#[output application/json --- {
+    user: { key: authentication.properties.claims.sub },
+    http_method: attributes.method,
+    url: p("permit.urlBase") ++ attributes.requestUri,
+    tenant: "default"
+  }]]]></http:body>
+  <http:headers><![CDATA[#[{
+    "Authorization": "Bearer " ++ p("secure::permit.apiKey"),
+    "Content-Type": "application/json"
+  }]]]></http:headers>
+</http:request>
+```
+
+The PDP matches the full URL, including the scheme and host, against the URL templates of your mapping rules. Set the `permit.urlBase` property to the scheme and host your templates use, for example `https://api.example.com`, so the URL Mule builds matches the templates whatever host name the load balancer forwards. The PDP passes the values of template variables, such as `{claimId}`, to the check as resource attributes.
+
+When no rule matches the URL and method, the PDP returns `"allow": false` with the `debug.reason` `Matched mapping rule not found for the requested URL and HTTP method`, and the choice in step 4 blocks the request. See [Check permissions by URL with simple URL mapping](/how-to/enforce-permissions/url-mapping/url-mapping-check).
+
+## Use attributes from external systems \{#use-attributes-from-external-systems}
+
+In many Mule estates, a flow calls several systems to collect authorization context before it makes a decision. With Permit, the PDP can load that context itself. The Open Policy Administration Layer (OPAL) inside each PDP runs data fetchers that pull data from your sources into the PDP, and your policy reads the data as attributes.
+
+- **Mule sends only what is in the request.** The user, the action, the resource, and request-only context.
+- **The PDP adds attributes it already holds.** Data from an HTTP API, a database, or a custom fetcher reaches the PDP before the request, so the check doesn't wait on the source system.
+- **The data stays in your network.** OPAL fetches the data directly from your source into your PDPs, and the data isn't sent to the Permit control plane.
+
+When the same attribute comes from more than one source, the check input from Mule takes precedence over the external data, and the external data takes precedence over the attributes stored in Permit. A Mule API that already aggregates context can serve as an OPAL data source over HTTP, so you can move sources one at a time.
+
+To set up a data source, see [Use an external data source](/how-to/manage-data/use-external-data-source). For the available fetchers and how to write one, see the [OPAL fetch providers](https://docs.opal.ac/fetch-providers/).
+
+## Enforce the check on every API with a custom policy \{#custom-policy}
+
+A Mule 4 custom policy runs before the API's flow on every request to an API that the policy is applied to. Put the PDP call from step 3 and the choice from step 4 in the policy's `http-policy:source` block, before `http-policy:execute-next`. When the PDP denies the request, the policy skips `http-policy:execute-next`, so the request never reaches the API's flow:
+
+```xml
+<http-policy:proxy name="permit-authorization">
+  <http-policy:source>
+    <!-- 1. http:request to the PDP, as in step 3, with target="authz" -->
+    <choice>
+      <when expression="#[vars.authz.allow == true]">
+        <http-policy:execute-next/>
+      </when>
+      <otherwise>
+        <!-- 2. Set HTTP status 403 and a response body -->
+      </otherwise>
+    </choice>
+  </http-policy:source>
+</http-policy:proxy>
+```
+
+Expose the PDP host and the API key as policy configuration properties, so API Manager supplies them when you apply the policy. For the template structure, packaging, and how to set the response status, see MuleSoft's [Custom Policy Development Reference](https://docs.mulesoft.com/mule-gateway/policies-custom-mule-4-reference). For Omni Gateway (formerly Flex Gateway), build the same check with the [Policy Development Kit](https://docs.mulesoft.com/pdk/latest/policies-pdk-overview).
+
+## Decide what happens when the PDP doesn't answer \{#pdp-errors}
+
+The HTTP Request operation raises an error when the PDP doesn't return a `2xx` status. Handle these errors so that a failed check never forwards the request:
+
+| Error type | Cause | Recommended response |
+|---|---|---|
+| `HTTP:UNAUTHORIZED` | The PDP rejected the API key (HTTP `401`) | Return HTTP `500`, and fix the `permit.apiKey` property |
+| `HTTP:CONNECTIVITY` | Mule can't reach the PDP | Return HTTP `503` |
+| `HTTP:TIMEOUT` | The PDP didn't answer within `responseTimeout` | Return HTTP `503` |
+
+Returning an error status for these cases keeps the API closed when the check can't run. The PDP keeps answering from its local copy of the policy when its connection to Permit drops, so a Permit outage doesn't stop checks. See [Keep serving decisions when Permit is unreachable](/how-to/deploy/deploy-to-production#pdp-offline-mode).
+
+## Troubleshoot the integration \{#troubleshooting}
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Every request fails with `HTTP:UNAUTHORIZED` | The PDP doesn't accept the API key | Check that `Authorization` is `Bearer ` followed by the environment API key of the PDP's environment |
+| Every request fails with `HTTP:CONNECTIVITY` | Mule can't reach the PDP host or port | Send `GET /healthy` to the PDP from the Mule network |
+| Every check returns `"allow": false` | The user key doesn't exist in Permit, or the resource type or action doesn't match the policy | Find the decision in **Audit Log** and compare the user, action, and resource with your policy |
+| URL checks return `Matched mapping rule not found` | The URL or method doesn't match any mapping rule | Compare the scheme, host, and segment count of the URL with your templates |
+| ABAC conditions never match | The check goes to the Cloud PDP | Point `permit.pdp.host` at an Edge PDP |
+
+## Next steps
+
+- [Enforce permissions at an API gateway or proxy](/integrations/gateways/overview)
+- [Check permissions by URL with simple URL mapping](/how-to/enforce-permissions/url-mapping/url-mapping-check)
+- [Use an external data source](/how-to/manage-data/use-external-data-source)
+- [Deploy the PDP to production](/how-to/deploy/deploy-to-production)
+
+<NextStepCallout variant="production" />
