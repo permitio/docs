@@ -762,6 +762,7 @@ const sidebars = {
           items: [
             "integrations/gateways/aws-api-gateway",
             "integrations/gateways/kong",
+            "integrations/gateways/mulesoft",
             "integrations/gateways/nginx",
           ],
         },
