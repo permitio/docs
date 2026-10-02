@@ -21,6 +21,8 @@ With proxy facts, the SDK sends the write to the PDP. The PDP forwards the write
 - A PDP container, version `0.5.1` or later, that your application can reach. See [Run the PDP](/overview/run-pdp). The `timeout_policy` option requires PDP version `0.8.0` or later.
 - A Permit SDK configured with your environment API key ([Get your API key](/overview/get-api-key))
 
+The Cloud PDP doesn't serve the Local Facts API, and returns `404` for every `/facts/` route. In `permit` 3.1 or later, the Python SDK issues a `UserWarning` when you create a client with `proxy_facts_via_pdp=True` and the Cloud PDP address as `pdp`. A facts call through the Cloud PDP raises a `PermitApiError` that names the route and says it needs a container PDP.
+
 ## Create a user, then check permissions \{#example-create-a-user-then-check-permissions}
 
 Turn on proxy facts in the SDK configuration, and point the SDK at your PDP. In the following examples, replace `<your-api-key>` or `<YOUR_API_KEY>` with your environment API key.
@@ -192,6 +194,8 @@ Set the options at three levels. A level lower in the list overrides the levels 
 ### SDK configuration \{#sdk-configuration}
 
 In the Python and Node.js SDKs, when you don't set a timeout or a timeout policy, the SDK sends no value and the PDP defaults apply.
+
+In the Python SDK, `permit` 3.1 or later sends a timeout of `0`, from `facts_sync_timeout=0` or `wait_for_sync(timeout=0)`, in the `X-Wait-Timeout` header, so the PDP responds without waiting. Earlier releases sent no header for `0`, so the PDP waited for its default timeout.
 
 <Tabs groupId="language">
 <TabItem value="python" label="Python">
@@ -389,6 +393,16 @@ POST /facts/relationship_tuples
 ```
 
 The PDP forwards requests to other facts routes to the Permit API without waiting for the data update.
+
+In the Python SDK, these methods of `permit.api` send the requests that the PDP waits on:
+
+- `users.create()`, `users.update()`, `users.sync()`, `users.assign_role()`, and `users.unassign_role()`
+- `tenants.create()`
+- `role_assignments.assign()` and `role_assignments.unassign()`
+- `resource_instances.create()` and `resource_instances.update()`
+- `relationship_tuples.create()`
+
+Every other facts method of the Python SDK returns before the PDP has the change, for example `users.delete()`, `tenants.update()`, `tenants.delete()`, `tenants.delete_tenant_user()`, `resource_instances.delete()`, `relationship_tuples.delete()`, and the bulk methods. A permission check right after one of those writes can still see the old data. `tenants.create_user()`, in `permit` 3.1 or later, always sends its request to the Permit API, so it doesn't wait either.
 
 :::warning Role assignments in user requests
 The PDP doesn't wait for the `role_assignments` field of a user request (`POST /facts/users`, `PUT /facts/users/{user_id}`, `PATCH /facts/users/{user_id}`). A permission check right after the user request can miss those roles. Send each role assignment in a separate role assignment request after you create or update the user.
