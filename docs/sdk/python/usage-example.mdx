@@ -177,6 +177,27 @@ tenant: TenantRead = await permit.api.tenants.create(
 )
 ```
 
+### Create a user as a member of a tenant \{#create-a-user-in-a-tenant}
+
+`permit.api.tenants.create_user()` takes a tenant key and a user object, creates the user as a member of that tenant with no role there, and returns a `UserRead` object. It needs `permit` 3.1 or later.
+
+```py
+from permit import UserRead
+
+user: UserRead = await permit.api.tenants.create_user(
+    # the tenant key
+    "acme",
+    # the new user
+    {"key": "auth0|user-2", "email": "user2@example.com"},
+)
+```
+
+- The user must be new. When a user with the same key exists, in any tenant, the Permit API returns status code 409 and the SDK raises `PermitAlreadyExistsError`. To give an existing user access to another tenant, assign the user a role in that tenant with [`permit.api.users.assign_role()`](#role-assignments).
+- The Permit API grants the role assignments in the user object's `role_assignments` field as it does for `permit.api.users.create()`, each in the tenant it names.
+- The request always goes to the Permit API, even with `proxy_facts_via_pdp` on, so it doesn't wait for the PDP to have the user.
+- `permit.api.tenants.delete_tenant_user()` returns status code 404 for a member with no role in the tenant. To remove such a member, delete the user with `permit.api.users.delete()`.
+- `permit.api.tenants.add_user()` is a deprecated alias of `create_user()`.
+
 ## Sync users \{#users}
 
 ### Create or update a user (sync user)
@@ -238,6 +259,21 @@ assignments = await permit.api.role_assignments.list(
     role_key=["viewer", "editor"],
 )
 ```
+
+### List the tenants a user has a role in \{#user-tenants}
+
+`permit.get_user_tenants()` asks the PDP for the tenants in which a user has a tenant-level role, the kind `permit.api.users.assign_role()` grants. It returns a list of `TenantDetails` objects, each with the tenant's `key` and `attributes`. It needs `permit` 3.1 or later and a container PDP.
+
+```py
+tenants = await permit.get_user_tenants("auth0|user-1")
+print([tenant.key for tenant in tenants])
+```
+
+After the role assignment in [Assign a role to a user in a tenant](#role-assignments), the list holds the `acme` tenant once the PDP has the assignment.
+
+- A role on a resource instance doesn't count, and neither does membership without a role, such as [`permit.api.tenants.create_user()`](#create-a-user-in-a-tenant) creates.
+- The list is empty when the user has no tenant-level role, or the PDP doesn't know the user.
+- The Cloud PDP doesn't serve this query. It returns status code 404, and the SDK raises a `PermitConnectionError` that says the query needs a container PDP.
 
 ## Check permissions \{#checking-permissions}
 
