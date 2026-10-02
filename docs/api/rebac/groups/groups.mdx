@@ -1,11 +1,11 @@
 ---
 sidebar_position: 1
 title: Groups API
-description: "Create groups with the Permit.io Groups API, add users and child groups, and assign a role to a group so every member derives it."
+description: "Create groups with the Permit.io Groups API or the Python SDK, add users and child groups, and assign a role to a group so every member derives it."
 slug: /api/rebac/groups
 ---
 
-Use the Permit.io Groups API to give a set of users the same access in one call: assign a role to a group, and every member of the group derives that role. This page is for developers who manage relationship-based access control (ReBAC) groups through the API. To manage groups in the Permit dashboard instead, see [Groups UI](/api/rebac/groups-ui).
+Use the Permit.io Groups API to give a set of users the same access in one call: assign a role to a group, and every member of the group derives that role. This page is for developers who manage relationship-based access control (ReBAC) groups through the API. To manage groups from Python code, see [Manage groups with the Python SDK](#python-sdk). To manage groups in the Permit dashboard instead, see [Groups UI](/api/rebac/groups-ui).
 
 ## How groups work \{#key-features}
 
@@ -249,6 +249,82 @@ curl -X GET \
 ```
 
 The response holds the group resource type key, the group instance key, the tenant, and the group ID.
+
+## Manage groups with the Python SDK \{#python-sdk}
+
+In the Python SDK, `permit.api.groups` sends the Groups API requests on this page. It needs `permit` 3.1 or later, and an environment API key, or a project or organization API key with the SDK's API context set to the environment.
+
+This example sets up the [marketing team example](#example-usage-for-user-groups) from Python. Create the `social_media` resource and the `editor` role first, as in steps 2 and 3. Replace `<YOUR_API_KEY>` with your environment API key.
+
+Create the client and the group. In `create()`, `group_instance_key` is the instance key alone, `marketing`, not `teams:marketing`:
+
+```python
+import asyncio
+
+from permit import Permit
+
+permit = Permit(token="<YOUR_API_KEY>", pdp="http://localhost:7766")
+
+
+async def create_marketing_group():
+    await permit.api.groups.create(
+        {
+            "group_instance_key": "marketing",
+            "group_resource_type_key": "teams",
+            "group_tenant": "default",
+        }
+    )
+
+
+asyncio.run(create_marketing_group())
+```
+
+Assign the `editor` role on `social_media:training_video` to the group, and add a user to the group. Replace `<USER_KEY>` with the key of an existing user. Like every call of the asyncio client, these calls run inside an `async` function:
+
+```python
+await permit.api.groups.assign_role(
+    "teams:marketing",
+    {
+        "role": "editor",
+        "resource": "social_media",
+        "resource_instance": "training_video",
+        "tenant": "default",
+    },
+)
+await permit.api.groups.assign_user("teams:marketing", "<USER_KEY>", tenant="default")
+```
+
+Once the PDP has the change, a check for that user, the `edit` action, and the `training_video` instance returns `True`:
+
+```python
+allowed = await permit.check(
+    "<USER_KEY>", "edit", {"type": "social_media", "key": "training_video", "tenant": "default"}
+)
+```
+
+The role is a resource role on the `training_video` instance, which the group's members derive through ReBAC role derivation over the group instance. It isn't a tenant-wide role: a check must name the resource instance, and a check that names only the resource type, such as `permit.check("<USER_KEY>", "edit", "social_media")`, doesn't use it.
+
+### Python groups methods \{#python-groups-methods}
+
+| Method                                                          | Endpoint                                              |
+| --------------------------------------------------------------- | ----------------------------------------------------- |
+| `list(page=1, per_page=100)`                                    | `GET /groups/direct`                                  |
+| `get(group_instance_key)`                                       | `GET /groups/direct/{group_instance_key}`             |
+| `create(group_data)`                                            | `POST /groups`                                        |
+| `delete(group_instance_key)`                                    | `DELETE /groups/{group_instance_key}`                 |
+| `assign_role(group_instance_key, role_data)`                    | `POST /groups/{group_instance_key}/roles`             |
+| `remove_role(group_instance_key, role_data)`                    | `DELETE /groups/{group_instance_key}/roles`           |
+| `assign_user(group_instance_key, user_key, tenant)`             | `PUT /groups/{group_instance_key}/users/{user_id}`    |
+| `remove_user(group_instance_key, user_key, tenant)`             | `DELETE /groups/{group_instance_key}/users/{user_id}` |
+| `assign_group(group_instance_key, {"group_instance_key": ...})` | `PUT /groups/{group_instance_key}/assign_group`       |
+| `remove_group(group_instance_key, {"group_instance_key": ...})` | `DELETE /groups/{group_instance_key}/assign_group`    |
+
+- **Group identifiers.** The `group_instance_key` argument of every method but `list()` and `create()` takes the group's ID, `"<type>:<key>"` such as `"teams:marketing"`, or the instance key alone, such as `"marketing"`, which finds only groups of the default `group` resource type.
+- **Group-to-group assignment.** `assign_group("group:support", {"group_instance_key": "org1"})` makes the members of `support` members of `org1`, so they derive the roles assigned to `org1`. The members of `org1` derive nothing from `support`. `remove_group()` with the same arguments undoes it. Both groups must be of the same resource type, and the second argument names its group by instance key alone or by ID, never `"<type>:<key>"`.
+- **Listing.** `list()` returns one page of groups with the total count, and doesn't take the `tenant`, `resource`, or `search` filters. It lists the instances of every resource type that has a `member` role.
+- **Early-access endpoints.** The SDK has no methods for the early-access endpoints that list a group's roles, users, child groups, or parent groups.
+
+The blocking client, `permit.sync.Permit`, has the same methods. Call them without `await`.
 
 ## API reference \{#api-reference}
 
