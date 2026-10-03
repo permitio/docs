@@ -1,10 +1,10 @@
 ---
 title: Manage policy and check permissions with the Python SDK
 sidebar_label: Python SDK examples
-description: "Create a Permit client, manage resources, roles, tenants, users, and role assignments, handle API errors, and check permissions with the Python SDK."
+description: "Create and close a Permit client, manage resources, roles, tenants, users, and role assignments, handle API errors, check permissions, and refresh PDP data with the Python SDK."
 ---
 
-This page collects short Python SDK examples for the most common calls: create a Permit client, manage resources, roles, tenants, and users, assign roles, handle API errors, and check permissions. It is for backend developers who have installed the `permit` package and want the call and argument shape for each task. To install the SDK and run a first check, see [Check permissions with the Python SDK (asyncio)](/sdk/python/quickstart-python).
+This page collects short Python SDK examples for the most common calls: create a Permit client and turn on its logs, manage resources, roles, tenants, and users, assign and list roles, handle API errors, check permissions, and refresh the data of your PDPs. It also lists the deprecated APIs that permit 4.0 removes. This page is for backend developers who have installed the `permit` package and want the call and argument shape for each task. To manage groups, see [Manage groups with the Python SDK](/api/rebac/groups#python-sdk). To install the SDK and run a first check, see [Check permissions with the Python SDK (asyncio)](/sdk/python/quickstart-python).
 
 The `Permit` class from `from permit import Permit` is asynchronous. Every method returns a coroutine, so run the examples with `await` inside an `async` function. For code that doesn't use `asyncio`, import `Permit` from `permit.sync` instead and call the same methods without `await`. See [Check permissions with the Python SDK (sync)](/sdk/python/quickstart_python_sync).
 
@@ -18,11 +18,11 @@ The `Permit` class from `from permit import Permit` is asynchronous. Every metho
 
 Create one `Permit` client and reuse it across your application.
 
-| Argument | Description |
-|---|---|
-| `token` | API key of the Permit environment. The API key selects the project and environment of every call. |
-| `pdp` | Address of the PDP that `permit.check()` calls, for example `http://localhost:7766` for a PDP container. |
-| `log` | Logger settings. `enable` turns SDK logs on (default `False`). `level` sets the log level (default `"info"`). |
+| Argument | Description                                                                                              |
+| -------- | -------------------------------------------------------------------------------------------------------- |
+| `token`  | API key of the Permit environment. The API key selects the project and environment of every call.        |
+| `pdp`    | Address of the PDP that `permit.check()` calls, for example `http://localhost:7766` for a PDP container. |
+| `log`    | Optional. SDK log settings: `enable`, `level`, and `label`. See [Turn on SDK logs](#logs).               |
 
 ```py
 from permit import Permit
@@ -32,10 +32,75 @@ permit = Permit(
     token="<YOUR_API_KEY>",
     # the url in which the SDK can connect to the PDP container
     pdp="http://localhost:7766",
-    # use this to turn on sdk logs:
-    log={"level": "debug", "enable": True},
 )
 ```
+
+### Turn on SDK logs \{#logs}
+
+The SDK logs with [loguru](https://github.com/Delgan/loguru), and logs nothing unless you turn logs on with the `log` option. This section describes the `log` option of `permit` 3.1 or later.
+
+```py
+from permit import Permit
+
+# permit 3.1 or later
+permit = Permit(
+    token="<YOUR_API_KEY>",
+    pdp="http://localhost:7766",
+    log={"enable": True, "level": "debug", "label": "Permit"},
+)
+```
+
+| Setting  | Default    | Description                                                                                                                                                                                                                                                                                                                      |
+| -------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enable` | `False`    | Whether the SDK logs. `False` calls loguru's `logger.disable("permit")`. `True` undoes that call only if an earlier client made it, so a `logger.disable()` that your application made for `permit` still applies.                                                                                                               |
+| `level`  | `"info"`   | The lowest severity the SDK logs, such as `"debug"`, `"info"`, `"warning"`, or `"error"`. The SDK drops its records below this level before they reach a sink, and your application's own records aren't affected. For a level name that loguru doesn't know, the SDK logs a warning that names the level, and logs at `"info"`. |
+| `label`  | `"Permit"` | The text the SDK puts in square brackets before every message it logs, as in `[Permit] ...`. An empty string adds nothing.                                                                                                                                                                                                       |
+| `json`   | `False`    | Not applied. For JSON output, see the loguru sink below.                                                                                                                                                                                                                                                                         |
+
+- The SDK adds no loguru sink of its own. Its records go to the sinks your application added, or to loguru's default stderr sink, in the format of those sinks.
+- The SDK logs its HTTP requests and the PDP's responses at the `"debug"` level.
+- loguru's logger is process-wide, so the `log` settings are too. The client created last decides whether the SDK logs, and the last client created with `"enable": True` decides the level and the label, for every client in the process. `wait_for_sync()` doesn't create a client, so it doesn't change the settings.
+
+For JSON output, replace loguru's default sink with a serialized sink. A serialized sink that you add next to the default sink prints every record a second time.
+
+```py
+import sys
+
+from loguru import logger
+
+logger.remove()
+logger.add(sys.stderr, serialize=True)
+```
+
+### Close the client's connections \{#close-the-client}
+
+In `permit` 3.1 or later, a client keeps the HTTP connections it opens and reuses them for its next requests, so a request doesn't open a new connection, with a new TLS handshake, each time. The client keeps one pool of connections for the Permit API and one for the PDP, and opens each pool on its first request. The asyncio client keeps these pools per event loop it's used on.
+
+Closing the client is optional. For a client that lives as long as your application, you don't need to close it. For a client that does one task, such as a script, close it when the task ends: use the client as a context manager, or call `close()`. The context manager and `close()` need `permit` 3.1 or later.
+
+```py
+import asyncio
+
+from permit import Permit
+
+
+async def main():
+    # permit 3.1 or later
+    async with Permit(token="<YOUR_API_KEY>", pdp="http://localhost:7766") as permit:
+        allowed = await permit.check("auth0|user-1", "read", "document")
+        print(allowed)
+
+
+asyncio.run(main())
+```
+
+With the blocking client, use `with Permit(...) as permit:` and call `permit.close()` without `await`.
+
+- `await permit.close()` on the asyncio client, or `permit.close()` on the blocking client, closes the connections, as leaving the `with` block does. A second `close()` closes nothing more. The client stays usable: its next request opens new connections.
+- An asyncio client that you never close leaves nothing open when its event loop shuts down through `asyncio.run()` or `asyncio.Runner`. If you run an event loop yourself, run `await permit.close()` on that loop before you close it. Connections left on a closed loop stay open until the client's next request lets the garbage collector free them, and Python reports each one with a `ResourceWarning`.
+- Close a client once no request is in flight. A request in flight when `close()` runs fails.
+- The blocking client, `permit.sync.Permit`, runs its calls on an event loop in a background daemon thread, which it starts on its first call. Its `close()` waits for the calls that other threads have in flight, then closes the connections and stops the thread. Don't call the blocking client from code that runs on that thread, such as a callback scheduled on its loop: the call raises `RuntimeError`.
+- With `proxy_facts_via_pdp` on, the client that `wait_for_sync()` yields uses the connections of the client you call it on. Close the client you called `wait_for_sync()` on. The yielded client's `close()` does nothing.
 
 ## Manage resources \{#resources}
 
@@ -119,7 +184,7 @@ If the Permit API returns an error status code, the SDK raises a `PermitApiError
 ```py
 from permit import Permit, PermitApiError
 
-permit = Permit(...)
+permit = Permit(token="<YOUR_API_KEY>", pdp="http://localhost:7766")
 
 # handle not found error
 try:
@@ -178,6 +243,27 @@ tenant: TenantRead = await permit.api.tenants.create(
     }
 )
 ```
+
+### Create a user as a member of a tenant \{#create-a-user-in-a-tenant}
+
+`permit.api.tenants.create_user()` takes a tenant key and a user object, creates the user as a member of that tenant with no role there, and returns a `UserRead` object. It needs `permit` 3.1 or later.
+
+```py
+from permit import UserRead
+
+user: UserRead = await permit.api.tenants.create_user(
+    # the tenant key
+    "acme",
+    # the new user
+    {"key": "auth0|user-2", "email": "user2@example.com"},
+)
+```
+
+- The user must be new. When a user with the same key exists, in any tenant, the Permit API returns status code 409 and the SDK raises `PermitAlreadyExistsError`. To give an existing user access to another tenant, assign the user a role in that tenant with [`permit.api.users.assign_role()`](#role-assignments).
+- The Permit API grants the role assignments in the user object's `role_assignments` field as it does for `permit.api.users.create()`, each in the tenant it names.
+- The request always goes to the Permit API, even with `proxy_facts_via_pdp` on, so it doesn't wait for the PDP to have the user.
+- `permit.api.tenants.delete_tenant_user()` returns status code 404 for a member with no role in the tenant. To remove such a member, delete the user with `permit.api.users.delete()`.
+- `permit.api.tenants.add_user()` is a deprecated alias of `create_user()`.
 
 ## Sync users \{#users}
 
@@ -241,6 +327,47 @@ assignments = await permit.api.role_assignments.list(
 )
 ```
 
+### List role assignments with their details \{#detailed-lists}
+
+`permit.api.role_assignments.list_detailed()` takes the filters of `list()` as keyword arguments, and returns one page of role assignments with the total count. Where `list()` returns the keys of the role, the user, and the tenant, each detailed role assignment has them as objects with their names and attributes, and also has the resource instance of a resource role. It needs `permit` 3.1 or later.
+
+```py
+page = await permit.api.role_assignments.list_detailed(
+    user_key="auth0|user-1",
+    tenant_key="acme",
+)
+for assignment in page.data:
+    print(assignment.role.name, assignment.tenant.name, assignment.user.email)
+print(page.total_count)
+```
+
+`permit.api.resource_instances` and `permit.api.relationship_tuples` have a `list_detailed()` method too, with the filters of their `list()` methods:
+
+| Method                                           | What each result has beyond `list()`                                                                                                                                             |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `permit.api.role_assignments.list_detailed()`    | The role, the user, the tenant, and for a resource role the resource instance, as objects. `per_page` is up to 1000.                                                             |
+| `permit.api.resource_instances.list_detailed()`  | `relationships`: the relationship tuples whose subject or object the instance is. `search_key` matches an instance key or ID exactly, where `list()` also matches part of a key. |
+| `permit.api.relationship_tuples.list_detailed()` | `subject_details`, `relation_details`, `object_details`, and `tenant_details`, which `list()` leaves empty.                                                                      |
+
+- Each method needs an environment API key, or a project or organization API key with the SDK's API context set to the environment.
+- With `proxy_facts_via_pdp` on, the requests go through the PDP, which forwards only the last value of a filter given as a list: `user_key=["alice", "bob"]` lists only the role assignments of `bob`. Pass lists only with `proxy_facts_via_pdp` off.
+- `permit.api.resource_instances.list(detailed_key=True)` is deprecated. Use `permit.api.resource_instances.list_detailed()` instead.
+
+### List the tenants a user has a role in \{#user-tenants}
+
+`permit.get_user_tenants()` asks the PDP for the tenants in which a user has a tenant-level role, the kind `permit.api.users.assign_role()` grants. It returns a list of `TenantDetails` objects, each with the tenant's `key` and `attributes`. It needs `permit` 3.1 or later and a container PDP.
+
+```py
+tenants = await permit.get_user_tenants("auth0|user-1")
+print([tenant.key for tenant in tenants])
+```
+
+After the role assignment in [Assign a role to a user in a tenant](#role-assignments), the list holds the `acme` tenant once the PDP has the assignment.
+
+- A role on a resource instance doesn't count, and neither does membership without a role, such as [`permit.api.tenants.create_user()`](#create-a-user-in-a-tenant) creates.
+- The list is empty when the user has no tenant-level role, or the PDP doesn't know the user.
+- The Cloud PDP doesn't serve this query. It returns status code 404, and the SDK raises a `PermitConnectionError` that says the query needs a container PDP.
+
 ## Check permissions \{#checking-permissions}
 
 `permit.check()` takes a user, an action, and a resource, sends the check to the PDP, and returns `True` or `False`. Pass the user as a key string, and the resource as a resource key string or a dictionary with `type` and `tenant`. The code comments in the example list the conditions that a role-based access control (RBAC) policy needs to return `True`.
@@ -248,7 +375,7 @@ assignments = await permit.api.role_assignments.list(
 ```py
 from permit import Permit
 
-permit = Permit(...)
+permit = Permit(token="<YOUR_API_KEY>", pdp="http://localhost:7766")
 
 # in order to be permitted according to the RBAC policy, a few conditions must be met:
 # 1) the user must exist in the permit system (you called sync user before)
@@ -279,9 +406,40 @@ else:
 
 To confirm the result, open the audit log in the Permit dashboard. The check appears with the user, action, resource, and decision.
 
+## Refresh the data of the environment's PDPs \{#refresh-pdps}
+
+`permit.api.pdps.refresh()` makes every PDP connected to the environment fetch all of its authorization data from Permit again, instead of at its next periodic update. Use it when the data the PDPs decide on changed outside Permit, such as in an [external data source](/how-to/manage-data/use-external-data-source). It needs `permit` 3.1 or later.
+
+```py
+refreshed = await permit.api.pdps.refresh(reason="nightly import")
+print(refreshed.update_id, refreshed.pdp_ids)
+```
+
+- `refresh()` returns once Permit has triggered the refresh, not once the PDPs have finished it. A check sent right after `refresh()` returns can still get an answer from the old data.
+- `reason` is optional, at most 512 characters, and shows in the PDPs' logs. With a longer `reason`, the SDK raises a validation error and sends nothing.
+- The result has the `update_id` of the data update that carries the refresh, and the `pdp_ids` of the PDP configurations it was sent to.
+- `refresh()` needs an environment API key with write or admin access, or a project or organization API key with the SDK's API context set to the environment. The Permit API returns status code 403 for a read-only key, and 404 for an environment with no PDP configuration.
+
+## Deprecated APIs \{#deprecations}
+
+permit 4.0, a future major release, removes these APIs. Each one issues a `DeprecationWarning` that says what to use instead. `tenants.add_user()` and its replacement, `create_user()`, need `permit` 3.1 or later, and so do the `detailed_key` warning and the `PermitException` warning that this section describes.
+
+| Deprecated                                                                                                                                        | Use instead                                                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pydantic 1 support. On pydantic 1, `import permit` warns once.                                                                                    | pydantic 2. The SDK's models then come from `pydantic.v1`, so invalid input raises `pydantic.v1.ValidationError`, which you can catch under both pydantic versions.                                                        |
+| The flat methods on `permit.api`, such as `permit.api.get_user()` and `permit.api.sync_user()`.                                                   | The grouped APIs, such as `permit.api.users.get()` and `permit.api.users.sync()`. Each warning names the replacement.                                                                                                      |
+| `permit.api.tenants.add_user()`.                                                                                                                  | `permit.api.tenants.create_user()`, which `add_user()` calls.                                                                                                                                                              |
+| The `detailed_key` argument of `permit.api.resource_instances.list()`. Only a call that passes `detailed_key=True` or `detailed_key=False` warns. | `permit.api.resource_instances.list_detailed()`. See [List role assignments with their details](#detailed-lists).                                                                                                          |
+| `PermitException`.                                                                                                                                | Catch `PermitConnectionError`, the only exception the SDK raises that is a `PermitException`. In permit 4.0, `PermitConnectionError` becomes a direct subclass of `PermitError`, so handlers of either class keep working. |
+
+In `permit` 3.1 or later, `PermitException` warns only at the line that imports it, or that reads `permit.PermitException` or `permit.exceptions.PermitException`. A star import of `permit` or `permit.exceptions` binds `PermitException`, so it warns at the star import line. To avoid that warning, import the names your code uses. `permit` 3.0 warns once instead, when `import permit` runs, with the message "Use PermitError instead".
+
+Python shows a `DeprecationWarning` only when the code that triggers the warning is in `__main__`, such as the script you run. pytest lists the warnings in its warnings summary. To see the warnings elsewhere, such as in a web app, run Python with `-W default::DeprecationWarning`, or set the environment variable `PYTHONWARNINGS=default::DeprecationWarning`. For warning filters that silence the pydantic 1 and flat method warnings while you migrate, see the [Python SDK 3.0 migration guide](https://github.com/permitio/permit-python/blob/v3.0.0/MIGRATION.md#deprecations-to-be-removed-in-40). In `permit` 3.1 or later, the filter `ignore:PermitException is deprecated:DeprecationWarning` silences the `PermitException` warning. In `permit` 3.0, the filter `ignore:Use PermitError instead:DeprecationWarning` does.
+
 ## Next steps
 
 - [Sync users](/how-to/sync-users)
 - [Check permissions](/how-to/enforce-permissions/check)
 - [Create resources and roles with a Python policy script](/sdk/python/sync-policy-script/sync-policy)
+- [Manage groups with the Python SDK](/api/rebac/groups#python-sdk)
 - [Python SDK on GitHub](https://github.com/permitio/permit-python)
