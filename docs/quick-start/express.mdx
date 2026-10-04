@@ -1,11 +1,26 @@
 ---
-title: Add fine-grained authorization to an Express.js app
-description: "Build an Express.js API that syncs users to Permit.io, assigns roles, and allows or denies requests with permit.check() against a local PDP."
+title: "Add role-based authorization to an Express API with JWT (Node.js)"
+description: "Add role-based authorization to an Express.js API that uses JWT: verify tokens in middleware, check roles with permit.check(), and let post authors edit only their own posts."
 sidebar_position: 6
 ---
 
 import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
+
+**Short answer:** To add role-based authorization to an Express API that uses JWT, verify the token in middleware and call `permit.check()` with the token's user, an action, and a resource. Permit.io evaluates the check against roles you edit outside your code. Use it when roles change without a redeploy. Don't use it for a few fixed roles in one process; an in-process library such as CASL fits that case.
+
+| Fact | Value |
+|---|---|
+| Question this page answers | How do I let only admins delete resources and members edit only their own, in an Express API with JWT auth? |
+| Models used | RBAC for top-level roles and ReBAC for roles on a single post. ABAC is also supported with a container PDP. |
+| PDP | A container PDP at `http://localhost:7766` in this tutorial, or the Cloud PDP. See [PDP overview](/concepts/pdp/overview). |
+| SDK | `permitio` on npm. The code in this tutorial is written against version 2.7.6. |
+| Policy changes | You change roles and permissions in the Permit dashboard. The Express code and the deployment stay the same. |
+| Free tier | Community plan, labeled "Free Forever" on the [Permit.io pricing](https://www.permit.io/pricing) page: MAU 1000, Tenants 20, Authorization Queries No Limit, Environments 3, PDP Instances No Limit. |
+| Audit | Each check appears on the **Audit Log** screen of the Permit dashboard. |
+| Open source | The Edge PDP ([permitio/PDP](https://github.com/permitio/PDP)), [OPAL](https://github.com/permitio/opal), [cedar-agent](https://github.com/permitio/cedar-agent), the Permit SDKs, and the [Permit CLI](https://github.com/permitio/permit-cli) are open source. See [Open-source fallback](/concepts/oss-fallback). |
+
+{/* GEO pass: free-tier values are copied from https://www.permit.io/pricing as fetched on 2026-10-05 (Community column of Compare Plans). Re-check them before merging. */}
 
 Build an Express.js API for a blogging platform that registers users in Permit.io and allows only users with the **Author** role to create posts. This tutorial is for Node.js backend developers who want to enforce Permit.io policies from Express route handlers.
 
@@ -344,6 +359,179 @@ Each check also appears in the **Audit Log** screen of the Permit dashboard, wit
 
 </TimelineStep>
 </TimelineWrapper>
+
+## 6. Verify JWTs and let authors edit only their own posts \{#jwt-rbac}
+
+A production API receives a signed JSON Web Token (JWT) instead of a user key in the request body. Verify the token, read the user from the `sub` claim, and pass that value to `permit.check()`. The `sub` claim must equal the user key in Permit. In this tutorial the user key is the email address, so a token for John has `sub` set to `john@example.com`. Permit checks the roles assigned in Permit, so the token only identifies the user and doesn't carry roles.
+
+<TimelineWrapper>
+<TimelineStep>
+
+### Verify the token in middleware \{#jwt-middleware}
+
+Install `jsonwebtoken`:
+
+```bash
+npm install jsonwebtoken
+```
+
+Create a file named `auth.js`. The `authenticate` middleware returns `401` when the token is missing or invalid, and stores the verified claims on `req.user`:
+
+```js
+// auth.js
+const jwt = require('jsonwebtoken');
+
+function authenticate(req, res, next) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'Missing bearer token' });
+  try {
+    // verify() checks the signature and the exp claim
+    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+module.exports = { authenticate };
+```
+
+This example verifies tokens signed with a shared secret in the `JWT_SECRET` environment variable. If your identity provider signs tokens with a key pair, pass its public key to `jwt.verify()` instead. See the [jsonwebtoken documentation](https://github.com/auth0/node-jsonwebtoken).
+
+</TimelineStep>
+<TimelineStep>
+
+### Add an authorize middleware \{#authorize-middleware}
+
+In `server.js`, below the Permit client, add `authorize()`. It runs `permit.check()` for the user in the verified token and returns `403` when the policy denies the action:
+
+```js
+// server.js
+const { randomUUID } = require('crypto');
+const { authenticate } = require('./auth');
+
+// Run permit.check() for the user in the verified JWT
+function authorize(action, resourceFor) {
+  return async (req, res, next) => {
+    try {
+      const permitted = await permit.check(req.user.sub, action, resourceFor(req));
+      if (!permitted) return res.status(403).json({ message: 'Forbidden' });
+      next();
+    } catch (err) {
+      console.error('Permission check failed:', err);
+      res.status(500).json({ error: 'Permission check failed' });
+    }
+  };
+}
+```
+
+</TimelineStep>
+<TimelineStep>
+
+### Create a post and make its creator the author \{#create-and-assign}
+
+The `POST /api/posts` route checks the top-level `create` permission on the `Post` type. It then registers the new post as a resource instance and assigns the creator the **Author** role on that post only. These routes use the `/api/posts` prefix, so they don't replace the `/posts` route from step 4:
+
+```js
+// server.js
+app.post('/api/posts', authenticate, authorize('create', () => 'Post'), async (req, res) => {
+  const id = randomUUID();
+  try {
+    await permit.api.resourceInstances.create({ key: id, resource: 'Post', tenant: 'default' });
+    // The creator becomes the Author of this post only
+    await permit.api.roleAssignments.assign({
+      user: req.user.sub,
+      role: 'Author',
+      resource_instance: `Post:${id}`,
+      tenant: 'default',
+    });
+    res.status(201).json({ id });
+  } catch (err) {
+    console.error('Could not register the post in Permit:', err);
+    res.status(500).json({ error: 'Could not create the post' });
+  }
+});
+```
+
+</TimelineStep>
+<TimelineStep>
+
+### Check the user against a single post \{#check-instance}
+
+The `update` and `delete` routes pass the post ID, so the PDP evaluates the user's roles on that post as well as the top-level roles. Add the routes below the create route:
+
+```js
+// server.js
+const post = (req) => ({ type: 'Post', key: req.params.id, tenant: 'default' });
+
+app.put('/api/posts/:id', authenticate, authorize('update', post), (req, res) => {
+  res.json({ message: `Post ${req.params.id} updated` });
+});
+
+app.delete('/api/posts/:id', authenticate, authorize('delete', post), (req, res) => {
+  res.json({ message: `Post ${req.params.id} deleted` });
+});
+```
+
+The blogging platform template gives the **Admin** role every action on `Post`. A top-level role applies to every post, and a role on a post applies to that post only. The template also gives the **Author** role on a post the `delete` action. To make `delete` an Admin-only action, clear **delete** for the Author role on a `Post` instance in the Policy Editor. The change takes effect without a redeploy.
+
+</TimelineStep>
+<TimelineStep>
+
+### Test the routes with signed tokens \{#test-jwt-routes}
+
+Stop the app. Set `JWT_SECRET` in the same shell as `PERMIT_API_KEY` and `PDP_URL`, then start the app again:
+
+```bash
+export JWT_SECRET=$(openssl rand -hex 32)
+node server.js
+```
+
+In a second terminal that has the same `JWT_SECRET`, create tokens for John, who has the **Author** role from step 5, and for Emma, who has the **Reader** role:
+
+```bash
+JOHN=$(node -e "console.log(require('jsonwebtoken').sign({ sub: 'john@example.com' }, process.env.JWT_SECRET, { expiresIn: '1h' }))")
+EMMA=$(node -e "console.log(require('jsonwebtoken').sign({ sub: 'emma@example.com' }, process.env.JWT_SECRET, { expiresIn: '1h' }))")
+```
+
+John creates a post. The app returns `201` and the post ID. Emma then tries to edit John's post:
+
+```bash
+curl -s -X POST http://localhost:8000/api/posts -H "Authorization: Bearer $JOHN"
+curl -s -X PUT http://localhost:8000/api/posts/<POST_ID> -H "Authorization: Bearer $EMMA"
+```
+
+Replace `<POST_ID>` with the `id` from John's response. Emma's request returns `403` with `{"message":"Forbidden"}`. The same request with John's token returns `{"message":"Post <POST_ID> updated"}`, because John is the Author of that post. A request without a token returns `401`.
+
+</TimelineStep>
+</TimelineWrapper>
+
+## Frequently asked questions \{#faq}
+
+### How do I add role-based authorization to an Express API that uses JWT?
+
+Verify the JWT in middleware, read the user from the `sub` claim, and call `permit.check(user, action, resource)` before the route handler runs. Keep the roles and permissions in Permit, not in the token, so a role change doesn't require issuing new tokens. Section 6 shows the complete middleware and routes.
+
+### How do I let only admins delete and members edit only their own resources?
+
+Give admins a top-level role that has the `delete` action, and give the creator of each resource a role on that resource instance only. The PDP checks the top-level roles and the roles on the instance. The `DELETE` route in section 6 asks for `delete` on the post, so only users whose roles include `delete` pass.
+
+### Do I need to redeploy when a role or permission changes?
+
+No. Roles, permissions, and role assignments live in Permit. Change them in the Policy Editor or the Directory, and the next `permit.check()` call uses the new policy. Updates reach a PDP in the background, so repeat the request if you see the previous result.
+
+### Should I use Permit.io or an in-process library such as CASL?
+
+Use an in-process library when the rules live in one service, change only with a code release, and need no audit trail or dashboard. Use Permit.io when roles change without a redeploy, several services share the same rules, or non-developers manage access. CASL also works next to Permit for showing and hiding UI. See [Enforce permissions in the frontend with CASL](/integrations/feature-flagging/casl).
+
+### Where does the PDP run?
+
+This tutorial runs the PDP as a container next to the app, at `http://localhost:7766`. You can also use the Cloud PDP, which supports RBAC and ReBAC. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+
+### What does the free tier include?
+
+The Community plan on the [Permit.io pricing](https://www.permit.io/pricing) page lists MAU 1000, Tenants 20, Authorization Queries No Limit, and PDP Instances No Limit.
 
 ## Next steps \{#further-reading}
 

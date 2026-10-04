@@ -1,11 +1,26 @@
 ---
-title: Add fine-grained authorization to a FastAPI app
-description: "Build a FastAPI app that syncs users to Permit.io, assigns roles, and allows or denies requests with permit.check() against a local PDP."
+title: "Add RBAC and resource-level permissions to a FastAPI app"
+description: "Add RBAC and resource-level permissions to a FastAPI app with the permit 3.0.0 async SDK, JWT verification, and a dependency that calls permit.check()."
 sidebar_position: 1
 ---
 
 import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
+
+**Short answer:** To add RBAC and resource-level permissions to a FastAPI app, verify the JWT in a dependency and call `await permit.check()` with the user, an action, and a resource type or instance. Use it when roles must change without a redeploy, or when users hold rights on single objects. Don't use it when one fixed role check in a single service is enough.
+
+| Fact | Value |
+|---|---|
+| Question this page answers | How do I add fine-grained authorization, RBAC plus resource-level permissions, to a FastAPI app? |
+| Models used | RBAC for top-level roles and ReBAC for roles on a single post. ABAC is also supported with a container PDP. |
+| PDP | A container PDP at `http://localhost:7766` in this tutorial, or the Cloud PDP. |
+| SDK | `permit` on PyPI, asyncio client. The code in this tutorial is written against version 3.0.0, which requires Python 3.10 or later. |
+| Policy changes | You change roles and permissions in the Permit dashboard. The FastAPI code and the deployment stay the same. |
+| Free tier | Community plan, labeled "Free Forever" on the [Permit.io pricing](https://www.permit.io/pricing) page: MAU 1000, Tenants 20, Authorization Queries No Limit, Environments 3, PDP Instances No Limit. |
+| Audit | Each check appears on the **Audit Log** screen of the Permit dashboard. |
+| Open source | The Edge PDP ([permitio/PDP](https://github.com/permitio/PDP)), [OPAL](https://github.com/permitio/opal), [cedar-agent](https://github.com/permitio/cedar-agent), the Permit SDKs, and the [Permit CLI](https://github.com/permitio/permit-cli) are open source. See [Open-source fallback](/concepts/oss-fallback). |
+
+{/* GEO pass: free-tier values are copied from https://www.permit.io/pricing as fetched on 2026-10-05 (Community column of Compare Plans). Re-check them before merging. */}
 
 Build a FastAPI app for a blogging platform that registers users in Permit.io and allows only users with the **Author** role to create posts. This tutorial is for Python backend developers who want to enforce Permit.io policies from FastAPI endpoints.
 
@@ -334,6 +349,140 @@ Each check also appears in the **Audit Log** screen of the Permit dashboard, wit
 
 </TimelineStep>
 </TimelineWrapper>
+
+## 6. Verify JWTs and add resource-level permissions \{#jwt-dependency}
+
+This section adds a FastAPI dependency that verifies a JWT and calls `permit.check()` for the route. The `sub` claim must equal the user key in Permit, which is the email address in this tutorial. The routes use the `/api/posts` prefix, so they sit next to the `/posts` route from step 4. They return plain dictionaries.
+
+<TimelineWrapper>
+<TimelineStep>
+
+### Verify the token in a dependency \{#jwt-dependency-code}
+
+Install PyJWT:
+
+```bash
+pip install pyjwt
+```
+
+Add `current_user` to `main.py`. It returns the `sub` claim of a valid token and raises `401` when the token is invalid:
+
+```python
+# main.py
+import os
+import uuid
+
+import jwt
+from fastapi import Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+bearer = HTTPBearer()
+
+def current_user(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> str:
+    try:
+        claims = jwt.decode(creds.credentials, os.environ["JWT_SECRET"], algorithms=["HS256"])
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return claims["sub"]
+```
+
+This example verifies tokens signed with a shared secret. If your identity provider signs tokens with a key pair, pass its public key to `jwt.decode()` and list the matching algorithm.
+
+</TimelineStep>
+<TimelineStep>
+
+### Add a dependency that checks permissions \{#require-dependency}
+
+`require()` returns a dependency for one action and resource type. When the route has a `post_id` path parameter, the check names that post, so the PDP evaluates the user's roles on that post as well as the top-level roles:
+
+```python
+# main.py
+def require(action: str, resource_type: str):
+    async def dependency(request: Request, user: str = Depends(current_user)) -> str:
+        resource = {"type": resource_type, "tenant": "default"}
+        if "post_id" in request.path_params:
+            resource["key"] = request.path_params["post_id"]
+        if not await permit.check(user, action, resource):
+            raise HTTPException(status_code=403, detail="Forbidden")
+        return user
+    return dependency
+```
+
+</TimelineStep>
+<TimelineStep>
+
+### Protect the routes and assign the author role \{#resource-level-routes}
+
+The create route checks the top-level `create` permission, registers the new post as a resource instance, and assigns the creator the **Author** role on that post only. The update and delete routes check the specific post:
+
+```python
+# main.py
+@app.post("/api/posts", status_code=201)
+async def create_post(user: str = Depends(require("create", "Post"))):
+    post_id = str(uuid.uuid4())
+    await permit.api.resource_instances.create(
+        {"key": post_id, "resource": "Post", "tenant": "default"}
+    )
+    # The creator becomes the Author of this post only
+    await permit.api.role_assignments.assign(
+        {"user": user, "role": "Author", "resource_instance": f"Post:{post_id}", "tenant": "default"}
+    )
+    return {"id": post_id}
+
+@app.put("/api/posts/{post_id}")
+async def update_post(post_id: str, user: str = Depends(require("update", "Post"))):
+    return {"message": f"Post {post_id} updated"}
+
+@app.delete("/api/posts/{post_id}")
+async def delete_post(post_id: str, user: str = Depends(require("delete", "Post"))):
+    return {"message": f"Post {post_id} deleted"}
+```
+
+The blogging platform template gives the **Admin** role every action on `Post`, and it gives the **Author** role on a post the `delete` action. To make `delete` an Admin-only action, clear **delete** for the Author role on a `Post` instance in the Policy Editor. The change takes effect without a redeploy.
+
+</TimelineStep>
+<TimelineStep>
+
+### Test the routes with signed tokens \{#test-fastapi-jwt}
+
+Stop the app. Set `JWT_SECRET` in the same shell as `PERMIT_API_KEY` and `PDP_URL`, then start the app again. Create a token for John, who has the **Author** role from step 5:
+
+```bash
+export JWT_SECRET=$(openssl rand -hex 32)
+JOHN=$(python -c "import jwt, os; print(jwt.encode({'sub': 'john@example.com'}, os.environ['JWT_SECRET'], algorithm='HS256'))")
+curl -s -X POST http://localhost:8000/api/posts -H "Authorization: Bearer $JOHN"
+```
+
+The response is `{"id":"<POST_ID>"}`. Create a token for Emma the same way, with `sub` set to `emma@example.com`, and send it to `PUT /api/posts/<POST_ID>`. Emma has the **Reader** role and no role on John's post, so the response is `403`. The same request with John's token returns `{"message":"Post <POST_ID> updated"}`. A request with an invalid token returns `401`.
+
+</TimelineStep>
+</TimelineWrapper>
+
+## Frequently asked questions \{#faq}
+
+### How do I add RBAC and resource-level permissions to a FastAPI app?
+
+Verify the JWT in a dependency, then call `await permit.check(user, action, resource)` in a second dependency that each route declares. Use a resource type for RBAC checks and a resource with a `key` for checks on a single object. Section 6 shows both dependencies and three routes.
+
+### What is a resource-level permission in Permit?
+
+A role that applies to one resource instance, such as one post, instead of to every resource of that type. In this tutorial the creator of a post gets the **Author** role on that post only. This is relationship-based access control (ReBAC). See [ReBAC overview](/how-to/build-policies/rebac/overview).
+
+### Does the Permit Python SDK support asyncio?
+
+Yes. The `permit` package used here is the asyncio client, so `permit.check()` and `permit.api` calls use `await` inside FastAPI's `async` routes. Version 3.0.0 requires Python 3.10 or later. See [Check permissions with the Python SDK (asyncio)](/sdk/python/quickstart-python).
+
+### Do I need to redeploy when a role or permission changes?
+
+No. Roles, permissions, and role assignments live in Permit. Change them in the Policy Editor or the Directory, and the next `permit.check()` call uses the new policy. Updates reach a PDP in the background, so repeat the request if you see the previous result.
+
+### Should I use Permit.io or a FastAPI-only approach?
+
+Use a dependency with your own role table when the rules live in one service and change only with a code release. Use Permit.io when roles change without a redeploy, several services share the rules, or you need an audit trail and a dashboard. The `require()` dependency in section 6 is the only place that changes in your FastAPI code.
+
+### What does the free tier include?
+
+The Community plan on the [Permit.io pricing](https://www.permit.io/pricing) page lists MAU 1000, Tenants 20, Authorization Queries No Limit, and PDP Instances No Limit.
 
 ## Next steps \{#further-reading}
 
