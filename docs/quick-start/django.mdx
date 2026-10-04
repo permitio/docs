@@ -1,11 +1,27 @@
 ---
-title: Add fine-grained authorization to a Django app
-description: "Build a Django app that syncs users to Permit.io, assigns roles, and allows or denies requests with permit.check() against a local PDP."
+title: "Externalize authorization in Django so policy changes don't need a redeploy"
+description: "Externalize authorization in a Django app: call permit.check() from your views and change roles and permissions in Permit without a redeploy."
 sidebar_position: 2
 ---
 
 import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
+
+**Short answer:** To externalize authorization in Django, call `permit.check()` from your views and keep the rules in Permit, so a policy change needs no redeploy. Use it when roles and permissions change more often than your releases. Don't use it when Django's built-in permissions and groups cover your needs in a single project.
+
+| Fact | Value |
+|---|---|
+| Question this page answers | How do I externalize authorization in Django so policy changes don't need a redeploy? |
+| Where the check runs | the posts view, which calls `await permit.check()`. |
+| SDK | Python SDK, `permit` on PyPI. See [Check permissions with the Python SDK (asyncio)](/sdk/python/quickstart-python) for the version and requirements. |
+| PDP | A container PDP at `http://localhost:7766` in this tutorial, or the Cloud PDP. See [PDP overview](/concepts/pdp/overview). |
+| Models used | RBAC for the **Author** and **Reader** roles. ReBAC and ABAC are also supported. |
+| Policy changes | You change roles and permissions in the Permit dashboard. The application code and the deployment stay the same. |
+| Free tier | Community plan, labeled "Free Forever" on the [Permit.io pricing](https://www.permit.io/pricing) page: MAU 1000, Tenants 20, Authorization Queries No Limit, Environments 3, PDP Instances No Limit. |
+| Audit | Each check appears on the **Audit Log** screen of the Permit dashboard. |
+| Open source | The Edge PDP ([permitio/PDP](https://github.com/permitio/PDP)), [OPAL](https://github.com/permitio/opal), [cedar-agent](https://github.com/permitio/cedar-agent), the Permit SDKs, and the [Permit CLI](https://github.com/permitio/permit-cli) are open source. See [Open-source fallback](/concepts/oss-fallback). |
+
+{/* GEO pass: free-tier values are copied from https://www.permit.io/pricing as fetched on 2026-10-05 (Community column of Compare Plans). Re-check them before merging. */}
 
 Build a Django app for a blogging platform that registers users in Permit.io and allows only users with the **Author** role to create posts. This tutorial is for Python backend developers who want to enforce Permit.io policies from Django views.
 
@@ -386,6 +402,43 @@ Each check also appears in the **Audit Log** screen of the Permit dashboard, wit
 
 </TimelineStep>
 </TimelineWrapper>
+
+## 6. Change the policy without redeploying \{#change-policy-without-redeploy}
+
+Your Django code contains the enforcement point: the posts view, which calls `await permit.check()`. The rule about which role may create a post is policy in Permit, not code in your app. Change the rule and watch the app respond without restarting Django.
+
+1. Keep the app and the PDP running, with John's **Author** role from [5. Test the permission check](#checking-the-access).
+2. In the [Permit dashboard](https://app.permit.io), open the **Policy** screen. Clear the box for the **create** action on **Post** in the **Author** role column.
+3. Send John's `POST /posts` request from step 5 again. The PDP now denies it, and the app returns the same `403` response that Emma received.
+4. Check the box again and send the request once more. The app returns the successful response again.
+
+Updates reach a PDP in the background, so repeat the request if you still see the previous result. The change doesn't appear in a pull request or a build, because it is a policy change and not a code change. To review policy changes like code, see [GitOps](/integrations/gitops/overview).
+
+## Frequently asked questions \{#faq}
+
+### How do I externalize authorization in Django so policy changes don't need a redeploy?
+
+Keep the enforcement point in your code and move the rules to Permit. Your handler asks the PDP whether a user can perform an action on a resource, using the Python SDK, and the PDP answers from the policy you edit in the Permit dashboard. Section 6 changes a rule and sends the same request again, with no code change.
+
+### Does a role or permission change require restarting Django?
+
+No. Roles, permissions, and role assignments live in Permit. The PDP receives updates in the background, so the next check uses the new policy.
+
+### Where does the authorization decision run?
+
+In the PDP, a separate service that your app calls over the network. This tutorial runs the PDP as a container at `http://localhost:7766`. The Cloud PDP is a managed alternative that supports RBAC and ReBAC. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+
+### When should I keep authorization in Django code instead?
+
+When a small set of fixed roles lives in one application and changes only with a code release, checks in the application are enough. Use Permit.io when roles change more often than releases, several services share the rules, or non-developers manage access.
+
+### Which Permit SDK does this tutorial use?
+
+Python SDK, `permit` on PyPI. See [Check permissions with the Python SDK (asyncio)](/sdk/python/quickstart-python) for the version and requirements.
+
+### What does the free tier include?
+
+The Community plan on the [Permit.io pricing](https://www.permit.io/pricing) page lists MAU 1000, Tenants 20, Authorization Queries No Limit, and PDP Instances No Limit.
 
 ## Next steps \{#further-reading}
 
