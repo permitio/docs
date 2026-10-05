@@ -120,7 +120,7 @@ Nexus PDP stores authorization data in a different place than the container PDP,
 | | Container PDP (`pdp-v2`) | Nexus PDP (`nexus-pdp`) |
 | --- | --- | --- |
 | Authorization data | In OPA's in-memory document | On disk, in an embedded database |
-| Memory as data grows | Grows with your data set | Limited by a cache size you configure |
+| Memory as data grows | Grows with your data set | Grows far more slowly, and peaks during a cold start |
 | Processes | Rust API server, Python OPAL client (Horizon), and OPA | Rust binary, NATS leaf node, and OPA |
 | Python runtime | Required, for the Open Policy Administration Layer (OPAL) client | Not present |
 | Persistent storage | Not required | Required |
@@ -128,10 +128,28 @@ Nexus PDP stores authorization data in a different place than the container PDP,
 On the container PDP, your authorization data is raw JSON in memory. The [OPA policy performance documentation](https://www.openpolicyagent.org/docs/policy-performance) states that raw JSON in OPA uses about 20 times the memory of the same data in a compact on-disk form. On Nexus PDP, the data set lives on disk in a compact form, and memory depends on the storage engine's cache sizes, which you set.
 
 :::caution Start Nexus PDP with 4 GiB of memory
-The default storage-engine settings of Nexus PDP target large workloads: a 512 MiB block cache and 256 MiB write buffers. If you give the container a memory limit of a few hundred MiB, the container is killed for running out of memory (OOM) at startup. Give the Nexus PDP container 4 GiB of memory to start.
+The default storage-engine settings of Nexus PDP target large workloads: a 512 MiB block cache and 256 MiB write buffers. If you give the container a memory limit of a few hundred MiB, the container is killed for running out of memory (OOM) at startup. Give the Nexus PDP container 4 GiB of memory to start, and more for a large data set: see [Measured memory and cold start](#measured-footprint).
 
 To run Nexus PDP with less memory, lower the cache and write-buffer sizes in [Nexus PDP storage engine settings](/concepts/pdp/nexus-pdp-configuration#storage-engine), then load test against your own data set before you choose a size.
 :::
+
+### Measured memory and cold start (early access) \{#measured-footprint}
+
+Permit measured these figures in October 2026 on Nexus PDP `0.7.0-beta.26`, an early-access build, with default storage-engine settings. The data set was one Google Drive–style ReBAC model (tenants, groups, folders, and documents, nested up to five levels), loaded in three steps. Facts are the rows Permit stores for an environment: users, tenants, resource instances, role assignments, and relationship tuples. Treat the figures as a starting point, not a guarantee: later builds can change them, and your policy and data shape change them too.
+
+| Facts | Users / resource instances | CPUs | Cold start, to correct data | Peak memory, during the cold start | Memory while serving checks | Snapshot size |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2.0M | 182K / 402K | 2 | 24 s | ~0.6 GiB | 1.0–1.5 GiB | 0.26 GiB |
+| 10.8M | 1.0M / 2.2M | 8 | 68 s | ~3.9 GiB | 2.1–3.0 GiB | 1.35 GiB |
+| 20.0M | 1.85M / 4.1M | 8 | 151 s | ~6.5 GiB | ~2.7 GiB | 2.67 GiB |
+
+- **Memory peaks during a cold start.** Loading the snapshot takes about twice the snapshot's size plus 0.5–1.2 GiB. Size the memory limit for that peak, not for steady state, or the container is killed while it loads.
+- **Memory limit by data-set size.** 4 GiB covers a few million facts. Give 6 GiB at about 10 million facts and 10 GiB at about 20 million. Permit has not measured larger data sets: load test before you choose a size.
+- **Cold start time grows faster than the data set.** Set the startup probe from the cold start time for your size, with headroom. A cold start on a new Kubernetes node also waits for the node and the image pull.
+- **The snapshot grows linearly**, at about 0.13 GiB for each million facts.
+- **Disk.** At 20 million facts, the volume held 5.8 GiB, about twice the snapshot, which matches the [disk guidance](#disk).
+
+These figures cover memory, disk, and cold start only. They are not latency or throughput figures: the test's data set was deliberately heavier than a typical one, and the [caution on throughput](#running-at-high-volume) still applies.
 
 ### Disk
 
