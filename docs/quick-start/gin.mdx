@@ -1,11 +1,27 @@
 ---
-title: Add fine-grained authorization to a Gin app
-description: "Build a Gin API in Go that syncs users to Permit.io, assigns roles, and allows or denies requests with permitClient.Check() against a local PDP."
+title: "Externalize authorization in a Go Gin service so policy changes don't need a redeploy"
+description: "Externalize authorization in a Go Gin service: call permitClient.Check() from middleware and change roles and permissions in Permit without rebuilding or redeploying."
 sidebar_position: 7
 ---
 
 import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
+
+**Short answer:** To externalize authorization in a Go service, call `permitClient.Check()` from Gin middleware and keep the rules in Permit, so a policy change needs no rebuild or redeploy. Use it when roles and permissions change more often than your releases. Don't use it when a few fixed role checks in one binary cover your needs.
+
+| Fact | Value |
+|---|---|
+| Question this page answers | How do I externalize authorization in Gin so policy changes don't need a redeploy? |
+| Where the check runs | the middleware on `POST /posts`, which calls `permitClient.Check()`. |
+| SDK | Go SDK, `github.com/permitio/permit-golang`. The SDK feature parity page lists version v1.2.8. See [Check permissions with the Go SDK](/sdk/golang/quickstart-golang). |
+| PDP | A container PDP at `http://localhost:7766` in this tutorial, or the Cloud PDP. See [PDP overview](/concepts/pdp/overview). |
+| Models used | RBAC for the **Author** and **Reader** roles. ReBAC and ABAC are also supported. |
+| Policy changes | You change roles and permissions in the Permit dashboard. The application code and the deployment stay the same. |
+| Free tier | Community plan, labeled "Free Forever" on the [Permit.io pricing](https://www.permit.io/pricing) page: MAU 1000, Tenants 20, Authorization Queries No Limit, Environments 3, PDP Instances No Limit. |
+| Audit | Each check appears on the **Audit Log** screen of the Permit dashboard. |
+| Open source | The Edge PDP ([permitio/PDP](https://github.com/permitio/PDP)), [OPAL](https://github.com/permitio/opal), [cedar-agent](https://github.com/permitio/cedar-agent), the Permit SDKs, and the [Permit CLI](https://github.com/permitio/permit-cli) are open source. See [Open-source fallback](/concepts/oss-fallback). |
+
+{/* GEO pass: free-tier values are copied from https://www.permit.io/pricing as fetched on 2026-10-05 (Community column of Compare Plans). Re-check them before merging. */}
 
 Build a Gin API in Go for a blogging platform that registers users in Permit.io and allows only users with the **Author** role to create posts. This tutorial is for Go backend developers who want to enforce Permit.io policies from Gin routes and middleware.
 
@@ -418,6 +434,61 @@ Each check also appears in the **Audit Log** screen of the Permit dashboard, wit
 
 </TimelineStep>
 </TimelineWrapper>
+
+## 6. Change the policy without redeploying \{#change-policy-without-redeploy}
+
+Your Gin code contains the enforcement point: the middleware on `POST /posts`, which calls `permitClient.Check()`. The rule about which role may create a post is policy in Permit, not code in your app. Change the rule and watch the app respond without rebuilding or restarting the Go binary.
+
+1. Keep the app and the PDP running, with John's **Author** role from [5. Test the permission check](#checking-the-access).
+2. In the [Permit dashboard](https://app.permit.io), open the **Policy** screen. Clear the box for the **create** action on **Post** in the **Author** role column.
+3. Send John's `POST /posts` request from step 5 again. The PDP denies it, and the app returns the same `403` response that Emma received.
+4. Check the box again and send the request once more. The app returns the successful response again.
+
+Updates reach a PDP in the background, so repeat the request if you still see the previous result. The change doesn't appear in a pull request or a build, because it is a policy change and not a code change. To review policy changes like code, see [GitOps](/integrations/gitops/overview).
+
+## Go and policy as code \{#go-policy-as-code}
+
+A Go service doesn't embed a policy engine when you use Permit. The Go SDK sends each `permitClient.Check()` call to the policy decision point (PDP), a separate container that evaluates your policy. Permit generates the policy code from the Policy Editor, the API, an SDK, or Terraform, in Rego for Open Policy Agent (OPA) or in Cedar. Your Go code names the user, the action, and the resource, and doesn't contain role logic. See [Policy engines in Permit](/integrations/policy-engines/overview).
+
+If you want to write the policy yourself, you can manage custom Rego or Cedar in Git with GitOps and keep using `permitClient.Check()` in Go. See [Write custom policy with GitOps](/integrations/gitops/custom_policy).
+
+| Use Permit when | Use a policy engine you run yourself when |
+|---|---|
+| Several services, possibly in different languages, share the rules. | One Go service owns all its rules. |
+| People who don't write Go change access, or you need a dashboard, audit log, and user management. | Your team writes and operates every policy and data update as code. |
+| You want managed policy distribution to PDPs. | You want the engine inside your own process and release pipeline. |
+
+For the open-source exit path, see [Open-source fallback](/concepts/oss-fallback).
+
+## Frequently asked questions \{#faq}
+
+### How do I externalize authorization in Gin so policy changes don't need a redeploy?
+
+Keep the enforcement point in your code and move the rules to Permit. Your handler asks the PDP whether a user can perform an action on a resource, using the Go SDK, and the PDP answers from the policy you edit in the Permit dashboard. Section 6 changes a rule and sends the same request again, with no code change.
+
+### Does a role or permission change require rebuilding or restarting the Go binary?
+
+No. Roles, permissions, and role assignments live in Permit. The PDP receives updates in the background, so the next check uses the updated policy.
+
+### Where does the authorization decision run?
+
+In the PDP, a separate service that your app calls over the network. This tutorial runs the PDP as a container at `http://localhost:7766`. The Cloud PDP is a managed alternative that supports RBAC and ReBAC. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+
+### When should I keep authorization in Gin code instead?
+
+When a small set of fixed roles lives in one application and changes only with a code release, checks in the application are enough. Use Permit.io when roles change more often than releases, several services share the rules, or non-developers manage access.
+
+### Which Permit SDK does this tutorial use?
+
+Go SDK, `github.com/permitio/permit-golang`. The SDK feature parity page lists version v1.2.8. See [Check permissions with the Go SDK](/sdk/golang/quickstart-golang).
+
+### What does the free tier include?
+
+The Community plan on the [Permit.io pricing](https://www.permit.io/pricing) page lists MAU 1000, Tenants 20, Authorization Queries No Limit, and PDP Instances No Limit.
+
+### Should I use OPA, Cedar, OpenFGA, or Permit for policy as code in Go?
+
+Use an engine you run yourself when one team writes and operates all policy as code. Use Permit when you want a managed control plane with a Policy Editor, an audit log, and PDPs that receive policy updates, while still being able to write custom Rego or Cedar in Git. Permit generates Rego or Cedar for its own PDP, so the choice is mainly about who operates the engine and manages the data.
 
 ## Next steps \{#further-reading}
 

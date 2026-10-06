@@ -1,11 +1,27 @@
 ---
-title: Add fine-grained authorization to a Next.js app
-description: "Build Next.js API routes that sync users to Permit.io, assign roles, and allow or deny requests with permit.check() in middleware against a local PDP."
+title: "Add organization-scoped authorization to a Next.js App Router app"
+description: "Add organization-scoped authorization to a Next.js App Router app: map each organization to a Permit.io tenant and check permissions in route handlers with permit.check()."
 sidebar_position: 4
 ---
 
 import TimelineStep from "../../src/components/timeline/TimelineStep";
 import TimelineWrapper from "../../src/components/timeline/TimelineWrapper";
+
+**Short answer:** To scope a Next.js App Router app by organization, map each organization to a Permit.io tenant and call `permit.check()` in route handlers with the user and organization from the verified session. Use it when one user holds different roles in different organizations. Don't use it when every user has one global role, or when you only need show and hide rules in the UI.
+
+| Fact | Value |
+|---|---|
+| Question this page answers | How do I make sure users can only edit resources that belong to their organization in a Next.js App Router app? |
+| Organization model | One Permit tenant for each organization. A user can have a different role in each tenant. |
+| Models used | RBAC for roles in a tenant and ReBAC for roles on a single post. |
+| PDP | A container PDP at `http://localhost:7766` in this tutorial, or the Cloud PDP. |
+| SDK | `permitio` on npm. The code in this tutorial is written against version 2.7.6, with Next.js 15.5. |
+| Authentication | Any provider that issues a JWT with a user ID in `sub` and an organization ID claim. The example reads a claim named `org_id`. |
+| Free tier | Community plan, labeled "Free Forever" on the [Permit.io pricing](https://www.permit.io/pricing) page: MAU 1000, Tenants 20, Authorization Queries No Limit, Environments 3, PDP Instances No Limit. |
+| Audit | Each check appears on the **Audit Log** screen of the Permit dashboard. |
+| Open source | The Edge PDP ([permitio/PDP](https://github.com/permitio/PDP)), [OPAL](https://github.com/permitio/opal), [cedar-agent](https://github.com/permitio/cedar-agent), the Permit SDKs, and the [Permit CLI](https://github.com/permitio/permit-cli) are open source. See [Open-source fallback](/concepts/oss-fallback). |
+
+{/* GEO pass: free-tier values are copied from https://www.permit.io/pricing as fetched on 2026-10-05 (Community column of Compare Plans). Re-check them before merging. */}
 
 Build Next.js API routes for a blogging platform that register users in Permit.io and allow only users with the **Author** role through a protected route. This tutorial is for Next.js developers who want to enforce Permit.io policies from App Router route handlers and middleware.
 
@@ -374,6 +390,182 @@ Each check also appears in the **Audit Log** screen of the Permit dashboard, wit
 
 </TimelineStep>
 </TimelineWrapper>
+
+## 6. Scope permissions to the user's organization \{#org-scoped-authorization}
+
+The middleware in step 4 reads the user from a request header, which is useful for a local test. In a real app, read the user and the active organization from a verified session. This section shows route handlers that use the organization as the Permit tenant, so a user who is an admin in one organization and a reader in another gets the right answer in each. For the model behind this, see [Multi-tenant authorization](/concepts/multi-tenant-authorization).
+
+<TimelineWrapper>
+<TimelineStep>
+
+### Read the user and organization from the session \{#session-helper}
+
+Install `jose`, a JWT library:
+
+```bash
+npm install jose
+```
+
+Create `src/lib/session.ts`. The example verifies a JWT from the `Authorization` header and reads the user from `sub` and the organization from an `org_id` claim. Change the claim name to match your identity provider, or read the session from your auth library:
+
+```ts
+// src/lib/session.ts
+import { jwtVerify } from "jose";
+
+const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+
+// Returns the verified user ID and organization ID, or null
+export async function getSession(req: Request) {
+  const token = req.headers.get("authorization")?.replace("Bearer ", "");
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secret);
+    if (!payload.sub || typeof payload.org_id !== "string") return null;
+    return { userId: payload.sub, orgId: payload.org_id };
+  } catch {
+    return null;
+  }
+}
+```
+
+</TimelineStep>
+<TimelineStep>
+
+### Create a tenant for each organization \{#org-onboarding}
+
+Create `src/lib/orgs.ts`. Call `createOrg()` when your app creates an organization, and `addMember()` when a user joins it. The role is a top-level role such as **Admin**, **Author**, or **Reader**, assigned in that organization's tenant only:
+
+```ts
+// src/lib/orgs.ts
+import { permit } from "./permit";
+
+// Call when your app creates an organization
+export async function createOrg(orgId: string, orgName: string) {
+  await permit.api.tenants.create({ key: orgId, name: orgName });
+}
+
+// Call when a user joins an organization
+export async function addMember(userId: string, email: string, orgId: string, role: string) {
+  await permit.api.users.sync({ key: userId, email });
+  await permit.api.roleAssignments.assign({ user: userId, role, tenant: orgId });
+}
+```
+
+Use the same value for `userId` as the `sub` claim in the user's token. For a user who belongs to two organizations, call `addMember()` once for each organization with a different role.
+
+</TimelineStep>
+<TimelineStep>
+
+### Check the tenant when a post is created \{#org-create-route}
+
+Create `src/app/api/posts/route.ts`. The handler checks `create` in the user's organization, registers the post as a resource instance in the same tenant, and makes the creator the **Author** of that post:
+
+```ts
+// src/app/api/posts/route.ts
+import { randomUUID } from "node:crypto";
+import { getSession } from "@/lib/session";
+import { permit } from "@/lib/permit";
+
+export async function POST(req: Request) {
+  const session = await getSession(req);
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const allowed = await permit.check(session.userId, "create", {
+    type: "Post",
+    tenant: session.orgId,
+  });
+  if (!allowed) return Response.json({ error: "Forbidden" }, { status: 403 });
+
+  const id = randomUUID();
+  await permit.api.resourceInstances.create({ key: id, resource: "Post", tenant: session.orgId });
+  await permit.api.roleAssignments.assign({
+    user: session.userId,
+    role: "Author",
+    resource_instance: `Post:${id}`,
+    tenant: session.orgId,
+  });
+  return Response.json({ id }, { status: 201 });
+}
+```
+
+</TimelineStep>
+<TimelineStep>
+
+### Check the tenant and the post when it is edited \{#org-update-route}
+
+Create `src/app/api/posts/[id]/route.ts`. In Next.js 15, `params` is a promise, so the handler awaits it. The check names the post and the organization, so a user from another organization is denied even if the post ID is known:
+
+```ts
+// src/app/api/posts/[id]/route.ts
+import { getSession } from "@/lib/session";
+import { permit } from "@/lib/permit";
+
+export async function PUT(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getSession(req);
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  const permitted = await permit.check(session.userId, "update", {
+    type: "Post",
+    key: id,
+    tenant: session.orgId,
+  });
+  if (!permitted) return Response.json({ error: "Forbidden" }, { status: 403 });
+
+  // ... update the post in your database
+  return Response.json({ message: `Post ${id} updated` });
+}
+```
+
+The post must exist as a resource instance in the same tenant as the check. Create the instance when your app creates the post, as the `POST` handler does.
+
+</TimelineStep>
+<TimelineStep>
+
+### Test with a signed token \{#org-test}
+
+Set `JWT_SECRET` in the environment of the Next.js app, restart it, and sign a token for a user in an organization. Run this command in the project directory:
+
+```bash
+export JWT_SECRET=$(openssl rand -hex 32)
+node --input-type=module -e "import { SignJWT } from 'jose'; console.log(await new SignJWT({ org_id: 'acme' }).setProtectedHeader({ alg: 'HS256' }).setSubject('john@example.com').setExpirationTime('1h').sign(new TextEncoder().encode(process.env.JWT_SECRET)))"
+```
+
+Before you call the routes, create the `acme` tenant with `createOrg('acme', 'Acme')` and assign `john@example.com` a role with `addMember()`. Send the token as `Authorization: Bearer <TOKEN>` to `POST /api/posts`. A token with a different `org_id` that has no role in that tenant gets `403`.
+
+</TimelineStep>
+</TimelineWrapper>
+
+Server Actions run on the server, and a client can call them directly. Call `getSession`-style code and `permit.check()` inside each action, as you do in a route handler, and don't rely on the page that renders the button.
+
+## Frequently asked questions \{#faq}
+
+### How do I make sure users can only edit resources that belong to their organization in Next.js?
+
+Map each organization to a Permit tenant, put the organization ID in the verified session, and pass it as the `tenant` in every `permit.check()` call. For a single post, also pass the post ID as the resource `key`. Section 6 shows the route handlers.
+
+### Which authentication providers work with this setup?
+
+Any provider that gives your route handlers a verified user ID and the active organization ID, such as Clerk, Auth.js, or Supabase Auth. Permit doesn't issue tokens or manage passwords. Read the session with your provider's helper instead of `getSession()`, and pass the same user ID to Permit.
+
+### Can a user have different roles in different organizations?
+
+Yes. A role assignment belongs to one tenant, so a user can be an admin in one organization and a viewer in another. A check with `tenant: orgId` uses only the roles in that tenant.
+
+### Should I check permissions in middleware or in route handlers?
+
+Check in the route handler or Server Action that touches the data, because that code knows the resource. Middleware, as in step 4, fits a coarse gate on a URL prefix. Middleware that calls `permit.check()` must run in the Node.js runtime, as the prerequisites describe.
+
+### Do I need to redeploy when a role changes?
+
+No. Change roles and permissions in the Policy Editor or the Directory. The next `permit.check()` call uses the updated policy.
+
+### What does the free tier include?
+
+The Community plan on the [Permit.io pricing](https://www.permit.io/pricing) page lists MAU 1000, Tenants 20, Authorization Queries No Limit, and PDP Instances No Limit.
 
 ## Next steps \{#further-reading}
 
