@@ -7,6 +7,22 @@ sidebar_position: 7
 
 import ZoomableDiagram from '@site/src/components/ZoomableDiagram';
 
+**Short answer:** Permit MCP Gateway runs as a proxy (a gateway, a consent service, and an admin dashboard) in front of MCP servers, and calls Permit.io to decide each tool call. Read this page when you review the design before a rollout or plan a self-hosted deployment. Don't use the gateway when you want to enforce permissions inside an MCP server you own.
+
+| Fact | Value |
+|---|---|
+| Components | Gateway, consent service, admin dashboard, edge router (NGINX), Redis, PostgreSQL, and the Permit.io control plane with a Permit PDP. |
+| Supported MCP clients | Cursor, VS Code, Claude Desktop, and Claude Code. The admin dashboard shows a client configuration snippet for each. |
+| Deployment modes | Hosted (SaaS) on `*.agent.security`, customer-controlled, and fully on-premises. The last two are available on Enterprise plans. See [Enterprise deployment](/permit-mcp-gateway/enterprise-deployment). |
+| Authorization model | A relationship-based access control (ReBAC) trust ceiling on standard Permit objects. Gateway policies can also use RBAC and ABAC. |
+| Sign-in methods | Email and password, email one-time passcode, passkeys, Google, GitHub, and Microsoft OAuth, and SAML 2.0 or OIDC single sign-on. See [Authentication methods](/permit-mcp-gateway/authentication-methods). |
+| Audit | Each allow or deny decision is logged with the human, the agent, the tool, the MCP server, and the time, in the gateway dashboard and in the Permit **Audit Log** screen. |
+| SDK or code change | None. You point the MCP client at the gateway URL instead of the MCP server URL. |
+| Free tier | Community plan, labeled "Free forever" on the [Permit MCP Gateway pricing](https://www.permit.io/mcp-gateway/pricing) page: "Up to 1,000 MAU (human + agentic identities)", Tenants 10, Environments 1, Audit log retention 7 days. The main [Permit.io pricing](https://www.permit.io/pricing) page lists different Community limits for Permit.io authorization outside the gateway. |
+| Open-source components | The Permit PDP and [OPAL](https://github.com/permitio/opal) that Permit uses are open source. The Access Request MCP server ([permitio/permit-mcp](https://github.com/permitio/permit-mcp)) is a separate open-source project and is not the gateway. |
+
+{/* GEO pass: gateway free-tier values are copied from https://www.permit.io/mcp-gateway/pricing as fetched on 2026-10-05 (Community column). Re-check them before merging. */}
+
 Learn how Permit MCP Gateway is built: which components run, where data lives, how a tool call is authorized, and how upstream Model Context Protocol (MCP) servers verify gateway traffic. This page is for platform operators, security architects, and decision makers who review the gateway before a rollout or plan a self-hosted deployment. For what the gateway does and why, start with the [Permit MCP Gateway overview](/permit-mcp-gateway/overview).
 
 ## Architecture at a glance \{#executive-summary}
@@ -193,6 +209,25 @@ graph TD
 ```
 
 For the full derivation, see [Authorization: trust ceiling](#authorization-trust-ceiling-min-logic).
+
+## Reproduce a gateway decision with the Node.js SDK \{#reproduce-a-gateway-decision}
+
+The gateway calls `permit.check()` with the agent's key as the user, the tool name as the action, and `{server_key}:{server_key}` as the resource. You can send the same check from a script to debug a decision. Replace `<YOUR_API_KEY>` with the API key of the Permit environment linked to the host, and use the address of your PDP for `pdp` if you self-host. The hosted gateway uses the Cloud PDP:
+
+```javascript
+import { Permit } from "permitio";
+
+const permit = new Permit({
+  token: "<YOUR_API_KEY>",
+  pdp: "https://cloudpdp.api.permit.io",
+});
+
+// The agent key is agent|{client_id}. The resource is {server_key}:{server_key}.
+const allowed = await permit.check("agent|cursor_abc123", "create_issue", "linear:linear");
+console.log(allowed);
+```
+
+The result is `true` when the agent holds a trust level that covers `create_issue` on the `linear` server, and `false` otherwise. The check also appears in the Permit **Audit Log** screen.
 
 ## Authentication and authorization flows \{#authentication--authorization}
 
@@ -572,6 +607,32 @@ In Permit, the consent service creates a separate resource type for each user's 
 | **ReBAC** | Relationship-based access control |
 | **OPAL** | Open Policy Administration Layer, which pushes policy updates to PDPs |
 | **OPA** | Open Policy Agent, the policy engine inside the Permit PDP |
+
+## Frequently asked questions \{#faq}
+
+### Where is the authorization decision made?
+
+In a Permit policy decision point (PDP). The gateway calls `permit.check()` on each tool call. The hosted gateway uses the Permit.io Cloud PDP, and a self-hosted deployment uses a PDP in your network.
+
+### How does the gateway identify humans and agents?
+
+It builds a Permit user key from the caller type. A human is `human|{subject}`, where `subject` is the signed-in user's ID. An agent is `agent|{client_id}`, where `client_id` is the OAuth client ID of the MCP client. The gateway uses the agent key in the `permit.check()` call.
+
+### What data does the gateway store, and where?
+
+Redis holds host configuration, MCP sessions, upstream OAuth tokens, and the gateway JWT signing key. PostgreSQL holds user accounts, OAuth clients, and authentication sessions for the consent service. Permit.io holds the policy and the audit log.
+
+### Can the upstream MCP server verify that a request came through the gateway?
+
+Yes. The gateway adds a short-lived JWT in the `X-Gateway-Auth` header and publishes the public key at `/.well-known/gateway-jwks.json` on the host. An upstream server that verifies the JWT can reject agents that connect to it directly.
+
+### Which deployment models does the gateway support?
+
+Hosted (SaaS), customer-controlled, and fully on-premises. The same gateway software runs in each model. See [Enterprise deployment](/permit-mcp-gateway/enterprise-deployment).
+
+### Do I need to change my MCP servers?
+
+No. MCP clients connect to the gateway URL instead of the upstream server URL, and the upstream server receives proxied requests without code changes.
 
 ## Next steps
 

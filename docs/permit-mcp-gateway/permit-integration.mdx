@@ -5,6 +5,22 @@ description: Learn how Permit MCP Gateway maps MCP servers, tools, and trust lev
 sidebar_position: 8
 ---
 
+**Short answer:** Permit MCP Gateway stores its policy in Permit.io: each MCP server is a resource type, each tool is an action, and each trust level is a role. Use this mapping to debug a tool-call decision or to inspect the policy in the Permit dashboard. Don't use the gateway when you want to enforce permissions inside an MCP server you own.
+
+| Fact | Value |
+|---|---|
+| Permit objects | MCP server: resource type. Tool: action. Trust level: role. Human and agent: users with the keys `human\|{subject}` and `agent\|{client_id}`. |
+| Supported MCP clients | Cursor, VS Code, Claude Desktop, and Claude Code. The admin dashboard shows a client configuration snippet for each. |
+| Deployment modes | Hosted (SaaS) on `*.agent.security`, customer-controlled, and fully on-premises. The last two are available on Enterprise plans. See [Enterprise deployment](/permit-mcp-gateway/enterprise-deployment). |
+| Authorization model | A relationship-based access control (ReBAC) trust ceiling on standard Permit objects. Gateway policies can also use RBAC and ABAC. |
+| Sign-in methods | Email and password, email one-time passcode, passkeys, Google, GitHub, and Microsoft OAuth, and SAML 2.0 or OIDC single sign-on. See [Authentication methods](/permit-mcp-gateway/authentication-methods). |
+| Audit | Each allow or deny decision is logged with the human, the agent, the tool, the MCP server, and the time, in the gateway dashboard and in the Permit **Audit Log** screen. |
+| SDK or code change | None. You point the MCP client at the gateway URL instead of the MCP server URL. |
+| Free tier | Community plan, labeled "Free forever" on the [Permit MCP Gateway pricing](https://www.permit.io/mcp-gateway/pricing) page: "Up to 1,000 MAU (human + agentic identities)", Tenants 10, Environments 1, Audit log retention 7 days. The main [Permit.io pricing](https://www.permit.io/pricing) page lists different Community limits for Permit.io authorization outside the gateway. |
+| Open-source components | The Permit PDP and [OPAL](https://github.com/permitio/opal) that Permit uses are open source. The Access Request MCP server ([permitio/permit-mcp](https://github.com/permitio/permit-mcp)) is a separate open-source project and is not the gateway. |
+
+{/* GEO pass: gateway free-tier values are copied from https://www.permit.io/mcp-gateway/pricing as fetched on 2026-10-05 (Community column). Re-check them before merging. */}
+
 Learn how Permit MCP Gateway stores its authorization model in Permit.io: how MCP servers, tools, and trust levels map to Permit resources, actions, and roles, what each setup step writes to Permit, and how to inspect and debug the result in the Permit dashboard. This page is for gateway admins and developers who debug tool-call decisions or change the policy in Permit.
 
 Permit MCP Gateway checks every tool call with `permit.check()`. Permit holds the policy, evaluates each check in a policy decision point (PDP), and records each decision in the audit log.
@@ -234,6 +250,24 @@ min(medium, low) = low → "create_issue" requires medium → DENY
 | **Consent Service** | Creates agent users. Assigns agent roles on user profiles (consented trust level). Checks that the human has access before it accepts consent. |
 | **Gateway** | Calls `permit.check()` at runtime. Doesn't change the policy in Permit. |
 
+## Reproduce a gateway decision with the Node.js SDK \{#reproduce-a-gateway-decision}
+
+The gateway checks a tool call with the agent's key as the user, the tool name as the action, and the server as the resource. You can send the same check from a script. Replace `<YOUR_API_KEY>` with the API key of the Permit environment linked to the host. The hosted gateway uses the Cloud PDP; for a self-hosted gateway, set `pdp` to the address of your PDP:
+
+```javascript
+import { Permit } from "permitio";
+
+const permit = new Permit({
+  token: "<YOUR_API_KEY>",
+  pdp: "https://cloudpdp.api.permit.io",
+});
+
+const allowed = await permit.check("agent|cursor_abc123", "create_issue", "linear:linear");
+console.log(allowed);
+```
+
+The result is `true` when the agent has a trust level that covers `create_issue` on the `linear` server. The Permit **Audit Log** screen shows the same parameters for the check.
+
 ## Inspect the policy in the Permit dashboard \{#using-the-permit-dashboard}
 
 The gateway uses standard Permit objects, so you can inspect and debug them in the [Permit dashboard](https://app.permit.io).
@@ -327,6 +361,32 @@ The gateway admin dashboard moves the tool's action to the permissions of the ne
 | Revoke an agent | The agent's role on the profile is removed. | Yes, to restore access |
 
 For the procedures, see [Manage humans and agents](/permit-mcp-gateway/managing-humans-and-agents).
+
+## Frequently asked questions \{#faq}
+
+### How does Permit MCP Gateway map MCP concepts to Permit objects?
+
+An imported MCP server becomes a resource type, and its instance has the same key (`linear:linear`). Each tool becomes an action on that resource type. Trust levels are roles, and humans and agents are Permit users with the key prefixes `human|` and `agent|`.
+
+### Why does the gateway use relationship-based access control?
+
+A tool-call decision depends on the human, the agent acting for the human, the MCP server, and the tool. ReBAC models the link between the agent, the human, and the server, so one check can combine the trust level the human granted with the limit the admin set.
+
+### Which Permit tenant does the gateway use?
+
+The `default` tenant. The gateway handles multi-tenancy with hosts, one subdomain and one Permit environment each, not with Permit tenants.
+
+### What happens when I change a policy in Permit?
+
+The next `permit.check()` call uses the change, with no gateway restart.
+
+### Why is every tool call denied on a new environment?
+
+A new gateway environment has no permissions. An agent can call a tool only after an admin imports an MCP server and grants a user access, the user consents, and the agent receives a trust level. A check for an incomplete combination returns deny.
+
+### Where do I see why a call was denied?
+
+Open the **Audit Log** screen in the linked Permit environment to see the `permit.check()` parameters and the decision, or the **Audit Logs** tab of the agent in [app.agent.security](https://app.agent.security).
 
 ## Next steps
 
