@@ -22,13 +22,13 @@ Nexus PDP has operational requirements that the container PDP (the Edge PDP imag
 | Image | `permitio/nexus-pdp`, pinned by digest (`permitio/nexus-pdp@sha256:<digest>`) | `permitio/nexus-pdp` has no `latest` tag, so a pull without a tag fails. Tags can move: `0-beta` moves to each new beta or release build, and a numbered beta tag name can be published again for a later build. A new build can rename configuration variables. See [Nexus PDP configuration reference](/concepts/pdp/nexus-pdp-configuration). |
 | One container per environment | Set `PDP_API_KEY` to the Nexus PDP API key of one Permit environment | Nexus PDP has no multi-environment mode. The Nexus PDP API key binds the container to exactly one environment. |
 | Persistent storage | Mount a persistent volume at `/var/lib/edge-pdp`, which holds the embedded database and the event store at default paths | On ephemeral storage, every restart runs a full cold start with a snapshot transfer of your whole data set. |
-| Memory limit (`resources.limits.memory`) | 4 GiB to start, and never less than 2.5 GiB; about 6 GiB at 10 million [facts](/concepts/pdp/nexus-pdp-how-it-works#measured-footprint) and 10 GiB at 20 million | Below 2304 MiB (2.25 GiB), the embedded database can stop applying changes under a sustained write load without reporting it; restart the container to recover. A large data set needs more memory during a cold start than afterward, and the container is killed if the cold start passes the limit. The embedded database sizes its cache from the memory limit; without a limit, it sizes the cache from the node's memory. See [Measured memory and cold start](/concepts/pdp/nexus-pdp-how-it-works#measured-footprint). |
+| Memory limit (`resources.limits.memory`) | 4 GiB to start, and never less than 2.5 GiB; about 7 GiB at 10 million [facts](/concepts/pdp/nexus-pdp-how-it-works#measured-footprint) and 12 GiB at 20 million (estimates that allow for a rebuild) | Below 2304 MiB (2.25 GiB), the embedded database can stop applying changes under a sustained write load without reporting it; raise the memory limit and restart the container to recover. A large data set needs more memory during a cold start than afterward, and the container is killed if the cold start passes the limit. The embedded database sizes its cache from the memory limit; without a limit, it sizes the cache from the node's memory. See [Measured memory and cold start](/concepts/pdp/nexus-pdp-how-it-works#measured-footprint). |
 | Volume permissions | The volume is writable by user ID and group ID `10001` | Nexus PDP runs as the non-root user `10001` and cannot write its database or event store. |
 | Exposed ports | `7000` (authorization API) and `7001` (health) only | Other ports bind to loopback inside the container and are not reachable from outside. |
 | Termination grace period | `terminationGracePeriodSeconds: 40` or higher | 40 seconds is the sum of the default shutdown budgets `EDGE_DRAIN_TIMEOUT_SECS` (10) and `EDGE_CHILD_TERMINATION_TIMEOUT_SECS` (30). With a shorter grace period, Kubernetes kills the NATS leaf node before its on-disk event store finishes flushing. |
 | Liveness probe | `GET /health` on port `7001` | A liveness probe on port `7000` fails during the cold start and restarts the container. See [Health and readiness](#health-and-readiness). |
 | Readiness probe | `GET /health/ready` on port `7001` | Traffic reaches a Nexus PDP that cannot answer yet. |
-| Startup probe | `GET /health/ready` on port `7001`, with `failureThreshold` × `periodSeconds` longer than your cold start plus headroom (measured on 8 CPUs: 68 s at 10.8 million facts, 151 s at 20 million) | A cold start takes longer as your data grows. A short startup probe restarts a first boot that is still loading data. |
+| Startup probe | `GET /health/ready` on port `7001`, with `failureThreshold` × `periodSeconds` longer than your cold start plus headroom (measured on 8 CPUs: 68 s at 10.8 million facts, 151 s at 20 million). Fewer CPUs take longer, so time a cold start of your own data set before you set the probe | A cold start takes longer as your data grows. A short startup probe restarts a first boot that is still loading data. |
 
 ## Run Nexus PDP with Docker
 
@@ -52,7 +52,7 @@ kubectl create secret generic nexus-pdp-api-key \
   --from-literal=PDP_API_KEY="$NEXUS_PDP_API_KEY"
 ```
 
-Then size the `nexus-pdp-data` claim for your data set, and add a startup probe with enough time for a cold start:
+Then size the `nexus-pdp-data` claim for your data set (see [Disk](/concepts/pdp/nexus-pdp-how-it-works#disk)), and add a startup probe with enough time for a cold start:
 
 ```yaml
 terminationGracePeriodSeconds: 40
@@ -79,6 +79,10 @@ containers:
       httpGet: { path: /health, port: 7001 }
     readinessProbe:
       httpGet: { path: /health/ready, port: 7001 }
+    startupProbe:
+      httpGet: { path: /health/ready, port: 7001 }
+      periodSeconds: 10
+      failureThreshold: 30 # 300 s: set from a timed cold start of your data set
     volumeMounts:
       - name: nexus-data
         mountPath: /var/lib/edge-pdp
