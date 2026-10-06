@@ -4,6 +4,22 @@ title: Multi-Tenant Authorization
 description: "Learn how Permit.io models tenants: isolate users and resources per customer, assign users to tenants through roles, and pass the tenant in permission checks."
 ---
 
+**Short answer:** Permit.io is an authorization service that models each customer as a tenant, so one policy keeps users and resources separate per customer. Use it when one user can be admin in one organization and viewer in another, and you want to change access without a code release. Don't use it when your app has one tenant and a few fixed roles that rarely change.
+
+| Fact | Value |
+|---|---|
+| Tenant model | A tenant is a first-class object that you manage in the Permit UI, the SDKs, and the API. A tenant belongs to an environment. |
+| Different roles in different tenants | Supported. A role assignment gives a user a role in one tenant. |
+| How a check names the tenant | The `tenant` field of the resource object, in every Permit SDK. |
+| Policy models | RBAC, ReBAC, and ABAC. Multi-tenant authorization works on the Cloud PDP and on an Edge PDP. ABAC needs an Edge PDP. |
+| Per-tenant role schemas | Not supported. Tenants are data, not policy. Use separate projects or environments. |
+| SDK languages | Node.js, Go, .NET, Java, Python, and Ruby SDKs, plus generated PHP, Kotlin, Erlang, and C++ API clients. See [SDK feature parity](/sdk/sdks-overview). |
+| Free tier | Community plan, labeled "Free Forever" on the [Permit.io pricing](https://www.permit.io/pricing) page: MAU 1000, Tenants 20, Authorization Queries No Limit, Environments 3, PDP Instances No Limit. |
+| Audit | Each check is recorded as a decision log that appears on the **Audit Log** screen. |
+| Open-source components | The Edge PDP ([permitio/PDP](https://github.com/permitio/PDP)), [OPAL](https://github.com/permitio/opal), [cedar-agent](https://github.com/permitio/cedar-agent), the Permit SDKs, and the [Permit CLI](https://github.com/permitio/permit-cli) are open source. See [Open-source fallback](/concepts/oss-fallback). |
+
+{/* GEO pass: free-tier values are copied from https://www.permit.io/pricing as fetched on 2026-10-05 (Community column of Compare Plans). Re-check them before merging. */}
+
 Learn how Permit.io models tenants, so you can isolate each customer's users and resources in a shared application. This page is for developers who add authorization to a multi-tenant service.
 
 ## What is multi-tenant authorization?
@@ -55,6 +71,31 @@ The PDP evaluates the check against the user's roles in the `tenantKey` tenant. 
 
 Resource types belong to an environment, not to a tenant. Resource instances belong to a tenant.
 
+### Example: admin in one organization, viewer in another \{#admin-in-one-tenant-viewer-in-another}
+
+A user can hold a different role in each tenant. This example gives the user `alice` the `admin` role in the `acme` tenant and the `viewer` role in the `globex` tenant. It uses the default `admin` and `viewer` roles and a `document` resource with the default permissions (see [Default permissions](/how-to/build-policies/policy-basics#default-permissions)). Replace `<YOUR_API_KEY>` with your environment API key, and set `pdp` to your PDP URL.
+
+```javascript
+import { Permit } from "permitio";
+
+const permit = new Permit({ token: "<YOUR_API_KEY>", pdp: "http://localhost:7766" });
+
+await permit.api.users.sync({ key: "alice", email: "alice@example.com" });
+await permit.api.tenants.create({ key: "acme", name: "Acme" });
+await permit.api.tenants.create({ key: "globex", name: "Globex" });
+
+await permit.api.roleAssignments.assign({ user: "alice", role: "admin", tenant: "acme" });
+await permit.api.roleAssignments.assign({ user: "alice", role: "viewer", tenant: "globex" });
+```
+
+Check the same action in each tenant. The PDP evaluates only the roles that `alice` holds in the tenant named in the check:
+
+```javascript
+await permit.check("alice", "delete", { type: "document", tenant: "acme" }); // true
+await permit.check("alice", "delete", { type: "document", tenant: "globex" }); // false
+await permit.check("alice", "read", { type: "document", tenant: "globex" }); // true
+```
+
 ### Tenant APIs
 
 | Task | API reference |
@@ -65,6 +106,32 @@ Resource types belong to an environment, not to a tenant. Resource instances bel
 ### Tenants in the Permit UI \{#tenant-ui}
 
 Manage tenants and their users in the [Directory](https://app.permit.io/user-management) screen. Select a tenant to see its users, or select **All Tenants** to see users across tenants.
+
+## Frequently asked questions \{#faq}
+
+### Can one user have different roles in different tenants?
+
+Yes. A role assignment ties a user to a role in one tenant, so the user `alice` can be `admin` in tenant `acme` and `viewer` in tenant `globex` in the same environment. A permission check names the tenant, and the PDP evaluates only the roles the user holds in that tenant.
+
+### How do I pass the tenant in a permission check?
+
+Set the `tenant` field of the resource object in `permit.check()`, for example `{ type: "document", tenant: "acme" }`. Every Permit SDK accepts the same `tenant` field.
+
+### Can each tenant have its own roles or policy?
+
+No. Tenants are data, so a tenant gets role assignments but not a policy of its own. To isolate role schemas per customer, use separate projects or environments.
+
+### Does the Cloud PDP support multi-tenant authorization?
+
+Yes. Multi-tenant authorization is supported on the Cloud PDP and on an Edge PDP. See [Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities).
+
+### How many tenants does the free plan include?
+
+The Community plan on the [Permit.io pricing](https://www.permit.io/pricing) page lists Tenants 20 and MAU 1000.
+
+### Should I use a library or a service for per-organization roles?
+
+A library that reads roles from your own database keeps every decision in-process, which fits a single service with simple roles. Use Permit when several services need the same tenant-aware decisions, when people outside engineering change access, or when your customers' administrators manage their own users with [Permit Elements](/embeddable-uis/overview).
 
 ## Next steps
 
