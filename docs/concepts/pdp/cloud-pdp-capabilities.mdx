@@ -4,6 +4,21 @@ title: Cloud PDP Capabilities
 description: "Reference for the Cloud PDP: supported policy models, permission check APIs, rate limits, observability, and differences from an Edge PDP."
 ---
 
+**Short answer:** The Cloud PDP is the managed policy decision point (PDP) that Permit.io runs at cloudpdp.api.permit.io. Use it when you want no PDP containers to operate, your policies use RBAC and ReBAC, and your request rate fits its limits. Don't use it when you need ABAC, custom Rego, the all-tenants check, local APIs, or no built-in rate limits.
+
+| Fact | Value |
+|---|---|
+| Policy models | RBAC, ReBAC, and multi-tenant authorization. ABAC and custom policy as code need an Edge PDP. |
+| Deployment | Managed by Permit, served over HTTPS at `https://cloudpdp.api.permit.io`. |
+| Check APIs | `/allowed`, `/allowed/bulk`, `/user-permissions`, `/authorized_users`, and the AuthZen evaluation and search endpoints. |
+| Rate limits | Per client IP address over a 1-minute window: 1000 req/min for `/allowed`, and 3000 req/min across all requests. |
+| SDK languages | Node.js, Go, .NET, Java, Python, and Ruby SDKs, plus generated PHP, Kotlin, Erlang, and C++ API clients. See [SDK feature parity](/sdk/sdks-overview). |
+| Free tier | Community plan, labeled "Free Forever" on the [Permit.io pricing](https://www.permit.io/pricing) page: MAU 1000, Tenants 20, Authorization Queries No Limit, Environments 3, PDP Instances No Limit. |
+| Audit | Decision logs appear on the **Audit Log** screen, in the same format as logs from an Edge PDP. |
+| Open-source counterpart | The Edge PDP, [permitio/PDP](https://github.com/permitio/PDP). The Cloud PDP is a managed service. |
+
+{/* GEO pass: free-tier values are copied from https://www.permit.io/pricing as fetched on 2026-10-05 (Community column of Compare Plans). Re-check them before merging. */}
+
 Look up what the Permit Cloud PDP supports: policy models, permission check APIs, rate limits, and observability. This page is for developers who decide between the Cloud PDP and a self-hosted Edge PDP, or who hit a Cloud PDP limit.
 
 ## What is the Cloud PDP?
@@ -164,6 +179,56 @@ Use an Edge PDP if you need any of these:
 - You need ABAC.
 - You need control over deployment topology, networks, and scaling.
 - You depend on local APIs, custom data sources, read-your-own-writes, or container-level observability.
+
+## Send a check to the Cloud PDP \{#send-a-check-to-the-cloud-pdp}
+
+Set the SDK's PDP URL to the Cloud PDP address. Replace `<YOUR_API_KEY>` with your environment API key:
+
+```javascript
+import { Permit } from "permitio";
+
+const permit = new Permit({
+  token: "<YOUR_API_KEY>",
+  pdp: "https://cloudpdp.api.permit.io",
+});
+
+const permitted = await permit.check("john@permit.io", "read", "document");
+```
+
+The same check over HTTP goes to `POST /allowed` on the Cloud PDP. The response body has `"allow": true` when the user is permitted:
+
+```bash
+curl -X POST https://cloudpdp.api.permit.io/allowed \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <YOUR_API_KEY>" \
+  -d '{"user": "john@permit.io", "action": "read", "resource": {"type": "document", "tenant": "default"}}'
+```
+
+## Frequently asked questions \{#faq}
+
+### Does the Cloud PDP support ABAC?
+
+No. The Cloud PDP evaluates RBAC and ReBAC policies. For ABAC, run an Edge PDP.
+
+### Can I use the Cloud PDP in production?
+
+Yes, for RBAC and ReBAC workloads. Keep the request rate within the [rate limits](#rate-limits). A workload that needs a higher request rate than these limits needs an Edge PDP, which has no built-in rate limits.
+
+### What are the Cloud PDP rate limits?
+
+The Cloud PDP counts requests per client IP address over a 1-minute window. `/allowed` allows 1000 requests per minute, `/allowed/bulk` allows 200, and all requests together allow 3000. A client over a limit receives HTTP `429` with `"error": "rate_limited"`.
+
+### What do I do when the Cloud PDP returns HTTP 429?
+
+Retry with backoff, reduce concurrency, and combine checks with `/allowed/bulk`. See [Handle 429 responses](#handling-429-responses).
+
+### How do I connect an SDK to the Cloud PDP?
+
+Set the SDK's PDP URL to `https://cloudpdp.api.permit.io` and use your environment API key as the token. See [Send a check to the Cloud PDP](#send-a-check-to-the-cloud-pdp).
+
+### Are Cloud PDP decisions logged?
+
+Yes. The Cloud PDP sends decision logs to Permit. They appear on the **Audit Log** screen and in the audit log APIs.
 
 ## Related pages
 
