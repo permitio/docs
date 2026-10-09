@@ -126,6 +126,7 @@ Copy rules:
 - Copy and merge work only between environments in the same project. Copying across projects or workspaces isn't allowed.
 - To copy into a new environment, the API key or member needs write access to the project.
 - To copy into an existing environment, the API key or member needs write access to the target environment.
+- To [delete condition sets the source doesn't have](#delete-target-only-condition-sets), the API key or member also needs permission to delete condition sets in the target environment.
 
 ### Copy an environment with the API \{#copy-environments-via-api}
 
@@ -188,12 +189,22 @@ When you copy an environment, Permit copies the checked objects below:
 - [x] User Sets
 - [x] Resource Sets
 - [x] Condition Sets Rules
-- [ ] Condition Sets Inheritance
+- [x] Condition Sets Inheritance ([details](#condition-set-hierarchy))
 - [x] Custom Policies ([details](#custom-policies))
 
 ### Custom policies in copied environments \{#custom-policies}
 
 When you [use GitOps](/integrations/gitops/custom_policy) with a custom Git repository, copying an environment copies **all files** in the source environment's branch into the new environment's branch, including all custom `.rego` policy files.
+
+### Copy into an environment protected by a Policy Guard \{#copy-into-a-guarded-environment}
+
+When the target environment is protected by a [Policy Guard](/how-to/policy-guard/policy_guard), the copy checks every guarded object it would change or delete, the same way the API does when you change that object directly. That includes granting a role a permission and adding a condition set rule, even on a role the same copy creates.
+
+- If the guard forbids a change, the copy fails with `403 Forbidden`, the error names the object, and nothing is copied.
+- If Permit can't reach the Policy Guard to check, the copy fails with `503 Service Unavailable` and nothing is copied. Retry the copy.
+- With the async copy endpoint, a `503` is returned by the request itself and nothing is started; a `403` appears in the copy task's result.
+
+Objects the copy leaves unchanged, and new resources, actions, roles, and condition sets it creates, don't need the guard's permission, so promoting an environment whose guarded objects are already identical still succeeds.
 
 ### Conflict strategy for merges \{#conflict-strategy}
 
@@ -220,7 +231,17 @@ Set `conflict_strategy` in the copy request body to choose how Permit resolves c
 | `conflict_strategy` | Result |
 |---|---|
 | `fail` (default) | The merge fails, Permit rolls back the entire merge, and the target environment keeps its existing objects. |
-| `overwrite` | Permit replaces the existing object in the target environment with the object from the source environment. |
+| `overwrite` | Permit replaces the existing object in the target environment with the object from the source environment. For a condition set, this includes its parent condition set. |
+
+Neither strategy deletes a condition set that exists only in the target environment. To delete those, see [Delete condition sets the source doesn't have](#delete-target-only-condition-sets).
+
+### Condition set hierarchy in a copy \{#condition-set-hierarchy}
+
+A copied condition set keeps its parent. A child condition set matches only the users or resources that also match every ancestor, so copying it without its parent would grant more than the source environment does.
+
+- If `scope` copies a condition set but leaves out its parent, the copy fails with `409 Conflict` and nothing is copied. Change `scope` so it also copies the parent, or so it leaves out the child.
+- Copying again with `"conflict_strategy": "overwrite"` re-parents condition sets that already exist in the target environment to match the source environment, including removing a parent the source no longer has.
+- If the source environment's hierarchy contains a cycle, or a parent of a different type or resource than its child, the copy fails with `406 Not Acceptable` and nothing is copied.
 
 ### Exclude or include objects in a copy \{#excluding--including-objects}
 
@@ -257,7 +278,45 @@ curl --location 'https://api.permit.io/v2/projects/{project_id}/envs/{env_id}/co
 }'
 ```
 
-`include` and `exclude` accept wildcards to match several objects. Wildcards follow [Unix filename pattern matching](https://docs.python.org/3/library/fnmatch.html).
+`include` and `exclude` match object keys. `*` is the only wildcard and matches any run of characters, other characters match themselves, and matching is case-sensitive. An object is copied when its key matches any `include` pattern (or `include` is empty) and no `exclude` pattern. `custom_policies` patterns are different: they match file paths in the environment's policy branch and follow [Unix filename pattern matching](https://docs.python.org/3/library/fnmatch.html).
+
+:::note Changed matching
+Earlier versions of the API matched these patterns differently: an object was copied only when its key matched **every** `include` pattern, matching ignored case, and `_` matched any single character. If you send `scope`, check your patterns against the rules above:
+
+- Two `include` patterns now copy the objects matching either one.
+- An `exclude` pattern such as `Admin` no longer excludes `admin`, and `svc_*` no longer excludes `svc-a`.
+- An `include` pattern such as `Admin*` no longer includes `admin-eu`.
+:::
+
+### Delete condition sets the source doesn't have \{#delete-target-only-condition-sets}
+
+When you merge into an existing environment, set `"delete_target_only_condition_sets": true` to delete the target environment's condition sets that the source environment doesn't have. Use it to promote a removal or a key rename from one environment to the next. It is off by default.
+
+```bash
+curl --location 'https://api.permit.io/v2/projects/{project_id}/envs/{env_id}/copy' \
+  -H 'authorization: Bearer API_SECRET_KEY' \
+  -H 'Content-Type: application/json' \
+  --data '{
+  "target_env": {
+    "existing": "prod"
+  },
+  "conflict_strategy": "overwrite",
+  "delete_target_only_condition_sets": true
+}'
+```
+
+Permit deletes a target condition set only when all of these are true:
+
+- `scope` selects it, using the same matching as the copy.
+- The source environment has no condition set with the same key, whether or not `scope` selects that key in the source.
+- It isn't an autogenerated condition set, such as the user set Permit creates for a role.
+- If it is a resource set, its resource is copied.
+
+Deleting a condition set also deletes its child condition sets and its condition set rules. A child condition set that the source environment also has is moved out from under the deleted one first, and gets the parent it has in the source. If deleting a selected condition set would delete any other child condition set that wouldn't be deleted on its own, the copy fails with `409 Conflict` and nothing is deleted. If the condition sets selected for deletion form a cycle, the copy fails with `406 Not Acceptable`.
+
+The deletion needs permission to delete condition sets in the target environment. In a target protected by a Policy Guard, each deleted condition set, and each one moved out from under it, is also checked against the guard.
+
+`delete_target_only_condition_sets` has no effect when you copy into a new environment.
 
 ## Customize the GitOps branch name \{#customize-gitops-branch-name}
 
