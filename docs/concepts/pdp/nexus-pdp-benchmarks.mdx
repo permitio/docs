@@ -1,5 +1,5 @@
 ---
-title: Nexus PDP Benchmarks
+title: Nexus PDP benchmarks
 sidebar_label: Benchmarks
 description: "Measured permission-check latency and capacity for Permit Nexus PDP with RBAC and ReBAC policies, how capacity grows with CPU and with more instances, and how to size a deployment from the figures."
 sidebar_position: 5
@@ -15,33 +15,37 @@ As of October 2026, Nexus PDP is in early access. These figures come from one ea
 
 - **Date:** October 2026.
 - **Build:** `permitio/nexus-pdp` `0.7.0-beta.50`.
-- **Region and hardware:** AWS `us-east-2`, on AWS `m6a` instances. Each Nexus PDP instance ran as a Kubernetes pod with 2 vCPU and a 4 GiB memory limit, unless a table says otherwise. CPU and memory requests were equal to the limits.
+- **Region and hardware:** AWS `us-east-2`, on AWS `m6a` instances (x86, AMD EPYC). Each Nexus PDP instance ran as a Kubernetes pod with 2 vCPU and a 4 GiB memory limit, unless a table says otherwise. CPU and memory requests were equal to the limits.
+- **Policy models:** role-based access control (RBAC) and relationship-based access control (ReBAC). See [Access patterns](#access-patterns).
 - **Data location:** each Nexus PDP instance answered every check from its own local copy of the environment's data. No check left the container.
 - **Latency:** taken at the PDP, server-side. The figures are the time Nexus PDP spends processing each authorization request. They don't include the network round trip between your client and the PDP, so latency in your application is higher and depends on network proximity and payload size.
 - **Latency runs:** a constant arrival rate of about 55 requests per second with 10 concurrent requests, a 2-minute warm-up, then a 10-minute measurement window. Each percentile was computed over 10-second intervals, and the tables report the mean of those intervals over the window.
-- **Capacity runs:** a stepped arrival rate that rose by 25% every 2 minutes. The reported capacity is the highest step at which the 99th percentile (p99) latency stayed under the latency bound, no request failed, and the load generator sent at least 99% of the requests it scheduled. The latency bound is 30 ms for RBAC and 40 ms for ReBAC, the p99 latency that the [Cloud PDP benchmarks](/concepts/pdp/cloud-pdp-benchmarks) report at 10 concurrent requests. Because the load rises in 25% steps, the true capacity is between the reported figure and 25% above it.
-- **Correctness:** every run checked each decision against the expected result. All runs returned the expected decision for every request, with no errors.
+- **Capacity runs:** a separate run for each scenario, with an open-model arrival rate: requests arrive at a set rate whether or not earlier requests have finished. The rate started at the latency-run rate, about 55 requests per second, and rose by 25% every 2 minutes, with up to 200 concurrent requests. The reported capacity is the highest step at which the 99th percentile (P99) latency stayed under the latency bound and the load generator sent at least 99% of the requests it scheduled. Above the reported capacity, latency rose past the bound. Because the load rises in 25% steps, the true capacity is between the reported figure and 25% above it.
+- **Latency bound:** 30 ms for RBAC and 40 ms for every ReBAC depth: the average P99 that the [Cloud PDP benchmarks](/concepts/pdp/cloud-pdp-benchmarks) report for RBAC and for ReBAC depth 1 at 10 concurrent requests.
+- **Correctness:** before each run, 1,000 checks for each access pattern were compared with their expected decisions (with more than one instance, at every instance, before and after the load). During the load, every response was compared with the expected decision for its request. No run had a failed request or a wrong decision.
 
 ### Access patterns \{#access-patterns}
 
-Each scenario checks one access pattern, a policy model plus the path through which the user gets access:
+Each scenario checks one access pattern: a policy model plus the path through which the user gets access. For ReBAC, depth counts the parent relationships between the role and the resource.
 
-| Access pattern | How the user gets access |
-| --- | --- |
-| RBAC | A role-based access control (RBAC) role at the tenant level, which grants the permission on a resource type |
-| ReBAC depth 0 | A relationship-based access control (ReBAC) role assigned directly on the resource instance |
-| ReBAC depth 1 | A role on a folder, inherited by a resource in that folder |
-| ReBAC depth 2 | A role on a folder, inherited through 2 levels of nested folders |
-| ReBAC depth 3 | A role on a folder, inherited through 3 levels of nested folders |
+| Access pattern | How the user gets access | Parent relationships |
+| --- | --- | --- |
+| RBAC | An RBAC role at the tenant level, which grants the permission on a resource type | None |
+| ReBAC depth 0 | A ReBAC role assigned directly on the file | 0 |
+| ReBAC depth 1 | A role on a folder that contains the file | 1: folder → file |
+| ReBAC depth 2 | A role on a folder, inherited through a nested folder | 2: folder → folder → file |
+| ReBAC depth 3 | A role on a folder, inherited through 2 nested folders | 3: folder → folder → folder → file |
 
-In every ReBAC scenario, each user reaches the resource through a single path.
+In every ReBAC scenario, each user reaches the file through a single path. The Cloud PDP benchmarks use different data and policies, so the two pages are not a row-by-row comparison.
 
 ### Data sets \{#data-sets}
 
-| Data set | Size |
+A fact is one user, resource instance, relationship tuple, or role assignment.
+
+| Data set | Contents |
 | --- | --- |
-| Small | About 12,600 resource instances and 1,750 users |
-| Large | About 20 million facts in a file-sharing model of drives, folders, and files |
+| Small | 1,750 users, 12,610 resource instances, 12,000 relationship tuples, and 2,223 role assignments, in 11 tenants |
+| Large | About 20 million facts (users, resource instances, relationship tuples, and role assignments) in a file-sharing model of drives, folders, and files |
 
 In the large data set, the users that the checks query have the same access paths as in the small data set. The large data set shows the effect of the total data set size, not of larger permission graphs for each user.
 
@@ -73,7 +77,7 @@ The same load and the same access patterns, against the large data set. Each ins
 
 ## Capacity for each instance \{#capacity}
 
-The highest arrival rate, in requests per second, at which one instance kept p99 latency under the latency bound (30 ms for RBAC, 40 ms for ReBAC) with no errors:
+The highest arrival rate, in requests per second, at which one instance kept P99 latency under the latency bound (30 ms for RBAC, 40 ms for every ReBAC depth):
 
 | Access pattern | 2 vCPU, small data set | 4 vCPU, small data set | 2 vCPU, 20 million facts |
 | --- | --- | --- | --- |
@@ -82,6 +86,8 @@ The highest arrival rate, in requests per second, at which one instance kept p99
 | ReBAC depth 1 | 326 req/s | 509 req/s | 261 req/s |
 | ReBAC depth 2 | 261 req/s | 509 req/s | 261 req/s |
 | ReBAC depth 3 | 261 req/s | 408 req/s | 261 req/s |
+
+Adjacent depths can show the same figure because capacity is measured in 25% steps.
 
 ## Capacity with more instances \{#scale-out}
 
@@ -94,41 +100,45 @@ Identical instances with 2 vCPU each, behind one Kubernetes Service, with the sm
 
 ## Key results \{#key-results}
 
-- **Median latency:** P50 latency is under 10 ms for every access pattern with the small data set, and 10.2 ms or lower with 20 million facts.
-- **Tail latency:** P99 latency is under 12 ms for every access pattern with the small data set, and under 14 ms with 20 million facts.
+- **Median latency:** at about 55 requests per second, P50 latency is under 10 ms for every access pattern with the small data set, and 10.2 ms or lower with 20 million facts.
+- **Tail latency:** at about 55 requests per second, P99 latency is under 12 ms for every access pattern with the small data set, and under 14 ms with 20 million facts.
 - **Relationship depth:** with the small data set, going from a direct ReBAC grant (depth 0) to depth 3 raises P50 latency by about 1.6 ms, from 7.63 ms to 9.27 ms.
-- **Data set size:** with about 20 million facts in the environment, P99 latency is 0.8 to 2.6 ms higher, and capacity is the same or one 25% step lower, which is the resolution of the capacity measurement. The checked users had the same small permission graphs in both data sets, so the results depend on the size of each user's permission graph more than on the total size of the data set. Checks for users who reach resources through many paths can take longer.
-- **CPU:** capacity is limited by CPU. Going from 2 to 4 vCPU raised capacity by 1.56 to 1.95 times.
-- **More instances:** capacity grows almost linearly with the number of instances. For ReBAC depth 2, 3 instances sustained 3.05 times the capacity of one. For RBAC, 3 instances sustained 2.44 times the capacity of one, because a Kubernetes Service balances connections, not requests, so the load did not split evenly across instances. To get the most from more instances, open many connections from your clients, or put a load balancer that balances each request in front of the instances.
-- **Memory:** memory in use during the check load was about 0.15 to 0.25 GiB with the small data set, and peaked at about 2 to 3 GiB with 20 million facts and a 10 GiB memory limit. These figures cover serving checks only. Memory is higher while Nexus PDP loads a snapshot, and the 2.5 GiB minimum in [Nexus PDP resource footprint](/concepts/pdp/nexus-pdp-how-it-works#resource-footprint) applies at any data set size.
+- **Data set size:** with about 20 million facts in the environment, P99 latency is 0.8 to 2.6 ms higher. Capacity is the same (ReBAC depth 2 and 3) or one 25% step lower (RBAC, ReBAC depth 0 and depth 1), which is the resolution of the capacity measurement. The checked users had the same small permission graphs in both data sets, so these results show the effect of total data set size only, not of larger permission graphs for each user, such as users who reach a resource through many paths.
+- **CPU:** at the capacity step, the instance's CPU was at its limit. Going from 2 to 4 vCPU raised capacity by 1.56 to 1.95 times, not 2 times.
+- **More instances:** for ReBAC depth 2, 2 instances sustained 1.95 times and 3 instances 3.05 times the capacity of one. For RBAC, 2 instances sustained 1.56 times and 3 instances 2.44 times, mainly because a Kubernetes Service balances connections, not requests: the busiest instance received 54% of the requests with 2 instances and 37% with 3, instead of 50% and 33%. The ratios are approximate because capacity is measured in 25% steps. To spread the load evenly, open many connections from your clients, or put a load balancer that balances each request in front of the instances.
+- **Memory:** memory in use during the check load was about 0.15 to 0.25 GiB with the small data set, and peaked at about 2.2 to 3.1 GiB with 20 million facts and a 10 GiB memory limit. The embedded database sizes its read cache from the memory limit, so with a smaller limit, memory in use and latency can differ. These figures don't show that 20 million facts fit in 4 GiB. They cover serving checks only: memory is higher while Nexus PDP loads a snapshot, and the 2.5 GiB minimum in [Nexus PDP resource footprint](/concepts/pdp/nexus-pdp-how-it-works#resource-footprint) applies at any data set size.
 
-## Size a Nexus PDP deployment from these figures \{#sizing}
+## Size a Nexus PDP deployment from the benchmark figures \{#sizing}
 
-1. **Pick the access pattern.** Find your heaviest common check in [Access patterns](#access-patterns). If your policy mixes patterns, size for the pattern with the lowest capacity, or weight the patterns by their share of your traffic.
+These steps are guidance derived from the measurements above, not measured results.
+
+1. **Pick the access pattern.** Find your heaviest common check in [Access patterns](#access-patterns).
 2. **Estimate peak check rate.** Use the peak number of permission checks per second across all the services that call the PDP, not the daily average.
-3. **Divide by the capacity for each instance.** Instances needed = peak checks per second ÷ capacity for one instance with the CPU you plan to give it, rounded up.
-4. **Add headroom.** Add about 30% to the peak rate, or one extra instance, whichever gives more instances. The headroom covers an instance that restarts or is replaced during a rolling update, uneven load balancing, and the up-to-25% resolution of the capacity figures.
-5. **Choose CPU or instances.** Capacity grows with both. More instances also add redundancy. Larger instances mean fewer copies of the data set, each with its own memory and disk.
-6. **Size memory and disk for the data set, not for the check rate.** Every instance holds a full copy of the environment's data, so memory and disk for each instance don't shrink as you add instances. See [Nexus PDP resource footprint](/concepts/pdp/nexus-pdp-how-it-works#resource-footprint).
-7. **Load test with your own policy and data.** Confirm the plan against your own permission graph before you go to production.
+3. **Add headroom to the peak rate.** Add about 30%. The headroom covers an instance that restarts or is replaced during a rolling update, uneven load balancing, and the up-to-25% resolution of the capacity figures.
+4. **Divide by the capacity for each instance.** Instances needed = (peak checks per second × 1.3) ÷ capacity for one instance with the CPU you plan to give it, rounded up. Then compare with one extra instance on top of the peak rate without headroom (peak checks per second ÷ capacity, rounded up, plus 1), and use the larger number.
+5. **Size mixed traffic.** If your policy mixes access patterns, either size all traffic for the pattern with the lowest capacity, or add up the instances for each pattern: instances = Σ (peak rate of the pattern × 1.3 ÷ capacity of the pattern), rounded up once at the end.
+6. **Choose CPU or instances.** Capacity grows with both. More instances also add redundancy. Larger instances mean fewer copies of the data set, each with its own memory and disk.
+7. **Size memory and disk for the data set, not for the check rate.** Every instance holds a full copy of the environment's data, so memory and disk for each instance don't shrink as you add instances. See [Nexus PDP resource footprint](/concepts/pdp/nexus-pdp-how-it-works#resource-footprint).
+8. **Load test with your own policy and data.** Confirm the plan against your own permission graph before you go to production.
 
-For example, at a peak of 2,000 ReBAC depth 2 checks per second, plan for 2,600 checks per second with 30% headroom:
+For example, at a peak of 2,000 ReBAC depth 2 or depth 3 checks per second, plan for 2,600 checks per second with 30% headroom:
 
-| Instance size | Capacity for each instance | Instances |
-| --- | --- | --- |
-| 2 vCPU | 261 req/s | 2,600 ÷ 261 = 9.96, so 10 instances |
-| 4 vCPU | 509 req/s | 2,600 ÷ 509 = 5.11, so 6 instances |
+| Access pattern | Instance size | Capacity for each instance | Instances |
+| --- | --- | --- | --- |
+| ReBAC depth 2 | 2 vCPU | 261 req/s | 2,600 ÷ 261 = 9.96, so 10 instances |
+| ReBAC depth 2 | 4 vCPU | 509 req/s | 2,600 ÷ 509 = 5.11, so 6 instances |
+| ReBAC depth 3 | 2 vCPU | 261 req/s | 2,600 ÷ 261 = 9.96, so 10 instances |
+| ReBAC depth 3 | 4 vCPU | 408 req/s | 2,600 ÷ 408 = 6.37, so 7 instances |
 
-The capacity figures are the load at which p99 latency reaches the latency bound. If your latency target is tighter than 30 ms for RBAC or 40 ms for ReBAC, plan for a lower load on each instance. At about 55 requests per second, every access pattern stayed under 14 ms at p99.
+The capacity figures are the highest load at which P99 latency stayed under the latency bound. If your latency target is tighter than 30 ms for RBAC or 40 ms for ReBAC, plan for a lower load on each instance. At about 55 requests per second, every access pattern stayed under 14 ms at P99.
 
 ## What these results don't cover \{#limits}
 
 - **One build.** The figures come from the early-access build `0.7.0-beta.50`. A later build can perform differently.
-- **One test environment.** All runs used one AWS region and one instance family. Other CPUs, storage, and Kubernetes setups can give different results.
+- **One test environment.** All runs used one AWS region and one instance family: x86 (AMD EPYC, `m6a`) only. The `arm64` image was not measured. Other CPUs, storage, and Kubernetes setups can give different results.
 - **Synthetic data and policies.** The data sets and the RBAC and ReBAC policies were generated for the test. Your policy, the number of roles and relationships, and the shape of your permission graph change the results.
-- **The access patterns listed.** The runs measured single permission checks for the patterns in [Access patterns](#access-patterns), with one access path for each user. Users who reach a resource through many paths, and other endpoints such as bulk checks or user permissions, were not measured.
+- **The access patterns listed.** The runs measured single permission checks for the patterns in [Access patterns](#access-patterns), with one access path for each user. Users who reach a resource through many paths, ABAC conditions, and other endpoints such as bulk checks or user permissions were not measured.
 - **Serving checks only.** The runs measured checks against a running instance. They didn't measure checks while Nexus PDP applies a large burst of data changes, or the time to start a new instance.
-- **Server-side latency.** The network round trip between your client and Nexus PDP is not included.
 
 :::note Network latency is not included
 These benchmarks measure the time Nexus PDP spends processing each check. Latency in your application adds the network round trip between your client and Nexus PDP. To keep that round trip short, run Nexus PDP in the same network as the services that call it, or next to them.
