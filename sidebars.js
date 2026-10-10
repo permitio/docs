@@ -152,6 +152,7 @@ const sidebars = {
                 "concepts/pdp/nexus-pdp-architecture",
                 "concepts/pdp/nexus-pdp-how-it-works",
                 "concepts/pdp/nexus-pdp-feature-parity",
+                "concepts/pdp/nexus-pdp-benchmarks",
                 "concepts/pdp/nexus-pdp-deployment",
                 "concepts/pdp/nexus-pdp-configuration",
               ],
