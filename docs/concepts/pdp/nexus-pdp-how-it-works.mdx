@@ -15,7 +15,7 @@ The NATS leaf node inside the Nexus PDP container keeps a persistent connection 
 
 | Plane | Carries |
 | --- | --- |
-| **Change stream** | Transactions of authorization data: users, tenants, resource instances, and relationship tuples |
+| **Change stream** | Transactions of authorization data: users, tenants, resource instances, role assignments, and relationship tuples |
 | **Policy files** | The compiled Rego bundle that Open Policy Agent (OPA) evaluates |
 | **Policy schema** | Role and permission definitions from your policy |
 | **Snapshot** | A one-time bulk transfer of the whole data set, used only during a cold start |
@@ -109,38 +109,44 @@ Nexus PDP avoids per-request work that depends on other systems:
 - **Sync on separate tasks.** Change ingest runs on its own tasks, separate from request handling.
 - **The managed Cloud PDP's evaluation core.** Nexus PDP is built from the same authorization libraries as the managed Cloud PDP.
 
-:::caution No published Nexus PDP throughput figures
-Permit has not published measured throughput for Nexus PDP. The [Cloud PDP benchmarks](/concepts/pdp/cloud-pdp-benchmarks) measure the managed Cloud PDP, a different deployment, and are not Nexus PDP figures.
+:::info Measured Nexus PDP latency and capacity
+[Nexus PDP benchmarks](/concepts/pdp/nexus-pdp-benchmarks) report the measured check latency and the capacity of one instance for RBAC and ReBAC access patterns, how capacity grows with CPU and with more instances, and how to size a deployment from those figures. In the benchmarks, the instance was throttled at its CPU limit during the capacity runs, and going from 2 to 4 vCPU raised capacity by 1.56 to 1.95 times. Each instance answers from its own full copy of the data, so you add capacity with more CPU or more instances.
 :::
 
 ## Resource footprint
 
-Nexus PDP stores authorization data in a different place than the container PDP, which changes how you size the container.
+Nexus PDP stores authorization data in a different place than the container PDP, which changes how you size the container. Memory and disk follow your data set. CPU and the number of instances follow your check rate: see [Size a Nexus PDP deployment](/concepts/pdp/nexus-pdp-benchmarks#sizing).
 
 | | Container PDP (`pdp-v2`) | Nexus PDP (`nexus-pdp`) |
 | --- | --- | --- |
 | Authorization data | In OPA's in-memory document | On disk, in an embedded database |
-| Memory as data grows | Grows with your data set | Limited by a cache size you configure |
+| Memory as data grows | Grows with your data set | Grows with your data set, and peaks while it loads a snapshot |
 | Processes | Rust API server, Python OPAL client (Horizon), and OPA | Rust binary, NATS leaf node, and OPA |
 | Python runtime | Required, for the Open Policy Administration Layer (OPAL) client | Not present |
 | Persistent storage | Not required | Required |
 
-On the container PDP, your authorization data is raw JSON in memory. The [OPA policy performance documentation](https://www.openpolicyagent.org/docs/policy-performance) states that raw JSON in OPA uses about 20 times the memory of the same data in a compact on-disk form. On Nexus PDP, the data set lives on disk in a compact form, and memory depends on the storage engine's cache sizes, which you set.
+On the container PDP, your authorization data is raw JSON in memory. The [OPA policy performance documentation](https://www.openpolicyagent.org/docs/policy-performance) states that raw JSON in OPA uses about 20 times the memory of the same data in a compact on-disk form. On Nexus PDP, the data set lives on disk in a compact form. Memory still grows with the data set, and peaks while Nexus PDP loads a snapshot: during a cold start, and during a [rebuild](#self-healing), when the old database keeps serving with its cache while the new one loads. In the [Nexus PDP benchmarks](/concepts/pdp/nexus-pdp-benchmarks#key-results), memory in use while serving checks was about 0.15 to 0.2 GiB with a small data set, and peaked at about 2.2 to 3.1 GiB with about 20 million facts and a 10 GiB memory limit. The embedded database sizes its read cache from the memory limit, so with a smaller limit, memory in use and latency can differ. With about 20 million facts, memory peaked at about 5.3 to 6.7 GiB while an instance loaded its snapshot at startup, so a 4 GiB memory limit isn't enough for a data set of that size, and the data volume used up to about 7.4 GiB.
 
-:::caution Start Nexus PDP with 4 GiB of memory
-The default storage-engine settings of Nexus PDP target large workloads: a 512 MiB block cache and 256 MiB write buffers. If you give the container a memory limit of a few hundred MiB, the container is killed for running out of memory (OOM) at startup. Give the Nexus PDP container 4 GiB of memory to start.
+:::caution Never give Nexus PDP less than 2.5 GiB of memory
+Below 2304 MiB (2.25 GiB), the embedded database can stop applying changes for good under a sustained write load, such as applying the changes that arrived during a cold start, or a burst of changes. Nexus PDP then keeps answering from the data it already has, so later changes to your policy data don't take effect. Nexus PDP doesn't report this (last verified on `0.7.0-beta.26`): `/health` stays up and nothing is logged. With 2 CPUs or fewer and a memory limit below 2304 MiB, the whole process can stop answering instead, and a liveness probe on `/health` restarts it. To recover, restart the container and raise its memory limit. A load test of permission checks alone doesn't show the problem, because checks don't write.
 
-To run Nexus PDP with less memory, lower the cache and write-buffer sizes in [Nexus PDP storage engine settings](/concepts/pdp/nexus-pdp-configuration#storage-engine), then load test against your own data set before you choose a size.
+2304 MiB is the point below which writes can stall, not a size to run at. Memory limits in decimal units count as written: `2400M` (2.4 billion bytes) is below it.
+
+Give the Nexus PDP container a memory limit of 4 GiB to start, and more for a large data set. The embedded database sizes its cache and write buffers from the container's memory limit; without a limit, it sizes them from the node's memory. See [Nexus PDP storage engine settings](/concepts/pdp/nexus-pdp-configuration#storage-engine). Before you choose a size, load test against your own data set, and include a cold start, a rebuild, and a sustained burst of updates in the test.
 :::
 
 ### Disk
 
-Two Nexus PDP paths must be on persistent storage: the embedded database (`EDGE_DB_PATH`) and the event store (`EDGE_DATA_DIR`). Plan for about twice the size of your data set, plus headroom. During a rebuild, the old and new database copies exist on disk together until Nexus PDP swaps in the new copy.
+Two Nexus PDP paths must be on persistent storage: the embedded database (`EDGE_DB_PATH`) and the event store (`EDGE_DATA_DIR`). At the default paths, both are on the volume mounted at `/var/lib/edge-pdp`. Size the volume from your snapshot size, plus headroom. You don't see the snapshot size before the first cold start, so for a first estimate use a measured data point: in the [Nexus PDP benchmarks](/concepts/pdp/nexus-pdp-benchmarks#key-results), with about 20 million facts, the data volume used up to about 7.4 GiB. No rebuild ran in those measurements, and a rebuild needs room for one more database copy, so give the volume more than that, then monitor free space after the first cold start.
+
+- **During a cold start**, the volume holds the downloaded snapshot, an unpacked copy of its files, and the database built from them, all at once: about three times the snapshot. If a cold start is killed before it finishes, for example by the memory limit or a short startup probe, its copies can stay on the volume, and each new attempt writes new ones. If restarts fill the volume, fix the cause, then empty the volume so the next start runs a clean cold start.
+- **During a [rebuild](#self-healing)**, the old database also stays on the volume until Nexus PDP swaps in the new copy: about four times the snapshot. Give the volume at least four times the snapshot size.
+- **The event store** keeps the changes Nexus PDP receives, with no age or size limit. It grows with your update volume over time, not with the data set, so monitor free space on the volume.
 
 ## Next steps \{#related-documentation}
 
 - [Permit Nexus PDP](/concepts/pdp/nexus-pdp): what Nexus PDP is and when to choose it
-- [Nexus PDP architecture](/concepts/pdp/nexus-pdp-architecture): the processes and ports inside the container
 - [Nexus PDP feature parity](/concepts/pdp/nexus-pdp-feature-parity): supported endpoints and capabilities
+- [Nexus PDP benchmarks](/concepts/pdp/nexus-pdp-benchmarks): measured check latency and capacity, and how to size a deployment
 - [Deploy Nexus PDP](/concepts/pdp/nexus-pdp-deployment): storage, probes, logs, and the security model
 - [Nexus PDP configuration reference](/concepts/pdp/nexus-pdp-configuration): environment variables
