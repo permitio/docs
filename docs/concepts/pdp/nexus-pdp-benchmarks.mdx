@@ -1,0 +1,115 @@
+---
+title: Nexus PDP benchmarks
+description: "Measured server-side latency, per-pod capacity, scale-out, and memory for Permit Nexus PDP on RBAC and ReBAC permission checks."
+sidebar_position: 7
+---
+
+Measured latency and capacity for [Permit Nexus PDP](/concepts/pdp/nexus-pdp) on RBAC and ReBAC permission checks. Use these figures to size Nexus PDP pods and to estimate the server-side processing time of permission checks.
+
+## Results at a glance \{#key-results}
+
+- **RBAC check at about 56 req/s:** P50 4.27 ms and P99 5.59 ms on one 2 CPU pod.
+- **Relationship depth:** from a role held directly on the file to a role three folders above it, P99 rises from 9.32 ms to 11.28 ms.
+- **Capacity per 2 CPU pod:** 658 req/s for RBAC checks and 261 to 408 req/s for ReBAC chains, with server-side P99 between 11.85 ms and 21.11 ms at those rates.
+- **Scale-out:** 3 pods behind one Kubernetes Service sustained 1,606 req/s (RBAC) and 796 req/s (ReBAC depth 2).
+
+All latency figures are server-side and exclude the network round trip between your service and the PDP. Run Nexus PDP next to your service to keep that round trip on the same host or network.
+
+## Methodology
+
+- **Date and region:** October 9, 2026, AWS `us-east-2`.
+- **Image:** `permitio/nexus-pdp:0.7.0-beta.50` (`sha256:43b0f5c6d422558555e47ff4e84b99920d00ac832978f245e57b28d2d0d5eec6`), a beta build.
+- **Pods:** one Nexus PDP pod per node, holding the API, OPA, query layer, and embedded database, with CPU and memory requests equal to limits. 2 CPU pods ran on `m6a.xlarge` nodes (4 vCPU, 16 GiB). The 4 CPU pod ran on an `m6a.2xlarge` node (8 vCPU, 32 GiB).
+- **Load generator:** k6 on a node of its own. In every step where its CPU was recorded, it used at most about 0.7 cores, so it did not limit the results.
+- **Latency:** the duration of the PDP's own `POST /allowed` server span. Load was offered at a constant 56.5 req/s for RBAC and 54.7 req/s for the ReBAC chains, with at most 10 concurrent requests, for a 2-minute warm-up and then a 10-minute measured window. Each percentile is the mean of the percentiles of 10-second buckets.
+- **Capacity:** the offered rate grew by ×1.25 every 2 minutes, with up to 200 concurrent requests. A step passed with server-side P99 under the profile's limit, no failed requests, and at most 1% dropped requests. Capacity is the highest passing step, so the true limit is up to 25% higher. The P99 limit was 29.94 ms for RBAC and 40.00 ms for the ReBAC chains.
+- **Correctness:** before load, every profile answered a 1,000-check gate file with 1,000 correct decisions. No request failed in any run.
+- **Runs:** one run per configuration.
+
+### Profiles
+
+| Profile | What the check walks | Concurrency in the latency run |
+| --- | --- | --- |
+| RBAC | A tenant role on the resource type, no graph walk | 10 |
+| ReBAC chain, depth 0 | A role held directly on the file | 10 |
+| ReBAC chain, depth 1 | A role on the folder above the file (1 hop) | 10 |
+| ReBAC chain, depth 2 | A role two folders above the file (2 hops) | 10 |
+| ReBAC chain, depth 3 | A role three folders above the file (3 hops) | 10 |
+
+Each ReBAC chain has one child per parent (breadth 1).
+
+## Latency \{#latency}
+
+One 2 CPU pod, at 56.5 req/s (RBAC) or 54.7 req/s (ReBAC) with 10 concurrent requests. "Small" is a data set of about 12,600 resource instances. "20M" is a smaller copy of the same profiles in an environment that also holds about 20 million facts on other resource types (see [Data size](#data-size)).
+
+| Profile | P50 small | P95 small | P99 small | P50 20M | P95 20M | P99 20M |
+| --- | --- | --- | --- | --- | --- | --- |
+| RBAC | 4.27 ms | 4.98 ms | 5.59 ms | 4.79 ms | 5.60 ms | 6.47 ms |
+| ReBAC chain, depth 0 | 7.63 ms | 8.52 ms | 9.32 ms | 8.41 ms | 9.52 ms | 11.29 ms |
+| ReBAC chain, depth 1 | 8.25 ms | 9.10 ms | 9.94 ms | 9.12 ms | 10.34 ms | 11.68 ms |
+| ReBAC chain, depth 2 | 8.77 ms | 9.67 ms | 10.59 ms | 10.19 ms | 11.31 ms | 13.19 ms |
+| ReBAC chain, depth 3 | 9.27 ms | 10.25 ms | 11.28 ms | 9.94 ms | 10.98 ms | 12.04 ms |
+
+The 20M depth 2 row is slower than depth 3. Its run was CPU-throttled in 5 of about 7,200 scheduler periods (0.07%), which may have affected it.
+
+## Capacity per pod \{#capacity}
+
+Highest passing rate for one pod, in requests per second.
+
+| Profile | 2 CPU, small | 4 CPU, small | 2 CPU, 20M |
+| --- | --- | --- | --- |
+| RBAC | 658 | 1,028 | 526 |
+| ReBAC chain, depth 0 | 408 | 637 | 326 |
+| ReBAC chain, depth 1 | 326 | 509 | 261 |
+| ReBAC chain, depth 2 | 261 | 509 | 261 |
+| ReBAC chain, depth 3 | 261 | 408 | 261 |
+
+- **What sets capacity:** the pod saturates before latency reaches the limit. At every highest passing step, server-side P99 was between about 11 ms and 26 ms. At the next step, P99 rose above 160 ms or requests started to drop.
+- **CPU:** going from 2 to 4 CPU raised capacity by ×1.56, or by ×1.95 for ReBAC depth 2. Each figure is resolved to one ×1.25 step, so each ratio is accurate to one step either way.
+
+## Scale-out \{#scale-out}
+
+2 CPU pods behind one Kubernetes Service, small data set, in requests per second. The figure in parentheses is the total divided by the number of pods.
+
+| Profile | 1 pod | 2 pods | 3 pods |
+| --- | --- | --- | --- |
+| RBAC | 658 | 1,028 (514) | 1,606 (535) |
+| ReBAC chain, depth 2 | 261 | 509 (255) | 796 (265) |
+
+At 3 pods, both profiles are consistent with linear scaling within the resolution of the ×1.25 steps. At 2 pods, ReBAC depth 2 is consistent with linear scaling, and RBAC scaled below linear: its 1,284.7 req/s step failed, although twice the single-pod figure is 1,315.6 req/s. These runs don't establish the cause. The Service balances load per connection. At the passing steps, the 2-pod split was 54% to 55% and 45% to 46% for RBAC, and 51% and 49% for depth 2. At 3 pods, the busiest pod handled 37% to 38% of requests.
+
+## Data size \{#data-size}
+
+The 20M runs put the profiles in an environment that also holds about 20 million facts. Compared with the small data set:
+
+- P50 was 0.5 ms to 1.4 ms higher and P99 0.76 ms to 2.60 ms higher, on all five profiles.
+- Capacity was one step (20%) lower for RBAC, depth 0, and depth 1, and the same for depth 2 and depth 3.
+
+The 20M runs don't measure a large graph on the resource types the checks query. The 20 million facts were on resource types the checks never read, and the profiles' own data was smaller than in the small runs (1,500 instances instead of about 12,600). The 20M pod also had a 10 GiB memory limit, against 4 GiB for the small runs. The embedded database sizes its cache from the memory limit, which favours the 20M runs.
+
+## Memory \{#memory}
+
+| Data set | Latency runs | Capacity runs, passing steps | Cold start peak |
+| --- | --- | --- | --- |
+| Small (about 12,600 instances) | 0.14 to 0.18 GiB | 0.14 to 0.18 GiB | Not reported |
+| 20M facts | 0.90 to 0.97 GiB mean, 2.2 to 3.1 GiB peak | 0.66 to 0.67 GiB | 5.26 to 6.71 GiB |
+
+Memory was sampled every 15 seconds, so the peaks are lower bounds.
+
+Cold start sets the memory size for a large environment. With about 20 million facts, cold start peaked above 5 GiB, so the 4 GiB starting point in [Deploy Nexus PDP](/concepts/pdp/nexus-pdp-deployment) does not fit that data size. These runs used a 10 GiB memory limit, and lower limits were not tested. The embedded database sizes its cache from the memory limit, so peaks under a lower limit may differ. The data directory reached 7.44 GiB of an 8 GiB volume, so give the data volume headroom above that for an environment of this size.
+
+## Limits of these figures \{#limits}
+
+- **Server-side only.** Latency excludes the network between your service and the PDP.
+- **Warm working set.** Checks were drawn at random from one 1,000-check file per data set, so every decision repeats and any caching in Nexus PDP sees a warm working set.
+- **Logging.** Nexus PDP ran at warn log level, exported only the request trace span, and shipped no decision logs. Higher log levels and decision logs use CPU that these runs didn't spend.
+- **Cold start** is not included in any latency figure.
+- **Capacity P99.** Each P99 is the mean of 10-second bucket P99s. This is not the P99 of the whole window. In the latency runs a bucket held about 550 requests. In the capacity runs a bucket held thousands of requests.
+- **Beta build, one run per configuration.**
+
+If you have a latency or throughput target, [book a call with Permit](https://www.permit.io/demo) to test Nexus PDP against your own workload.
+
+## Next steps \{#related-documentation}
+
+- [Deploy Nexus PDP](/concepts/pdp/nexus-pdp-deployment): memory, storage, and probe requirements
+- [How Nexus PDP syncs data](/concepts/pdp/nexus-pdp-how-it-works): request handling and resource footprint
