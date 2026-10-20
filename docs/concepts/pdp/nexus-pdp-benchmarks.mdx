@@ -20,9 +20,9 @@ All latency figures are server-side and exclude the network round trip between y
 - **Date and region:** October 9, 2026, AWS `us-east-2`.
 - **Image:** `permitio/nexus-pdp:0.7.0-beta.50` (`sha256:43b0f5c6d422558555e47ff4e84b99920d00ac832978f245e57b28d2d0d5eec6`), a beta build.
 - **Pods:** one Nexus PDP pod per node, holding the API, OPA, query layer, and embedded database, with CPU and memory requests equal to limits. 2 CPU pods ran on `m6a.xlarge` nodes (4 vCPU, 16 GiB). The 4 CPU pod ran on an `m6a.2xlarge` node (8 vCPU, 32 GiB).
-- **Load generator:** k6 on a node of its own. It used at most about 0.7 cores, so it did not limit the results.
+- **Load generator:** k6 on a node of its own. In every step where its CPU was recorded, it used at most about 0.7 cores, so it did not limit the results.
 - **Latency:** the duration of the PDP's own `POST /allowed` server span. Load was offered at the Cloud PDP's observed rate (56.5 req/s for RBAC, 54.7 req/s for the ReBAC chains) with at most 10 concurrent requests, for a 2-minute warm-up and then a 10-minute measured window. Each percentile is the mean of the percentiles of 10-second buckets, the same estimator as the [Cloud PDP benchmarks](/concepts/pdp/cloud-pdp-benchmarks).
-- **Capacity:** the offered rate grew by ×1.25 every 2 minutes, with up to 200 concurrent requests. A step passed with server-side P99 under the profile's limit, no failed requests, and at most 1% dropped requests. Capacity is the highest passing step, so the true limit is up to 25% higher. The limit was the Cloud PDP's P99: 29.94 ms for RBAC, and 40.00 ms (the Cloud PDP's ReBAC depth 1 P99) for the ReBAC chains.
+- **Capacity:** the offered rate grew by ×1.25 every 2 minutes, with up to 200 concurrent requests. A step passed with server-side P99 under the profile's limit, no failed requests, and at most 1% dropped requests. Capacity is the highest passing step, so the true limit is up to 25% higher. The limit was the Cloud PDP's P99: 29.94 ms for RBAC, and 40.00 ms for the ReBAC chains. The chains have no Cloud PDP figure of their own, so they were held to the Cloud PDP's ReBAC depth 1 P99, the strictest ReBAC limit at 10 concurrent requests that the Cloud PDP published, not a like-for-like one.
 - **Correctness:** before load, every profile answered a 1,000-check gate file with 1,000 correct decisions. No request failed in any run.
 - **Runs:** one run per configuration.
 
@@ -76,7 +76,7 @@ Highest passing rate for one pod, in requests per second.
 | RBAC | 658 | 1,028 (514) | 1,606 (535) |
 | ReBAC chain, depth 2 | 261 | 509 (255) | 796 (265) |
 
-At 3 pods, both profiles are consistent with linear scaling within the resolution of the ×1.25 steps. At 2 pods, ReBAC depth 2 is consistent with linear scaling, and RBAC measured one step below twice the single-pod figure. These runs don't establish the cause. The Service balances load per connection, and at the passing steps the busiest of 3 pods handled 37% to 38% of requests.
+At 3 pods, both profiles are consistent with linear scaling within the resolution of the ×1.25 steps. At 2 pods, ReBAC depth 2 is consistent with linear scaling, and RBAC scaled below linear: its 1,284.7 req/s step failed, although twice the single-pod figure is 1,315.6 req/s. These runs don't establish the cause. The Service balances load per connection. At the passing steps, the 2-pod split was 54% to 55% and 45% to 46% for RBAC, and 51% and 49% for depth 2. At 3 pods, the busiest pod handled 37% to 38% of requests.
 
 ## Data size \{#data-size}
 
@@ -96,14 +96,15 @@ The 20M runs don't measure a large graph on the resource types the checks query.
 
 Memory was sampled every 15 seconds, so the peaks are lower bounds.
 
-Cold start sets the memory size for a large environment. With about 20 million facts, cold start peaked above 5 GiB, so the 4 GiB starting point in [Deploy Nexus PDP](/concepts/pdp/nexus-pdp-deployment) is not enough for that data size. In these runs, cold start took 135 to 169 seconds and the data directory reached 7.44 GiB of an 8 GiB volume. For an environment of that size, set the memory limit to at least 8 GiB and give the data volume more than 8 GiB.
+Cold start sets the memory size for a large environment. With about 20 million facts, cold start peaked above 5 GiB, so the 4 GiB starting point in [Deploy Nexus PDP](/concepts/pdp/nexus-pdp-deployment) does not fit that data size. These runs used a 10 GiB memory limit, and lower limits were not tested. The embedded database sizes its cache from the memory limit, so peaks under a lower limit may differ. The data directory reached 7.44 GiB of an 8 GiB volume, so give the data volume headroom above that for an environment of this size.
 
 ## Limits of these figures \{#limits}
 
 - **Server-side only.** Latency excludes the network between your service and the PDP.
 - **Throughput figures are different quantities.** The capacity figures are the highest rate Nexus PDP sustained under the Cloud PDP's P99. The Cloud PDP's throughput figures are the rate it was offered, not a maximum.
+- **Data set.** The data set was rebuilt for these runs. The Cloud PDP's data set is unknown.
 - **Warm working set.** Checks were drawn at random from one 1,000-check file per data set, so every decision repeats and any caching in Nexus PDP sees a warm working set.
-- **Logging differs.** The Cloud PDP ran at info log level and exported every trace span. Nexus PDP ran at warn level, exported only the request span, and shipped no decision logs.
+- **Logging differs, in the Cloud PDP's disfavour.** The Cloud PDP ran at info log level and exported every trace span and event. Nexus PDP ran at warn level, exported only the request span, and shipped no decision logs, so none of its CPU went to buffering and uploading them.
 - **Topology differs.** Nexus PDP is one container. The Cloud PDP is several services.
 - **Cold start** is not included in any latency figure.
 - **Capacity P99.** Each P99 is the mean of 10-second bucket P99s. In the latency runs a bucket held about 550 requests, so those P99s compare directly with the Cloud PDP's. In the capacity runs a bucket held thousands of requests, so the capacity P99 limit is not a like-for-like P99.
