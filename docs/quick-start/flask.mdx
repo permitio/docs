@@ -11,15 +11,15 @@ Build a Flask app for a blogging platform that registers users in Permit.io and 
 
 When you finish, your Flask app has two endpoints:
 
-| Endpoint | What it does |
-|---|---|
-| `POST /register` | Syncs a user to Permit.io and assigns the user the **Reader** role in the `default` tenant |
-| `POST /posts` | Calls `permit.check()` and returns `403` unless the user has permission to `create` a `Post` |
+| Endpoint         | What it does                                                                                 |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| `POST /register` | Syncs a user to Permit.io and assigns the user the **Reader** role in the `default` tenant   |
+| `POST /posts`    | Calls `permit.check()` and returns `403` unless the user has permission to `create` a `Post` |
 
 ## Prerequisites
 
 - A Permit.io account. See [Create a Permit.io account](/quickstart).
-- Python 3 with [Flask](https://flask.palletsprojects.com) installed.
+- Python 3.10 or later with [Flask](https://flask.palletsprojects.com) installed.
 - [Node.js](https://nodejs.org/en) and npm, to install the Permit CLI.
 - [Docker](https://www.docker.com/), to run the policy decision point (PDP) container.
 
@@ -81,12 +81,12 @@ In the [Permit dashboard](https://app.permit.io), select your project and open t
 
 The blogging-platform template creates:
 
-| Policy element | What the template defines |
-|---|---|
-| Resources | `Post` (with a `premium` boolean attribute) and `Comment`, each with `create`, `read`, `update`, and `delete` actions |
-| Roles | **Admin** (all actions), **Author** (create and read posts, read comments), **Reader** (create and read comments), and **Premium Reader** (read posts and comments) |
-| Relationship | A `Post` is the parent of its `Comment` instances. An **Author** of a post instance becomes a **Moderator** of the comments on that post. This rule is relationship-based access control (ReBAC). |
-| Resource set | **Free Post** contains posts where `premium` is `false`. **Readers** can read free posts. This rule is attribute-based access control (ABAC). |
+| Policy element | What the template defines                                                                                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Resources      | `Post` (with a `premium` boolean attribute) and `Comment`, each with `create`, `read`, `update`, and `delete` actions                                                                             |
+| Roles          | **Admin** (all actions), **Author** (create and read posts, read comments), **Reader** (create and read comments), and **Premium Reader** (read posts and comments)                               |
+| Relationship   | A `Post` is the parent of its `Comment` instances. An **Author** of a post instance becomes a **Moderator** of the comments on that post. This rule is relationship-based access control (ReBAC). |
+| Resource set   | **Free Post** contains posts where `premium` is `false`. **Readers** can read free posts. This rule is attribute-based access control (ABAC).                                                     |
 
 This tutorial uses one rule from the policy: the **Author** role can `create` a `Post`, and the **Reader** role cannot. To change which role can perform an action, check or clear the box in the Policy Editor.
 
@@ -128,7 +128,7 @@ In your Flask project, install the Permit Python SDK:
 pip install permit
 ```
 
-The `permit` package installs Pydantic with email validation, which the request models in this tutorial use. For all SDK options, see [Check permissions with the Python SDK (asyncio)](/sdk/python/quickstart-python).
+The `permit` package installs Pydantic with email validation, which the request models in this tutorial use. This tutorial uses the blocking client of the SDK, which matches Flask's synchronous routes. For all SDK options, see [Check permissions with the Python SDK (sync)](/sdk/python/quickstart_python_sync).
 
 </TimelineStep>
 <TimelineStep>
@@ -140,9 +140,8 @@ Create a file named `app.py` with the following code:
 ```python
 # app.py
 from flask import Flask, request, jsonify
-from permit import Permit
+from permit.sync import Permit
 import os
-import asyncio
 from pydantic import BaseModel, EmailStr, ValidationError
 
 app = Flask(__name__)
@@ -160,12 +159,12 @@ class UserIn(BaseModel):
 
 The `UserIn` Pydantic model validates the body of registration requests. The `Permit` client reads two environment variables:
 
-| Variable | Value |
-|---|---|
-| `PERMIT_API_KEY` | Your environment API key from [2. Get your API key](#2-get-your-api-key) |
-| `PDP_URL` | The PDP address from [3. Run the PDP](#setting-up-the-pdp-server): `http://localhost:7766` |
+| Variable         | Value                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------ |
+| `PERMIT_API_KEY` | Your environment API key from [2. Get your API key](#2-get-your-api-key)                   |
+| `PDP_URL`        | The PDP address from [3. Run the PDP](#setting-up-the-pdp-server): `http://localhost:7766` |
 
-The `Permit` class imported from `permit` is the asyncio client, so its methods are coroutines. Flask route functions in this tutorial are synchronous, so each call runs the coroutine with `asyncio.run()`. If you prefer synchronous calls without `asyncio.run()`, see [Check permissions with the Python SDK (sync)](/sdk/python/quickstart_python_sync).
+The `Permit` class imported from `permit.sync` is the blocking client: its methods return their results directly. The Flask route functions in this tutorial are synchronous, so they call the client without `await`. For more examples of the blocking client, see [Check permissions with the Python SDK (sync)](/sdk/python/quickstart_python_sync).
 
 </TimelineStep>
 <TimelineStep>
@@ -188,26 +187,26 @@ def register():
         return jsonify(e.errors()), 422
 
     # Sync user with Permit
-    user = asyncio.run(permit.api.users.sync({
+    user = permit.api.users.sync({
         "key": user_in.email,
         "email": user_in.email,
         "first_name": user_in.first_name,
         "last_name": user_in.last_name,
-    }))
+    })
 
     # Assign Reader role to the user in the 'default' tenant
-    role_assignment = asyncio.run(permit.api.users.assign_role({
+    role_assignment = permit.api.users.assign_role({
         "user": user_in.email,
         "role": "Reader",
         "tenant": "default",
-    }))
+    })
 
     # Continue with your app's registration logic..
 
     return jsonify({
         "message": "User registered and role assigned",
-        "user": user.dict() if hasattr(user, "dict") else user.__dict__,
-        "role_assignment": role_assignment.dict() if hasattr(role_assignment, "dict") else role_assignment,
+        "user": user.dict(),
+        "role_assignment": role_assignment.dict(),
     }), 201
 ```
 
@@ -236,7 +235,7 @@ def posts():
     except ValidationError as e:
         return jsonify(e.errors()), 422
 
-    permitted = asyncio.run(permit.check(check.user, action, resource))
+    permitted = permit.check(check.user, action, resource)
     if permitted:
         return jsonify({"message": "User is permitted"})
     else:
@@ -341,7 +340,7 @@ Each check also appears in the **Audit Log** screen of the Permit dashboard, wit
 
 ## Next steps \{#further-reading}
 
-- [Check permissions with the Python SDK (sync)](/sdk/python/quickstart_python_sync): call Permit from synchronous Python code without `asyncio.run()`.
+- [Check permissions with the Python SDK (sync)](/sdk/python/quickstart_python_sync): more examples of the blocking client that this tutorial uses.
 - [Check permissions with permit.check()](/how-to/enforce-permissions/check): check against tenants, resource instances, and attributes.
 - [Build RBAC policies](/how-to/build-policies/rbac/building-rbac-policy): create roles and permissions for your own resources.
 - [Permit Elements overview](/embeddable-uis/overview): embed user management and other UI components in your app.
