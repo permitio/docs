@@ -18,13 +18,15 @@ Get every permission a user has, in every tenant and on every resource instance,
 
 ## Get user permissions function by SDK
 
-| SDK | Function |
-|---|---|
-| Node.js | `permit.getUserPermissions(user, tenants?, resources?, resource_types?)` |
-| Python | `permit.get_user_permissions(user, tenants=None, resources=None, resource_types=None)` |
-| Java | `permit.getUserPermissions(GetUserPermissionsQuery query)` |
-| Go | `permit.GetUserPermissions(user, tenants ...string)` and `permit.GetUserPermissionsWithOptions(user, opts ...)` |
-| PDP API | `POST /user-permissions` |
+| SDK     | Function                                                                                                        |
+| ------- | --------------------------------------------------------------------------------------------------------------- |
+| Node.js | `permit.getUserPermissions(user, tenants?, resources?, resource_types?)`                                        |
+| Python  | `permit.get_user_permissions(user, tenants=None, resources=None, resource_types=None, context=None)`            |
+| Java    | `permit.getUserPermissions(GetUserPermissionsQuery query)`                                                      |
+| Go      | `permit.GetUserPermissions(user, tenants ...string)` and `permit.GetUserPermissionsWithOptions(user, opts ...)` |
+| PDP API | `POST /user-permissions`                                                                                        |
+
+The Python `context` argument needs `permit` 3.1 or later. See [Include ABAC permissions in the result](#enabling-abac-in-user-permissions).
 
 ## Get all permissions of a user \{#simple-usage}
 
@@ -38,6 +40,26 @@ const { Permit } = require("permitio");
 
 const permit = new Permit({ token: "<YOUR_API_KEY>", pdp: "http://localhost:7766" });
 const userPermissions = await permit.getUserPermissions("john@doe.com");
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import asyncio
+
+from permit import Permit
+
+permit = Permit(token="<YOUR_API_KEY>", pdp="http://localhost:7766")
+
+
+async def main():
+    user_permissions = await permit.get_user_permissions("john@doe.com")
+    for key, entry in user_permissions.items():
+        print(key, entry["permissions"])
+
+
+asyncio.run(main())
 ```
 
 </TabItem>
@@ -116,12 +138,12 @@ func main() {
 
 The result is an object keyed by the object the permissions apply to: a tenant or a resource instance. Each value contains:
 
-| Field | Description |
-|---|---|
-| `tenant` | The tenant `key` and tenant `attributes`. |
-| `resource` | For a resource instance: the resource `type`, `key`, and `attributes`. |
+| Field         | Description                                                                                           |
+| ------------- | ----------------------------------------------------------------------------------------------------- |
+| `tenant`      | The tenant `key` and tenant `attributes`.                                                             |
+| `resource`    | For a resource instance: the resource `type`, `key`, and `attributes`.                                |
 | `permissions` | The permissions the user has on the object, in `resource:action` format, for example `document:read`. |
-| `roles` | The roles that grant the permissions. |
+| `roles`       | The roles that grant the permissions.                                                                 |
 
 An empty object means the user has no permissions in the environment.
 
@@ -135,7 +157,7 @@ When you enable ABAC permissions:
 - Add `__tenant` to `resource_types` to keep tenant-level (RBAC) permissions in the result.
 - Run a container PDP. The Cloud PDP and Nexus PDP don't evaluate ABAC policies ([Cloud PDP capabilities](/concepts/pdp/cloud-pdp-capabilities), [Nexus PDP feature parity](/concepts/pdp/nexus-pdp-feature-parity#abac)).
 
-The Node.js and Python SDK functions don't take a context argument. From those languages, call the PDP API directly.
+The Node.js SDK function doesn't take a context argument, so from Node.js, call the PDP API directly. The Python SDK function takes `context` in `permit` 3.1 or later. The SDK merges `context` over the base context of the SDK's context store, as `permit.check()` does. A call without `context` sends no context, and so doesn't send the base context either. Pass `context={}` to send the base context alone.
 
 <Tabs groupId="language">
 <TabItem value="curl" label="cURL">
@@ -158,6 +180,31 @@ curl --location 'http://localhost:7766/user-permissions' \
         "enable_abac_user_permissions": true
     }
 }'
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+This example needs `permit` 3.1 or later.
+
+```python
+import asyncio
+
+from permit import Permit
+
+permit = Permit(token="<YOUR_API_KEY>", pdp="http://localhost:7766")
+
+
+async def main():
+    user_permissions = await permit.get_user_permissions(
+        "eddie",
+        resource_types=["document", "__tenant"],
+        context={"enable_abac_user_permissions": True},
+    )
+    print(user_permissions)
+
+
+asyncio.run(main())
 ```
 
 </TabItem>
@@ -218,17 +265,17 @@ UserPermissions permissions = permit.getUserPermissionsFromOPA(
 	)
 );
 
-```	
+```
 
 ## Filter the user permissions result \{#filtering-out-the-results}
 
 Limit the result with one or more filters:
 
-| Filter | Returns |
-|---|---|
-| `tenants` | Permissions in the listed tenants only. |
+| Filter           | Returns                                                                                                          |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `tenants`        | Permissions in the listed tenants only.                                                                          |
 | `resource_types` | Permissions on instances of the listed resource types only. Use `__tenant` to get tenant-level permissions only. |
-| `resources` | Permissions on the listed resource instances only, in `resource_type:resource_key` format. |
+| `resources`      | Permissions on the listed resource instances only, in `resource_type:resource_key` format.                       |
 
 The argument order differs by SDK. In Node.js and Python, the order is `tenants`, `resources`, `resource_types`. In the Java `GetUserPermissionsQuery` constructor, the order is `tenants`, `resource_types`, `resources`. In Go, use `enforcement.WithTenants()`, `enforcement.WithResources()`, and `enforcement.WithResourceTypes()` with `GetUserPermissionsWithOptions()`.
 
@@ -240,11 +287,35 @@ const { Permit } = require("permitio");
 
 const permit = new Permit({ token: "<YOUR_API_KEY>", pdp: "http://localhost:7766" });
 const userPermissions = await permit.getUserPermissions(
-    "john@doe.com",
-    ["tenant-1", "tenant-2"], // tenants
-    ["document:doc-1", "document:doc-2"], // resources
-    ["document", "__tenant"], // resource_types
+  "john@doe.com",
+  ["tenant-1", "tenant-2"], // tenants
+  ["document:doc-1", "document:doc-2"], // resources
+  ["document", "__tenant"] // resource_types
 );
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import asyncio
+
+from permit import Permit
+
+permit = Permit(token="<YOUR_API_KEY>", pdp="http://localhost:7766")
+
+
+async def main():
+    user_permissions = await permit.get_user_permissions(
+        "john@doe.com",
+        tenants=["tenant-1", "tenant-2"],
+        resources=["document:doc-1", "document:doc-2"],
+        resource_types=["document", "__tenant"],
+    )
+    print(user_permissions)
+
+
+asyncio.run(main())
 ```
 
 </TabItem>
