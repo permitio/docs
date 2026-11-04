@@ -126,7 +126,7 @@ const sidebars = {
             "concepts/differentiator-checklist",
             "how-to/build-policies/policy-basics",
             "overview/glossary",
-            "how-to/SDLC/modeling-implementation-components",
+            "how-to/sdlc/modeling-implementation-components",
             "concepts/control-plane-and-data-plane",
           ],
         },
@@ -370,7 +370,7 @@ const sidebars = {
             {
               type: "doc",
               label: "SCIM",
-              id: "integrations/SCIM/SCIM_overview",
+              id: "integrations/scim/scim_overview",
             },
           ],
         },
@@ -686,8 +686,8 @@ const sidebars = {
         "authentication/supertokens",
         "authentication/hankopermit",
         "authentication/logto",
-        "integrations/SCIM/OKTA",
-        "integrations/SCIM/EntraID",
+        "integrations/scim/okta",
+        "integrations/scim/entraid",
       ],
     },
     {
@@ -781,9 +781,9 @@ const sidebars = {
           label: "GraphQL",
           link: {
             type: "doc",
-            id: "integrations/GraphQL/overview",
+            id: "integrations/graphql/overview",
           },
-          items: ["integrations/GraphQL/apollo_server"],
+          items: ["integrations/graphql/apollo_server"],
         },
       ],
     },
@@ -805,7 +805,7 @@ const sidebars = {
           },
           items: [
             "how-to/deploy/offline-mode",
-            "how-to/SDLC/CI-CD",
+            "how-to/sdlc/ci-cd",
             {
               type: "category",
               label: "Cloud Hosts",
@@ -847,7 +847,7 @@ const sidebars = {
           type: "category",
           label: "Test & Monitor",
           items: [
-            "how-to/SDLC/authz-testing",
+            "how-to/sdlc/authz-testing",
             {
               type: "category",
               label: "Audit Logs",
