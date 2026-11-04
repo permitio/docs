@@ -8,7 +8,7 @@ sidebar_position: 4
 Use this page to check whether Permit Nexus PDP, a self-hosted policy decision point (PDP), supports the endpoints and capabilities your application uses before you choose Nexus PDP or move to it. The page compares Nexus PDP (`permitio/nexus-pdp`) with the [container PDP](/concepts/pdp/overview#run-an-edge-pdp-with-docker), the Edge PDP image `permitio/pdp-v2`.
 
 :::info Nexus PDP support changes between releases
-This comparison describes Nexus PDP as of September 2026, during early access. The set of supported capabilities changes between releases, so check this page before you upgrade.
+This comparison describes Nexus PDP as of November 2026, during early access. The set of supported capabilities changes between releases, so check this page before you upgrade.
 :::
 
 ## Nexus PDP compatibility with container PDP endpoints
@@ -29,20 +29,21 @@ Nexus PDP implements a subset of the container PDP's endpoints. Its capabilities
 | [Bulk check](/how-to/enforce-permissions/bulk-check) (`POST /allowed/bulk`) | Yes | Yes |
 | [User permissions](/how-to/enforce-permissions/user-permissions) (`POST /user-permissions`) | Yes | Yes |
 | [Authorized users](/how-to/enforce-permissions/authorized-users) (`POST /authorized_users`) | Yes | Yes |
+| User tenants (`POST /user-tenants`) | Yes | Yes |
 | [All-tenants check](/how-to/enforce-permissions/all-tenants-check) (`POST /allowed/all-tenants`) | Yes | No |
 | [URL-based enforcement](/how-to/enforce-permissions/url-mapping/url-mapping-check) (`POST /allowed_url`) | Yes | No |
 | AuthZen access evaluation (`POST /access/v1/evaluation`) | Yes | Yes |
 | AuthZen access evaluations (`POST /access/v1/evaluations`) | Yes | Yes |
-| AuthZen subject, resource, and action search (`POST /access/v1/search/subject`, `/resource`, `/action`) | Yes | Yes |
+| AuthZen subject, resource, and action search (`POST /access/v1/search/subject`, `/resource`, `/action`) | Yes | [Yes](#authzen-search) |
 | AuthZen discovery (`GET /.well-known/authzen-configuration`) | Yes | Yes |
 | Policy as code and custom Rego bundles | Yes | No |
 | Local facts and read-your-own-writes | Yes | No |
 | [Local enforcement APIs](/how-to/enforce-permissions/list-role-assignments) (`/local/*`) | Yes | No |
 | Custom data sources | Yes | No |
 | Kong and NGINX integrations | Yes | No |
-| [Offline or air-gapped first boot](/how-to/deploy/offline-mode) | Yes | No |
+| [Offline or air-gapped boot](/how-to/deploy/offline-mode) | Yes | [No](#offline-boot) |
 | Decision logs sent to Permit | Yes | Yes |
-| Health and readiness endpoints | Yes | Yes |
+| Health and readiness endpoints | Yes | [Partial](#health-and-readiness) |
 | Prometheus metrics (`GET /metrics`) | Yes | No |
 
 ## Notes on specific rows
@@ -51,9 +52,24 @@ Nexus PDP implements a subset of the container PDP's endpoints. Its capabilities
 
 Nexus PDP supports [`/user-permissions`](/how-to/enforce-permissions/user-permissions) and [`/authorized_users`](/how-to/enforce-permissions/authorized-users), which answer most "which resources can this user see?" questions on both PDP types. For other approaches, see [Data filtering](/how-to/enforce-permissions/data-filtering).
 
-### Offline first boot on Nexus PDP \{#offline-first-boot}
+### AuthZen search on Nexus PDP \{#authzen-search}
 
-Nexus PDP downloads its data set from the control plane on first boot. A Nexus PDP that cannot reach the control plane on its first boot does not start. After a successful first boot, Nexus PDP keeps serving decisions from its local copy during control-plane outages.
+Nexus PDP answers all three AuthZen search endpoints the way the container PDP does. Both PDPs share these limits:
+
+- Neither PDP paginates search results. A search returns all its results in one response, and `page.next_token` is always empty.
+- On both PDPs, resource search doesn't filter by the requested action. It returns every resource of the requested type on which the subject has any permission.
+
+Action search differs in one way. Nexus PDP matches a `tenant` set in the resource's `properties` and returns that tenant's actions. The container PDP doesn't match it yet, so on the container PDP a search that sets one returns no actions.
+
+### Health and readiness on Nexus PDP \{#health-and-readiness}
+
+The container PDP serves `GET /health`, `GET /healthy`, and `GET /ready` on port `7000`. On Nexus PDP, port `7000` serves `GET /health` and `GET /healthy`, which always return `200`, and has no `/ready`. Readiness is `GET /health/ready` on the management port, `7001`. Point every probe at port `7001`. See [Health and readiness](/concepts/pdp/nexus-pdp-deployment#health-and-readiness).
+
+### Booting without the control plane on Nexus PDP \{#offline-boot}
+
+Nexus PDP signs up with the control plane every time it starts, not only on its first boot. A Nexus PDP that cannot reach the control plane when it starts does not start.
+
+A running Nexus PDP that loses the control plane keeps answering on port `7000` from its local copy. Its readiness endpoint, `GET /health/ready` on port `7001`, returns `503` within about 30 seconds, so Kubernetes stops sending it traffic through its Service.
 
 ### ABAC policies on Nexus PDP \{#abac}
 
