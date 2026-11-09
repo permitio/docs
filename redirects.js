@@ -40,7 +40,7 @@ module.exports = [
   },
   {
     from: ["/reference/sdks/dotnet/sync_user/"],
-    to: "/sdk/dotnet/user/SyncUser",
+    to: "/sdk/dotnet/user/syncuser",
   },
   {
     from: [
@@ -407,7 +407,7 @@ module.exports = [
   },
   {
     from: ["/category/policy-lifecycle", "/how-to/manage-policy-lifecycle"],
-    to: "/how-to/SDLC/CI-CD",
+    to: "/how-to/sdlc/ci-cd",
   },
   {
     from: "/category/golang",
