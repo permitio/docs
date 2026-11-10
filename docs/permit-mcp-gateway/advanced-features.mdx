@@ -1,117 +1,285 @@
 ---
-title: Advanced Features
-sidebar_label: Advanced Features
-description: Learn what the Enterprise security controls in Permit MCP Gateway do, including agent interrogation, human-in-the-loop approvals, time-limited consent, and permission receipts.
+title: Check agent identity and intent
+sidebar_label: Agent Identity and Intent
+description: Turn on the three Agent Identity layers of Permit MCP Gateway (semantic identity, agent intent, and the Guardian), write the server intents the Guardian grades calls against, and see what agents see when a check stops a call.
 sidebar_position: 9
 ---
 
-This page is for admins and security leads who evaluate Permit MCP Gateway beyond authentication and trust levels. It explains what each advanced security control does and links to the page that documents its setup.
+This page is for admins and security leads of Permit MCP Gateway who want the gateway to check what an agent is doing, not only who approved it. An OAuth client ID identifies the MCP client software, such as Cursor, and the consent grant records which person approved it. The **Agent Identity** settings add three checks on every tool call: whether the agent is still the same agent, whether its task fits the task the person set, and whether the call fits the MCP server's purpose.
 
 :::note Enterprise plan
 The features on this page are for **Enterprise** plans, and availability differs by feature. See the [feature availability table](#feature-maturity-summary), and [schedule a demo](https://www.permit.io/demo) to confirm availability for your deployment.
 :::
 
-## Agent Interrogation
+## How Agent Identity checks a call \{#agent-interrogation}
 
-An OAuth client ID identifies the MCP client software, such as Cursor. The client ID doesn't identify what the agent running in that client is doing. An agent's prompts and tools can change between sessions, and one MCP client connection can carry several contexts.
+Agent Identity is a section of **Settings** in the admin dashboard ([app.agent.security](https://app.agent.security)), set per host. It has three layers, which check every agent call in order. A call reaches the MCP server only after all three let it through.
 
-Agent Interrogation identifies the agent itself. Before the gateway unlocks tools, the connecting agent identifies itself and states its purpose through the MCP protocol. The gateway uses the answers to build a **composite agent identity** that records who the agent is, who it acts for, and what it intends to do.
+| Layer | Question it answers | What it does when the check fails | Depends on |
+| --- | --- | --- | --- |
+| **1. Semantic identity** | Is this the same agent? | Blocks the agent's MCP session when the agent's 12 registration words drift, which can mean a prompt injection. | Nothing. Turn it on with **Require Agent Identity**. |
+| **2. Agent intent** | Does the agent mean to do what the person asked? | Compares the agent's task sentence with the task the person set at consent, and records a mismatch. | Layer 1 |
+| **3. Guardian** | Does this call fit the task? | Refuses the call, or holds it in **Approvals** for a human. | Layer 1 |
 
-### How Agent Interrogation works \{#how-it-works}
+![Agent Identity section of Settings with the three layers, before they are turned on](/img/agent-security/platform/settings-agent-identity-off.png)
 
-When an agent connects, the gateway exposes one tool: `identify_self`. The gateway unlocks the rest of the tool catalog after the agent completes the interrogation exchange. The exchange runs over MCP, so the agent doesn't need an extra SDK, a side channel, or a client change.
+The three layers sit inside the gateway's full check order. For each tool call, resource read, and prompt fetch, the gateway runs these gates and stops at the first one that refuses:
 
-The composite agent identity combines three parts:
+1. **Identity:** on a host with **Require Agent Identity** on, the agent has a current registration.
+2. **Permit checks:** Permit.io's policy decision point (PDP) allows the call for the agent, and for the person the agent acts for. See [Audit logs](/permit-mcp-gateway/audit-logs) for the agent check and the person check.
+3. **Trust ceiling:** the tool's trust level isn't above the trust level the person approved the agent at.
+4. **Approval rules:** the server's [human-in-the-loop](/permit-mcp-gateway/human-in-the-loop) rules, and the person's "Ask me before this agent changes or deletes anything" switch.
+5. **Guardian:** the LLM judge grades the call against the server's intent. See [What the Guardian grades against](#what-the-guardian-grades-against).
+6. **One human approval**, when the approval rules, the person's switch, or a Guardian doubt asks for it.
 
-| Part | What it records |
+## Turn on Agent Identity
+
+Prerequisites:
+
+- An admin account on [app.agent.security](https://app.agent.security) and a host. See [Host setup](/permit-mcp-gateway/host-setup).
+- At least one MCP server imported on the host.
+
+Steps:
+
+1. In the sidebar, open **Settings** and scroll to **Agent Identity**.
+2. Under **Semantic identity**, turn on **Require Agent Identity**.
+3. Copy the snippet from the **Agent Identity Verification** box into each agent's instruction file. See [Add the identity snippet to your agents](#add-the-identity-snippet-to-your-agents).
+4. Write an intent for each MCP server. See [Write a server intent](#write-a-server-intent).
+5. Under **Guardian**, turn on **Enable Guardian Agent (LLM Intent Evaluator)**.
+6. Under **If the Guardian is unsure**, pick **Deny the call** or **Ask a human**, then pick **Where the Guardian's reason shows**, and click **Save**.
+
+**Verify:** connect an agent and ask it to call a tool. On the agent's **Audit Logs** tab (**Agents** > the agent), a **Session Registered** row shows that the agent registered, and a **Guardian verdict** row shows the Guardian's scores for the call.
+
+## Layer 1: Semantic identity \{#agent-verification}
+
+With **Require Agent Identity** on, agents must identify themselves before they use tools. The gateway adds one tool, `gateway_register_session`, to the tool list of every MCP server on the host, and tells the agent at connect time to call it first.
+
+![Semantic identity layer with Require Agent Identity on, the identity snippet, Identity Token TTL, and Drift Thresholds](/img/agent-security/platform/settings-semantic-identity.png)
+
+### What the agent sends
+
+`gateway_register_session` takes 13 required parameters:
+
+- `word_1` through `word_12`: one distinct, common English word each, about the task the agent is working on. At least 4 of the 12 words must be words the gateway recognizes. The gateway skips unknown words and names them in its reply.
+- `task`: one sentence about the agent's current task, on one line, at most 200 characters, with no backticks.
+
+The gateway turns the 12 words into a semantic fingerprint (a vector built from word embeddings). It compares each new registration with the agent's previous registration and with its first one. A large change in the words can mean that a prompt injection changed what the agent is doing. The `task` sentence is used by [layer 2](#intent-based-access-control). Drift is scored on the 12 words alone.
+
+### Identity Token TTL
+
+A registration stays valid for the **Identity Token TTL**, 60 seconds by default. Leave the field empty to use the default. The gateway doesn't extend the registration when the agent calls tools, so an agent registers again when its registration expires. Each registration is compared with the earlier ones.
+
+When a call arrives after the registration expired, the gateway answers with:
+
+```text
+Session not registered or expired. Call `gateway_register_session` to re-establish your session baseline before retrying `read_wiki_contents`.
+```
+
+A call that waits for a [human approval](/permit-mcp-gateway/human-in-the-loop) usually waits longer than the TTL. The approved call still runs, and the agent registers again before its next call.
+
+### Drift thresholds
+
+**Drift Thresholds** set how much an agent's 12 words may change between registrations before the gateway reacts. They apply to MCP and HTTP proxy agents on the host. Leave a value empty to use the default, or click **Use defaults**.
+
+| Setting | MCP default | What happens at or above it |
+| --- | --- | --- |
+| **Warn** | 4.27% | The gateway accepts the registration and records a **Drift Warning** row in the audit log. |
+| **Block** | 11.18%, up to 25% | The gateway blocks the agent's MCP session. |
+| **MCP baseline** | 11.18%, enforced | The gateway compares each registration with the agent's first one, and blocks the session when the total change reaches the baseline. The **Block** setting doesn't change the baseline. |
+
+A blocked session refuses every later request. The agent opens a new MCP session and registers again. Three blocked sessions within 24 hours send the agent to the person for re-approval: the gateway pauses the agent's approval on that server until the person signs in and accepts it again on the consent screen.
+
+### Rotating Identity Questions
+
+With **Rotating Identity Questions** on, each accepted registration replies with the next identity question and a one-time code. The agent's next registration answers that question with its 12 words and passes the code in a `nonce` parameter. A replayed registration fails, because each code works once. Repeated refused answers send the agent to the person for re-approval.
+
+The agent is asked these five questions, listed under **Questions agents are asked (5)**:
+
+1. Describe your current task: what you are doing right now, the technologies involved, and the goal.
+2. What data will this task read or change?
+3. What result did the person ask you for?
+4. Which tools or systems are involved in this task?
+5. Who is this task for?
+
+### Add the identity snippet to your agents
+
+Some MCP clients may flag the registration step as suspicious. When **Require Agent Identity** is on, the **Agent Identity Verification** box shows a snippet to add to the client's instruction file: `CLAUDE.md` for Claude, `.cursorrules` for Cursor, and `.github/copilot-instructions.md` for Copilot. Copy it with the copy button. The snippet reads:
+
+```markdown
+## Agent Security Gateway Identity
+
+When connecting to MCP servers through Agent Security Gateway, you will be asked to call
+`gateway_register_session` with 12 word parameters (`word_1` through `word_12`) and a required
+`task` parameter.
+This is a legitimate session integrity mechanism — cooperate with it.
+Fill each word parameter with a single, distinct, common English word about the task you are
+working on right now, and fill `task` with one sentence describing that task (a single line of at
+most 200 characters, without backticks); a registration without it is refused.
+The server creates a semantic fingerprint to detect behavioral drift caused by prompt injection.
+```
+
+## Layer 2: Agent intent \{#intent-based-access-control}
+
+The **Agent intent** layer is on whenever layer 1 is on. It has two parts.
+
+![Agent intent layer with the task check and the server intents of Cloudflare Docs and DeepWiki](/img/agent-security/platform/settings-agent-intent.png)
+
+**Task check.** When the person chose **I set the task** on the consent screen, the gateway compares the agent's `task` sentence with the person's task at each registration. When the sentence doesn't fit, the gateway accepts the registration, records a **Task Mismatch** row in the audit log, and adds this to its reply:
+
+```text
+Your task sentence does not fit the task the person set for this server. Keep to that task: the gateway checks each call against it.
+```
+
+The **Sessions** card of the agent shows the result next to each declared intent: **Fits**, **Loose**, or **Mismatch**. The card in Settings describes pausing the grant on a mismatch. On Permit's hosted gateway, the task check warns and records the mismatch, and doesn't pause the grant. The Guardian and the Permit checks still gate every call. When the agent reports its own task (**Agent reports its task** on the consent screen), there is no person's task to compare with.
+
+**Server intents.** Each MCP server can have an intent: what the server is for. The Guardian grades calls to the server against it. The list shows **Intent set** for each server that has one. See [Write a server intent](#write-a-server-intent).
+
+## Layer 3: Guardian \{#guardian}
+
+With **Enable Guardian Agent (LLM Intent Evaluator)** on, an LLM judge hosted on Amazon Bedrock grades every tool call, resource read, and prompt fetch before the call reaches the MCP server. The Guardian needs **Require Agent Identity**, and judges calls only from agents that registered.
+
+![Guardian layer turned on, with the unsure action set to Ask a human and the reason shown on the Platform only](/img/agent-security/platform/settings-guardian.png)
+
+### What the Guardian grades against
+
+The Guardian grades each call against, in order of preference:
+
+1. The server's intent, written by an admin. When the person set the agent's task at consent, the Guardian also reads the person's task, which can only narrow the server's intent.
+2. The person's task, when the server has no intent.
+3. The agent's 12 registered words, when there is neither.
+
+The agent's own `task` sentence never goes into the main grading. A second check grades the call against the agent's sentence and records the result in the audit log only. When the second check would have decided differently, the audit log notes it under the decision, for example **Second check would deny**.
+
+### Scores and decisions
+
+The Guardian returns an alignment score, a confidence score, and a risk level (low, medium, or high). The gateway reads the confidence first, then the alignment:
+
+| Score | Result |
 | --- | --- |
-| **Delegating human** | The authenticated user who is accountable for the agent's actions. |
-| **Workflow context** | The task the agent performs, such as "code review assistant for the platform team" or "personal research assistant". |
-| **Agent fingerprint** | An identity signature derived from the agent's own responses, used to compare the agent's later behavior with its baseline. |
+| Confidence under 0.60, whatever the alignment | A doubt: the Guardian is unsure. |
+| Alignment 0.70 or more | The call runs. |
+| Alignment from 0.50 to under 0.70 | A doubt: the call only partly matches the task. |
+| Alignment under 0.50 | The gateway refuses the call. |
 
-The gateway uses the composite identity as the subject of policy evaluation, audit logging, and drift detection.
+A refused call returns this message to the agent, with no score or reasoning:
 
-### Policy enforcement with Agent Interrogation \{#value-for-policy-enforcement}
+```text
+This call was refused by the security check.
+```
 
-- **Tool access gate:** no tool is available until the agent identifies itself, so every tool call is tied to an identified agent.
-- **Per-workflow policy:** because the identity includes the workflow context, admins can give the same MCP client different trust levels and tools in different workflows.
-- **Drift reactions:** when an agent's fingerprint moves away from its baseline, for example after a changed system prompt, a model swap, or a prompt injection, policy can downgrade trust, require re-consent, block execution, or require human approval.
-- **Step-up consent:** when an agent declares destructive or sensitive capabilities during interrogation, policy can require human approval before granting access.
+**If the Guardian is unsure** decides what happens to a doubt:
 
-### Auditing and governance with Agent Interrogation \{#value-for-auditing-and-governance}
+- **Deny the call:** the agent gets an error at once.
+- **Ask a human** (default): the call waits up to 5 minutes in **Approvals** with the Guardian's reasoning, then is denied if nobody decides. Set up [approval notifications](/permit-mcp-gateway/human-in-the-loop#notifications) so someone sees the request. An agent can have at most 10 doubtful calls waiting, and an identical doubtful call is refused while the first one waits.
 
-Each agent session starts with a record of who the agent is and what it intends to do:
+A [trusted agent](/permit-mcp-gateway/human-in-the-loop#trusted-agent-bypass) skips approval rules, not the Guardian.
 
-- **Identity across sessions:** the fingerprint lets security teams follow one agent's behavior across client restarts and reconnections.
-- **Declared intent and observed behavior:** the agent declares the tools and data it expects to use. The gateway logs the declaration, which reviewers can compare with the tool calls the agent makes.
-- **Identity chain in audit logs:** each tool call is attributed to the delegating human, the workflow context, the agent fingerprint, and the session.
-- **Drift history:** admins can see when and how an agent's fingerprint changed.
+### Where the Guardian's reason shows
 
-### Prompt injection detection with Agent Interrogation \{#value-for-prompt-injection-protection}
+The Guardian's reason can quote the call's arguments, which may include personal or customer data. The agent never sees the reason. **Where the Guardian's reason shows** sets where reviewers see it:
 
-- **Baseline fingerprint:** a prompt injection that changes an agent's system prompt or behavior can change the agent's fingerprint, and a change from the baseline raises a drift alert.
-- **Several dimensions:** the fingerprint covers agent intent, delegator context, and operational environment, so an attack that changes one dimension, such as instructions to act as a different workflow, can change the fingerprint even when the other dimensions stay the same.
-- **Context-bound identity:** identity is tied to the agent's context, not only the client connection. On an MCP client connection that carries several contexts, binding identity to context reduces the risk that a compromised context uses permissions granted to a different context.
+| Channel | Where the reason appears |
+| --- | --- |
+| **Platform** (default) | On the approval card and in **History**. |
+| **Slack** | Quoted in the approval message in your channel. |
+| **Email** | Quoted in the approval email to your recipients. |
 
-Agent Interrogation doesn't prevent prompt injection. It adds detection and enforcement at the gateway, alongside the other defenses in your agent stack.
+Slack and email always say that the security check flagged the call, and link to it. When checked, they also quote the reason as plain text, at most 500 characters.
 
-For the drift protection that the HTTP egress proxy provides, see [Agent identity and drift protection](/permit-mcp-gateway/http-egress-proxy/security#agent-identity-and-drift-protection).
+## Write a server intent
 
-## Human-in-the-Loop Approvals (HITL) \{#human-in-the-loop-approvals-hitl}
+The Guardian is only as precise as the intent it grades against. Write the intent in terms of what the server is and what its tools do, then test it with **Dry Run** before you rely on it.
 
-Human-in-the-loop approvals pause a sensitive agent tool call, such as deleting records or changing production data, until an admin approves or rejects it. Tool calls that don't require approval run without a pause.
+1. Go to **MCP Servers** and open the server.
+2. On the **Overview** tab, find the **Intent** card and click **Edit intent**.
+3. Write up to 500 characters in **Workflow intent**, then click **Save intent**.
 
-HITL includes per-tool, per-server, and per-trust-level approval policies, an approval queue with batch actions, approval history, a trusted agent bypass for automation, and email and Slack notifications.
+You can also write the intent during import, in **Workflow intent (optional)**. With no intent, the Guardian grades calls against the person's task when the person set one, and otherwise against the agent's 12 registered words.
 
-For setup, see [Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop).
+![Intent card of the DeepWiki server with the reworded intent](/img/agent-security/platform/server-intent.png)
 
-## Time-Limited Consent
+:::tip Describe the server, not only the task category
+An intent for DeepWiki that said only "Read-only research on public GitHub repositories to answer engineering questions. No writes." caused false denials. The Guardian refused legitimate `read_wiki_structure` calls because reading "from deepwiki" didn't look like research on "GitHub repositories". This intent fixed it:
 
-Time-limited consent sets a consent window that expires. For example, you can give a contractor's agent two weeks of access. When the window closes, the gateway revokes access. If the engagement continues, the user consents again through the standard [consent flow](/permit-mcp-gateway/consent-service).
+"DeepWiki hosts generated documentation for public GitHub repositories. Agents read those wiki pages and ask questions about how open-source codebases such as React and Next.js work. Read-only; no writes."
 
-:::info
-Every plan includes session expiry: a session ends 90 days after the last tool call, and each tool call resets that timer. Enterprise plans add configurable consent windows. See [Session expiry](/permit-mcp-gateway/consent-service#session-expiry).
+The intent names what the server hosts, the words its tools use (wiki pages, questions), and what is out of bounds (writes).
 :::
 
-## Agent Verification
+### Test an intent with Dry Run
 
-Agent verification checks that a connecting agent matches its expected identity and behavior. The gateway builds a profile when the agent connects and uses it to detect changes in the agent's identity or behavior over time.
+The **Dry Run** tab of a server runs a call through the gateway's checks without sending it to the server. It writes no audit row. Dry Run is for admins, on servers an admin imported, and each host gets 10 runs a minute.
 
-[Agent Interrogation](#agent-interrogation) provides the mechanism. The fingerprint from interrogation is the baseline that later connections are compared against.
+1. Open the server and select the **Dry Run** tab.
+2. Pick a **Tool** and enter the **Arguments** as a JSON object, the way an agent would send them.
+3. Under **Grade against**, pick **Server intent**, or **Server intent and a person's task** to add a person's task.
+4. Optional: turn on **Person asks before writes**, set **Agent approved at**, or enter an **Agent's task sentence (checked only when enforced)**.
+5. Click **Start Dry Run**.
 
-## Session Monitoring
+**What would happen** shows each gate (**Trust ceiling**, **Approval rules**, **Ask before writes**, **Judge**), the overall result, the judge's alignment and confidence scores against the thresholds, its reasoning, and the text it graded against. Dry Run grades the call even when the Guardian is off, so you can tune an intent before you turn the Guardian on. Run one legitimate call and one off-task call, for example a DeepWiki call with `{"repoName": "acme-corp/payroll-service"}`, and check that the first runs and the second is denied.
 
-Session monitoring tracks the pattern of tool calls within a session, which gives security reviewers and incident investigators context beyond single calls at the gateway.
+![Dry Run result for ask_wiki_question: every gate passes, alignment 0.85, confidence 0.90](/img/agent-security/platform/server-dry-run.png)
 
-With [Agent Interrogation](#agent-interrogation), session monitoring compares the intent the agent declared during interrogation with the tool calls it makes, and flags differences for review.
+## What the agent sees
 
-## Permission Receipts
+The gateway returns these messages to the agent in its MCP responses. Error codes are JSON-RPC error codes.
 
-A permission receipt is an audit record of a permission grant. It lists who approved the grant, the agent, the MCP server, the tools, the trust level, and when the grant expires. You can export receipts for compliance and governance reviews.
+| Situation | Message to the agent |
+| --- | --- |
+| Registration accepted | `Identification accepted.` |
+| Registration accepted, some words unknown | `Identification accepted. The gateway did not recognize these words, so they did not count toward your fingerprint: codebase, frontend.` The reply then asks the agent to replace them with common English words. |
+| No registration, or the registration expired | ``Session not registered or expired. Call `gateway_register_session` to re-establish your session baseline before retrying `<tool>`.`` |
+| The task sentence doesn't fit the person's task | The acceptance, followed by `Your task sentence does not fit the task the person set for this server.` |
+| The session is blocked (error `-32012`) | `This MCP session is blocked (drift). Open a new MCP session and call gateway_register_session again.` The cause in parentheses is `admin` when an admin blocked the session. |
+| A registration sent the agent to the person for re-approval (error `-32009`) | The `gateway_register_session` reply says the session is now locked, then: `Tell the user: "Your MCP server needs re-authentication. Please go to your MCP server settings and click the Authenticate button to re-approve the connection."` On a host with rotating questions, the next identity question follows. |
+| A request on a paused, revoked, or expired grant (HTTP `401`, error `-32009`) | `Reconsent required: <reason>`, with an OAuth challenge. The MCP client signs in again, and the person sees the consent screen. |
+| The Guardian refused the call (error `-32004`) | `This call was refused by the security check.` |
+| The tool is above the agent's trust level (error `-32004`) | `Permission denied: tool 'ask_wiki_question' is not allowed at your current trust level. To use this tool, an administrator needs to enable it or increase your trust level in the Agent Security Gateway.` |
 
-## Intent-Based Access Control
+For the messages an agent gets while a call waits for approval, see [Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop#what-the-agent-user-sees).
 
-Intent-based access control evaluates an agent's declared purpose against policy before the agent starts work, so access checks can consider the whole workflow instead of single tool calls.
+## Monitor and block sessions \{#session-monitoring}
 
-[Agent Interrogation](#agent-interrogation) captures the intent. During the interrogation exchange, the agent declares its purpose and the tools it expects to use, and policy uses the declaration for access decisions.
+Each agent is one person using one MCP client on one server. Open **Agents** and select an agent to see its **Sessions** card. Each session lists the intent the agent declared in it (its `task` sentence), whether the intent was **Accepted**, and how it fits the person's task. A session without a registration shows **Intent missing**.
 
-## Feature availability \{#feature-maturity-summary}
+![Sessions card of Acme Research Agent: one session with a declared intent, Accepted and Fits, and older sessions with Intent missing](/img/agent-security/platform/agent-sessions.png)
 
-| Feature | Availability | What it covers |
+To stop one session, click **Block Session** and confirm. Every later request on that session is refused, and the agent has to open a new session and register again. Other sessions of the agent keep working. Three blocked sessions within 24 hours send the agent to the person for re-approval.
+
+## Consent grants and expiry \{#permission-receipts}
+
+**Consent Grants** in the sidebar lists every approval a person gave an MCP agent on the host, one row per person, agent, and server. The columns are **Agent**, **Server**, **Level** (trust level), **Task**, **Ends**, **Status**, and **Sessions**. A grant's status is **Active**, **Expiring soon**, **Paused**, **Expired**, or **Revoked**. **Recent changes** shows the last five events across the host, and **View all history** lists each change, pause, expiry, and revoke.
+
+![Consent Grants with one Low approval of Acme Research Agent on deepwiki that ends in 7 days](/img/agent-security/platform/consent-grants.png)
+
+### Set when access ends \{#time-limited-consent}
+
+The person sets when an agent's access ends on the consent screen, under **Task and expiry**: **1 hour**, **1 day**, **7 days**, **Custom** (from 5 minutes to 90 days), or **Forever**. **I set the task** defaults to 7 days, and **Agent reports its task** defaults to **Forever**. See [Consent Service](/permit-mcp-gateway/consent-service).
+
+When the end date passes, the grant expires and the gateway removes the agent's access to the server. The person approves the agent again through the consent flow to restore it.
+
+To warn people before access ends, go to **Settings** > **Expiring consent grants** and set **Warn this long before access ends**: 1 hour, 1 day, 2 days (default), 7 days, 30 days, or **Custom**. Grants inside that window show **Expiring soon** in the admin dashboard and on the person's **Your MCP agents** page.
+
+## Human-in-the-loop approvals \{#human-in-the-loop-approvals-hitl}
+
+Human-in-the-loop approvals hold a tool call until an admin, or the person the agent acts for, approves or rejects it. Approval rules, a Guardian doubt, and the person's "Ask me before this agent changes or deletes anything" switch all lead to one approval. See [Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop).
+
+## Where each control lives \{#feature-maturity-summary}
+
+| Control | Where it is | Availability |
 | --- | --- | --- |
-| **Agent Interrogation** | Contact Permit | Composite agent identity, fingerprinting, and drift detection |
-| **[Human-in-the-Loop Approvals](/permit-mcp-gateway/human-in-the-loop)** | Enterprise | Per-tool, per-server, and per-trust-level approval policies with email and Slack notifications |
-| **Time-Limited Consent** | Enterprise | Configurable consent windows |
-| **Agent Verification** | Contact Permit | Identity and behavior checks based on Agent Interrogation |
-| **Session Monitoring** | Contact Permit | Tool call patterns within a session |
-| **Permission Receipts** | Contact Permit | Exportable records of permission grants |
-| **Intent-Based Access Control** | Contact Permit | Policy decisions based on declared intent |
+| **Agent identity and verification** (semantic identity, drift detection) | **Settings** > **Agent Identity**, layer 1 | Contact Permit |
+| **Intent-based access control** (task check, server intents, Guardian) | **Settings** > **Agent Identity**, layers 2 and 3, and each server's **Intent** card | Contact Permit |
+| **[Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop)** | **Approvals**, and each server's approval settings | Enterprise |
+| **Time-limited consent** | **Access ends** on the consent screen, and **Settings** > **Expiring consent grants** | Enterprise |
+| **Session monitoring** | **Agents** > agent > **Sessions** | Contact Permit |
+| **Permission receipts** | **Consent Grants** | Contact Permit |
 
 For features marked "Contact Permit", [schedule a demo](https://www.permit.io/demo) or email [support@permit.io](mailto:support@permit.io) to confirm availability. You can also ask in the [Permit Slack community](https://io.permit.io/slack).
 
 ## Next steps
 
-- [Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop): set up approval policies and notifications.
-- [Consent Service](/permit-mcp-gateway/consent-service): how users grant trust and how sessions expire.
-- [Enterprise deployment](/permit-mcp-gateway/enterprise-deployment): run the gateway in your own infrastructure, with a local PDP, private MCP servers, and data residency.
-- [Audit logs](/permit-mcp-gateway/audit-logs): review agent activity.
+- [Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop): set up approval rules, trusted agents, and notifications.
+- [Audit logs](/permit-mcp-gateway/audit-logs): read registrations, Guardian verdicts, and tool calls.
+- [Consent Service](/permit-mcp-gateway/consent-service): how people approve agents, set their task, and choose when access ends.
+- [Manage humans and agents](/permit-mcp-gateway/managing-humans-and-agents): set trust levels and revoke access.
