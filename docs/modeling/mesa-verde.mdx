@@ -6,25 +6,20 @@ description: "Learn how the Mesa Verde banking demo models multi-tenant RBAC, at
 
 Learn how Mesa Verde Bank, an open source Next.js banking demo, models its authorization with Permit.io: tenant roles, attribute-based wire transfer limits, per-transaction relationships, and approval flows. This page is for developers who implement authorization in a fintech or banking application and want a worked example to copy from.
 
-:::tip Try the demo
-
-- [Sign up to the live Mesa Verde demo](https://io.permit.io/mesa-verde-docs-link)
-- [Read the application code on GitHub](https://github.com/permitio/mesa-verde-banking-demo)
-
-:::
+The code is in the [mesa-verde-banking folder](https://github.com/permitio/examples/tree/main/mesa-verde-banking) of the `permitio/examples` repository. The app runs on your machine with Docker Compose and needs only a Permit environment API key.
 
 ## What you build
 
 The Mesa Verde model answers these authorization questions for a bank account:
 
-- **Who can use an account.** Each new user gets their own tenant and the `AccountOwner` role in it. Owners invite beneficiaries and members.
-- **Who can send a wire transfer, and how much.** Rules combine the user's role, the transfer amount, where the user signs in from, and whether the user entered a one-time password (OTP).
-- **Who can see a transaction.** The sender and the receiver of each transaction get a role on that transaction instance.
-- **Who can approve a blocked transfer.** When a transfer is denied, the account owner reviews it in an embedded approval UI.
+- **Who can use an account.** Each new user gets their own tenant and the `AccountOwner` role in it. Owners add beneficiaries and members.
+- **Who can send a wire transfer, and how much.** Rules combine the user's role, the transfer amount, where the user signs in from, and whether the user entered a one-time code.
+- **Who can see a transaction.** The owners of the sending and the receiving account get a role on that transaction instance.
+- **Who can approve a blocked transfer.** When the policy denies a transfer, the account owner reviews it in an embedded approval UI.
 
 ## Model overview
 
-The schema is defined in Terraform in [`main.tf`](https://github.com/permitio/mesa-verde-banking-demo/blob/main/main.tf). The tables below summarize it.
+The schema is defined in Terraform in [`main.tf`](https://github.com/permitio/examples/blob/main/mesa-verde-banking/main.tf). The tables below summarize it.
 
 **Resources**
 
@@ -46,9 +41,9 @@ The schema is defined in Terraform in [`main.tf`](https://github.com/permitio/me
 
 | Resource role | Permissions | Assigned to |
 |---|---|---|
-| `Transaction#Sender` | `list` | The sender of a transaction |
+| `Transaction#Sender` | `list` | The owner of the sending account |
 | `Transaction#Receiver` | `list` | The owner of the receiving account |
-| `Wire_Transfer#_Reviewer_` | `approve`, `deny`, `review` | The account owner who reviews a blocked transfer |
+| `Wire_Transfer#_Reviewer_` | `approve`, `deny`, `review` | The account owner, on a transfer that needs approval |
 | `Wire_Transfer#_Approved_` | `operate` | The requesting user, after a reviewer approves the request |
 
 **Attribute-based sets** (attribute-based access control, ABAC)
@@ -61,36 +56,39 @@ The schema is defined in Terraform in [`main.tf`](https://github.com/permitio/me
 | `Unsafe_Owners` | User set | `user.location` doesn't equal `user.country`, and the user has the `AccountOwner` role |
 | `Strong_Auth_Owners` | User set | `user.strongAuth` is `true`, and the user has the `AccountOwner` role |
 
-**User attributes**, created by the demo's `setup.js` script: `location` (country of the request IP address), `country` (country the user is from), and `strongAuth` (the user entered an OTP).
+**User attributes**, also defined in `main.tf`: `location` (the country the user signs in from), `country` (the country of the user's registered address), and `strongAuth` (the user entered a one-time code for this request). All country values are ISO 3166 codes.
 
 The model has no relations between resource types. For a model built on relations and role derivations, see [Google Drive permissions with ReBAC](/modeling/google-drive).
 
 ## Prerequisites
 
-To run the demo locally, you need:
+- Docker with Compose. See [Get Docker](https://docs.docker.com/get-docker/).
+- A Permit.io account and an environment with no existing policy. Setup applies `main.tf` to the environment and adds the demo data. Create an environment as described in [Projects and environments](/manage-your-account/projects-and-env), then copy its environment API key ([Get your API key](/overview/get-api-key)).
 
-- [Node.js](https://nodejs.org/en/download/), [Docker](https://docs.docker.com/get-docker/), [Terraform](https://developer.hashicorp.com/terraform/install), and [ngrok](https://ngrok.com/download). ngrok exposes your local app so Permit can call the approval webhook.
-- A Permit.io account and an environment with no existing policy. Create an environment as described in [Projects and environments](/manage-your-account/projects-and-env), then copy its environment API key ([Get your API key](/overview/get-api-key)).
-- Accounts on [Stytch](https://stytch.com/dashboard) (authentication and OTP) and [JSONBin.io](https://jsonbin.io/) (stores each user's home country).
+## Run the example locally \{#run-the-demo-locally}
 
-## Run the demo locally
+The [mesa-verde-banking README](https://github.com/permitio/examples/tree/main/mesa-verde-banking#run-it-with-docker-compose) has the steps. In short, you set `PERMIT_API_KEY` in `.env` and run `docker compose up --build`. Compose starts a policy decision point (PDP) container, a one-shot `setup` service that applies `main.tf` with Terraform, configures the Permit Elements, and seeds the demo data, and the app on `http://localhost:3000`.
 
-The [repository README](https://github.com/permitio/mesa-verde-banking-demo#running-the-application) owns the full setup. The short version:
+Setup creates four demo users. They all sign in with the password `mesa-verde-demo`, and each one also owns an account of their own:
 
-1. Clone `permitio/mesa-verde-banking-demo` and run `npm install`.
-2. Copy `.env.template` to `.env` and fill in the Stytch, Permit, JSONBin, webhook secret, and ngrok values.
-3. Run `npm run setup`. The script creates the user attributes, applies `main.tf` with Terraform, and creates the Permit Elements configurations.
-4. Run `docker-compose up --build`. Docker Compose starts the Next.js app, a policy decision point (PDP) container on port 7766, and ngrok.
+| User | Role in Alice's account | `country` | `location` | What the policy allows |
+|---|---|---|---|---|
+| `alice@mesaverde.example` | `AccountOwner` | US | US | Any transfer from her account |
+| `bob@mesaverde.example` | `AccountBeneficiary` | GB | GB | Transfers of £1,000 or less from Alice's account. Larger ones need Alice's approval. |
+| `carol@mesaverde.example` | `AccountMember` | US | US | Sees the balance of Alice's account, but not its transactions. Every transfer from it needs approval. |
+| `dave@mesaverde.example` | None | US | FR | Transfers over £1,000 from his own account need a one-time code |
 
-To verify the setup, open the [Policy Editor](https://app.permit.io/policy-editor) in your environment. It shows the `Account`, `Wire_Transfer`, and `Transaction` resources with the roles from the model overview. Then open your ngrok URL and sign up. The app shows your account with the **Send Wire Transfer** and **Manage Account Users** buttons.
+A user who signs up with another email address owns an account of their own, has no registered country, and needs a one-time code for every transfer.
+
+To verify the setup, open the [Policy Editor](https://app.permit.io/policy-editor) in your environment. It shows the `Account`, `Wire_Transfer`, and `Transaction` resources with the roles from the model overview. Then sign in to the app as `alice@mesaverde.example` and open her account. The app shows the **Send Wire Transfer**, **Manage Account Users**, and **Review Wire Transfers** buttons.
 
 ## Authorization flows in the demo \{#authorization-flows}
 
-Each flow below maps to part of the model and to code in the repository.
+Each flow below maps to part of the model and to code in the example.
 
 ### Multi-tenant RBAC for new accounts \{#multi-tenancy-hierarchical-role-based-access-control-rbac}
 
-When a user signs up, the app creates a tenant for that user, syncs the user to Permit, and assigns the `AccountOwner` role in the new tenant. The sign-up event comes from Stytch, the authentication provider. The code is in [Sync users, tenants, and roles](#data).
+The app signs users in with [Better Auth](https://www.better-auth.com) (email and password). The first time a user opens the app, the `GET /account/api/tenants` route creates a tenant for that user, syncs the user to Permit, and assigns the `AccountOwner` role in the new tenant. The code is in [Sync users, tenants, and roles](#data).
 
 ### Secure collaboration with Permit Elements \{#secure-collaboration}
 
@@ -100,48 +98,60 @@ Account owners and beneficiaries manage the people on an account with [Permit El
 
 ### Feature toggling in the UI \{#dynamic-ui-feature-toggling}
 
-The frontend shows or hides buttons based on the same policy the backend enforces. The app uses [CASL](/integrations/feature-flagging/casl) with `permit-fe-sdk`: the browser sends the list of actions to the app's `/account/api/frontend-permissions` route, which runs `permit.bulkCheck()` and returns one decision per action. The React components read the results through `@casl/react`:
+The frontend shows or hides buttons based on the same policy the backend enforces. The app uses `permit-fe-sdk`: the browser sends the list of actions to the app's `/account/api/frontend-permissions/<account>` route, which runs `permit.bulkCheck()` for the signed-in user and returns one decision per action. The route ignores user attributes that the browser sends, so the browser can't claim attributes the user doesn't have. `src/components/AbilityContext.tsx` turns the decisions into flags, and `src/components/AccountToolbar.tsx` renders a button only when its flag is `true`:
 
-```javascript
-{
-  abilities?.CREATE_WIRE_TRANSFER && (
-    <Button type="primary" onClick={() => setActiveModal(ModalType.WIRE_TRANSFER)}>
-      Send Wire Transfer
-    </Button>
-  );
-}
-{
-  abilities?.ADD_MEMBERS && (
-    <Button
-      type="default"
-      onClick={() => setActiveModal(ModalType.USER_MANAGEMENT)}
-      disabled={!userJwt}
-    >
-      Manage Account Users
-    </Button>
-  );
-}
+```tsx
+{abilities?.CREATE_WIRE_TRANSFER === true ? (
+  <Button type="primary" onClick={() => setActiveModal('wire-transfer')}>
+    Send Wire Transfer
+  </Button>
+) : null}
+{abilities?.ADD_MEMBERS === true ? (
+  <Button type="default" onClick={() => setActiveModal('user-management')}>
+    Manage Account Users
+  </Button>
+) : null}
 ```
+
+The `CREATE_WIRE_TRANSFER` flag checks `create` on `Wire_Transfer` with an `amount` of 100, a small transfer, so beneficiaries see the button too. For the same pattern on a dashboard, see [Show or hide UI components by permission](/modeling/feature-flagging).
 
 ### Multi-step wire transfer authorization \{#fine-grained-wire-transfer-permissions}
 
 A wire transfer passes more than one permission check before the app records it. The `POST` handler in `src/app/account/api/transactions/route.ts` runs these steps:
 
-1. **Check the transfer.** `permit.check(user, "create", Wire_Transfer)` with the transfer attributes. Owners pass through the `AccountOwner` role. Beneficiaries pass only for transfers in `Small_Wire`.
-2. **Start an approval if the transfer check fails.** The app creates a `Wire_Transfer` resource instance, assigns the account owner the `_Reviewer_` role on it, and returns HTTP 403 with `Wire transfer needs approval`.
-3. **Check the transaction.** `permit.check()` on `Transaction:create` with the user attributes `location` and `strongAuth`. The condition set rules decide the result (see [Condition set rules](#condition-sets)).
-4. **Ask for an OTP if the transaction check fails.** The app sends an OTP email through Stytch and returns HTTP 403 with `Wire transfer needs strong authentication`. When the user resubmits the transfer with the OTP, the app verifies the code with Stytch and runs the checks again with `strongAuth: true`.
-5. **Record the transaction.** The app creates a `Transaction` resource instance and assigns the `Sender` and `Receiver` resource roles.
+1. **Redeem the one-time code, if the request has one.** A wrong or used code answers HTTP 403 with `{ "code": "invalid_code" }`.
+2. **Check the account.** `permit.check(user, "read", Account)` in the account's tenant. A user with no role in the account gets HTTP 403 with `{ "code": "denied" }`, so a stranger can't ask the account owner for approvals.
+3. **Check the transfer.** `permit.check(user, "create", Wire_Transfer)` with the transfer attributes. Owners pass through the `AccountOwner` role. Beneficiaries pass only for transfers in `Small_Wire`.
+4. **Start an approval if the transfer check fails.** The app creates a `Wire_Transfer` resource instance, assigns the account owner the `_Reviewer_` role on it, and answers HTTP 200 with `{ "status": "approval_required" }`.
+5. **Check the transaction.** `permit.check()` on `Transaction:create` with the user attributes `location` and `strongAuth`. The condition set rules decide the result (see [Condition set rules](#condition-sets)).
+6. **Ask for a one-time code if the transaction check fails.** The app sends a code through Better Auth's email-OTP plugin and answers HTTP 200 with `{ "status": "strong_auth_required" }`. The example has no mail server, so the code goes to the app's log (`docker compose logs app`). When the user sends the transfer again with the code, the checks run with `strongAuth: true`. If the transaction check still fails, the app answers HTTP 403 with `{ "code": "denied" }`.
+7. **Record the transaction.** The app creates a `Transaction` resource instance, assigns the `Sender` and `Receiver` resource roles, and answers HTTP 200 with `{ "status": "sent" }`.
 
-![Wire transfer flow diagram showing the role check, the location and OTP checks, and the approval request path](/img/modeling/mesa-verde/transfer-flow-diagram.png)
+The next steps of the flow (approval and one-time code) answer HTTP 200 with a `status`, like a sent transfer. A refusal answers HTTP 403 with a `code`.
+
+```mermaid
+flowchart TD
+  Request["POST /account/api/transactions"] -->|"with a code"| Redeem{{"Is the code valid?"}}
+  Redeem -->|no| Invalid["403 invalid_code"]
+  Redeem -->|yes| Read{{"read on Account?"}}
+  Request -->|"without a code"| Read
+  Read -->|no| Denied["403 denied"]
+  Read -->|yes| Wire{{"create on Wire_Transfer?"}}
+  Wire -->|no| Approval["Approval request:<br/>200 approval_required"]
+  Wire -->|yes| Tx{{"create on Transaction?"}}
+  Tx -->|yes| Sent["Transaction recorded:<br/>200 sent"]
+  Tx -->|"no, without a code"| Code["Code sent:<br/>200 strong_auth_required"]
+  Tx -->|"no, with a code"| Denied
+  Code -.->|"sent again with the code"| Request
+```
 
 The flow uses three patterns:
 
-- **External data.** The user's home `country` comes from JSONBin.io, a stand-in for an identity provider. The app's middleware looks up the request IP address with ipinfo.io and passes the result as the `location` attribute at check time. See [Load external data](/how-to/manage-data/loading-data).
-- **Authentication and authorization feedback.** A denied check triggers a stronger authentication step (OTP), and the OTP result becomes an attribute in the next check.
+- **External data.** The user's registered `country` and current `location` come from the app's `customer` table, a stand-in for the bank's customer records and for a lookup of the request's location. Setup fills the table for the demo users. The app syncs `country` to Permit as a user attribute, and passes `location` in each transaction check. See [Load external data](/how-to/manage-data/loading-data).
+- **Authentication and authorization feedback.** A denied check triggers a stronger authentication step (a one-time code), and the result becomes the `strongAuth` attribute in the next check.
 - **Transaction approval.** Account owners approve transfers that other users can't perform on their own.
 
-The demo doesn't check the account balance. It checks only whether the user has permission to send the transfer.
+The demo doesn't track balances. Each account shows a fixed balance, and transfers don't change it. The checks decide only whether the user may send the transfer.
 
 ### Transactions with ReBAC \{#relationship-based-access-control-rebac}
 
@@ -161,39 +171,60 @@ The demo uses three more Permit Elements:
 
 ## Application architecture
 
-Mesa Verde is a Next.js application. It uses these services:
+Mesa Verde is a Next.js application. Docker Compose runs it with these parts:
 
 | Component | Role in the demo |
 |---|---|
-| [Stytch](https://stytch.com/) | Authenticates users and sends and verifies OTP codes. |
-| JSONBin.io | Stores each user's home country. In a production application, this data usually comes from the identity provider. |
-| Docker Compose | Runs the app, a PDP container, and ngrok. |
-| ngrok | Exposes the local app so Permit can send webhooks to it. |
-| ipinfo.io | Resolves the request IP address to a country. |
+| Next.js app | Serves the UI and the API routes, and signs users in with Better Auth (email and password). Better Auth's email-OTP plugin creates the one-time codes. Users, sessions, and the `customer` table are in a SQLite database. |
+| PDP container | Runs `permitio/pdp-v2` and answers every `permit.check()` from the app. |
+| `setup` service | Applies `main.tf` with Terraform, configures the four Permit Elements, and seeds the demo users, accounts, roles, and transactions. Then it exits. |
+| Permit cloud | Stores the policy and the data, syncs both to the PDP, and serves the elements from `https://embed.permit.io`. With `PUBLIC_URL` and `WEBHOOK_SECRET` set, Permit calls the app's approval webhook. |
 
-![Mesa Verde architecture diagram showing the Next.js app, Stytch, JSONBin, the PDP container, and the Permit cloud](/img/modeling/mesa-verde/architecture-diagram.png)
+The following diagram shows which part calls which:
+
+```mermaid
+sequenceDiagram
+  participant Browser
+  participant App as Next.js app
+  participant PDP as PDP container
+  participant Setup as setup service
+  participant Permit as Permit cloud
+  Setup->>Permit: Apply main.tf, configure the elements, seed the demo data
+  Permit-->>PDP: Sync the policy and the data
+  Browser->>App: Sign in, open an account, send a transfer
+  App->>PDP: permit.check()
+  PDP-->>App: Allow or deny
+  App->>Permit: Sync users, tenants, roles, and resource instances
+  Browser->>Permit: Load the elements from embed.permit.io
+  opt PUBLIC_URL and WEBHOOK_SECRET are set
+    Permit->>App: Approval webhook
+  end
+```
 
 ### Where the authorization code lives \{#application-code}
 
+All paths are relative to the `mesa-verde-banking` folder.
+
 | Path | Contents |
 |---|---|
-| `package.json` | Dependencies and the `setup` scripts. |
-| `main.tf` | The policy schema, applied with the Permit Terraform provider. |
-| `setup.js` | Creates the user attributes and the Permit Elements configurations. |
-| `docker-compose.yml` | Runs the app with the PDP and ngrok. |
-| `lib/permit.ts` | Initializes the Permit SDK and holds the data sync functions. |
-| `lib/stytch.ts` | Initializes the Stytch client. |
-| `src/middleware.ts` | Authenticates each request with Stytch and resolves the user's location. |
-| `src/app/account/api/*` | API routes. Most `permit.check()` calls are here. |
+| `main.tf` | The policy schema and the user attributes, applied with the Permit Terraform provider. |
+| `docker-compose.yml` | Runs the PDP, the setup service, and the app. |
+| `scripts/setup.ts`, `src/setup/` | The setup: Terraform, the Permit Elements configurations (`elements.ts`), and the demo data (`seed.ts`). |
+| `src/lib/permit.ts` | Initializes the Permit SDK and holds the data sync functions. |
+| `src/lib/auth.ts` | Better Auth, with email and password sign-in and the email-OTP plugin. |
+| `src/lib/personas.ts` | The demo users and transactions. |
+| `src/app/account/api/*` | API routes. Most `permit.check()` calls are here. Every route answers HTTP 401 without a Better Auth session. |
 | `src/app/account/webhook/route.ts` | Receives the approval result from Permit. |
-| `src/components/*` | UI components, including feature toggles and the embedded elements. |
+| `src/components/*` | UI components, including the feature toggles and the embedded elements. |
+
+Every line that asks Permit for a decision carries a `// Permit check:` comment, and every line that writes to Permit a `// Permit write:` comment.
 
 ## Build the authorization model \{#configuration-guide}
 
 Permit separates authorization into three parts. The demo configures them in this order:
 
-1. **Schema.** Resources, actions, roles, and condition sets. Mesa Verde defines the schema with the [Permit Terraform provider](/integrations/infra-as-code/terraform-provider). You can also use the API or the Permit dashboard.
-2. **Data.** Users, tenants, role assignments, attributes, and resource instances. Mesa Verde syncs data with the Node.js SDK from its existing sign-up and transaction code.
+1. **Schema.** Resources, actions, roles, user attributes, and condition sets. Mesa Verde defines the schema with the [Permit Terraform provider](/integrations/infra-as-code/terraform-provider). You can also use the API or the Permit dashboard.
+2. **Data.** Users, tenants, role assignments, attributes, and resource instances. Mesa Verde syncs data with the Node.js SDK from its sign-in and transfer code. Setup seeds the demo data through the Permit API.
 3. **Enforcement.** `permit.check()` decides a single request. `permit.getUserPermissions()` returns what a user can access.
 
 ### Define the policy schema in Terraform \{#schema}
@@ -202,77 +233,71 @@ A Permit policy is a table: rows are resources (or resource sets) with their act
 
 ![Policy Editor table for Mesa Verde with Account, Transaction, and Wire Transfer actions as rows and the three account roles as columns](/img/modeling/mesa-verde/policy-editor.jpg)
 
-The diagram shows how the schema components relate:
-
-![Mesa Verde schema diagram showing resources, resource sets, roles, user sets, and resource roles](/img/modeling/mesa-verde/policy-schema-diagram.png)
-
 #### Resources
 
 The `Account` resource covers actions on the account itself:
 
 ```hcl
 resource "permitio_resource" "Account" {
-  key = "Account"
+  key  = "Account"
   name = "Account"
   actions = {
-      "read" = {
-          name = "Read"
-      }
-      "add-beneficiaries" = {
-          name = "Add Beneficiaries"
-      }
-      "add-members" = {
-          name = "Add Members"
-      }
+    "read" = {
+      name = "Read"
+    }
+    "add-beneficiaries" = {
+      name = "Add Beneficiaries"
+    }
+    "add-members" = {
+      name = "Add Members"
+    }
   }
   attributes = {
   }
 }
 ```
 
-The `Wire_Transfer` resource has attributes, so condition sets can match transfers by amount or currency. The `approve`, `review`, `deny`, and `operate` actions support the approval flow:
+The `Wire_Transfer` resource has attributes, so condition sets can match transfers by amount or currency. The `approve`, `review`, `deny`, and `operate` actions support the approval flow. The excerpt leaves out three of the actions, and the `id`, `description`, `date`, and `currency` string attributes:
 
 ```hcl
 resource "permitio_resource" "Wire_Transfer" {
   name        = "Wire"
   key         = "Wire_Transfer"
+  description = "Wire Transfer resource for modeling approval workflows"
   actions = {
-      "approve" = { name = "Approve"}
-      "review" = { name = "Review" }
-      "deny" = { name = "Deny" }
-      "operate" = { name = "Operate" }
-      "create" = { name = "Operate" }
+    "approve" = {
+      name = "Approve"
+    }
+    # review, deny, and operate
+    "create" = {
+      name = "Create"
+    }
   }
   attributes = {
-      "id" = {
-      name = "ID"
-      type = "string"
-      }
-      "description" = {
-      name = "Description"
-      type = "string"
-      }
-      "date" = {
-      name = "Date"
-      type = "string"
-      }
-      "currency" = {
-      name = "Currency"
-      type = "string"
-      }
-      "amount" = {
+    # id, description, date, and currency
+    "amount" = {
       name = "Amount"
       type = "number"
-      }
+    }
   }
 }
 ```
 
-:::note Action key and display name
-In `main.tf`, the `create` action has the display name `Operate`, the same display name as the `operate` action. Checks use the action key, so `permit.check(user, "create", ...)` matches `create`. The Policy Editor shows two columns labeled **Operate** for `Wire_Transfer`. To tell them apart in the UI, set `name = "Create"` on the `create` action.
-:::
-
 The `Transaction` resource covers every money movement, including ones that aren't wire transfers. It has the actions `create` and `list`, and the same attributes as `Wire_Transfer`.
+
+#### User attributes
+
+`main.tf` declares the three user attributes that the user sets compare:
+
+```hcl
+resource "permitio_user_attribute" "location" {
+  key         = "location"
+  type        = "string"
+  description = "ISO 3166 country code of where the user is now"
+}
+```
+
+`country` is a string attribute, and `strongAuth` is a `bool` attribute.
 
 #### Resource sets
 
@@ -342,9 +367,9 @@ A user set groups users by their attributes. The schema holds only the condition
 
 | User set | Matches |
 |---|---|
-| `Safe_Owners` | Account owners whose request location matches their home country. |
-| `Unsafe_Owners` | Account owners whose request location doesn't match their home country. |
-| `Strong_Auth_Owners` | Account owners who entered an OTP for the request. |
+| `Safe_Owners` | Account owners whose location matches the country of their registered address. |
+| `Unsafe_Owners` | Account owners whose location doesn't match the country of their registered address. |
+| `Strong_Auth_Owners` | Account owners who entered a one-time code for the request. |
 
 The `Safe_Owners` user set:
 
@@ -368,6 +393,7 @@ resource "permitio_user_set" "Safe_Owners" {
       }
     ]
   })
+  depends_on = [permitio_user_attribute.location, permitio_user_attribute.country]
 }
 ```
 
@@ -396,7 +422,9 @@ All condition set rules in `main.tf`:
 | `AccountBeneficiary` | `Small_Transaction` | `Transaction:create` |
 | `AccountBeneficiary` | `Small_Wire` | `Wire_Transfer:create` |
 
-An account owner who signs in from outside their home country can send only small transfers until they enter an OTP.
+The two `AccountBeneficiary` rules set `user_set` to the role's user set, `__autogen_AccountBeneficiary`. Permit stores a rule that names a role under that key, so with the key written out, applying `main.tf` again doesn't try to create the rules a second time.
+
+An account owner who signs in from outside their home country can send only small transfers until they enter a one-time code.
 
 #### Resource roles
 
@@ -424,7 +452,7 @@ resource "permitio_role" "Sender" {
 
 #### Apply the schema \{#summary}
 
-Run `terraform apply` (or `npm run setup:schema`) in the repository root. The Policy Editor then shows the full schema:
+The `setup` service applies `main.tf` with Terraform, and keeps the Terraform state in a Compose volume so that setup can run again. In dev mode, `pnpm demo:setup` runs the same setup. The Policy Editor then shows the full schema:
 
 ![Policy Editor showing the complete Mesa Verde schema with resource sets, user sets, and resource roles](/img/modeling/mesa-verde/full-policy-editor.jpg)
 
@@ -436,108 +464,96 @@ The applied schema enforces rules such as:
 
 - Only account owners can add beneficiaries. Owners and beneficiaries can add members.
 - Account owners and beneficiaries can list the account's transactions.
-- Account owners in their home country, or with an OTP, can create large transactions.
+- Account owners in their home country, or with a one-time code, can create large transactions.
 - The sender and the receiver of a transaction can list that transaction.
 - The `_Reviewer_` of a wire transfer can approve or deny it.
 
 ### Sync users, tenants, and roles \{#data}
 
-The PDP evaluates checks against the data it holds, so the app syncs users, tenants, role assignments, attributes, and resource instances to Permit when they change in the app. Most of the sync code is in [`lib/permit.ts`](https://github.com/permitio/mesa-verde-banking-demo/blob/main/lib/permit.ts).
+The PDP evaluates checks against the data it holds, so the app syncs users, tenants, role assignments, attributes, and resource instances to Permit when they change in the app. Most of the sync code is in [`src/lib/permit.ts`](https://github.com/permitio/examples/blob/main/mesa-verde-banking/src/lib/permit.ts).
 
 #### Sync the user
 
-When a user signs up through Stytch, the app syncs the user by email:
+The first time a user opens the app, `openAccount()` syncs the user by email. When the bank knows the country of the user's registered address, the user gets it as the `country` attribute:
 
-```javascript
-// Add User to Tenant
+```ts
+// Permit write: the user, with their registered country
 await permit.api.users.sync({
   key: email,
   email,
+  ...(country === undefined ? {} : { attributes: { country } }),
 });
 ```
 
 #### Create a tenant for each account
 
-Each user gets a tenant. The tenant key is the email address with the domain and non-alphanumeric characters removed (`cleanedEmail`), and the tenant name is the full email:
+Each user gets a tenant. The tenant key is the whole email address in lower case, with each run of other characters replaced by `-`: `alice@mesaverde.example` owns `alice-mesaverde-example`. The tenant name is the email address:
 
-```javascript
-await permit.api.tenants.create({
-  key: cleanedEmail,
-  name: email,
-});
+```ts
+// Permit write: the user's account, a tenant
+await permit.api.tenants.create({ key: tenant, name: email });
 ```
 
-To list the accounts in the UI, the app lists tenants:
+The key holds the whole address, so two users whose addresses share the part before the `@` don't share an account. If the tenant exists and another user owns it, `openAccount()` fails instead of adding the new user to it.
 
-```javascript
-const tenants = await permit.api.tenants.list({
-  perPage: 100,
-});
+To list the accounts a transfer can go to, the `GET /account/api/tenants/all` route lists tenants and leaves out Permit's `default` tenant:
+
+```ts
+const tenants = await getPermit().api.tenants.list({ perPage: 100 });
 ```
 
 #### Assign a tenant role
 
-Permit has two kinds of role assignment: a tenant role applies to the whole tenant, and a resource role applies to one resource instance. The app assigns the new user `AccountOwner` in their tenant:
+Permit has two kinds of role assignment: a tenant role applies to the whole tenant, and a resource role applies to one resource instance. The app assigns the new user `AccountOwner` in their tenant. `createOrKeep()` treats an HTTP 409 (the assignment exists) as done:
 
-```javascript
-await permit.api.users.assignRole({
-  role: "AccountOwner",
-  tenant: cleanedEmail,
-  user: email,
-});
+```ts
+await createOrKeep(() =>
+  // Permit write: AccountOwner of their account
+  permit.api.roleAssignments.assign({ role: 'AccountOwner', tenant, user: email }),
+);
 ```
 
 #### Assign a resource role
 
-When the app records a transaction, it assigns the `Sender` role on that transaction instance. The `resource_instance` value is `<resource type>:<instance key>`:
+When the app records a transaction, it assigns the `Sender` role to the owner of the sending account and the `Receiver` role to the owner of the receiving account. The `resource_instance` value is `<resource type>:<instance key>`:
 
-```javascript
-await permit.api.roleAssignments.assign({
-  role: "Sender",
-  tenant,
-  resource_instance: `Transaction:${transaction.id}`,
-  user,
-});
+```ts
+const instance = `Transaction:${transfer.id}`;
+const assignments = [{ role: 'Sender', user: senderKey }];
+if (receiver !== undefined) assignments.push({ role: 'Receiver', user: receiver.key });
+await Promise.all(
+  assignments.map(({ role, user }) =>
+    permit.api.roleAssignments.assign({ role, tenant, resource_instance: instance, user }),
+  ),
+);
 ```
 
 #### Sync user attributes \{#sync-user-attributes}
 
-The app copies each user's home country from JSONBin.io into the `country` user attribute:
-
-```javascript
-const response = await fetch(`https://api.jsonbin.io/v3/b/${process.env.JSONBIN_KEY}/latest`);
-const data = await response.json();
-
-const envUsers = await permit.api.users.list();
-const users = envUsers.data.map((user) => user.key);
-
-await Promise.all(
-  Object.entries(data.record)
-    .filter(([key]) => users.includes(key))
-    .map(([key, country]) => permit.api.users.update(key, { attributes: { country } }))
-);
-```
-
-The function updates every user in one pass. In a production application, sync the attribute when the user is created or updated. To sync attributes from your identity provider, use [SCIM provisioning](/integrations/SCIM/SCIM_overview). Attributes that change per request, such as `location` and `strongAuth`, go in the `permit.check()` call instead (see [Check a transaction](#check)).
+Setup writes each demo user's `country` as a user attribute, and `openAccount()` writes it for a new user (see [Sync the user](#sync-the-user)). In a production application, sync attributes such as `country` when the user is created or updated. To sync attributes from your identity provider, use [SCIM provisioning](/integrations/SCIM/SCIM_overview). Attributes that change per request, such as `location` and `strongAuth`, go in the `permit.check()` call instead (see [Check a transaction](#check)).
 
 #### Create resource instances
 
-The app creates a `Transaction` resource instance with the transaction's fields as attributes. Resource roles such as `Sender` attach to this instance:
+The app creates a `Transaction` resource instance with the transfer's fields as attributes. The server sets the transfer's `id` and `date`. Resource roles such as `Sender` attach to this instance:
 
-```javascript
-const resourceInstance = await permit.api.resourceInstances.create({
-  resource: "Transaction",
-  key: transaction.id,
-  tenant,
-  attributes: {
-    ...transaction,
-  },
-});
+```ts
+const [receiver] = await Promise.all([
+  getAccountOwner(transfer.to),
+  // Permit write: the transaction, then its Sender and Receiver relationships
+  permit.api.resourceInstances.create({
+    resource: 'Transaction',
+    key: transfer.id,
+    tenant,
+    attributes: { ...transfer },
+  }),
+]);
 ```
+
+`getAccountOwner()` finds the owner of the receiving account, who gets the `Receiver` role.
 
 ### Enforce permissions in the API routes \{#enforcement}
 
-The app uses two SDK calls:
+The app uses two SDK calls in its API routes, plus `permit.bulkCheck()` for the UI toggles:
 
 - `permit.check(user, action, resource)` returns `true` or `false` for one request.
 - `permit.getUserPermissions(user, tenants, resources, resource_types)` returns the resource instances a user has permissions on, with the user's roles on each.
@@ -554,46 +570,53 @@ Each argument to `permit.check()` takes a key or an object:
 
 To check whether a user can read an account, pass the user key, the action, and the resource type with the tenant:
 
-```javascript
-await permit.check(user, "read", { type: "Account", tenant });
+```ts
+// Permit check: may the user read this account?
+const allowed = await getPermit().check(user.email, 'read', { type: 'Account', tenant });
 ```
 
-To check a transaction, pass request-time user attributes and the transaction attributes. The PDP matches them against the user sets and resource sets:
+To check a transaction, pass request-time user attributes and the transaction attributes. The app reads the user's current `location` from the `customer` table. The PDP matches the attributes against the user sets and resource sets:
 
-```javascript
+```ts
+const location = findCustomer(getDatabase(), user.email)?.location;
+// Permit check: may the user, where they are now and with or without a code, make it?
 const transactionAllowed = await permit.check(
   {
-    key: user,
-    attributes: { strongAuth: !!OTP, location },
+    key: user.email,
+    attributes: {
+      strongAuth: otp !== undefined,
+      ...(location === undefined ? {} : { location }),
+    },
   },
-  "create",
-  {
-    type: "Transaction",
-    attributes: { ...transaction },
-    tenant,
-  }
+  'create',
+  { type: 'Transaction', tenant, attributes: { ...transfer } },
 );
 ```
 
 #### List allowed transactions \{#getuserpermissions}
 
-To build the transaction list, the app gets the account owner's permissions on `Transaction` instances in the tenant:
+The `GET /account/api/transactions` route first checks `list` on `Transaction` for the signed-in user, so members get HTTP 403. To build the list, the app gets the account owner's permissions on `Transaction` instances in the tenant:
 
-```javascript
-const transactionInstances = await permit.getUserPermissions(key, [tenant], [], ["Transaction"]);
+```ts
+const permissions = await getPermit().getUserPermissions(
+  owner.key,
+  [tenant],
+  [],
+  ['Transaction'],
+);
 ```
 
 The arguments filter by tenant (`[tenant]`) and resource type (`["Transaction"]`). The empty array means no filter on specific resource instances. The app reads the `Sender` or `Receiver` role on each result to show the amount as outgoing or incoming.
 
 #### Verify the enforcement \{#summary-1}
 
-Sign up in the demo and open your account. The balance route runs `permit.check(user, "read", { type: "Account", tenant })`, and the account page loads because `AccountOwner` has `Account:read`. In the Permit [audit log](https://app.permit.io/audit-log), the `read` decision on `Account` for your email is allowed.
+Sign in as `alice@mesaverde.example` and open her account. The balance route runs `permit.check(user, "read", { type: "Account", tenant })`, and the account page loads because `AccountOwner` has `Account:read`. In the Permit [audit log](https://app.permit.io/audit-log), the `read` decision on `Account` for `alice@mesaverde.example` is allowed.
 
-Send a wire transfer to test the multi-step flow. A denied check returns one of the HTTP 403 messages listed in [Multi-step wire transfer authorization](#fine-grained-wire-transfer-permissions), and the audit log shows the denied decision.
+Then sign in as `dave@mesaverde.example` and send a transfer of more than £1,000 from Dave's account. Dave signs in from FR and his registered country is US, so the `Transaction:create` check denies the transfer and the app asks for a one-time code. Find the code in `docker compose logs app` and enter it: the transfer goes through. The audit log shows the denied decision and then the allowed one.
 
 ## Configure Permit Elements \{#permit-elements}
 
-Permit Elements let your users manage permissions inside your application. The demo's `setup.js` script creates each element configuration through the Permit API. You can also edit each configuration in the Permit dashboard.
+Permit Elements let your users manage permissions inside your application. Setup creates each element configuration through the Permit API (`src/setup/elements.ts`). You can also edit each configuration in the Permit dashboard. The app embeds the elements with `@permitio/permit-js`, which signs the user in through the app's `/account/api/elements-login` route. The route calls `permit.elements.loginAs()` for the signed-in user in the current account.
 
 ### User Management
 
@@ -615,9 +638,9 @@ In the demo configuration, account members request the `AccountBeneficiary` role
 
 The **Wire Transfer Approval Request** element lets a user ask for approval of one `Wire_Transfer` instance that the policy denies, such as a beneficiary's transfer above 1000.
 
-![Operation Approval element configuration with the Wire_Transfer resource type and the webhook URL](/img/modeling/mesa-verde/approval-flow-request.jpg)
+![Operation Approval element configuration with the form title, message, justification placeholder, and button text](/img/modeling/mesa-verde/approval-flow-request.jpg)
 
-The configuration sets the resource type and a webhook. When the reviewer approves or denies, Permit calls the app's `/account/webhook` route with the webhook secret as a bearer token. On approval, the route records the transaction. On denial, it deletes the `Wire_Transfer` instance. See [Operation Approval element](/embeddable-uis/element/operation-approval) and [Webhooks](/embeddable-uis/webhooks).
+The configuration sets the resource type. When you set `PUBLIC_URL` and `WEBHOOK_SECRET`, setup also registers a webhook: when the reviewer approves or denies, Permit calls the app's `/account/webhook` route with the webhook secret as a bearer token. On approval, the route records the transaction. On denial, it deletes the `Wire_Transfer` instance. Permit must reach the app at `PUBLIC_URL`, so a local run needs a tunnel. Without the webhook, approvals still work in the elements, but the app doesn't record approved transfers. See [Operation Approval element](/embeddable-uis/element/operation-approval) and [Webhooks](/embeddable-uis/webhooks).
 
 ### Approval Management
 
@@ -629,8 +652,8 @@ See [Approval Management element](/embeddable-uis/element/approval-management).
 
 ## Next steps \{#conclusion}
 
+- Read the [mesa-verde-banking source](https://github.com/permitio/examples/tree/main/mesa-verde-banking) to see every check and write in context.
 - Build a relationship graph with role derivations in [Google Drive permissions with ReBAC](/modeling/google-drive).
 - Define attribute-based rules in [Build an ABAC policy](/how-to/build-policies/abac/building-abac-policy).
 - Manage your schema in code with the [Terraform provider](/integrations/infra-as-code/terraform-provider).
-- Embed approval flows with [Permit Elements](/embeddable-uis/overview).
 - Ask questions about your fintech model in the [Permit Slack community](https://io.permit.io/slack).
