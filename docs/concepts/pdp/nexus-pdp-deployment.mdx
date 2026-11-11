@@ -24,6 +24,7 @@ Nexus PDP has operational requirements that the container PDP (the Edge PDP imag
 | Persistent storage | Mount a persistent volume at `/var/lib/edge-pdp`, which holds the embedded database and the event store at default paths | On ephemeral storage, every restart runs a full cold start with a snapshot transfer of your whole data set. |
 | Memory | 4 GiB to start. An environment with about 20 million facts needs more: its cold start peaked above 5 GiB. | At default storage-engine settings, a container with a few hundred MiB is killed for running out of memory (OOM) at startup. With about 20 million facts, cold start peaked at 5.26 to 6.71 GiB under a 10 GiB limit, and lower limits were not tested. See [Nexus PDP resource footprint](/concepts/pdp/nexus-pdp-how-it-works#resource-footprint) and [Nexus PDP memory benchmarks](/concepts/pdp/nexus-pdp-benchmarks#memory). |
 | Volume permissions | The volume is writable by user ID and group ID `10001` | Nexus PDP runs as the non-root user `10001` and cannot write its database or event store. |
+| Credentials directory | `PDP_RUNTIME_DIR` (default `/tmp/edge-pdp`) is writable by user ID `10001`, is not on the persistent volume, and is used by one Nexus PDP only. On Kubernetes, mount an `emptyDir` with `medium: Memory` there, as in the example below. | Nexus PDP keeps the NATS credentials it gets at signup in this directory, never on the persistent volume. If it cannot create or write the directory, or another Nexus PDP already uses it, startup fails with an error that names `PDP_RUNTIME_DIR`. |
 | Exposed ports | `7000` (authorization API) and `7001` (health) only | Other ports bind to loopback inside the container and are not reachable from outside. |
 | Termination grace period | `terminationGracePeriodSeconds: 40` or higher | 40 seconds is the sum of the default shutdown budgets `EDGE_DRAIN_TIMEOUT_SECS` (10) and `EDGE_CHILD_TERMINATION_TIMEOUT_SECS` (30). With a shorter grace period, Kubernetes kills the NATS leaf node before its on-disk event store finishes flushing. |
 | Liveness probe | `GET /health` on port `7001` | A liveness probe on port `7000` fails during the cold start and restarts the container. See [Health and readiness](#health-and-readiness). |
@@ -80,10 +81,16 @@ containers:
     volumeMounts:
       - name: nexus-data
         mountPath: /var/lib/edge-pdp
+      - name: nexus-runtime # NATS credentials, kept in memory
+        mountPath: /tmp/edge-pdp
 volumes:
   - name: nexus-data
     persistentVolumeClaim:
       claimName: nexus-pdp-data
+  - name: nexus-runtime
+    emptyDir:
+      medium: Memory
+      sizeLimit: 1Mi
 ```
 
 :::tip Run Nexus PDP locally on macOS
