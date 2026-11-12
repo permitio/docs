@@ -21,6 +21,8 @@ With proxy facts, the SDK sends the write to the PDP. The PDP forwards the write
 - A PDP container, version `0.5.1` or later, that your application can reach. See [Run the PDP](/overview/run-pdp). The `timeout_policy` option requires PDP version `0.8.0` or later.
 - A Permit SDK configured with your environment API key ([Get your API key](/overview/get-api-key))
 
+The Cloud PDP doesn't serve the Local Facts API, and returns `404` for every `/facts/` route. In `permit` 3.1 or later, the Python SDK issues a `UserWarning` when you create a client with `proxy_facts_via_pdp=True` and the Cloud PDP address as `pdp`. A facts call through the Cloud PDP raises a `PermitApiError` that names the route and says it needs a container PDP.
+
 ## Create a user, then check permissions \{#example-create-a-user-then-check-permissions}
 
 Turn on proxy facts in the SDK configuration, and point the SDK at your PDP. In the following examples, replace `<your-api-key>` or `<YOUR_API_KEY>` with your environment API key.
@@ -44,7 +46,7 @@ async def create_and_check():
         "key": "user123",
         "email": "user@example.com"
     })
-    
+
     # Check for permissions right after
     allowed = await permit.check(user.key, "read", "document")
     print(f"Permission granted: {allowed}")
@@ -62,16 +64,16 @@ import { Permit } from "permitio";
 const permit = new Permit({
   token: "<your-api-key>",
   pdp: "http://localhost:7766",
-  proxyFactsViaPdp: true
+  proxyFactsViaPdp: true,
 });
 
 async function createAndCheck() {
   // Create user
   const user = await permit.api.users.create({
     key: "user123",
-    email: "user@example.com"
+    email: "user@example.com",
   });
-  
+
   // Check for permissions right after
   const allowed = await permit.check(user.key, "read", "document");
   console.log(`Permission granted: ${allowed}`);
@@ -141,7 +143,7 @@ public class Example {
             .withPdpAddress("http://localhost:7766")
             .withProxyFactsViaPdp(true)
             .build();
-            
+
         Permit permit = new Permit(config);
 
         // Create user
@@ -168,13 +170,13 @@ Run the example for a user key that doesn't exist yet, with a policy that allows
 
 ## Configuration options \{#configuration-options}
 
-| Option | Values | PDP default | Description |
-|---|---|---|---|
-| Timeout | `0` | | Don't wait. The PDP responds right after it forwards the write. |
-| | A positive number, such as `10` | `10` | Wait up to this number of seconds for the data update. |
-| | A negative number, such as `-1` | | Wait with no time limit. |
-| Timeout policy | `ignore` | `ignore` | When the timeout passes, respond with the result of the write. |
-| | `fail` | | When the timeout passes, respond with HTTP status `424 Failed Dependency`. Requires PDP `0.8.0` or later. |
+| Option         | Values                          | PDP default | Description                                                                                               |
+| -------------- | ------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------- |
+| Timeout        | `0`                             |             | Don't wait. The PDP responds right after it forwards the write.                                           |
+|                | A positive number, such as `10` | `10`        | Wait up to this number of seconds for the data update.                                                    |
+|                | A negative number, such as `-1` |             | Wait with no time limit.                                                                                  |
+| Timeout policy | `ignore`                        | `ignore`    | When the timeout passes, respond with the result of the write.                                            |
+|                | `fail`                          |             | When the timeout passes, respond with HTTP status `424 Failed Dependency`. Requires PDP `0.8.0` or later. |
 
 Set the options at three levels. A level lower in the list overrides the levels above it:
 
@@ -184,14 +186,16 @@ Set the options at three levels. A level lower in the list overrides the levels 
 
 ### PDP configuration \{#pdp-configuration}
 
-| Environment variable | Default | Description |
-|---|---|---|
-| `PDP_LOCAL_FACTS_WAIT_TIMEOUT` | `10` | Default timeout in seconds |
+| Environment variable             | Default  | Description                                |
+| -------------------------------- | -------- | ------------------------------------------ |
+| `PDP_LOCAL_FACTS_WAIT_TIMEOUT`   | `10`     | Default timeout in seconds                 |
 | `PDP_LOCAL_FACTS_TIMEOUT_POLICY` | `ignore` | Default timeout policy: `ignore` or `fail` |
 
 ### SDK configuration \{#sdk-configuration}
 
 In the Python and Node.js SDKs, when you don't set a timeout or a timeout policy, the SDK sends no value and the PDP defaults apply.
+
+In the Python SDK, `permit` 3.1 or later sends a timeout of `0`, from `facts_sync_timeout=0` or `wait_for_sync(timeout=0)`, in the `X-Wait-Timeout` header. The PDP then doesn't wait, and the timeout policy decides the response: with `ignore` the PDP returns the write's response, and with `fail` every write that waits responds with `424`. Earlier releases sent no header for `0`, so the PDP waited for its default timeout.
 
 <Tabs groupId="language">
 <TabItem value="python" label="Python">
@@ -219,13 +223,16 @@ const permit = new Permit({
   token: "<your-api-key>",
   pdp: "http://localhost:7766",
   proxyFactsViaPdp: true,
-  factsSyncTimeout: 10,           // Optional: Uses PDP default if not specified
-  factsSyncTimeoutPolicy: "ignore" // Optional: Uses PDP default if not specified
+  factsSyncTimeout: 10, // Optional: Uses PDP default if not specified
+  factsSyncTimeoutPolicy: "ignore", // Optional: Uses PDP default if not specified
 });
 
 // All operations will use the SDK-level settings
-const user = await permit.api.users.create({ /* user data */ });
+const user = await permit.api.users.create({
+  /* user data */
+});
 ```
+
 </TabItem>
 <TabItem value="go" label="Go">
 
@@ -264,7 +271,7 @@ permit.api.users.create(userCreate);
 
 ### Operation-specific configuration \{#operation-specific-configuration}
 
-Override the timeout for one write. In Python, `wait_for_sync()` is a context manager that returns a client with the timeout. In Node.js, `waitForSync()` returns an API client with the timeout, and also accepts a timeout policy as a second argument.
+Override the timeout for one write. In Python, `wait_for_sync()` is a context manager that returns a client with the timeout, and also accepts a timeout policy as `policy`. In Node.js, `waitForSync()` returns an API client with the timeout, and also accepts a timeout policy as a second argument.
 
 <Tabs groupId="language">
 <TabItem value="python" label="Python">
@@ -291,12 +298,15 @@ async def create_user_with_timeout(user_data: dict):
 const permit = new Permit({
   token: "<your-api-key>",
   pdp: "http://localhost:7766",
-  proxyFactsViaPdp: true
+  proxyFactsViaPdp: true,
 });
 
 // Override the default timeout for a specific operation
-const user = await permit.api.users.waitForSync(15).create({ /* user data */ });
+const user = await permit.api.users.waitForSync(15).create({
+  /* user data */
+});
 ```
+
 </TabItem>
 <TabItem value="go" label="Go">
 
@@ -320,8 +330,8 @@ user, _ := permitClient.Api.Users.WaitForSync(&timeout, api.WaitForSyncOptions{}
 
 To use proxy facts without an SDK, send facts requests to the PDP instead of the Permit API. The routes and request bodies are the same as the Permit API facts routes, without the `/v2` prefix and without the project and environment in the path:
 
-| Permit API | PDP Local Facts API |
-|---|---|
+| Permit API                                        | PDP Local Facts API               |
+| ------------------------------------------------- | --------------------------------- |
 | `https://api.permit.io/v2/facts/{proj}/{env}/...` | `http://localhost:7766/facts/...` |
 
 Set the timeout and the timeout policy for a request with headers:
@@ -370,7 +380,9 @@ POST /facts/tenants
 
 # Role Assignments
 POST /facts/users/{user_id}/roles
+DELETE /facts/users/{user_id}/roles
 POST /facts/role_assignments
+DELETE /facts/role_assignments
 
 # Resource Instances
 POST /facts/resource_instances
@@ -380,9 +392,17 @@ PATCH /facts/resource_instances/{instance_id}
 POST /facts/relationship_tuples
 ```
 
-The PDP also waits on `DELETE /facts/users/{user_id}/roles` and `DELETE /facts/role_assignments`, which remove role assignments.
-
 The PDP forwards requests to other facts routes to the Permit API without waiting for the data update.
+
+In the Python SDK, these methods of `permit.api` send the requests that the PDP waits on:
+
+- `users.create()`, `users.update()`, `users.sync()`, `users.assign_role()`, and `users.unassign_role()`
+- `tenants.create()`
+- `role_assignments.assign()` and `role_assignments.unassign()`
+- `resource_instances.create()` and `resource_instances.update()`
+- `relationship_tuples.create()`
+
+Every other facts method of the Python SDK returns before the PDP has the change, for example `users.delete()`, `tenants.update()`, `tenants.delete()`, `tenants.delete_tenant_user()`, `resource_instances.delete()`, `relationship_tuples.delete()`, and the bulk methods. A permission check right after one of those writes can still see the old data. `tenants.create_user()`, in `permit` 3.1 or later, always sends its request to the Permit API, so it doesn't wait either.
 
 :::warning Role assignments in user requests
 The PDP doesn't wait for the `role_assignments` field of a user request (`POST /facts/users`, `PUT /facts/users/{user_id}`, `PATCH /facts/users/{user_id}`). A permission check right after the user request can miss those roles. Send each role assignment in a separate role assignment request after you create or update the user.
