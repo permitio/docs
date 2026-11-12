@@ -39,6 +39,7 @@ const PUBLIC_REPOS = new Set([
   "opal",
   "opal-example-policy-repo",
   "pdp",
+  "permit-authzen-interop",
   "permit-cli",
   "permit-cpp",
   "permit-demo-element",
