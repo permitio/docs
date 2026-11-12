@@ -35,7 +35,7 @@ Docker Compose runs three services:
 |---|---|
 | `app` | An Express app with the demo page on `/` and the API on `/api/items`, on `http://localhost:3000`. It classifies each request, then asks the PDP in one bulk check. |
 | `pdp` | The policy decision point (PDP), `permitio/pdp-v2`, connected to your Permit environment, on `http://localhost:7766`. It answers the app's checks. |
-| `setup` | A one-shot service that writes the policy and the demo user to your Permit environment through the Permit API, then exits. The app starts once setup has finished and the PDP is healthy. |
+| `setup` | A one-shot service that writes the policy and the demo user to your Permit environment through the Permit API, waits until the PDP answers every check as `GRANTS` says, then exits. The app starts once setup has finished. |
 
 The classifier runs inside the app. With an `ARCJET_KEY`, it is the [Arcjet](https://arcjet.com) SDK, which asks Arcjet's API about each request. Without one, it is a User-Agent check in the app's own code. The following diagram shows which part calls which:
 
@@ -55,6 +55,7 @@ flowchart TD
   Classifier -->|"botType"| Authorize
   Authorize -->|"bulkCheck: botType,<br/>owner and private of each item"| PDP
   Setup -->|"resource, user attribute,<br/>user sets, resource sets, grants, demo user"| API
+  Setup -->|"checks until the PDP<br/>answers as GRANTS says"| PDP
   API -->|"syncs policy and data"| PDP
 ```
 
@@ -223,8 +224,8 @@ export const GRANTS: Record<UserSetKey, Partial<Record<ResourceSetKey, readonly 
 };
 ```
 
-:::note Setup adds rules and never removes them
-Setup creates each rule in `GRANTS` that the environment doesn't have yet, and leaves every other rule in place. If you remove an action from `GRANTS` and run setup again, the rule stays in Permit and the PDP still allows the action. Remove the rule in the **Policy Editor** of the Permit dashboard as well.
+:::note Setup keeps the rules in step with `GRANTS`
+Setup creates each rule in `GRANTS` that the environment doesn't have yet, and deletes the rules between this policy's user sets and resource sets that `GRANTS` no longer lists. Rules that involve any other set stay. To try a stricter grid, edit `GRANTS` and run setup again.
 :::
 
 ## How a request is classified \{#classification}
@@ -354,6 +355,7 @@ The app asks Permit in one place. Every line that calls Permit carries a `// Per
 |---|---|
 | `src/policy.ts` | The policy as data: the resource, the `botType` attribute, the user sets, the resource sets, and `GRANTS` |
 | `src/write-policy.ts`, `src/setup.ts` | The setup that writes the policy and the demo user with the Node.js SDK |
+| `src/wait-for-pdp.ts` | The setup step that sends every check the app can send until the PDP's answers match `GRANTS` |
 | `src/items.ts`, `src/personas.ts` | The demo user, the four items, and the User-Agent of each caller on the demo page |
 | `src/user-agent-classifier.ts`, `src/arcjet-classifier.ts` | The two classifiers |
 | `src/authorize.ts` | `decide()`, the one bulk check the app sends per request |
@@ -412,7 +414,7 @@ The [fine-grained-bot-protection README](https://github.com/permitio/examples/tr
 Setup writes the `Content_Item` resource, the `botType` user attribute, and the user sets, resource sets, and rules into the environment that `PERMIT_API_KEY` belongs to, and updates any of them that exist with the same keys.
 :::
 
-**Verify:** Open `http://localhost:3000/?as=untrusted-bot`. The table allows `read` on Public Item and Shared Item, and denies every other action. If every action shows Deny right after the first start, the PDP hasn't received the new policy yet. Reload after a few seconds.
+**Verify:** Open `http://localhost:3000/?as=untrusted-bot`. The table allows `read` on Public Item and Shared Item, and denies every other action.
 
 ## Next steps
 

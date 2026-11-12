@@ -476,7 +476,7 @@ The PDP evaluates checks against the data it holds, so the app syncs users, tena
 
 #### Sync the user
 
-The first time a user opens the app, `openAccount()` syncs the user by email. When the bank knows the country of the user's registered address, the user gets it as the `country` attribute:
+Until a user owns their own account, each visit runs `openAccount()`, which syncs the user by email. When the bank knows the country of the user's registered address, the user gets it as the `country` attribute:
 
 ```ts
 // Permit write: the user, with their registered country
@@ -491,12 +491,15 @@ await permit.api.users.sync({
 
 Each user gets a tenant. The tenant key is the whole email address in lower case, with each run of other characters replaced by `-`: `alice@mesaverde.example` owns `alice-mesaverde-example`. The tenant name is the email address:
 
+`openAccount()` looks for the tenant first, and creates it only when it is missing:
+
 ```ts
-// Permit write: the user's account, a tenant
-await permit.api.tenants.create({ key: tenant, name: email });
+// Permit write: the user's account, a tenant. A 409 means a request running at the same time
+// created it first.
+await createOrKeep(() => permit.api.tenants.create({ key: tenant, name: email }));
 ```
 
-The key holds the whole address, so two users whose addresses share the part before the `@` don't share an account. If the tenant exists and another user owns it, `openAccount()` fails instead of adding the new user to it.
+The key holds the whole address, so two users whose addresses share the part before the `@` don't share an account. If the tenant exists and another user owns it, `openAccount()` fails instead of adding the new user to it. Because each step reads before it writes, a visit after a first one that failed half way finishes opening the account.
 
 To list the accounts a transfer can go to, the `GET /account/api/tenants/all` route lists tenants and leaves out Permit's `default` tenant:
 
@@ -506,7 +509,7 @@ const tenants = await getPermit().api.tenants.list({ perPage: 100 });
 
 #### Assign a tenant role
 
-Permit has two kinds of role assignment: a tenant role applies to the whole tenant, and a resource role applies to one resource instance. The app assigns the new user `AccountOwner` in their tenant. `createOrKeep()` treats an HTTP 409 (the assignment exists) as done:
+Permit has two kinds of role assignment: a tenant role applies to the whole tenant, and a resource role applies to one resource instance. The app assigns the new user `AccountOwner` in their tenant when the account has no owner yet. `createOrKeep()` treats an HTTP 409 (the assignment exists) as done:
 
 ```ts
 await createOrKeep(() =>
