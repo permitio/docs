@@ -444,14 +444,26 @@ Nexus PDP and the Cloud PDP accept the scheme only as `Bearer` or `bearer`. Any 
 
 The container PDP checks the bearer token before it reads the body, so a request with a missing or wrong token gets `401` or `403` whatever its body. Nexus PDP and the Cloud PDP parse the request body before they check the bearer token, so a body that is not valid JSON, lacks a required field, has no JSON `Content-Type`, or is larger than 2 MB gets `400`, `422`, `415`, or `413` even when the token is missing or wrong. On every PDP type, the `/access/v1/evaluations` checks for an empty `evaluations` array and for items without `subject`, `action`, or `resource` run after the token check, so those requests get the token error when the token is missing or wrong.
 
-| AuthZen operation | Method and path | Required body fields |
+| AuthZen operation | Method and path | Required body fields | Answered like |
+| --- | --- | --- | --- |
+| Access evaluation | `POST /access/v1/evaluation` | `subject`, `action`, `resource` | A check, `POST /allowed` |
+| Access evaluations | `POST /access/v1/evaluations` | `evaluations`, with `subject`, `action`, and `resource` set at the top level or in each item | A bulk check, `POST /allowed/bulk` |
+| Subject search | `POST /access/v1/search/subject` | `subject` (with `type`), `action`, `resource` | Authorized users, `POST /authorized_users` |
+| Resource search | `POST /access/v1/search/resource` | `subject`, `action`, `resource` (with `type`) | User permissions, `POST /user-permissions` |
+| Action search | `POST /access/v1/search/action` | `subject`, `resource` | User permissions, `POST /user-permissions` |
+| Discovery | `GET /.well-known/authzen-configuration` | None | Lists the endpoints above |
+
+### AuthZen endpoint URLs \{#authzen-urls}
+
+Each PDP serves the AuthZen endpoints at its own base URL, next to its other APIs:
+
+| PDP | AuthZen base URL | Discovery document |
 | --- | --- | --- |
-| Access evaluation | `POST /access/v1/evaluation` | `subject`, `action`, `resource` |
-| Access evaluations | `POST /access/v1/evaluations` | `evaluations`, with `subject`, `action`, and `resource` set at the top level or in each item |
-| Subject search | `POST /access/v1/search/subject` | `subject` (with `type`), `action`, `resource` |
-| Resource search | `POST /access/v1/search/resource` | `subject`, `action`, `resource` (with `type`) |
-| Action search | `POST /access/v1/search/action` | `subject`, `resource` |
-| Discovery | `GET /.well-known/authzen-configuration` | None |
+| Cloud PDP | `https://cloudpdp.api.permit.io` | `https://cloudpdp.api.permit.io/.well-known/authzen-configuration` |
+| Edge PDP (`permitio/pdp-v2`) | Your PDP's address, `http://localhost:7766` by default | `<PDP URL>/.well-known/authzen-configuration` |
+| Nexus PDP | Your Nexus PDP's address | `<Nexus PDP URL>/.well-known/authzen-configuration` |
+
+An AuthZen client that reads the discovery document finds the URL of each endpoint there, so you configure only the base URL.
 
 ### AuthZen access evaluation \{#access-evaluation}
 
@@ -565,7 +577,15 @@ curl -X POST http://localhost:7766/access/v1/search/action \
 
 The PDP returns the permitted actions in a `results` array, for example `{"results": [{"name": "read"}, {"name": "write"}], "page": {}}`.
 
-AuthZen endpoints evaluate the same policies as the other PDP endpoints. A policy change you make in the Permit dashboard or API applies to AuthZen requests after the change reaches the PDP.
+AuthZen endpoints evaluate the same policies as the PDP endpoints in the **Answered like** column of the [AuthZen operations table](#authzen-compatibility). A policy change you make in the Permit dashboard or API applies to AuthZen requests after the change reaches the PDP. Custom `allow` rules that you add to the top-level `root.rego` with [custom policy through GitOps](/integrations/gitops/custom_policy) apply to the access evaluation endpoints. They don't apply to the search endpoints, because user permissions and authorized users don't evaluate the root policy. To filter a list by such a rule, send an access evaluations request for the candidate resources instead.
+
+### AuthZen standard and interop resources \{#authzen-resources}
+
+- **The standard.** The [Authorization API 1.0 specification](https://openid.github.io/authzen/) is written by the [OpenID Foundation AuthZen Working Group](https://openid.net/wg/authzen/).
+- **Interop testing.** The working group tests PDPs against shared scenarios on the [AuthZen interop site](https://authzen-interop.net/). Permit's results: [Todo, API 1.0 draft 2](https://authzen-interop.net/docs/scenarios/todo-1.1/results/permit), [Todo, API 1.0 draft 1](https://authzen-interop.net/docs/scenarios/todo-1.0-id/results/permit), and [identity provider](https://authzen-interop.net/docs/scenarios/idp/results/permit). Permit was one of the vendors in the [first AuthZen interop announcement](https://openid.net/authorization-interop-results/) in May 2024.
+- **Permit's interop deployment.** The interop suite's Todo app sends its requests for Permit to `https://permit-authzen-interop.up.railway.app`, listed in the suite's [PDP list](https://github.com/openid/authzen/blob/main/interop/authzen-todo-backend/src/pdps.json). That endpoint runs [permitio/permit-authzen-interop](https://github.com/permitio/permit-authzen-interop), a gateway in front of Permit PDPs that also accepts the request fields of earlier AuthZen drafts, such as `subject.identity`. Its `setup.js` creates the interop scenario's policy in a Permit environment, and its `test.sh` runs the interop tests against a running gateway.
+- **An example app.** The [Fleet Ops example](/modeling/fleet-ops) adds custom tenant rules to `root.rego`. Its [README](https://github.com/permitio/examples/tree/main/fleet-ops-demo#questions-you-may-get) lists which PDP endpoints, AuthZen access evaluation included, apply those rules.
+
 
 ## OPA and OPAL in the Edge PDP \{#powered-by-opaopal}
 
