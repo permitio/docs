@@ -176,7 +176,7 @@ Mesa Verde is a Next.js application. Docker Compose runs it with these parts:
 | Component | Role in the demo |
 |---|---|
 | Next.js app | Serves the UI and the API routes, and signs users in with Better Auth (email and password). Better Auth's email-OTP plugin creates the one-time codes. Users, sessions, and the `customer` table are in a SQLite database. |
-| PDP container | Runs `permitio/pdp-v2` and answers every `permit.check()` from the app. |
+| PDP container | Runs `permitio/pdp-v2` and answers every `permit.check()` from the app. The app's data writes go through it to Permit, so they apply in the PDP before the app reads them back. |
 | `setup` service | Applies `main.tf` with Terraform, configures the four Permit Elements, and seeds the demo users, accounts, roles, and transactions. Then it exits. |
 | Permit cloud | Stores the policy and the data, syncs both to the PDP, and serves the elements from `https://embed.permit.io`. With `PUBLIC_URL` and `WEBHOOK_SECRET` set, Permit calls the app's approval webhook. |
 
@@ -192,9 +192,11 @@ sequenceDiagram
   Setup->>Permit: Apply main.tf, configure the elements, seed the demo data
   Permit-->>PDP: Sync the policy and the data
   Browser->>App: Sign in, open an account, send a transfer
-  App->>PDP: permit.check()
-  PDP-->>App: Allow or deny
-  App->>Permit: Sync users, tenants, roles, and resource instances
+  App->>PDP: permit.check(), permit.getUserPermissions()
+  PDP-->>App: Allow or deny, or the allowed instances
+  App->>PDP: Write users, tenants, roles, and resource instances
+  PDP->>Permit: Forward each write
+  PDP-->>App: Answer once the PDP has applied it
   Browser->>Permit: Load the elements from embed.permit.io
   opt PUBLIC_URL and WEBHOOK_SECRET are set
     Permit->>App: Approval webhook
@@ -551,6 +553,20 @@ const [receiver] = await Promise.all([
 
 `getAccountOwner()` finds the owner of the receiving account, who gets the `Receiver` role.
 
+#### Wait for the PDP to apply writes \{#facts-via-pdp}
+
+The PDP gets data changes from Permit a short time after the API accepts them. The transaction list is read from the PDP right after a transfer, so the app sends its data writes (users, tenants, resource instances, and role assignments) through the PDP instead. With `proxyFactsViaPdp`, the PDP forwards each write to Permit and answers once it has applied the change, waiting up to `factsSyncTimeout` seconds:
+
+```ts
+client = new Permit({
+  token: apiKey,
+  apiUrl,
+  pdp: pdpUrl,
+  proxyFactsViaPdp: true,
+  factsSyncTimeout: 10,
+});
+```
+
 ### Enforce permissions in the API routes \{#enforcement}
 
 The app uses two SDK calls in its API routes, plus `permit.bulkCheck()` for the UI toggles:
@@ -595,18 +611,23 @@ const transactionAllowed = await permit.check(
 
 #### List allowed transactions \{#getuserpermissions}
 
-The `GET /account/api/transactions` route first checks `list` on `Transaction` for the signed-in user, so members get HTTP 403. To build the list, the app gets the account owner's permissions on `Transaction` instances in the tenant:
+The `GET /account/api/transactions` route first checks `list` on `Transaction` for the signed-in user, so members get HTTP 403. To build the list, the app gets the account owner's permissions on `Transaction` instances:
 
 ```ts
 const permissions = await getPermit().getUserPermissions(
   owner.key,
-  [tenant],
+  undefined,
   [],
   ['Transaction'],
 );
 ```
 
-The arguments filter by tenant (`[tenant]`) and resource type (`["Transaction"]`). The empty array means no filter on specific resource instances. The app reads the `Sender` or `Receiver` role on each result to show the amount as outgoing or incoming.
+The tenant argument is `undefined`, so the PDP answers for every tenant. A transaction lives in the tenant of the account that sent it, so a transfer the account received is in another tenant. The resource type argument (`["Transaction"]`) limits the answer to transactions, and the empty array means no filter on specific resource instances. From the answer, the app keeps two kinds of transaction:
+
+| The owner's role | Kept when | Shown as |
+|---|---|---|
+| `Sender` | The transaction is in this account's tenant | Outgoing |
+| `Receiver` | The transaction's `to` attribute is this account | Incoming |
 
 #### Verify the enforcement \{#summary-1}
 
