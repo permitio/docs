@@ -24,6 +24,7 @@ Nexus PDP has operational requirements that the container PDP (the Edge PDP imag
 | Persistent storage | Mount a persistent volume at `/var/lib/edge-pdp`, which holds the embedded database and the event store at default paths | On ephemeral storage, every restart runs a full cold start with a snapshot transfer of your whole data set. |
 | Memory | 4 GiB to start. An environment with about 20 million facts needs more: its cold start peaked above 5 GiB. | At default storage-engine settings, a container with a few hundred MiB is killed for running out of memory (OOM) at startup. With about 20 million facts, cold start peaked at 5.26 to 6.71 GiB under a 10 GiB limit, and lower limits were not tested. See [Nexus PDP resource footprint](/concepts/pdp/nexus-pdp-how-it-works#resource-footprint) and [Nexus PDP memory benchmarks](/concepts/pdp/nexus-pdp-benchmarks#memory). |
 | Volume permissions | The volume is writable by user ID and group ID `10001` | Nexus PDP runs as the non-root user `10001` and cannot write its database or event store. |
+| Credentials directory | `PDP_RUNTIME_DIR` (default `/tmp/edge-pdp`) is a directory that the user Nexus PDP runs as (user ID `10001`) can write, owned by that user or by root (a Kubernetes `emptyDir` mount point is root-owned and writable by every user), not a symbolic link, not on the persistent volume, and used by one Nexus PDP only. On Kubernetes, mount an `emptyDir` with `medium: Memory` there, into the Nexus PDP container only, as in the example below. | Nexus PDP keeps the NATS credentials it receives from the Permit control plane at startup in this directory, never on the persistent volume. Startup fails with an error that names `PDP_RUNTIME_DIR` if Nexus PDP cannot create or write the directory, or if the directory belongs to another user, is a symbolic link, is under `EDGE_DATA_DIR` or `EDGE_DB_PATH`, or is already used by another Nexus PDP. |
 | Exposed ports | `7000` (authorization API) and `7001` (health) only | Other ports bind to loopback inside the container and are not reachable from outside. |
 | Termination grace period | `terminationGracePeriodSeconds: 40` or higher | 40 seconds is the sum of the default shutdown budgets `EDGE_DRAIN_TIMEOUT_SECS` (10) and `EDGE_CHILD_TERMINATION_TIMEOUT_SECS` (30). With a shorter grace period, Kubernetes kills the NATS leaf node before its on-disk event store finishes flushing. |
 | Liveness probe | `GET /health` on port `7001` | A liveness probe on port `7000` fails during the cold start and restarts the container. See [Health and readiness](#health-and-readiness). |
@@ -45,7 +46,7 @@ docker run -d --name nexus-pdp \
 
 ## Kubernetes pod settings for Nexus PDP
 
-This pod-spec excerpt sets the ports, probes, memory request, volume, and shutdown budget from the requirements table. `fsGroup: 10001` makes the mounted volume writable by the non-root user that Nexus PDP runs as. Create the `nexus-pdp-api-key` secret with the environment's Nexus PDP API key under the key `PDP_API_KEY`, which the pod spec reads, reusing the shell variable from the Docker step:
+This pod-spec excerpt sets the ports, probes, memory request, volumes, and shutdown budget from the requirements table: the persistent data volume at `/var/lib/edge-pdp`, and an in-memory `emptyDir` at `/tmp/edge-pdp` for `PDP_RUNTIME_DIR`. `fsGroup: 10001` makes the persistent data volume writable by the non-root user that Nexus PDP runs as. Create the `nexus-pdp-api-key` secret with the environment's Nexus PDP API key under the key `PDP_API_KEY`, which the pod spec reads, reusing the shell variable from the Docker step:
 
 ```bash
 kubectl create secret generic nexus-pdp-api-key \
@@ -80,10 +81,16 @@ containers:
     volumeMounts:
       - name: nexus-data
         mountPath: /var/lib/edge-pdp
+      - name: nexus-runtime # NATS credentials, kept in memory
+        mountPath: /tmp/edge-pdp
 volumes:
   - name: nexus-data
     persistentVolumeClaim:
       claimName: nexus-pdp-data
+  - name: nexus-runtime
+    emptyDir:
+      medium: Memory
+      sizeLimit: 1Mi
 ```
 
 :::tip Run Nexus PDP locally on macOS
