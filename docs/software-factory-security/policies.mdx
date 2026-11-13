@@ -1,0 +1,109 @@
+---
+title: Policy patterns for a software factory
+sidebar_label: Policy patterns
+description: "Policy patterns for AI coding agents: trust levels per workflow, deny-by-default egress, approval checkpoints, separation of duties for agent-authored changes, and permit.check() with the agent as the subject."
+keywords:
+  - least privilege AI agents
+  - coding agent policy
+  - deny by default
+  - separation of duties AI code review
+  - human in the loop approval
+---
+
+Use these patterns to decide what each agent in your software factory may do. This page is for the engineer who writes and reviews the factory's policy. It assumes you have read the [reference architecture](/software-factory-security/reference-architecture).
+
+## Trust levels per workflow \{#trust-levels}
+
+Permit MCP Gateway classifies every tool by risk, and each agent gets an effective trust level per MCP server.
+
+| Trust level | Tool types | Examples |
+| --- | --- | --- |
+| **Low** | Read-only | `get_issue`, `list_repos`, `search_files` |
+| **Medium** | Low plus write | `create_issue`, `create_pull_request`, `send_message` |
+| **High** | Medium plus destructive | `merge_pull_request`, `delete_repo`, `destroy_environment` |
+
+Give each factory workflow the lowest level that completes it. A triage agent needs low trust on the ticketing server. A test-fixing agent needs medium trust on the code host. Reserve high trust for release workflows, and put approval on their destructive tools. To change the level the gateway assigned to a tool, see [Overriding trust levels](/permit-mcp-gateway/platform#overriding-trust-levels).
+
+## Deny-by-default egress per workflow \{#egress}
+
+Bind every agent token to one API workflow in the [HTTP Egress Proxy](/permit-mcp-gateway/http-egress-proxy/). A request that matches no rule in the workflow is denied before the proxy resolves the destination.
+
+- Allow the package registry, your code host API, and your CI API for build workflows.
+- Allow no paste sites, file-sharing hosts, or personal cloud storage in any workflow.
+- Use `intercept` TLS mode on hosts where you need path and method rules or credential injection. In the default `passthrough` mode, HTTPS is matched by domain only. See [TLS modes](/permit-mcp-gateway/http-egress-proxy/security#tls-modes).
+- Store credentials in the gateway and attach them to rules. The agent never receives the key. See [Credentials and connections](/permit-mcp-gateway/http-egress-proxy/credentials).
+
+## Approval checkpoints \{#approval-checkpoints}
+
+Put human approval on the steps that are hard to undo:
+
+| Checkpoint | How to gate it |
+| --- | --- |
+| Merge to a protected branch | HITL toggle on the merge tool of your code host MCP server |
+| Production deploy | HITL toggle on the deploy tool, or a `permit.check()` in your deploy service |
+| Read or rotate a secret | HITL toggle on the secrets manager tool; keep secrets out of agent environments |
+| Production data | A `permit.check()` or data filter in front of the database |
+| Publish a package | Approval on the publish rule or tool; deny the registry publish endpoint in other workflows |
+
+Three settings keep approvals meaningful:
+
+- **Timeouts reject.** If no approver decides within the timeout (5 minutes by default), the gateway rejects the call instead of allowing it.
+- **Trusted agent bypass.** List CI bots and scheduled pipelines whose work is already gated elsewhere, so they never wait.
+- **Notifications where approvers work.** Email or Slack, so approvals don't depend on someone watching a dashboard.
+
+See [Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop).
+
+## Separation of duties \{#separation-of-duties}
+
+The identity that writes a change should not be the identity that approves it. With a distinct identity per agent, you can enforce that:
+
+1. **Agents never hold merge rights on their own changes.** Keep merge tools at high trust with approval required, so a person approves every merge an agent requests.
+2. **Approvers are people.** Don't add agents that author changes to the trusted agent bypass list for the merge tool.
+3. **Check authorship in your own services.** Where your service performs the merge or deploy, compare the requester with the change's author before you call `permit.check()`, and deny when they match.
+4. **Keep your code host's branch protection on.** Require a review from someone other than the author or the last pusher. Permit's decision log then records who requested, who approved, and what ran.
+
+## Checks in your services \{#checks-in-your-services}
+
+In the applications and internal APIs that agents reach, check the agent the same way you check a user. The subject is the agent's key, and you pass the delegating human and the workflow as attributes so policy can use them.
+
+```js
+const allowed = await permit.check(
+  {
+    key: "agent|ci_fixer",
+    attributes: { delegated_by: "human|alice", workflow: "fix_failing_test" },
+  },
+  "merge",
+  { type: "repo", key: "payments-api", tenant: "default" }
+);
+```
+
+Define `merge` on a `repo` resource in the Policy Editor, then grant it with ABAC conditions on the `workflow` attribute, or with ReBAC relationships between the agent and the repository. See [Check permissions with permit.check()](/how-to/enforce-permissions/check).
+
+## An illustrative factory policy \{#illustrative-policy}
+
+The Rego below is an illustration written for this page, not a shipped policy. It shows the shape of the rule: deny by default, allow scoped actions in the agent's workflow, and send risky actions to a person.
+
+```rego
+package factory.agents
+
+default decision := "deny"
+
+risky_actions := {"merge_protected", "deploy_prod", "read_secret", "query_prod_data", "publish_package"}
+
+decision := "allow" if {
+    input.agent.delegated_by == input.human.id
+    input.action in data.workflows[input.agent.workflow].allowed_actions
+    not input.action in risky_actions
+}
+
+decision := "require_approval" if {
+    input.agent.delegated_by == input.human.id
+    input.action in risky_actions
+}
+```
+
+## Next steps
+
+- [Roll out a governed pilot](/software-factory-security/rollout)
+- [Audit and compliance evidence](/software-factory-security/compliance)
+- [Managing humans and agents](/permit-mcp-gateway/managing-humans-and-agents)
