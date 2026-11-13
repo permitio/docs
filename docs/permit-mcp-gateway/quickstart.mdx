@@ -1,128 +1,115 @@
 ---
 title: Permit MCP Gateway quickstart
 sidebar_label: Quick Start
-description: Create a Permit MCP Gateway host, get a gateway URL for one MCP server, connect your MCP client, and confirm that a tool call goes through the gateway.
+description: Sign in to Permit MCP Gateway, create a host, import an MCP server, give a person access, connect your MCP client, and confirm that the gateway allows, denies, and logs tool calls.
 sidebar_position: 0
 ---
 
-**Short answer:** Permit MCP Gateway is a proxy between MCP clients such as Cursor and Claude Code and your MCP servers, so each user can call only the tools they are allowed to. Use it when you want per-user, per-tool authorization, consent, and an audit log without changing the MCP servers. Don't use it when you own the MCP server and want to enforce permissions inside its own code.
+**Short answer:** Permit MCP Gateway is a proxy between MCP clients such as Cursor and Claude Code and your MCP servers, so each person's agent can call only the tools that person approved and an admin allowed. Use it when you want per-person, per-tool authorization, consent, approvals, and an audit log without changing the MCP servers. Don't use it when you own the MCP server and want to enforce permissions inside its own code.
 
 | Fact | Value |
 |---|---|
-| Setup steps | Create a host, get a gateway URL for one MCP server, connect your MCP client, complete the consent flow, and verify a tool call. |
-| Supported MCP clients | Cursor, VS Code, Claude Desktop, and Claude Code. The admin dashboard shows a client configuration snippet for each. |
+| Setup steps | Sign in with Permit.io, create a host, import an MCP server, grant a person access, connect your MCP client, and approve the agent on the consent screen. |
+| Gateway URL | `https://<subdomain>.agent.security/mcp/<server_key>` for one MCP server, or `https://<subdomain>.agent.security/mcp` to let the person pick a server when they connect. |
+| Supported MCP clients | Cursor, VS Code, Claude Desktop, and Claude Code. Each MCP server's page in the admin dashboard shows its URL and a configuration snippet for each client. |
 | Deployment modes | Hosted (SaaS) on `*.agent.security`, customer-controlled, and fully on-premises. The last two are available on Enterprise plans. See [Enterprise deployment](/permit-mcp-gateway/enterprise-deployment). |
-| Authorization model | A relationship-based access control (ReBAC) trust ceiling on standard Permit objects. Gateway policies can also use RBAC and ABAC. |
-| Sign-in methods | Email and password, email one-time passcode, passkeys, Google, GitHub, and Microsoft OAuth, and SAML 2.0 or OIDC single sign-on. See [Authentication methods](/permit-mcp-gateway/authentication-methods). |
-| Audit | Each allow or deny decision is logged with the human, the agent, the tool, the MCP server, and the time, in the gateway dashboard and in the Permit **Audit Log** screen. |
+| Authorization model | A relationship-based access control (ReBAC) trust ceiling on standard Permit objects: an agent gets the lower of the trust level the person approved and the maximum an admin set. Gateway policies can also use RBAC and ABAC. |
+| Optional controls | Admin approval per tool, agent identity checks, and the Guardian, an LLM judge that grades each tool call against the server's intent. |
+| Sign-in methods | Email and password (on by default), email one-time passcode, passkeys, Google, GitHub, and Microsoft OAuth, and SAML 2.0 or OIDC single sign-on. See [Authentication methods](/permit-mcp-gateway/authentication-methods). |
+| Audit | Each allowed or denied tool call is logged with the person, the agent, the tool, and the MCP server, on the **Audit Logs** tab of each agent, person, and server, and in the Permit **Audit Log** screen. |
 | SDK or code change | None. You point the MCP client at the gateway URL instead of the MCP server URL. |
 | Free tier | Community plan, labeled "Free forever" on the [Permit MCP Gateway pricing](https://www.permit.io/mcp-gateway/pricing) page: "Up to 1,000 MAU (human + agentic identities)", Tenants 10, Environments 1, Audit log retention 7 days. The main [Permit.io pricing](https://www.permit.io/pricing) page lists different Community limits for Permit.io authorization outside the gateway. |
 | Open-source components | The Permit PDP and [OPAL](https://github.com/permitio/opal) that Permit uses are open source. The Access Request MCP server ([permitio/permit-mcp](https://github.com/permitio/permit-mcp)) is a separate open-source project and is not the gateway. |
 
 {/* GEO pass: gateway free-tier values are copied from https://www.permit.io/mcp-gateway/pricing as fetched on 2026-10-05 (Community column). Re-check them before merging. */}
 
-Create a Permit MCP Gateway host, get a gateway URL for one Model Context Protocol (MCP) server, and connect your MCP client to it. This quickstart is for AI agent builders who want their agent's tool calls authenticated, authorized, and logged without changing the MCP server or the agent.
+Create a Permit MCP Gateway host, import one Model Context Protocol (MCP) server, and connect your MCP client to it through the gateway. This quickstart is for AI agent builders and admins who set up the gateway for the first time and want their agent's tool calls authenticated, authorized, and logged without changing the MCP server or the agent.
 
-When you finish, your MCP client calls the MCP server through the gateway, and the call appears in the gateway activity log.
+When you finish, your MCP client calls the DeepWiki MCP server through the gateway, one tool call is allowed, one is denied, and both appear in the agent's audit log.
 
 ## Prerequisites
 
-- A [Permit.io](https://app.permit.io) account with permission to create an organization-scoped API key.
+- A [Permit.io](https://app.permit.io) account. You sign in to the gateway admin dashboard with it.
 - An MCP client: Cursor, VS Code, Claude Desktop, or Claude Code.
-- The URL of the MCP server you want to secure, such as `https://mcp.linear.app/mcp`.
+- The URL of a remote MCP server. The examples use DeepWiki, `https://mcp.deepwiki.com/mcp`, which needs no sign-in of its own.
+- The email address of the person who connects the MCP client. For a first test, use your own.
 
-## 1. Create an account and a host
+The examples use the organization **Acme Corp** and the host `acme-zesty-magenta-11.agent.security`. Replace them with your own.
 
-A host is a gateway instance with its own subdomain, users, and policies. Each host is linked to one Permit environment.
+## 1. Sign in and choose an organization
 
-1. Sign up at [app.agent.security](https://app.agent.security).
-2. Connect your Permit.io organization with an [organization-scoped API key](https://app.permit.io/settings/api-keys).
-3. Go to **Dashboard > Create Host**, then pick a subdomain, a project, and an environment.
+1. Go to [app.agent.security](https://app.agent.security) and click **Sign in with Permit.io**.
+2. Sign in with your Permit.io account. The organization switcher at the top of the sidebar shows your current Permit organization.
+3. If your account has no organization, click **Manage Organizations** on the welcome page. On the **Organizations** page, enter an **Organization name** and an **Organization key** (lowercase letters, numbers, and dashes only), and click **Create Organization**.
 
-The gateway base URL for the host has this form:
+To create another organization later, open the organization switcher, click **+**, and click **Create Another Organization** on the **Organizations** page.
 
-```
-https://<your-subdomain>.agent.security/mcp
-```
+## 2. Create a host
 
-The examples on this page use the host `acme-brave-coral-37.agent.security`. Replace it with your own host.
+A host is one gateway tenant: its own subdomain, its own sign-in page for the people who connect agents, and one Permit environment that stores its policies.
 
-## 2. Get a gateway URL for your MCP server \{#2-get-a-gateway-url-for-your-target-mcp-server}
+1. On the **Hosts** page, the **Get Started** card lists three steps. Click **Create Host**.
 
-Choose how the gateway finds the upstream MCP server:
+   ![Hosts page in a new organization with the Get Started card and the Create Host button](/img/agent-security/platform/hosts-get-started.png)
 
-| Option | Use when | Admin control |
-| --- | --- | --- |
-| [Dynamic MCP](#option-a-dynamic-mcp-quickest-path) | You want to try the gateway with any MCP server right away | Users can connect to any MCP server URL |
-| [Pre-imported MCP server](#option-b-pre-imported-mcp-server) | You want admins to approve each MCP server and review its tools | Users can connect only to servers an admin imported and granted |
+2. In **Subdomain**, type a prefix such as `acme`. The platform adds a suffix such as `-zesty-magenta-11.agent.security`. You can't change the suffix.
+3. Under **Environment**, pick the Permit **Project**. In **Environment**, keep **+ Create new environment** and enter an **Environment Name** and an **Environment Key**, or pick an existing environment. You can't change the environment after you create the host.
+4. Decide on **Allow Dynamic MCP Connections**. The switch is on by default and lets people connect to any MCP server URL, not only servers you import. Turn it off to limit people to the servers you import.
+5. Click **Create Host**, then click **Create Host** again in the **Confirm Host Creation** dialog.
 
-### Option A: Dynamic MCP (quickest path)
+![Create Host form with the subdomain prefix acme, a new Acme Gateway environment, and Allow Dynamic MCP Connections on](/img/agent-security/platform/create-host-filled.png)
 
-With **Dynamic MCPs** enabled on the host, you point the gateway at any MCP server by adding a query parameter. You don't import the server first.
-
-1. In [app.agent.security](https://app.agent.security), open your host's **Settings** and turn on **Allow Dynamic MCPs**.
-2. Build the gateway URL by appending `?upstream_mcp=` and the MCP server URL to the gateway base URL:
-
-```
-https://<your-subdomain>.agent.security/mcp?upstream_mcp=<url-of-target-mcp-server>
-```
-
-Example gateway URLs:
-
-| Target MCP server | Gateway URL |
-| --- | --- |
-| Linear | `https://acme-brave-coral-37.agent.security/mcp?upstream_mcp=https://mcp.linear.app/mcp` |
-| GitHub | `https://acme-brave-coral-37.agent.security/mcp?upstream_mcp=https://api.githubcopilot.com/mcp/` |
-| A custom server | `https://acme-brave-coral-37.agent.security/mcp?upstream_mcp=https://internal.example.com/mcp` |
-
-:::warning Dynamic MCPs bypass the admin allow-list
-When **Allow Dynamic MCPs** is on, users of the host can connect to any MCP server URL, including servers an admin never reviewed. Tool calls are still authorized and logged. Turn the setting off in the host's **Settings** to limit users to imported servers.
+:::warning Dynamic MCP connections can't be turned off after they're on
+If you create the host with **Allow Dynamic MCP Connections** off, you can turn it on later in **Settings**. After the setting is on, you can't turn it off. To limit a host to imported servers, turn the switch off before you click **Create Host**.
 :::
 
-### Option B: Pre-imported MCP server
+The host card on the **Hosts** page is marked **Current**, and the host chip in the top bar shows the host's address. Host settings are under **Settings** in the sidebar.
 
-Import the MCP server first when you want admins to control which servers users can reach.
+## 3. Import an MCP server \{#2-get-a-gateway-url-for-your-target-mcp-server}
 
-1. Go to [**MCP Servers > Create Server**](https://app.agent.security/mcp-servers).
-2. Enter the upstream URL, such as `https://mcp.linear.app/mcp`, and click **Connect**.
-3. Review the trust level the gateway assigned to each tool, change any you need, and click **Import**.
-4. On the [**Humans**](https://app.agent.security/humans) page, grant yourself or your users access to the server.
+1. Go to **MCP Servers** and click **Create Server**. The **Import MCP Server** page opens on the **Connect** step.
+2. Enter the server URL, `https://mcp.deepwiki.com/mcp`, and click **Connect**. The platform asks the server for its tools. If the server requires a sign-in, the page shows **Authorization Required**. Click **Sign in to MCP Server**, sign in with the provider, and you return to the import.
+3. On the **Review & Configure** step, check the **Server Key**, such as `deepwiki`. The key is part of the server's gateway URL. Add a **Description (optional)** and a **Workflow intent (optional)**: up to 500 characters that say what the server is for. The Guardian uses the intent if you turn it on later.
+4. Under **Tools to Import**, each tool shows a trust level that the gateway picks from the tool name: **Low** for reads, **Medium** for writes, **High** for deletes. For this quickstart, set `ask_wiki_question` to **Medium** so you can see a denied call later.
 
-Users who connect with the host base URL pick the MCP server during the consent flow:
+   ![Review and Configure step for DeepWiki with the server key, workflow intent, and three tools with HITL switches and trust levels](/img/agent-security/platform/import-review.png)
 
-```
-https://acme-brave-coral-37.agent.security/mcp
-```
+5. Click **Import Server & 3 Tools**. The button shows the number of tools you selected.
+6. The **Server Created Successfully** dialog offers to add people who already signed in to the host. In a new host nobody has signed in yet, so click **Skip for Now**, then click **View Server**.
 
-To skip the server selection step, append the upstream URL as a query parameter:
+## 4. Give a person access to the server \{#grant-access}
 
-```
-https://acme-brave-coral-37.agent.security/mcp?upstream_mcp=https://mcp.linear.app/mcp
-```
+Nobody can use an imported server until an admin grants access. The grant sets **Max trust**, the highest trust level that person can give any of their agents on this server.
 
-Or use a path-based URL with the server key assigned during import (`linear` in this example):
+1. On the server page, find the **Authorized Humans** card and click **Grant Access**.
+2. In the **Grant Human Access** dialog, open the **Invite by Email** tab and enter the person's email address. Use **Existing User** instead for someone who already signed in to the host.
+3. Set **Max trust** to **High** and click **Grant Access**.
 
-```
-https://acme-brave-coral-37.agent.security/mcp/linear
-```
+An invite stays pending until the person signs up on the host with that email address. Their access starts when they sign up.
 
-## 3. Connect your MCP client
+For a person who already signed in, you can also grant access from **Humans**: open the person, click **Grant Access** on the **MCP Server Access** card, pick the **MCP Server** and **Max trust**, and click **Grant Access**.
 
-Add the gateway URL to your MCP client configuration. Replace the example URL with your own gateway URL.
+![Grant MCP Server Access dialog with DeepWiki selected and Max trust set to High](/img/agent-security/platform/human-grant-access.png)
+
+## 5. Connect your MCP client
+
+The **MCP URL** card on the server page shows the server's gateway URL, `https://<subdomain>.agent.security/mcp/<server_key>`, and a tab for each client. The examples use `https://acme-zesty-magenta-11.agent.security/mcp/deepwiki`.
+
+![MCP URL card for DeepWiki with the Cursor / VS Code tab open](/img/agent-security/platform/server-mcp-url.png)
 
 :::warning Remove direct connections to the same MCP server
 If your client also has a direct connection to the same MCP server, the agent can call the server through that connection and skip the gateway. Remove the direct entry so only the gateway URL remains.
 :::
 
-### Cursor \{#cursor--vs-code}
+### Cursor and VS Code \{#cursor--vs-code}
 
 Add the server to `.cursor/mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "linear": {
-      "url": "https://acme-brave-coral-37.agent.security/mcp?upstream_mcp=https://mcp.linear.app/mcp"
+    "deepwiki": {
+      "url": "https://acme-zesty-magenta-11.agent.security/mcp/deepwiki"
     }
   }
 }
@@ -132,66 +119,77 @@ VS Code reads MCP servers from `.vscode/mcp.json`, which uses a top-level `serve
 
 ### Claude Desktop
 
-Add the server to your Claude Desktop config file. The file is `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS and `%APPDATA%\Claude\claude_desktop_config.json` on Windows. The config uses [`mcp-remote`](https://github.com/geelen/mcp-remote), a community tool that connects Claude Desktop to the gateway's Streamable HTTP endpoint and handles the OAuth sign-in.
-
-```json
-{
-  "mcpServers": {
-    "linear": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "https://acme-brave-coral-37.agent.security/mcp?upstream_mcp=https://mcp.linear.app/mcp"]
-    }
-  }
-}
-```
+The **Claude Desktop** tab shows the same JSON and the location of the Claude Desktop config file: `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS and `%APPDATA%\Claude\claude_desktop_config.json` on Windows.
 
 ### Claude Code
 
-Run this command to add the gateway as an MCP server in Claude Code:
+Run this command:
 
 ```bash
-claude mcp add --transport http linear "https://acme-brave-coral-37.agent.security/mcp?upstream_mcp=https://mcp.linear.app/mcp"
+claude mcp add deepwiki --transport http "https://acme-zesty-magenta-11.agent.security/mcp/deepwiki"
 ```
 
-## 4. Complete the consent flow \{#4-authenticate-and-use}
+To let the person choose among every server they have access to, use the host URL `https://acme-zesty-magenta-11.agent.security/mcp` instead. The consent screen then lists the servers.
 
-The first time your MCP client connects, it opens a browser window for the consent flow:
+## 6. Sign in and approve the agent \{#4-authenticate-and-use}
 
-1. **Sign in:** create an account or sign in to the host.
-2. **Select the MCP server:** pick the server to connect to. The server is pre-selected if the URL includes `upstream_mcp` or a server path.
-3. **Set a trust level:** choose what the agent can do. Low allows read tools, medium adds write tools, and high adds destructive tools.
-4. **Accept:** the gateway saves the permissions and the MCP client receives an access token.
+The first time the client connects, the gateway asks it to sign in. The client registers itself with the host and opens a browser window on the host.
 
-For each screen of the consent flow, see [Consent service](/permit-mcp-gateway/consent-service).
+1. **Create an account on the host.** The host has its own accounts, separate from your Permit.io sign-in. Click **Create Account** and enter your **Name**, the **Email** you invited, a **Password**, and **Confirm Password**. On the hosted gateway, a **Check your email** page asks you to verify your address. Open the link in the email to continue.
+2. **Review the request.** The **Connect MCP Server** screen opens with DeepWiki selected, because the URL names the server. The screen names your MCP client, such as "Acme Research Agent wants to connect to an MCP server".
+3. **Set the terms.**
+   - **Trust Level:** pick **Low**. The slider stops at **Max**, the level an admin granted you.
+   - **Task and expiry:** by default the agent reports its own task and access never expires. Under **Advanced**, choose **I set the task** to write the task yourself (up to 500 characters) and pick when **Access ends**: **1 hour**, **1 day**, **7 days**, **Custom**, or **Forever**.
+   - **Available Tools:** each tool shows **Allowed** or **Denied** at the level you picked. At **Low**, `ask_wiki_question` shows **Denied** because it requires medium trust.
+4. Click **Accept**. The browser returns to your MCP client, and the client is connected.
 
-## 5. Verify that tool calls go through the gateway
+![Connect MCP Server review screen for DeepWiki with Low trust, a task set by the person, access ending in 7 days, and two tools allowed and one denied](/img/agent-security/consent/review-configured.png)
 
-1. Ask your agent to perform a read action, such as "list my Linear issues". The agent returns results from the MCP server.
-2. In [app.agent.security](https://app.agent.security), open the [**Agents**](https://app.agent.security/agents) page and select your MCP client. The tool call appears in the activity log as allowed.
+For each field on the consent screen, see [Consent service](/permit-mcp-gateway/consent-service).
 
-If the agent returns a permission error, the tool's trust level is higher than the trust level you set during consent. See [Troubleshooting](/permit-mcp-gateway/guide#troubleshooting) for this and other errors.
+## 7. Verify that tool calls go through the gateway
+
+1. Ask your agent to read documentation through DeepWiki, such as "Use DeepWiki to read the documentation for facebook/react." The agent calls `read_wiki_structure` or `read_wiki_contents`, and the gateway allows the call.
+2. Ask your agent to call the medium-trust tool, such as "Use the ask_wiki_question tool to ask how React schedules updates." The gateway denies the call and returns this error to the agent:
+
+   ```text
+   Permission denied: tool 'ask_wiki_question' is not allowed at your current trust level. To use this tool, an administrator needs to enable it or increase your trust level in the Agent Security Gateway.
+   ```
+
+3. In [app.agent.security](https://app.agent.security), open **Dashboard**. **Gateway activity** counts the allowed and denied calls, and **Live activity** lists them.
+4. Open **Agents**, expand your person, and open the agent. The **Audit Logs** tab shows each call with its decision, such as "Tool call on deepwiki: allowed by the agent and person checks".
+
+![Agent audit log with allowed DeepWiki tool calls, a trust-level denial, Guardian verdicts, and a session registration](/img/agent-security/platform/agent-audit-table.png)
+
+The **Consent Grants** page shows the approval you gave in step 6, with its level, task, and end date.
+
+If a call you expected to pass is denied, see [Troubleshooting](/permit-mcp-gateway/guide#troubleshooting).
 
 ## Frequently asked questions \{#faq}
 
-### How do I give an MCP server per-user tool permissions with Permit MCP Gateway?
+### How do I give an MCP server per-person tool permissions with Permit MCP Gateway?
 
-Create a host, import the MCP server, and grant each user access to it. The gateway assigns every tool a trust level (low for read tools, medium for write tools, high for destructive tools), and an admin sets the highest trust level each user can grant. Then point the MCP client at the gateway URL. The gateway checks every tool call against that policy and denies calls above the user's level.
+Create a host, import the MCP server, and grant each person access with a **Max trust** level. The gateway gives every tool a trust level (low for reads, medium for writes, high for deletes), and you can change any tool's level. When a person connects an MCP client, they approve the agent at a trust level up to their maximum. The gateway checks every tool call and denies calls above the agent's level.
 
 ### Do I need to change my MCP server or my agent?
 
-No. The gateway is a transparent proxy. You change only the MCP server URL in the MCP client configuration to the gateway URL.
+No. You change only the MCP server URL in the MCP client configuration to the gateway URL. If you turn on agent identity checks later, you also paste an instruction snippet into the agent's rules file, such as `CLAUDE.md`.
 
 ### Which MCP clients can connect through the gateway?
 
-Cursor, VS Code, Claude Desktop, and Claude Code. Step 3 of this quickstart shows the configuration for each.
+Cursor, VS Code, Claude Desktop, and Claude Code. Each MCP server's page shows the configuration for each client on its **MCP URL** card.
 
 ### Can an agent skip the gateway?
 
 Yes, if the MCP client also has a direct connection to the same MCP server. The agent can call the server through that connection, and those calls are not authorized or logged by the gateway. Remove the direct entry so that only the gateway URL remains.
 
+### How does a person give an agent a higher trust level?
+
+The person revokes the agent on **Your MCP agents** (`https://<subdomain>.agent.security/my-mcp-agents`), then reconnects it from the MCP client and picks a higher level on the consent screen, up to their max trust. Reconnecting while the grant is active doesn't show the consent screen. An admin can lower an agent's trust level but can't raise it.
+
 ### What does the gateway log?
 
-Each allowed or denied tool call, with the human, the agent, the tool, the MCP server, and the time. Open the **Agents** page in [app.agent.security](https://app.agent.security) to see the activity log.
+Each allowed or denied tool call, with the person, the agent, the tool, the MCP server, the time, and the reason. Open the **Audit Logs** tab of an agent, a person, or an MCP server in [app.agent.security](https://app.agent.security), or the **Dashboard** for the totals.
 
 ### Is there a free tier?
 
@@ -199,7 +197,8 @@ Yes. The Community plan on the [Permit MCP Gateway pricing](https://www.permit.i
 
 ## Next steps \{#whats-next}
 
-- [Getting started with Permit MCP Gateway](/permit-mcp-gateway/guide/): grant access to users, test a denied call, and read the audit log.
-- [n8n and Linear demo](/permit-mcp-gateway/demos/n8n-linear-mcp-gateway): run an n8n workflow through the gateway.
-- [Platform reference](/permit-mcp-gateway/platform/): manage hosts, MCP servers, and users in the admin UI.
+- [Getting started with Permit MCP Gateway](/permit-mcp-gateway/guide/): roll the gateway out to a team, require approvals, and turn on agent identity and the Guardian.
+- [Platform reference](/permit-mcp-gateway/platform/): every page of the admin dashboard.
+- [Consent service](/permit-mcp-gateway/consent-service): what people see when they approve an agent.
+- [Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop): hold sensitive tool calls for an admin.
 - [Permit MCP Gateway overview](/permit-mcp-gateway/overview/): the security and trust model and how the gateway compares to other tools.

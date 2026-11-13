@@ -28,7 +28,7 @@ The customer-controlled and fully on-premises models are available on **Enterpri
 | **Audit logs** | Permit.io cloud | Your infrastructure and Permit.io (configurable) | Your environment only |
 | **TLS certificates** | Managed by Permit | Your certificates and PKI | Your certificates and PKI |
 | **Private MCP servers** | Must be reachable from the internet | Reachable over your private network | Reachable over your private network |
-| **Internet connectivity** | Required | Required for control plane sync | Not required: supports air-gapped environments |
+| **Internet connectivity** | Required | Required for control plane sync | Not required: supports air-gapped environments, without the Guardian (see [Air-gapped environments](#air-gapped-environments)) |
 | **Uptime depends on** | Permit infrastructure | Your infrastructure, plus Permit.io for policy updates | Your infrastructure only |
 | **Best for** | Fast adoption, SaaS workloads, evaluation | Data residency, private MCP servers, local PDP | Air-gapped, classified, and zero-trust environments |
 
@@ -40,7 +40,7 @@ The customer-controlled and fully on-premises models are available on **Enterpri
 | Tool call parameters and upstream responses must not pass through a third party | Customer-controlled or fully on-premises |
 | The gateway must reach internal MCP servers that aren't exposed to the internet | Customer-controlled or fully on-premises |
 | Authorization must keep working during an internet outage | Customer-controlled (with cached policy) or fully on-premises |
-| No component may connect outside your network, including policy management | Fully on-premises |
+| No component may connect outside your network, including policy management | Fully on-premises, with the Guardian off |
 
 ### What stays the same across all models
 
@@ -62,6 +62,8 @@ In the hosted deployment, MCP traffic, including tool call parameters and upstre
 - **Internal policy:** a requirement that production traffic stays inside corporate infrastructure.
 
 In the customer-controlled and fully on-premises models, the gateway runs inside your VPC or data center and proxies tool calls directly to upstream MCP servers. MCP traffic doesn't pass through infrastructure outside your network.
+
+The Guardian and the agent task check are the exception. When the Guardian is on for a host, the gateway sends each graded tool call to a model on Amazon Bedrock: the tool name, a sanitized copy of its arguments, the server, the intent the call is graded against, the person's task when the person set one, and the agent's own task sentence, which a second check grades the call against and only records. At each registration on a grant whose task the person set, the task check also sends the agent's task sentence and the person's task to Bedrock. In the hosted gateway, Permit runs that connection. In the on-premises values template, the Guardian is off, and turning it on needs a Bedrock endpoint that the gateway can reach. See [Architecture: where data lives](/permit-mcp-gateway/architecture#data-flow).
 
 Permit.io is HIPAA compliant and SOC 2 Type II attested. The deployment model you choose decides where MCP traffic and audit data live, so review the model with your compliance team against your own requirements.
 
@@ -97,7 +99,9 @@ The fully on-premises deployment runs the entire Permit MCP Gateway stack, inclu
 | **Consent service** | OAuth 2.1 authorization server and consent screens for users |
 | **Policy decision point (PDP)** | Evaluates `permit.check()` calls locally |
 | **Control plane** | Policy management, resource schemas, role assignments, and audit log storage, provided by your self-hosted Permit Platform |
-| **Admin dashboard** | The gateway management UI, served from your infrastructure |
+| **Admin dashboard** | The gateway management UI, served from your infrastructure. Admins sign in through the Keycloak in your Permit Platform. |
+| **Edge router** | The bundled OpenResty reverse proxy that routes requests to the gateway and the consent service |
+| **PostgreSQL and Redis** | Bundled in the Helm chart, or your own instances |
 | **Policy dashboard** | Policy inspection, audit logs, and configuration in your self-hosted Permit Platform |
 
 To install the gateway on Kubernetes next to your Permit Platform, follow [On-prem installation](/permit-mcp-gateway/on-prem-installation). The installation guide lists each outbound connection the gateway makes.
@@ -106,10 +110,13 @@ To install the gateway on Kubernetes next to your Permit Platform, follow [On-pr
 
 The fully on-premises deployment runs in air-gapped environments without internet access:
 
-- **No required outbound connections:** the gateway, PDP, control plane, and supporting services run inside your network boundary. For the full network dependency list for your deployment, contact your Permit team.
+- **No required outbound connections:** the gateway, consent service, admin dashboard, PDP, control plane, and supporting services run inside your network boundary. The upstream MCP servers you configure must be reachable from the gateway.
+- **Guardian not available offline:** the Guardian and the agent task check call a model on Amazon Bedrock, so they don't run without a Bedrock endpoint that the gateway can reach. They're off in the on-premises values template. Agent identity (the agent's 12-word registration and drift detection), Permit checks, approval rules, and human-in-the-loop approvals don't need Bedrock.
 - **Offline policy management:** you create, change, and evaluate policies locally. The on-premises control plane sends changes to the local PDP.
 - **Offline updates:** Permit delivers updates as versioned artifacts, such as container images, that you move into the air-gapped environment through your secure media process. The installer package includes the container images, so the cluster doesn't pull images from the internet.
-- **Local storage:** audit logs, consent records, and session data stay in your infrastructure.
+- **Local storage:** audit logs, consent records, and grants stay in your infrastructure.
+
+For the full network dependency list for your deployment, see [Network egress requirements](/permit-mcp-gateway/on-prem-installation#egress-requirements), or contact your Permit team.
 
 ### When to choose fully on-premises
 
@@ -125,13 +132,13 @@ Enterprise plans add security controls on top of the core gateway features. Avai
 
 | Control | What it does | Details |
 | --- | --- | --- |
-| **Agent Interrogation** | Identifies the connecting agent and its declared purpose through the MCP protocol before tools unlock, and detects changes across sessions | [Agent Interrogation](/permit-mcp-gateway/advanced-features#agent-interrogation) |
-| **Human-in-the-loop approvals** | Pauses sensitive tool calls until an admin approves or rejects them | [Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop) |
-| **Time-limited consent** | Sets consent windows that expire, such as two weeks for a contractor's agent | [Time-limited consent](/permit-mcp-gateway/advanced-features#time-limited-consent) |
-| **Agent verification** | Compares a connecting agent with its identity and behavior baseline | [Agent verification](/permit-mcp-gateway/advanced-features#agent-verification) |
-| **Session monitoring** | Compares an agent's declared intent with its tool calls in a session | [Session monitoring](/permit-mcp-gateway/advanced-features#session-monitoring) |
-| **Permission receipts** | Exportable audit records of each permission grant | [Permission receipts](/permit-mcp-gateway/advanced-features#permission-receipts) |
-| **Intent-based access control** | Evaluates an agent's declared purpose against policy before work starts | [Intent-based access control](/permit-mcp-gateway/advanced-features#intent-based-access-control) |
+| **Agent identity** | Before it uses tools, the agent calls the gateway's `gateway_register_session` tool with 12 words and a one-line task. The gateway compares each registration with the agent's earlier ones. Drift past the host's block threshold blocks that MCP session, and the third blocked session within 24 hours pauses the grant until the person approves the agent again. Admins turn it on with **Require Agent Identity** under **Settings** > **Agent Identity**. | [Layer 1: Semantic identity](/permit-mcp-gateway/advanced-features#agent-verification) |
+| **Agent intent** | When the person set the agent's task on the consent screen, compares the task the agent states at registration with the person's task. Needs agent identity on. | [Layer 2: Agent intent](/permit-mcp-gateway/advanced-features#intent-based-access-control) |
+| **Guardian** | Grades each tool call with an LLM on Amazon Bedrock against the server's intent. When the server has no intent, it grades against the person's task when the person set one, and otherwise against the agent's 12 registered words. The Guardian allows the call, refuses it, or, when unsure, denies it or holds it for a human, as the host is set. | [Layer 3: Guardian](/permit-mcp-gateway/advanced-features#guardian) |
+| **Human-in-the-loop approvals** | Pauses a tool call until an admin approves or rejects it in **Approvals**. A person can also ask to approve their agent's changes and deletions on the consent screen. | [Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop) |
+| **Consent Grants** | Lists every approval a person gave an agent on a server, with the trust level, task, and end date, and the history of each change, pause, expiry, and revoke. | [Consent grants and expiry](/permit-mcp-gateway/advanced-features#permission-receipts) |
+
+Access that ends on a date isn't a separate control. On the consent screen, the person picks when the agent's access ends: 1 hour, 1 day, 7 days, a custom time, or never. When the end date passes, the gateway refuses the agent's requests on that server until the person approves it again. See [Consent service](/permit-mcp-gateway/consent-service).
 
 ## Get started \{#get-started}
 
@@ -147,4 +154,4 @@ To evaluate before you decide, follow the [Permit MCP Gateway quickstart](/permi
 
 - [Architecture](/permit-mcp-gateway/architecture): components, data flows, and authorization sequences.
 - [On-prem installation](/permit-mcp-gateway/on-prem-installation): install the gateway in your Kubernetes cluster.
-- [Advanced features](/permit-mcp-gateway/advanced-features): what each enterprise security control does.
+- [Check agent identity and intent](/permit-mcp-gateway/advanced-features): what each security control does and how to turn it on.

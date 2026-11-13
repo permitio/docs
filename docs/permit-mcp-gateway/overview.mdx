@@ -1,13 +1,13 @@
 ---
 title: Permit MCP Gateway overview
 sidebar_label: Overview
-description: Learn how Permit MCP Gateway authenticates users, authorizes agent tool calls, records consent, and logs decisions between MCP clients and MCP servers, and what the gateway does not cover.
+description: Learn how Permit MCP Gateway signs people in, records their consent, authorizes each agent tool call, adds optional identity, Guardian, and approval checks, and logs decisions between MCP clients and MCP servers, and what the gateway does not cover.
 sidebar_position: 1
 ---
 
 Learn how Permit MCP Gateway controls AI agent access to Model Context Protocol (MCP) servers: what the gateway checks on each tool call, how it uses Permit.io, what it enforces and logs, and what stays outside its scope. This page is for AI agent builders and security reviewers deciding whether and how to put the gateway in front of their MCP servers.
 
-Permit MCP Gateway is an enforcement proxy between MCP clients and MCP servers. The gateway authenticates users, authorizes each agent tool call against policy, collects the user's consent, and logs each decision. You don't modify your MCP servers or AI tools.
+Permit MCP Gateway is an enforcement proxy between MCP clients and MCP servers. The gateway signs in the person behind each agent, collects that person's consent, authorizes each tool call against policy, and logs each decision. You don't modify your MCP servers or AI tools.
 
 :::info What is MCP?
 The **Model Context Protocol (MCP)** is an open standard that lets AI tools connect to external services. MCP **clients** are AI tools such as Cursor, Claude Desktop, VS Code, and Claude Code. MCP **servers** are the services those clients connect to, such as GitHub, Linear, Slack, and Jira. Permit MCP Gateway sits between MCP clients and MCP servers and applies access control to each connection.
@@ -17,10 +17,10 @@ The **Model Context Protocol (MCP)** is an open standard that lets AI tools conn
 
 Teams that connect AI agents to MCP servers run into these gaps:
 
-- **No visibility:** without a central log, you can't answer which agents access which systems, what they read or change, and which human authorized the access.
-- **No per-tool control:** API gateways and identity and access management (IAM) tools don't model a human delegating access to an agent, and don't control access per MCP tool.
+- **No visibility:** without a central log, you can't answer which agents access which systems, what they read or change, and which person authorized the access.
+- **No per-tool control:** API gateways and identity and access management (IAM) tools don't model a person delegating access to an agent, and don't control access per MCP tool.
 - **Unreviewed MCP connections:** anyone can add an MCP server to a client, which creates access paths to sensitive systems that skip security review.
-- **Compliance gaps:** when agents act for humans, audits under regulations and frameworks such as GDPR, HIPAA, and SOC 2 need the same traceability that applies to human actions.
+- **Compliance gaps:** when agents act for people, audits under regulations and frameworks such as GDPR, HIPAA, and SOC 2 need the same traceability that applies to human actions.
 - **Broad agent privileges:** agents often run with the full access of the credentials they hold, because nothing limits them at the tool level.
 
 ## How the gateway works
@@ -29,23 +29,29 @@ You adopt the gateway with one configuration change: point the MCP client at the
 
 ### Admin setup \{#setup-admin}
 
-1. **Create a host:** a named gateway instance with its own subdomain, policies, and users.
-2. **Import MCP servers:** the gateway connects to each upstream server, discovers its tools, and assigns each tool a trust level by risk.
-3. **Grant user access:** the admin chooses which users can connect to which MCP servers and sets a maximum trust level per user and server.
+1. **Create a host:** a gateway tenant with its own subdomain, its own sign-in page for the people who connect agents, and one Permit environment for its policies.
+2. **Import MCP servers:** the gateway connects to each upstream server, discovers its tools, and assigns each tool a trust level by risk. The admin can change any level and add a workflow intent that says what the server is for.
+3. **Grant access:** the admin chooses which people can use which MCP servers and sets a maximum trust level per person and server.
+4. **Add optional checks:** admin approval for chosen tools, agent identity checks, and the Guardian.
 
-### User connection \{#connection-user}
+### Person connection \{#connection-user}
 
-1. **Connect and authenticate:** the MCP client connects to the gateway URL, and the user signs in with a method the host allows, such as single sign-on (SSO), OAuth, or email.
-2. **Consent:** the user selects an MCP server, reviews its tools, and chooses a trust level for the agent, up to the admin's maximum.
-3. **Use tools:** the MCP client works as before. The gateway forwards allowed tool calls to the upstream server and returns a permission error for denied calls.
+1. **Connect and sign in:** the person adds the server's gateway URL to the MCP client. The client registers itself with the host by OAuth, and the person signs in on the host with a method the host allows, such as single sign-on (SSO), OAuth, or email.
+2. **Consent:** the person reviews the server and its tools, picks a trust level for the agent up to the admin's maximum, and can write the agent's task and choose when access ends.
+3. **Use tools:** the MCP client works as before. The gateway forwards allowed tool calls to the upstream server and returns an error to the agent for denied calls.
 
 ### Each tool call at runtime \{#runtime-every-tool-call}
 
-1. **Authenticate:** the gateway verifies the agent's JSON Web Token (JWT) and identifies the agent and the human who authorized it.
-2. **Authorize:** the gateway asks Permit.io whether this agent can call this tool on this MCP server.
-3. **Audit:** the gateway logs the allow or deny decision with the agent, the human, the tool, the MCP server, and the time.
+The gateway checks each tool call, resource read, and prompt request, in this order:
 
-The upstream MCP server receives forwarded requests with the user's upstream credentials, as it would without the gateway.
+1. **Authenticate:** the gateway verifies the client's access token and identifies the agent and the person who approved it.
+2. **Agent identity**, when the host requires it: the agent must have a current registration whose words haven't drifted.
+3. **Authorize:** the gateway asks Permit.io whether this agent can call this tool on this MCP server, and on imported servers whether this person can. Both checks must allow the call.
+4. **Trust ceiling:** the tool's trust level must be at or below the level the person approved.
+5. **Approval rules and the Guardian**, when they are on: a call can wait for an approval, or the Guardian can refuse it or hold it for an admin.
+6. **Audit:** the gateway logs one decision for the call with the agent, the person, the tool, the MCP server, the time, and the reason.
+
+The upstream MCP server receives allowed requests with the person's upstream credentials, as it would without the gateway. Each request also carries a short-lived JSON Web Token (JWT) signed by the gateway in the `X-Gateway-Auth` header, which the server can verify with the host's key set at `https://<your-host>.agent.security/.well-known/gateway-jwks.json`.
 
 ## How Permit MCP Gateway uses Permit.io \{#how-permit-and-permit-mcp-gateway-are-connected}
 
@@ -54,24 +60,26 @@ Permit MCP Gateway is built on [Permit.io](https://www.permit.io). Permit is the
 | Component | Role | Dashboard |
 | --- | --- | --- |
 | **Permit.io** | Control plane and policy engine. Holds the authorization model, evaluates each `permit.check()` call, and stores audit logs. | [app.permit.io](https://app.permit.io) |
-| **Permit MCP Gateway** | Enforcement layer. Proxies MCP traffic, runs authentication and consent, and calls Permit for each authorization decision. The hosted gateway runs on `*.agent.security` subdomains. | [app.agent.security](https://app.agent.security) |
+| **Permit MCP Gateway** | Enforcement layer. Proxies MCP traffic, runs sign-in and consent, and calls Permit for each authorization decision. The hosted gateway runs on `*.agent.security` subdomains. | [app.agent.security](https://app.agent.security) |
 
 ### Each host is a Permit environment \{#every-host-is-a-permit-environment}
 
-Each gateway **host**, such as `acme-brave-coral-37.agent.security`, maps to one **Permit environment**:
+Each gateway **host**, such as `acme-zesty-magenta-11.agent.security`, maps to one **Permit environment**:
 
 | Gateway concept | Permit object |
 | --- | --- |
 | MCP server imported into a host | Resource type |
 | Tool on an MCP server | Action on that resource type |
-| User or agent | Permit user with role assignments |
+| Person or agent | Permit user with role assignments |
 | Trust level | Role, with higher levels including lower ones |
 | Maximum trust level (trust ceiling) | Relations and derived roles, using relationship-based access control (ReBAC) |
+
+Each agent is one person using one MCP client, so the agent's Permit user key combines the client's OAuth client ID and the person's ID: `agent|<client_id>|<subject>`. The person's key is `human|<subject>`.
 
 Because the gateway uses standard Permit objects, gateway policies can use:
 
 - Role-based access control (RBAC), attribute-based access control (ABAC), and ReBAC policy models.
-- Policy updates through Open Policy Administration Layer (OPAL). A change to a trust level, access grant, or revocation applies on the next tool call, without a restart.
+- Policy updates through Open Policy Administration Layer (OPAL), without a restart. An access grant or a revocation applies on the next tool call. A change to a tool's trust level or a server's intent applies within about a minute, because the gateway caches both for 60 seconds.
 - Audit logs for each authorization decision, in the Permit dashboard and through the Permit API.
 - Policy as code, through the Permit UI, the Permit API, or the Terraform provider.
 
@@ -79,7 +87,7 @@ Because the gateway uses standard Permit objects, gateway policies can use:
 
 Both dashboards show the same authorization data:
 
-- **[app.agent.security](https://app.agent.security)** is the gateway dashboard. Use it to create hosts, import MCP servers, grant user access, configure authentication, and review agent activity.
+- **[app.agent.security](https://app.agent.security)** is the gateway dashboard. Use it to create hosts, import MCP servers, grant access, review approvals, configure sign-in and agent identity, and review agent activity. You sign in with your Permit.io account.
 - **[app.permit.io](https://app.permit.io)** is the Permit control plane. Use it to inspect derived role rules, raw audit log entries, resource schemas, and role assignments.
 
 For how gateway concepts map to Permit objects in detail, see [How Permit MCP Gateway works with Permit.io](/permit-mcp-gateway/permit-integration/).
@@ -88,12 +96,12 @@ For how gateway concepts map to Permit objects in detail, see [How Permit MCP Ga
 
 ### Authentication
 
-Users sign in through the consent flow before any agent can reach an MCP server. Each host has its own sign-in methods:
+People sign in on the host before any agent can reach an MCP server. Each host has its own sign-in methods:
 
-- Email and password, email one-time passcode (OTP), and passkeys.
+- Email and password (on by default), email one-time passcode (OTP), and passkeys.
 - Google, GitHub, and Microsoft OAuth.
 - Enterprise SSO with SAML 2.0 or OpenID Connect (OIDC).
-- Email domain restrictions, and redirects that send users with a matching domain straight to SSO.
+- Email domain restrictions, and redirects that send people with a matching domain straight to SSO.
 
 See [Authentication methods](/permit-mcp-gateway/authentication-methods).
 
@@ -101,31 +109,47 @@ See [Authentication methods](/permit-mcp-gateway/authentication-methods).
 
 The gateway authorizes each tool call when the agent calls the tool:
 
-- **Trust levels per tool:** during import, the gateway assigns each tool low (read), medium (write), or high (destructive) trust. Admins can override any tool.
-- **Maximum trust level per user:** admins set the highest trust level each user can grant an agent.
-- **Consent-based delegation:** users choose how much access to grant, up to the admin's maximum.
-- **Trust ceiling:** the agent's effective trust level is the lower of the level the user granted and the level the admin allowed. Permit enforces this ceiling with ReBAC along the human, agent, and MCP server chain.
+- **Trust levels per tool:** during import, the gateway assigns each tool low (read), medium (write), or high (destructive) trust. Admins can change any tool.
+- **Maximum trust level per person and server:** admins set the highest trust level each person can approve for an agent.
+- **Consent-based delegation:** the person picks how much access to approve, up to the admin's maximum.
+- **Trust ceiling:** the agent's effective trust level is the lower of the level the person approved and the level the admin allowed. Permit enforces this ceiling with ReBAC along the person, agent, and MCP server chain.
+- **Lower only from the admin side:** an admin can lower an agent's trust level or revoke the agent. Only the person can raise it: the person revokes the agent on **Your MCP agents**, then reconnects it from the MCP client and picks a higher level on the consent screen, up to their max trust.
 
 See [Managing humans and agents](/permit-mcp-gateway/managing-humans-and-agents).
 
 ### Consent
 
-The consent flow records that a human authorized an agent's access:
+The consent screen records that a person approved an agent, and on what terms:
 
-- Users see which tools each trust level allows before they grant access.
-- Trust levels above the admin's maximum can't be selected.
-- The maximum is enforced in the consent UI, in the consent API, and in the Permit policy.
-- Sessions persist across client restarts. A session expires 90 days after the last tool call. See [Session expiry](/permit-mcp-gateway/consent-service#session-expiry).
+- The person sees which tools the chosen trust level allows before approving, and trust levels above the admin's maximum can't be selected.
+- The person can write the agent's task, or let the agent report its own task, and picks when access ends: 1 hour, 1 day, 7 days, a custom time, or never.
+- The person can turn on **Ask me before this agent changes or deletes anything**, so that changes wait for the person's approval by email.
+- Each approval is a consent grant for one person, agent, and server. People manage their grants on the host's **Your MCP agents** page, and admins see every grant on the **Consent Grants** page.
 
 See [Consent service](/permit-mcp-gateway/consent-service).
 
-### Audit
+### Agent identity and the Guardian
+
+Three optional layers in the host's **Settings** check whether an agent is still doing what the person asked:
+
+- **Semantic identity:** the agent registers 12 words and a task sentence, and the gateway stops an agent whose words drift, which can mean a prompt injection.
+- **Agent intent:** the agent's task sentence is checked against the task the person set at consent.
+- **Guardian:** an LLM judge hosted on AWS Bedrock grades each tool call against the server's workflow intent, then allows the call, refuses it, or holds it for an admin.
+
+See [Check agent identity and intent](/permit-mcp-gateway/advanced-features).
+
+### Approvals
+
+Admins can require approval for chosen tools or for every tool on a server. A waiting call appears in the **Approvals** queue, where an admin approves or rejects it, and notifications can go to email or a Slack webhook. See [Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop).
+
+### Audit and visibility
 
 The gateway logs each authorization decision:
 
-- Logs appear in the [Permit MCP Gateway dashboard](https://app.agent.security) and in the [Permit.io dashboard](https://app.permit.io).
-- Each entry includes the agent, the human, the tool, the MCP server, the time, and the allow or deny decision.
-- You can filter logs by agent, user, server, action, or decision.
+- The **Dashboard** shows gateway activity: governed calls, allowed and denied calls, pending approvals, top denied intents, and a live feed.
+- The **Agents** page shows each person's agents and their sessions, with the intent each agent declared.
+- The **Audit Logs** tab on each agent, person, and MCP server lists every decision with the agent, the person, the tool, the MCP server, the time, and the reason. Each entry can show the agent check, the person check, and the Guardian's verdict.
+- The same decisions appear in the [Permit.io dashboard](https://app.permit.io) **Audit Log**.
 
 See [Audit logs](/permit-mcp-gateway/audit-logs).
 
@@ -137,26 +161,29 @@ This section lists what Permit MCP Gateway sees, enforces, and logs, and what st
 
 | Data | Source |
 | --- | --- |
-| **User identity** | The user's sign-in during the consent flow (SSO, OAuth, or email) |
-| **Agent identity** | The MCP client, such as Cursor or Claude Desktop, identified by its OAuth client ID |
-| **Tool calls** | The name and parameters of each `call_tool` request |
+| **Person identity** | The person's sign-in on the host (SSO, OAuth, or email) |
+| **Agent identity** | One person using one MCP client, such as Cursor or Claude Desktop, identified by the client's OAuth client ID and the person's ID. With agent identity on, also the agent's 12 registered words and task sentence. |
+| **Consent terms** | The trust level, task, and end date the person approved for each agent and server |
+| **Tool calls** | The name and arguments of each tool call, resource read, and prompt request |
 | **MCP server identity** | The upstream server the call is sent to |
 | **Authorization decisions** | Whether each tool call was allowed or denied, and why |
 
 ### What the gateway enforces
 
-- **Authentication:** users sign in before any agent can reach an MCP server.
+- **Authentication:** people sign in before any agent can reach an MCP server.
 - **Authorization:** the gateway checks each tool call against policy and blocks denied calls before they reach the upstream server.
-- **Trust ceilings:** an agent can't exceed the trust level the human granted, and the human can't grant more than the admin's maximum.
-- **Consent:** an agent gets access only after the human completes the consent flow.
-- **Session management:** sessions expire after 90 days of inactivity, and admins can revoke a session immediately.
-- **Rate limiting:** rate limits apply to authentication, OAuth registration, and MCP endpoints. A request over the limit gets HTTP 429 with a JSON error body. See [Architecture: rate limiting](/permit-mcp-gateway/architecture#rate-limiting).
+- **Trust ceilings:** an agent can't exceed the trust level the person approved, and the person can't approve more than the admin's maximum.
+- **Consent:** an agent gets access to a server only after the person approves it on the consent screen.
+- **Grant lifetime:** a grant ends at the end date the person picked, when the person or an admin revokes it, or after 90 days without use. Admins can also block a single MCP session.
+- **Optional checks:** agent identity, the Guardian, and approvals, when an admin turns them on.
+- **Rate limiting:** on the hosted gateway, rate limits apply at the edge, and a request over a limit gets HTTP 429. See [Architecture](/permit-mcp-gateway/architecture).
 
 ### What the gateway logs
 
-- Each `call_tool` authorization decision (allow or deny), with the agent, human, tool, and server.
-- User sign-in and consent events.
-- Creation and expiry of agent-to-server sessions.
+- Each tool call decision (allow or deny), with the agent, the person, the tool, the server, and the reason.
+- The agent check, the person check, and the Guardian's verdict behind each decision.
+- Agent identity events, such as a session registration.
+- Each consent grant, and each change, pause, expiry, and revoke of a grant.
 
 You can read the logs in the Permit MCP Gateway dashboard and through the Permit.io audit log API.
 
@@ -164,8 +191,9 @@ You can read the logs in the Permit MCP Gateway dashboard and through the Permit
 
 - **Unauthorized tool access:** agents can call only the tools they are permitted to use.
 - **Privilege escalation:** the trust ceiling stops an agent from exceeding the admin's maximum.
-- **Untraceable agent activity:** each tool call is logged and tied to one human and one agent.
-- **Unreviewed MCP connections:** by default, users can connect only to MCP servers an admin imported. Turning on Dynamic MCPs removes this restriction for a host.
+- **Untraceable agent activity:** each tool call is logged and tied to one person and one agent.
+- **Off-task agents:** with agent identity and the Guardian on, the gateway can stop an agent whose identity drifts or whose call doesn't fit the task.
+- **Unreviewed MCP connections:** with **Allow Dynamic MCP Connections** off, people can connect only to MCP servers an admin imported. The setting is on by default for a new host, and after it is on it can't be turned off.
 - **Credential exposure to agents:** the gateway holds upstream OAuth tokens and doesn't pass them to MCP clients.
 
 ### What the gateway does not cover \{#what-the-gateway-does-not-fully-solve}
@@ -173,41 +201,41 @@ You can read the logs in the Permit MCP Gateway dashboard and through the Permit
 The gateway enforces access control and audit at the MCP protocol layer. These areas stay with other components:
 
 - **Upstream server security:** the gateway doesn't check what the upstream MCP server does with an authorized request. Input validation, data access controls, and business logic stay in the server.
-- **Prompt injection and adversarial inputs:** the gateway authorizes tool calls by identity and policy, not by the content or intent of prompts. Defend against prompt injection in the MCP client and the model layer.
-- **Data classification:** the gateway assigns trust levels from tool names. The gateway doesn't inspect data returned by tool calls or classify data sensitivity.
+- **Prompt injection and adversarial inputs:** agent identity and the Guardian are optional and grade calls with models, so they can miss an injected call or refuse a legitimate one. Test the Guardian on your servers with **Dry Run**, and keep defenses against prompt injection in the MCP client and the model layer.
+- **Data classification:** the gateway assigns default trust levels from tool names. The gateway doesn't classify the data that tool calls return.
 - **Network-level controls:** the gateway works at the application layer. Network segmentation, firewall rules, and transport security for upstream connections are configured separately.
 
 ## How the gateway compares to other tools \{#how-it-compares-to-existing-tools}
 
 | Approach | Limitation for MCP use cases |
 | --- | --- |
-| **API gateways** (Kong, Apigee) | Built for REST and gRPC APIs, not the MCP protocol. No model of a human delegating to an agent or of per-tool trust levels. |
-| **IAM platforms** (Okta, Microsoft Entra ID) | Authenticate users, but don't authorize individual MCP tool calls by agents or record consent-based delegation. |
+| **API gateways** (Kong, Apigee) | Built for REST and gRPC APIs, not the MCP protocol. No model of a person delegating to an agent or of per-tool trust levels. |
+| **IAM platforms** (Okta, Microsoft Entra ID) | Authenticate people, but don't authorize individual MCP tool calls by agents or record consent-based delegation. |
 | **Direct MCP server access** | No gateway authentication, authorization, or audit. Agents connect with whatever credentials the client holds. |
-| **Permit MCP Gateway** | Per-tool authorization tied to the human and the agent, trust delegation from human to agent, consent, and audit at one enforcement point. |
+| **Permit MCP Gateway** | Per-tool authorization tied to the person and the agent, trust delegation from person to agent, consent with terms, approvals, and audit at one enforcement point. |
 
 ## Use cases
 
 ### Secure the MCP servers your team uses \{#securely-consume-mcp-servers-internal}
 
-Your team uses Cursor, Claude, VS Code, or internal agents with MCP servers such as GitHub, Linear, Slack, and Jira. The gateway sits between the agents and those servers, applies per-user access control and trust levels, and logs each tool call.
+Your team uses Cursor, Claude, VS Code, or internal agents with MCP servers such as GitHub, Linear, Slack, and Jira. The gateway sits between the agents and those servers, applies per-person access control and trust levels, and logs each tool call.
 
-**Example:** an engineering team connects Cursor to GitHub and Linear through the gateway. Admins let developers use read and write tools and block destructive tools. Each tool call is logged, and an admin must import an MCP server before anyone can connect.
+**Example:** an engineering team connects Cursor to GitHub and Linear through the gateway. Admins let developers use read and write tools, block destructive tools, and require approval for a deploy tool. Each tool call is logged, and with dynamic MCP connections off, an admin must import an MCP server before anyone can connect.
 
 ### Offer secured MCP servers to your customers \{#provide-secure-mcp-servers-to-customers}
 
 You build or host MCP servers that your customers connect to. The gateway adds authentication, per-customer authorization, consent, and audit, so each customer's agents reach only what they are permitted to.
 
-**Example:** a SaaS platform exposes its API as an MCP server. Enterprise customers connect their agents through the gateway with SSO, per-user trust levels, and a separate audit trail per customer.
+**Example:** a SaaS platform exposes its API as an MCP server. Enterprise customers connect their agents through the gateway with SSO, per-person trust levels, and a separate audit trail per customer.
 
 ## When to use Permit MCP Gateway
 
 Use the gateway when one or more of these apply:
 
 - You use MCP from Cursor, Claude, VS Code, or internal agents, or plan to.
-- You need per-user or per-agent control over which tools agents can call.
+- You need per-person or per-agent control over which tools agents can call.
 - You need one audit trail of agent actions across MCP servers.
-- You want users to consent before agents use sensitive tools.
+- You want people to consent before agents use sensitive tools, or admins to approve sensitive calls.
 - Different MCP servers and tools need different risk controls.
 - You build MCP servers for customers and need to control their agents' access.
 
@@ -219,7 +247,7 @@ Permit MCP Gateway runs in three deployment models. For the full comparison, req
 
 ### Hosted gateway (SaaS) \{#hosted-gateway-saas}
 
-Permit runs the gateway, the consent service, and the policy decision point (PDP). Each host runs on a subdomain of `agent.security`, such as `acme-brave-coral-37.agent.security`, with its own users, policies, and sessions. The hosted gateway is the starting point for evaluation: follow the [Permit MCP Gateway quickstart](/permit-mcp-gateway/quickstart).
+Permit runs the gateway, the consent service, and the policy decision point (PDP). Each host runs on a subdomain of `agent.security`, such as `acme-zesty-magenta-11.agent.security`, with its own people, policies, and consent grants. The hosted gateway is the starting point for evaluation: follow the [Permit MCP Gateway quickstart](/permit-mcp-gateway/quickstart).
 
 ### Customer-controlled and fully on-premises deployment \{#customer-controlled-deployment-enterprise}
 
@@ -230,7 +258,7 @@ Both models are available on Enterprise plans. To discuss your requirements, [bo
 
 ## Next steps
 
-- [Permit MCP Gateway quickstart](/permit-mcp-gateway/quickstart): get a gateway URL and connect one MCP client.
+- [Permit MCP Gateway quickstart](/permit-mcp-gateway/quickstart): create a host, import one MCP server, and connect one MCP client.
 - [Getting started with Permit MCP Gateway](/permit-mcp-gateway/guide/): set up a host for your team and test allowed and denied calls.
 - [Architecture](/permit-mcp-gateway/architecture): data flows and sequence diagrams.
 - [How Permit MCP Gateway works with Permit.io](/permit-mcp-gateway/permit-integration/): the policy model behind hosts, tools, and trust levels.

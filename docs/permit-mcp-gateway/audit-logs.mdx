@@ -1,49 +1,137 @@
 ---
 title: Investigate agent activity with audit logs
 sidebar_label: Audit Logs
-description: Find, read, and investigate the allowed and denied tool calls that Permit MCP Gateway records, in the gateway dashboard and in the Permit.io dashboard.
+description: Find and read the tool calls, Permit checks, Guardian verdicts, and identity checks that Permit MCP Gateway records, in the admin dashboard and in the Permit.io dashboard.
 sidebar_position: 6
 ---
 
-Find, read, and investigate the tool calls that Permit MCP Gateway allowed or denied. This page is for gateway admins who monitor agents, debug denied calls, or collect activity for a compliance review.
+Find, read, and investigate what Permit MCP Gateway did with each agent call. This page is for gateway admins who monitor agents, debug denied calls, or collect activity for a compliance review.
 
-The gateway checks every tool call with `permit.check()`, and Permit records each decision in the audit log of the Permit environment linked to the host. You don't add logging code.
+The gateway writes every agent call, every Permit check, every Guardian verdict, and every identity registration to the audit log of the Permit.io environment linked to the host. You don't add logging code.
 
 ## Prerequisites
 
-- An admin account on the [Permit MCP Gateway dashboard](https://app.agent.security) with access to the host.
-- Access to the Permit project and environment linked to the host in the [Permit.io dashboard](https://app.permit.io). See [Create a host](/permit-mcp-gateway/guide#2-create-a-host).
-- At least one agent that has completed the [consent flow](/permit-mcp-gateway/consent-service) and called a tool.
+- An admin account on the admin dashboard ([app.agent.security](https://app.agent.security)) with access to the host.
+- For the raw decision log: access to the Permit project and environment linked to the host in the [Permit.io dashboard](https://app.permit.io). **Settings** > **Environment** in the admin dashboard shows which project and environment the host uses.
+- At least one agent that completed the [consent flow](/permit-mcp-gateway/consent-service) and called a tool.
 
 ## Where audit logs live
 
-The same decisions appear in two dashboards:
-
 | Location | What it shows | Use it for |
 | --- | --- | --- |
-| Permit MCP Gateway dashboard ([app.agent.security](https://app.agent.security)) | An **Audit Logs** tab on each agent, human, and MCP server detail page. The gateway dashboard reads the entries from the Permit audit logs API and scopes them to that page. | Day-to-day monitoring and lookups for one agent, human, or server. |
-| Permit.io dashboard ([app.permit.io](https://app.permit.io)) | The **Audit Log** screen of the linked environment, with the raw `permit.check()` parameters and the decision log for each entry. | Filtering by user, date, and decision, and reading the full reason for a decision. |
+| **Dashboard** > **Live activity** | The latest calls across the host, with an **All** and a **Blocked** view. | Watching activity as it happens. |
+| **Agents** > agent > **Audit Logs** | Everything one agent did on one server. | Following one agent. |
+| **Humans** > person > **Audit Logs** | Everything the person's agents did. | Reviewing everything done on one person's behalf. |
+| **MCP Servers** > server > **Audit Logs** | Every call to one server, from all agents and people. | Reviewing a sensitive server. |
+| **Audit Log** in the [Permit.io dashboard](https://app.permit.io) | The raw decision log of the linked environment. | Filtering by date, user, and decision, and exporting entries with the API. |
 
-## View activity in the gateway dashboard
+## Watch live activity on the Dashboard
 
-Each detail page in the gateway dashboard has an **Audit Logs** tab that scopes the entries:
+The **Dashboard** shows **Gateway activity** for the last 1 hour, 6 hours, 24 hours, or 7 days: governed calls, allowed and denied counts, calls the Guardian flagged, and approvals waiting. **Top denied intents** groups denials by what the Guardian graded each call against, and **Top agents by denials** lists the agents denied most.
 
-| Detail page | Entries shown |
+The **Live activity** feed lists each call as it happens. Select **Blocked** to see only refused calls, and click the pause button to stop the feed while you read it.
+
+![Dashboard with gateway activity, Top denied intents, Top agents by denials, and the Live activity feed](/img/agent-security/platform/dashboard-full.png)
+
+## Read the Audit Logs tab
+
+Each agent, person, and MCP server page has an **Audit Logs** tab. A key above the table names the four kinds of event:
+
+- **Request:** the agent's call: a tool, a read, a prompt, or a CLI / API call.
+- **Policy check:** Permit's decision for the agent or the person, or the trust ceiling.
+- **Guardian:** the AI judge's verdict on the call.
+- **Identity check:** the agent's Semantic Identity registration.
+
+![Audit Logs tab of Acme Research Agent with tool calls, Guardian verdicts, and their reasons](/img/agent-security/platform/agent-audit-logs.png)
+
+The table has five columns:
+
+| Column | Contents |
 | --- | --- |
-| **Agents** > agent | Tool calls made by that agent (MCP client), filtered by the agent's user key `agent\|{client_id}`. |
-| **Humans** > human | Tool calls made by all agents that act on behalf of that human. |
-| **MCP Servers** > server | Tool calls to that MCP server, from all agents and humans. |
+| **When** | The time and date of the event. |
+| **Identity** | Who the event is about: an **Agent** (its client ID, shortened) or a **Person** (their subject, shortened). |
+| **Event** | The tool, resource, or event name, with the kind of event under it. |
+| **Decision** | **Allowed** or **Denied**. |
+| **Reason** | Why. For a request, which check decided it. For a Guardian verdict, the scores and reasoning. |
 
-![Audit Logs tab on an agent detail page listing tool calls with allowed and denied decisions](/img/agent-security/agent-audit-logs.png)
+### Event types
 
-![Audit Logs tab on a human detail page listing tool calls from all of the human's agents](/img/agent-security/human-audit-logs.png)
+| Event | Kind | What it records |
+| --- | --- | --- |
+| **Tool call** | Request | One agent tool call and how it ended. **Allowed** means the MCP server ran the tool. |
+| **Resource read** | Request | One `resources/read` call. |
+| **Prompt** | Request | One `prompts/get` call. |
+| **CLI / API call** | Request | A request through the HTTP egress proxy. |
+| **Permit check on** `<server>` | Policy check | One Permit check, for the agent or for the person. |
+| **Trust ceiling** | Policy check | A tool refused because its trust level is above the level the person approved the agent at. |
+| **Guardian verdict** | Guardian | The Guardian's grade of one call. |
+| **Identity check** | Identity check | One `gateway_register_session` registration, or a block. |
 
-![Audit Logs tab on an MCP server detail page listing tool calls to that server](/img/agent-security/server-audit-logs.png)
+### Request reasons
 
-Each row shows the time, user, resource, action, decision (**Allowed** or **Denied**), and, for denied calls, a reason.
+A request's reason has the form "Tool call on deepwiki: `<reason>`". The reasons are:
 
-:::note Partial view for humans with many agents
-The human and agent views query at most 50 agent registrations. When a human has more than 50, the tab shows a **Partial audit view** notice, and activity from the other registrations is missing. Use the Permit.io dashboard to see all entries.
+| Reason | What it means | What to check |
+| --- | --- | --- |
+| allowed by the agent and person checks | Permit allowed the agent and the person, and the server ran the call. A server the person added by URL shows "allowed by the agent check". | Nothing. |
+| allowed by the agent and person checks and approved by an approver | The call waited for [approval](/permit-mcp-gateway/human-in-the-loop) and was approved. | **Approvals** > **History** for who decided. |
+| refused: the agent has not registered its session | The host requires agent identity, and the agent had no current registration. | Whether the agent calls `gateway_register_session`. See [Check agent identity and intent](/permit-mcp-gateway/advanced-features#agent-verification). |
+| denied by the agent check | The agent's trust level on the server is below the tool's trust level. | **Show checks**, then the agent's trust level. |
+| denied by the person check | The person's own access to the server doesn't cover the tool. | **Humans** > person > **MCP Server Access**. |
+| denied by the agent and person checks | Both checks denied. | Both of the above. |
+| denied: a permission check got no answer from the PDP | Permit's policy decision point (PDP) didn't answer, so the gateway refused the call. | The Permit environment linked to the host. |
+| refused: the tool's trust level is above the trust level the agent was approved at | The trust ceiling refused the tool. | The level the person approved the agent at, on **Consent Grants**. |
+| denied by the guardian | The Guardian refused the call. | The **Guardian verdict** row next to it. |
+| rejected by an approver | An approver rejected the call. | **Approvals** > **History**. |
+| refused: no approver answered before the approval request timed out | Nobody decided within the timeout. | [Approval notifications](/permit-mcp-gateway/human-in-the-loop#notifications). |
+| cancelled while waiting for approval | The client cancelled the call or disconnected while it waited. | The MCP client. |
+
+### Show the agent and person checks
+
+Tool call rows have **Show checks**. It expands into the two Permit checks behind the decision:
+
+- **Agent check:** Permit checked that this agent may use this tool on the server, at the trust level its person approved. Every call needs this check to allow it.
+- **Person check:** Permit checked that the person the agent acts for may use this tool themselves, at their own trust level. It stops an agent from using another person's approval. A server a person added by its URL has no person check.
+
+![Audit row with checks shown: Agent check Denied, Person check Allowed](/img/agent-security/platform/agent-audit-row-checks.png)
+
+### Guardian verdict rows
+
+On a host with the [Guardian](/permit-mcp-gateway/advanced-features#guardian) on, each graded call has a **Guardian verdict** row next to its request row. The reason starts with the scores, for example `alignment: 0.15, confidence: 0.85, risk: high`, followed by the Guardian's reasoning:
+
+- An allowed call: `alignment: 0.85, confidence: 0.90, risk: low`, "Action reads public repository documentation to answer engineering questions about React, which directly serves the declared read-only research intent and stated task scope."
+- A denied call to `acme-corp/payroll-service`: `alignment: 0.15, confidence: 0.85, risk: high`, "Action targets a private internal repository (payroll-service) rather than public GitHub repositories for React/Next.js research as declared."
+
+Click the arrow next to the tool name to see what the Guardian graded the call against: the server's intent, the person's task, or the agent's registered words. The expanded row also shows the second check, which grades the call against the agent's own task sentence and is recorded only. When the second check would have decided differently, the **Decision** column shows a note such as **Second check would deny**.
+
+### Identity check rows
+
+On a host with **Require Agent Identity** on, each registration writes an **Identity check** row. The event name says what happened:
+
+| Event name | What happened |
+| --- | --- |
+| **Session Registered** | The agent's first registration. The reason says the identity was established and the initial fingerprint created. |
+| **Identity Refreshed** | A later registration, accepted. The reason gives the drift from the earlier registration, for example drift 0.7%. |
+| **Drift Warning** | The drift reached the **Warn** threshold. The registration was accepted. |
+| **Session Blocked** | The gateway blocked the agent's MCP session, for example after the drift reached the **Block** threshold. |
+| **Blocked Session Refused** | The agent tried to register on a blocked session. |
+| **Drift Blocked** | The agent drifted and was sent to the person for re-approval. |
+| **Re-approval Required** | The agent was sent to the person for re-approval for another reason, such as three blocked sessions within 24 hours. |
+| **Task Mismatch** | The agent's task sentence didn't fit the task the person set. |
+| **Registration Refused** | The registration broke a rule, such as a missing `task` or too few known words. |
+
+Click the arrow on an identity row to see the words and task the agent sent, the question it answered, the outcome, and the MCP session.
+
+![Audit table with allowed and denied tool calls, Guardian verdicts, and a Session Registered row](/img/agent-security/platform/agent-audit-table.png)
+
+### Person and server tabs
+
+The person's **Audit Logs** tab shows the activity of every agent that acts for the person. The server's tab shows every call to the server, with the **Permit check on** rows for both the agent and the person.
+
+![Audit Logs tab of the DeepWiki server with a rejected call, a Guardian verdict, Permit checks, and an Identity Refreshed row](/img/agent-security/platform/server-audit-logs.png)
+
+:::note Partial view for people with many agents
+The person and agent views query at most 50 agent registrations. When there are more, the tab shows a **Partial audit view** notice, and activity from the other registrations is missing. Use the Permit.io dashboard to see all entries.
 :::
 
 ## View the raw decision log in Permit
@@ -53,94 +141,69 @@ The human and agent views query at most 50 agent registrations. When a human has
 3. Open the **Audit Log** screen.
 4. Select an entry to open its decision log.
 
-The decision log shows the check (user, action, resource, tenant) and the reason the policy decision point (PDP) allowed or denied it. On the **Audit Log** screen, you can filter entries by user, date, decision, and tenant. For details, see [View and filter audit logs](/how-to/use-audit-logs/types-and-filtering).
-
-## Read an audit log entry
-
-Each entry is one `permit.check()` call that the gateway made when an agent called a tool:
-
-| Field | Description | Example |
-| --- | --- | --- |
-| **Timestamp** | When the gateway checked the call. | `2026-03-10T14:32:05Z` |
-| **User key** | The agent's identity in Permit. | `agent\|cursor_abc123` |
-| **Action** | The tool name. | `create_issue` |
-| **Resource** | The MCP server, as resource type and instance. | `linear:linear` |
-| **Decision** | Whether Permit allowed or denied the call. | Allowed or Denied |
-| **Reason** | For a denied call, why the check failed. | `No permission for 'create_issue'` |
+On the **Audit Log** screen, you can filter entries by user, date, decision, and tenant. For details, see [View and filter audit logs](/how-to/use-audit-logs/types-and-filtering).
 
 ### Map an entry to the policy model
 
-This check is behind a `create_issue` call from Cursor to the Linear MCP server:
+For each call, the gateway asks Permit two questions about the same tool and server. The agent check runs on every server. The person check runs on servers an admin imported:
 
+```text
+permit.check("agent|<client_id>|<subject>", "<tool_name>", "<server_key>:<server_key>")
+permit.check("human|<subject>", "<tool_name>", "<server_key>:<server_key>")
 ```
-permit.check("agent|cursor_abc123", "create_issue", "linear:linear")
-```
 
-Read the check against the [Permit MCP Gateway policy model](/permit-mcp-gateway/permit-integration):
+For example, Acme Research Agent's call to `ask_wiki_question` on DeepWiki checks the user `agent|<client_id>|<subject>`, the action `ask_wiki_question`, and the resource `deepwiki:deepwiki`. Each agent is one person using one MCP client, so the agent key holds both the client ID and the person's subject. Permit derives the agent's role on the server from the lower of two trust levels: the level the person approved the agent at, and the person's own maximum trust level. See [How Permit MCP Gateway works with Permit.io](/permit-mcp-gateway/permit-integration).
 
-1. **User** `agent|cursor_abc123`: the MCP client (Cursor), identified by its OAuth client ID.
-2. **Action** `create_issue`: the tool. The tool's trust level (for example, medium) decides which roles grant the action.
-3. **Resource** `linear:linear`: the MCP server. The resource type and the instance share the same key.
-4. **Evaluation**: Permit derives the agent's role on the server from the lower of two trust levels, the level the human consented to and the admin's max trust level. See [The UserProfile indirection](/permit-mcp-gateway/permit-integration#the-userprofile-indirection-rebac). Permit then checks whether that role grants the action.
-
-### Denial reasons
-
-For a denied call, the gateway dashboard shortens Permit's reason when a role is missing. Other reasons appear as Permit reports them.
-
-| Reason or denial code | What it means | What to check |
-| --- | --- | --- |
-| `No permission for '<tool_name>'` | The agent's effective trust level is lower than the tool's trust level. | The agent's trust level for the server and the human's max trust level. |
-| [`user_not_synced`](/how-to/use-audit-logs/errors/user_not_synced) | Permit has no user with the agent's key. | Whether the human completed the consent flow for this agent. |
-| [`no_such_resource`](/how-to/use-audit-logs/errors/no_such_resource) | The MCP server's resource type doesn't exist in the environment. | Whether an admin imported the MCP server in the gateway dashboard. |
-
-For all denial codes, see [Denial codes in decision logs](/how-to/use-audit-logs/types-and-filtering#denial-codes-in-decision-logs).
+The gateway also writes its own row for each call, with the resource type `gateway.<server_key>` and the action `gateway.mcp_tool_call` (or `gateway.mcp_resource_read`, `gateway.mcp_prompt_get`). That row is the **Tool call** row of the admin dashboard. For Permit's denial codes, such as [`user_not_synced`](/how-to/use-audit-logs/errors/user_not_synced) and [`no_such_resource`](/how-to/use-audit-logs/errors/no_such_resource), see [Denial codes in decision logs](/how-to/use-audit-logs/types-and-filtering#denial-codes-in-decision-logs).
 
 ## Investigate common questions
 
 ### Why was a tool call denied?
 
-A developer reports that their agent can't create issues in Linear.
+A user reports that Acme Research Agent can't call `ask_wiki_question` on DeepWiki.
 
-1. In the gateway dashboard, go to **Agents** and open the developer's agent, for example Cursor.
-2. On the **Audit Logs** tab, find the denied `create_issue` entry.
-3. Read the **Reason**. `No permission for 'create_issue'` means the agent's effective trust level is too low for the tool. In this example, `create_issue` needs **medium** trust.
-4. On **Humans**, open the developer and check the max trust level for Linear. If the max trust level is **low**, an admin raises it first. The consent screen doesn't allow a trust level above the max.
-5. Check the agent's trust level for Linear. If the agent has **low** trust, the developer runs the consent flow again and selects **medium**.
+1. Go to **Agents**, open Acme Research Agent, and select the **Audit Logs** tab.
+2. Find the denied `ask_wiki_question` row. The reason reads "Tool call on deepwiki: denied by the agent check".
+3. Click **Show checks**. **Agent check** is **Denied** and **Person check** is **Allowed**: the person may use the tool, but the agent was approved at a lower trust level than the tool needs. In this example, `ask_wiki_question` is a Medium tool and the agent's badge on its page reads **Low**.
+4. Ask the person to revoke the agent on **Your MCP agents**, then reconnect it from the MCP client and pick **Medium** on the consent screen. Reconnecting while the grant is active doesn't show the consent screen. Admins can lower an agent's trust level but can't raise it.
+5. If the consent screen doesn't offer Medium, the person's own maximum is lower. Go to **Humans**, open the person, and raise the **Trust level** for DeepWiki in **MCP Server Access** first.
 
-**Result:** after the trust level change, the next `create_issue` call shows **Allowed** on the **Audit Logs** tab.
+**Result:** the next `ask_wiki_question` call shows **Allowed**.
 
-### Which human authorized an agent?
+### Why did the Guardian deny a call?
 
-1. In the gateway dashboard, go to **Agents** and open the agent.
-2. The agent detail page shows the human who completed the consent flow for the agent.
-3. On the agent's **Audit Logs** tab, review the agent's tool calls.
-4. On **Humans**, open that human to see the human's access grants and every agent acting on the human's behalf.
+1. On the agent's **Audit Logs** tab, find the **Guardian verdict** row next to the denied call.
+2. Read the reasoning, and click the arrow to see what the Guardian graded against.
+3. If the call was legitimate, reword the server's intent and test the call with **Dry Run**. See [Write a server intent](/permit-mcp-gateway/advanced-features#write-a-server-intent).
 
-**Result:** each tool call traces back to one human: human, consent, agent, tool call.
+### Which person authorized an agent?
+
+1. Go to **Agents** and open the agent. The header reads "On behalf of" the person's email, on the server.
+2. Go to **Consent Grants** to see the level, task, and end date the person approved.
+3. On **Humans**, open that person to see their server access and every agent that acts for them.
+
+**Result:** each tool call traces back to one person: person, consent, agent, tool call.
 
 ### Which calls reached a sensitive MCP server?
 
 For example, a compliance team reviews all agent calls to an MCP server connected to a production database.
 
-1. In the gateway dashboard, go to **MCP Servers** and open the server.
-2. On the **Audit Logs** tab, review each entry: the agent, the tool, the time, and the decision. **Allowed** entries reached the server. **Denied** entries were blocked by the gateway.
-3. For each allowed call, open the agent to find the human who authorized it.
-4. To list only allowed or only denied calls, open the **Audit Log** screen in the Permit.io dashboard, filter by decision, and look for the server's resource key, for example `production-db`.
+1. Go to **MCP Servers** and open the server.
+2. On the **Audit Logs** tab, review the **Tool call** rows. **Allowed** rows reached the server. **Denied** rows were stopped by the gateway, and the reason says which check stopped them.
+3. For each allowed call, open the agent to find the person who authorized it.
+4. To list only allowed or only denied calls over a period, use the **Audit Log** screen in the Permit.io dashboard and filter by decision.
 
 ### How did an agent's access change over time?
 
-1. In the gateway dashboard, go to **Agents** and open the agent.
-2. On the **Audit Logs** tab, compare older and newer entries for the same tool:
-   - A tool that was allowed and is later denied points to a lower trust level or revoked access.
-   - A tool that was denied and is later allowed points to a higher trust level or a new consent.
-3. On **Humans**, open the authorizing human to check the current max trust level and access grants. Changes to the max trust level or access apply from the agent's next tool call.
+1. Go to **Consent Grants** and click **View all history**. History lists each approval, change, pause, expiry, and revoke.
+2. On the agent's **Audit Logs** tab, compare older and newer entries for the same tool. A tool that was allowed and is later denied points to a lower trust level or an ended grant.
 
 ### Collect activity for a reporting period
 
 1. In the [Permit.io dashboard](https://app.permit.io), open the **Audit Log** screen for the environment linked to the host.
-2. Filter by the date range of the reporting period. Each entry shows the agent, the tool, the MCP server, the time, and the decision.
+2. Filter by the date range of the reporting period.
 3. To filter by resource or action, or to collect the entries in code, call the [List audit logs](https://api.permit.io/v2/redoc#tag/Audit-Logs/operation/list_audit_logs) endpoint.
-4. For a view per human, open the human on the **Humans** page of the gateway dashboard. The **Audit Logs** tab shows activity from all of the human's agents.
+4. For a view per person, open the person on the **Humans** page of the admin dashboard. The **Audit Logs** tab shows activity from all of the person's agents.
 
 :::note Audit log retention
 Permit deletes old audit logs periodically. For retention details, see [View audit logs](/how-to/use-audit-logs/types-and-filtering#viewing-your-audit-logs).
@@ -148,7 +211,7 @@ Permit deletes old audit logs periodically. For retention details, see [View aud
 
 ## Next steps
 
+- [Check agent identity and intent](/permit-mcp-gateway/advanced-features): the identity checks and Guardian verdicts in the log.
+- [Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop): the approvals behind "approved by an approver".
 - [How Permit MCP Gateway works with Permit.io](/permit-mcp-gateway/permit-integration): the policy model behind each decision.
 - [Manage humans and agents](/permit-mcp-gateway/managing-humans-and-agents): change trust levels and revoke access.
-- [Consent service](/permit-mcp-gateway/consent-service): how humans set an agent's trust level.
-- [View and filter audit logs](/how-to/use-audit-logs/types-and-filtering): Permit audit log features for all environments.

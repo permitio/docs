@@ -1,141 +1,199 @@
 ---
-title: Human-in-the-Loop Approvals
+title: Require human approval for agent tool calls
 sidebar_label: Human-in-the-Loop
-description: Require an admin to approve sensitive agent tool calls in Permit MCP Gateway, and configure approval policies, trusted agent bypass, notifications, and timeouts.
+description: Hold sensitive agent tool calls in Permit MCP Gateway until an admin or the person the agent acts for approves them, and set up approval rules, trusted agents, the approval queue, and notifications.
 sidebar_position: 7.5
 ---
 
-This guide is for admins of Permit MCP Gateway. Human-in-the-loop (HITL) approvals pause a sensitive agent tool call, such as deleting records or changing production data, until an admin approves or rejects it. Tool calls that don't require approval run without a pause.
+This guide is for admins of Permit MCP Gateway. Human-in-the-loop (HITL) approvals hold a sensitive agent tool call, such as deleting records or changing production data, until a human approves or rejects it. Tool calls that don't need approval run without a pause.
 
 :::note Enterprise plan
 Human-in-the-loop approvals are available on **Enterprise** plans. To discuss access, [schedule a demo](https://www.permit.io/demo).
 :::
 
+## Prerequisites
+
+- An admin account on the admin dashboard ([app.agent.security](https://app.agent.security)) with a host and an imported MCP server. See [Host setup](/permit-mcp-gateway/host-setup).
+- An agent that completed the [consent flow](/permit-mcp-gateway/consent-service) for that server.
+
 ## Require approval for a tool
 
-1. In the admin dashboard, go to **MCP Servers**, select a server, and turn on the **HITL** toggle for a tool.
-2. From an MCP client, such as Cursor or Claude Desktop, ask the agent to call that tool.
-3. In the admin dashboard, open **Approvals**. The request appears on the **Pending** tab.
-4. Approve the request. The tool call runs and the agent receives the result.
+1. In the sidebar, go to **MCP Servers** and open the server, for example DeepWiki.
+2. In the **Tools** card, turn on the **HITL** switch of the tool, for example `read_wiki_contents`.
 
-## How it works
+   ![Tools card of DeepWiki with the HITL switch on for read_wiki_contents](/img/agent-security/platform/server-tools-approval.png)
 
-1. An agent calls a tool that requires approval, such as `delete_repo`.
-2. The gateway checks authorization with Permit, using the agent's [trust level](/permit-mcp-gateway/managing-humans-and-agents#how-trust-flows).
-3. If the tool requires approval, the gateway pauses the tool call and creates an approval request.
-4. The gateway notifies admins in the admin dashboard, and by email or Slack if you configured [notifications](#notifications).
-5. An admin approves or rejects the request.
-6. On approval, the gateway runs the tool call. On rejection or timeout, the gateway returns an error to the agent.
+3. From the MCP client, ask the agent to call that tool. The call waits.
+4. In the sidebar, open **Approvals**. The request appears on the **Pending** tab.
+5. Click **Approve**. The tool call runs and the agent receives the result.
 
-The MCP client waits for the response, so you don't change any client configuration. If no admin decides within the timeout (5 minutes by default), the gateway rejects the request.
+**Verify:** on the **History** tab, the request shows **Approved**. On the agent's **Audit Logs** tab, the tool call's reason reads "Tool call on deepwiki: allowed by the agent and person checks and approved by an approver".
 
-## Approval queue
+## How an approval works
 
-Admins review requests on the **Approvals** page in the admin dashboard. The page has three tabs: **Pending**, **History**, and **Notifications**.
+The gateway runs its checks in a fixed order, and asks for at most one approval per call:
 
-### Pending approvals
+1. The Permit checks and the trust ceiling run first. A call they deny is refused and never reaches **Approvals**.
+2. The gateway reads the server's approval rules (the **HITL** switches and the **Server Approval Policy**) and the person's "Ask me before this agent changes or deletes anything" switch.
+3. On a host with the [Guardian](/permit-mcp-gateway/advanced-features#guardian) on, the Guardian grades the call. A Guardian denial refuses the call at once. A Guardian doubt asks for approval when **If the Guardian is unsure** is set to **Ask a human**.
+4. When any of these asks, the gateway creates one approval request, notifies the approvers, and holds the call.
+5. On approval, the call runs. On rejection or timeout, the gateway returns an error to the agent.
 
-Each pending approval card shows:
+The MCP client waits for the response, so you don't change any client configuration. A call also waits for an admin when the gateway can't read the tool's trust level.
 
-| Field | Contents |
-| --- | --- |
-| **Tool name** and **server** | The tool the agent wants to call and the MCP server that hosts it. |
-| **Trust-level badge** | The tool's trust level (high, medium, or low). High-trust cards have a red left border, and medium-trust cards have a yellow left border. |
-| **Agent and user identity** | The agent making the request and the user it acts for. |
-| **Tool arguments** | The exact parameters of the call, such as the issue ID or repository. |
-| **Approval reason** | When present, why the tool requires approval. |
-| **Countdown timer** | Time left before the gateway rejects the request. |
-
-![Approvals page with a pending request card](/img/agent-security/hitl/approval-queue-pending.png)
-
-Click **Approve** or **Reject** on a card. When you reject, you can add a reason: a preset ("Unauthorized scope", "Suspicious arguments", "Wrong environment") or your own message.
-
-![Reject dialog with preset and custom rejection reasons](/img/agent-security/hitl/approval-reject-with-reason.png)
-
-The gateway includes the rejection reason in the error it returns to the agent, so the user can see why the request was denied.
-
-![MCP client showing the rejection reason returned to the agent](/img/agent-security/hitl/agent-rejection-message.png)
-
-To act on several requests at once, select their cards with the checkboxes and use the batch action bar to approve or reject them.
-
-:::tip Keyboard shortcuts
-**J/K** move between cards · **A** approve · **R** reject (opens the reason input) · **X** select · **Esc** deselect
-
-You can turn off single-key shortcuts in the Approvals page. **Esc** works with the setting on or off.
-:::
-
-### Approval history
-
-The **History** tab lists resolved approvals, with the admin who decided, the time the decision took, and the outcome: approved, rejected, timed out, or cancelled. Filter the list by outcome with the status filter.
-
-![History tab listing resolved approval requests](/img/agent-security/hitl/approval-history-full.png)
-
-## Configuring approval policies
+## Choose which calls need approval
 
 ### Per-tool approval
 
-Each tool on an MCP server's detail page has a **HITL** toggle. Turn it on to require approval for that tool.
-
-![MCP server tool list with the per-tool HITL toggle](/img/agent-security/hitl/per-tool-hitl-toggle.png)
+Each tool row in a server's **Tools** card has a **HITL** switch. Turn it on to require approval for that tool. When you import a server, the **Tools to Import** list has the same switch for each tool.
 
 ### Server approval policy
 
-The **Server Approval Policy** card on the server detail page applies approval rules to more than one tool:
+The **Server Approval Policy** card on the server's **Overview** tab applies rules to all tools on the server, in addition to the per-tool switches:
 
-- **Require approval for all tools:** every tool on the server requires approval.
-- **Trust level threshold:** tools at the selected [trust level](/permit-mcp-gateway/platform#tool-auto-discovery-and-trust-level-classification) or higher require approval. Select High to require approval only for destructive tools, or Low to require approval for every tool.
+- **Require approval for all tools:** every tool on the server requires admin approval before it runs.
+- **Trust level threshold:** tools at the selected trust level or higher require approval. The options are **None**, **Low and above (all tools)**, **Medium and above**, and **High only (most critical)**.
 
-Per-tool toggles, the all-tools setting, and the trust level threshold combine. If any of them requires approval, the gateway pauses the tool call.
+![Server Approval Policy card with Require approval for all tools off and Trust level threshold None](/img/agent-security/platform/server-approval-policy.png)
 
-### Trusted agent bypass
+The per-tool switches, **Require approval for all tools**, and the threshold combine. If any of them requires approval, the call waits.
 
-The **Trusted Agent Bypass** card on the server detail page lists agents that never wait for approval, such as CI bots or scheduled pipelines. Add the agent's client ID to the list. A bypassed agent skips every approval rule on the server, including per-tool toggles.
+### Guardian doubts
 
-![Server Approval Policy and Trusted Agent Bypass cards on the server detail page](/img/agent-security/hitl/server-policy-and-bypass.png)
+When the Guardian is on and **If the Guardian is unsure** is **Ask a human** (the default), a call that the Guardian finds only partly aligned with the task, or is unsure about, waits in **Approvals** with the Guardian's reasoning. Its card reads "The security check partly agrees with the task." or "The security check is unsure this call fits the task.", with the alignment and confidence scores. See [Check agent identity and intent](/permit-mcp-gateway/advanced-features#guardian).
 
-To find an agent's client ID, open the **Agents** page in the admin dashboard.
+## Let trusted agents skip approval \{#trusted-agent-bypass}
+
+The **Trusted Agent Bypass** card on a server's **Overview** tab lists agents that skip the approval rules on that server, such as CI bots or scheduled pipelines. A trusted agent skips only the human approval step. Permit still checks every call, the Guardian still grades it when it's on, and the person's "Ask me before this agent changes or deletes anything" switch still applies.
+
+![Trusted Agent Bypass card with Everyone selected and the shared agent ID warning](/img/agent-security/platform/server-trusted-agent-bypass.png)
+
+Under **Who a trusted agent skips approval for**, pick one:
+
+- **Everyone** (default): everyone in your org who uses the agent. Enter the agent ID, which is the agent's OAuth client ID, and click **Add**. The **Registrations** card on the agent's page lists its client IDs.
+- **Specific people:** only the people you switch on. The card lists each agent approved on the server with the people who approved it, and a **Skips approval** switch for each person.
+
+:::warning Shared agent IDs skip approval
+With **Everyone**, anyone in your org who connects with a listed agent ID skips approval on the server, even if they copied the ID into their own MCP client. Choose **Specific people** to trust only the person and agent ID pairs you switch on.
+:::
+
+## Review approvals
+
+Open **Approvals** in the sidebar. The page has three tabs: **Pending**, **History**, and **Notifications**. The sidebar item and the **Approvals pending (HITL)** card on the **Dashboard** show how many requests wait.
+
+![Approvals page with one pending request from Acme Research Agent](/img/agent-security/platform/approvals-pending.png)
+
+### Read an approval card
+
+| Part | Contents |
+| --- | --- |
+| Headline | "Acme Research Agent wants to run `read_wiki_contents` on deepwiki for Check TheDog": the agent, the tool, the server, and the person the agent acts for. |
+| **Agent ID** and **Person ID** | The agent's key, `agent\|<client_id>\|<subject>`, and the person's key, `human\|<subject>`, each with a copy button. |
+| Request details | When it was asked (for example "Asked 1m ago"), the MCP session and intent number, and what the tool does: **Reads data**, **Changes data**, or **Deletes data**. |
+| Timer | The time left before the request times out, starting at 5:00. |
+| Reason | Why the call is waiting: the first reason, for example "A policy rule asks an admin to approve this tool." Click **Details** to see every reason. |
+| **Arguments** | The exact arguments of the call. |
+
+A request can wait for these reasons: **Policy rule** (a **HITL** switch or the server approval policy), **Judge doubt** (the Guardian, with its scores and, when the Platform channel is on, its reasoning), **Unknown trust level**, and **Ask before writes** (the person's switch).
+
+![Approval card with Details open: Policy rule, the approval policy for deepwiki covers this tool](/img/agent-security/platform/approval-card-details.png)
+
+### Approve or reject
+
+Click **Approve** or **Reject** on a card. When you reject, pick a preset reason (**Unauthorized scope**, **Suspicious arguments**, **Wrong environment**) or type your own in **Custom reason...**, then click **Reject**. The gateway includes the reason in the error it returns to the agent.
+
+![Approval card with reject presets and a custom reason typed](/img/agent-security/platform/approval-reject.png)
+
+In the last 60 seconds before timeout, the card shows a **+5 min** button that adds review time, up to one hour in total.
+
+To act on several requests at once, select their cards with the checkboxes, or the checkbox above the list, and click **Approve All** or **Reject All**.
+
+:::tip Keyboard shortcuts
+**J**/**K** navigate, **A** approve, **R** reject (opens the reason input), **X** select, **Esc** deselect.
+
+Single-key shortcuts can be turned off on the Approvals page. **Esc** works either way.
+:::
+
+To get a desktop notification for each new request while the admin dashboard is in a background tab, click **Enable desktop notifications** and allow the browser prompt.
+
+### Approval history
+
+The **History** tab lists resolved requests with the columns **Time**, **Tool** (with the reason it waited, such as **Policy rule**), **Server**, **Agent**, **Decided By**, **Decision Time**, and **Decision**. Filter by outcome with the status filter: **Approved**, **Rejected**, **Timed out**, or **Cancelled**. An admin's decision on a person's approval shows **Admin override**.
+
+![History tab with one rejected and one approved request for read_wiki_contents](/img/agent-security/platform/approvals-history.png)
 
 ## Notifications
 
-Configure notifications so admins know when a request is waiting. Go to **Approvals > Notifications**.
+Set up notifications so approvers know a request is waiting. Go to **Approvals** > **Notifications**.
 
-![Notifications tab with email and Slack settings](/img/agent-security/hitl/notification-settings.png)
+![Approval Notifications with Email Recipients and Slack Webhook fields](/img/agent-security/platform/approvals-notifications.png)
 
-### Email notifications
+- **Email Recipients:** enter an address and click **Add**. Each new request sends an email with the subject "Approval Required: `<tool>` on `<server>`" and a link to the request in the admin dashboard.
+- **Slack Webhook:** create an [Incoming Webhook](https://api.slack.com/messaging/webhooks) in Slack, paste its URL, and click **Save**. The Slack message names the server and the tool, and links to the request in the admin dashboard. Tool arguments stay in the admin dashboard.
 
-Add the email addresses that receive a message for each new approval request. The email includes the tool name, the server, the agent identity, and a link to the request in the admin dashboard.
+The Guardian's reasoning appears in Slack or email only when you check that channel under **Settings** > **Agent Identity** > **Where the Guardian's reason shows**. A host with no email recipients and no Slack webhook notifies no one outside the admin dashboard, so its requests wait until someone opens **Approvals**, or until they time out.
 
-![Approval request notification email](/img/agent-security/hitl/email-notification.png)
+## What the agent sees \{#what-the-agent-user-sees}
 
-### Slack notifications
+When the call starts to wait, the gateway sends the MCP client a log message, then reminds it while the call still waits:
 
-Paste a [Slack incoming webhook](https://api.slack.com/messaging/webhooks) URL to post notifications to a Slack channel. The message includes the approval context and a button that opens the admin dashboard. For security, Slack messages don't include tool arguments.
+```text
+Tool 'read_wiki_contents' requires admin approval before execution. Waiting for approval (timeout: 5m)...
+```
 
-![Approval request notification in a Slack channel](/img/agent-security/hitl/slack-notification.png)
+For a Guardian doubt, the message says the call "was flagged by the security check" instead. The agent never sees the Guardian's reasoning.
 
-### Browser notifications
+When an admin rejects the call, the agent gets an error with the admin's reason:
 
-To get desktop notifications while the admin dashboard is open in a background tab, click **Enable desktop notifications** on the Approvals page and allow the browser permission prompt. A desktop notification appears for each new approval request while the admin dashboard tab isn't in focus.
+```text
+Tool 'read_wiki_contents' was rejected by admin: 'Use the Next.js docs for this task; React internals are out of scope.'. Contact your admin if you believe this is an error.
+```
 
-## Timeouts
+When nobody decides in time:
+
+```text
+Tool 'read_wiki_contents' requires admin approval before execution. The approval request timed out after 5m without a response. Contact your admin or retry later.
+```
+
+:::info A wait outlasts the agent's identity registration
+On a host with **Require Agent Identity** on, an agent's registration stays valid for the **Identity Token TTL**, 60 seconds by default. A call that waits for approval usually waits longer. The approved call still runs, but the agent's next call gets "Session not registered or expired. Call `gateway_register_session` to re-establish your session baseline before retrying" followed by the tool name. The agent calls `gateway_register_session` again, then retries. See [Check agent identity and intent](/permit-mcp-gateway/advanced-features#agent-verification).
+:::
+
+## Let people approve their agent's writes \{#ask-before-writes}
+
+On the consent screen, the person can turn on **Ask me before this agent changes or deletes anything** ("When on, changes wait for your approval by email. Reading runs without asking."). On that grant, a tool call whose tool changes or deletes data waits for the person instead of an admin. Read tools, resource reads, and prompts run without asking.
+
+The gateway decides whether a tool changes data from its name and its MCP annotations. A name that isn't clearly a read, such as one with `query` or `fetch`, counts as a change, and so does a tool the gateway hasn't seen in the server's tool list.
+
+When the person's switch is the only reason a call waits:
+
+- The agent is told that the person asked to approve such calls, with a link to the approval page on the host, `https://<your-host>.agent.security/approvals/<id>`.
+- The person gets an email, "An agent is waiting for you on `<server>`", with an **Open Approval Page** button. The email names the server only, not the client, the tool, or its arguments. Admins' Slack and email notifications aren't sent for it.
+- The person approves or rejects on the approval page. Their **Your approvals** page on the host lists what waits for them. Deciding needs a recent sign-in, set in **Settings** > **Sign-in check for people's approvals** (15 minutes by default). With an older sign-in, the person signs in again or enters a code sent by email. A person with a passkey confirms each decision with it.
+
+When an admin rule or a Guardian doubt also applies to the call, the request goes to the admins alone.
+
+Admins see person-routed requests on the **Pending** tab too, with a **Who decides** filter (**All**, **Admins**, **People**). Instead of **Approve** and **Reject**, the card shows **Decide instead of** followed by the person's name. An admin's decision is recorded as an **Admin override**.
+
+A trusted agent doesn't skip the person's switch. Turning the switch off again needs the same sign-in check as a decision.
+
+:::note Described from the product code
+This flow is described from the gateway and consent service code. It wasn't exercised end to end on a live host for this page.
+:::
+
+## Timeouts and limits
 
 | Behavior | Details |
 | --- | --- |
-| Default timeout | 5 minutes. If no admin responds, the gateway rejects the request. |
-| Extend | In the last 60 seconds before timeout, the card shows an **Extend +5 min** button that adds review time. |
+| Default timeout | 5 minutes. If nobody decides, the gateway rejects the request. |
+| Extend | In the last 60 seconds, **+5 min** adds review time, up to one hour in total. |
 | Timeout result | A timeout always rejects the request. It never approves it. |
-| Agent disconnects | If the agent disconnects while waiting, the gateway cancels the request. |
-
-## What the agent user sees
-
-When the gateway pauses a tool call for approval, the agent receives this message:
-
-> Tool 'delete_repo' requires admin approval before execution. Waiting for approval (timeout: 5 minutes)...
-
-MCP clients such as Cursor, Claude Desktop, and Claude Code display the message, so the user knows the wait is expected. If an admin rejects the request, the error includes the admin's reason.
+| Agent disconnects | If the client cancels the call, ends its MCP session, or drops the connection, the gateway cancels the request. |
+| Access changes | If the person's approval of the agent is revoked, or the agent is blocked, while a call waits, the gateway cancels the request. |
+| Pending limit | A host holds at most 50 pending requests by default. Further requests are refused until some are decided or time out. |
 
 ## Next steps
 
+- [Check agent identity and intent](/permit-mcp-gateway/advanced-features): turn on the Guardian, whose doubts can wait for approval.
 - [Manage humans and agents](/permit-mcp-gateway/managing-humans-and-agents): set the trust levels that approval thresholds build on.
-- [Audit logs](/permit-mcp-gateway/audit-logs): review tool calls after approval.
-- [Advanced features](/permit-mcp-gateway/advanced-features): other Enterprise security controls.
+- [Audit logs](/permit-mcp-gateway/audit-logs): review approved and rejected tool calls.
