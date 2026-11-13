@@ -446,6 +446,22 @@ const sidebars = {
         },
       ],
     },
+    // Use case that combines the gateways and the Permit platform for fleets
+    // of AI coding agents.
+    {
+      type: "category",
+      label: "Software Factory Security",
+      className: "category-as-header",
+      collapsed: false,
+      collapsible: false,
+      items: [
+        "software-factory-security/index",
+        "software-factory-security/reference-architecture",
+        "software-factory-security/rollout",
+        "software-factory-security/policies",
+        "software-factory-security/compliance",
+      ],
+    },
     {
       type: "category",
       label: "AI Security",
