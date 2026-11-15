@@ -1,0 +1,96 @@
+---
+title: Roll out a governed software factory pilot
+sidebar_label: Roll out a pilot
+description: "Route one team's AI coding agents through Permit MCP Gateway and the HTTP Egress Proxy, add approvals at risky checkpoints, and tune trust levels on real traffic before you expand."
+keywords:
+  - govern Claude Code
+  - govern Cursor
+  - coding agent governance rollout
+  - human in the loop AI agents
+---
+
+Put one team's coding agents behind Permit.io, watch real traffic, and tune until normal work stops noticing the controls. This guide is for the platform or security engineer running the pilot. It takes a few days of setup and two to four weeks of observation for most teams.
+
+## Prerequisites
+
+- A Permit MCP Gateway account at [app.agent.security](https://app.agent.security), connected to a Permit.io organization ([Quickstart](/permit-mcp-gateway/quickstart))
+- The [HTTP Egress Proxy](/permit-mcp-gateway/http-egress-proxy/) enabled for your account
+- The `asg` CLI installed for operators and pilot developers ([The asg CLI](/permit-mcp-gateway/http-egress-proxy/cli))
+- One pilot team that uses Claude Code, Cursor, or another MCP client daily
+- For approvals: an Enterprise plan ([Human-in-the-loop approvals](/permit-mcp-gateway/human-in-the-loop))
+
+## 1. Map the factory's workflows \{#map-workflows}
+
+Write down the user stories the factory runs. For each one, list the MCP tools and hosts it needs, who delegates it, and the trust level it should get.
+
+| Workflow | MCP tools | Hosts | Delegated by | Trust |
+| --- | --- | --- | --- | --- |
+| `fix_failing_test` | GitHub: read files, create branch, open PR | Package registry, CI API | Developer on the team | Medium |
+| `bump_dependency` | GitHub: open PR | Package registry | Developer on the team | Medium |
+| `triage_issue` | Linear: read and comment | None | Developer on the team | Low |
+| `release` | GitHub: merge, create release | Registry publish endpoint | Release manager | High, with approval |
+
+Keep allowlists per workflow, not per developer. A dependency bump has no reason to reach a paste site or read cloud credentials.
+
+## 2. Create a host and import the MCP servers \{#import-servers}
+
+1. In [app.agent.security](https://app.agent.security), go to **Dashboard > Create Host** and pick a project and environment for the pilot.
+2. Go to **MCP Servers > Create Server**, enter each upstream URL (for example `https://mcp.linear.app/mcp`), and click **Connect**.
+3. Review the trust level the gateway assigned to each tool. Mark merge, delete, and publish tools as high.
+4. On the **Humans** page, grant the pilot team access and set each person's **max trust level**.
+
+## 3. Mark the sensitive boundaries \{#boundaries}
+
+1. On each server, turn on the **HITL** toggle for tools that merge, deploy, publish, or touch secrets. See [Require approval for a tool](/permit-mcp-gateway/human-in-the-loop#require-approval-for-a-tool).
+2. Add CI and scheduled agents that should never wait to the **Trusted Agent Bypass** list.
+3. Configure [Slack or email notifications](/permit-mcp-gateway/human-in-the-loop#notifications) so approvers see requests where they already work.
+4. In the services and data stores agents reach, add a `permit.check()` with the agent as the subject. See [Policy patterns](/software-factory-security/policies#checks-in-your-services).
+
+## 4. Define API workflows for agent egress \{#egress-workflows}
+
+1. Go to **CLIs / APIs > Workflows** and create one workflow per row of your map, for example `fix_failing_test`.
+2. Add each allowed domain and a rule for it. Attach stored credentials so agents never hold the keys. See [Workflows and rules](/permit-mcp-gateway/http-egress-proxy/egress-rules) and [Credentials and connections](/permit-mcp-gateway/http-egress-proxy/credentials).
+3. Leave everything else unmatched. Unmatched requests are denied.
+
+## 5. Launch agents through the gateway \{#launch}
+
+Each pilot developer bootstraps their machine once, then launches the agent with a workflow:
+
+```bash
+asg init --host <YOUR_HOST_NAME>
+asg run --workflow fix_failing_test --client claude
+```
+
+`asg run` opens a browser for consent, builds the proxy environment from a workflow-bound token, sends a canary request, and starts Claude Code. Use `--client cursor` for the Cursor agent CLI, or pass any command after `--`. Every launch is a separate agent identity.
+
+For MCP clients, point the client at the gateway URL instead of the MCP server URL. The admin dashboard shows a configuration snippet for each client. See [Connect your MCP client](/permit-mcp-gateway/quickstart#3-connect-your-mcp-client).
+
+## 6. Verify \{#verify}
+
+1. Ask the agent to read an issue. The call appears as **Allowed** on the **Agents** page for that client.
+2. Ask the agent to call a host that is not in its workflow, for example `curl https://example.com`. The proxy denies the request.
+3. Ask the agent to merge a pull request. The request appears on the **Approvals > Pending** tab, and the agent waits.
+4. Open the raw decision log in Permit and confirm each entry shows the agent's user key, the action, the resource, and the decision. See [Investigate agent activity with audit logs](/permit-mcp-gateway/audit-logs).
+
+## 7. Tune on evidence \{#tune}
+
+Review the pilot weekly. Count:
+
+- **Denies**, grouped by workflow and destination. Most early denies are allowlist gaps. Add the ones the workflow needs.
+- **Approvals and rejections.** If approvers approve nearly everything for a tool, lower its friction or move it behind a trust level instead.
+- **Timeouts.** A timeout rejects the call. Frequent timeouts mean the approver group or notification channel is wrong.
+- **Intent drift**, where enabled. A drift block stops the session until the person who authorized the agent re-approves it.
+
+The denies that are not allowlist gaps are why you ran the pilot. Review each one.
+
+## 8. Expand \{#expand}
+
+Add teams, workflows, and layers with the same identities and policy. Before you widen the rollout, inventory the agents that do not route through the gateways yet: CLIs a developer installed last week, and MCP servers added with a one-line config edit. Governing those is the next step.
+
+## Next steps
+
+- [Policy patterns for a software factory](/software-factory-security/policies)
+- [Audit and compliance evidence](/software-factory-security/compliance)
+- [Enterprise deployment](/permit-mcp-gateway/enterprise-deployment) for customer-controlled and on-premises gateways
+
+<NextStepCallout variant="enterprise" />
