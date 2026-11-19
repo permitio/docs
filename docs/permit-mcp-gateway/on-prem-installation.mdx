@@ -16,12 +16,13 @@ On-premises deployment is available on **Enterprise plans**. To compare deployme
 | Requirement | Details |
 | --- | --- |
 | **Permit Platform deployed** | Install the Permit Platform first, with the [Permit Platform installation guide](/how-to/deploy/on-prem/installation). The Permit Platform provides Keycloak (authentication) and the Permit backend (authorization). |
-| **Kubernetes cluster** (1.25+) | With an NGINX ingress controller installed. Check the `README.md` in your installer package for the supported versions of your release. |
+| **Kubernetes cluster** (1.25+) | With an NGINX ingress controller installed, with ingress class `nginx`. Check the `README.md` in your installer package for the supported versions of your release. |
 | **Helm 3.x** and **kubectl** | Configured for your cluster. |
 | **Docker** | Installed on the machine where you load images and push them to your registry. |
 | **Private container registry** | Hosts the MCP Gateway images, such as Google Artifact Registry, Amazon ECR, or Harbor. |
 | **TLS certificate** | For your MCP Gateway domain. The sign-in flow requires HTTPS. |
 | **DNS** | You can create DNS records for your MCP Gateway domain: a wildcard record and a record for the admin dashboard. |
+| **DNS resolution inside the cluster** | Your Permit Platform URL and your MCP Gateway domain resolve from inside the cluster. Pods call these URLs server-side, for example when the admin dashboard exchanges OIDC tokens with Keycloak. |
 
 ### Information you'll need \{#information-youll-need}
 
@@ -51,9 +52,12 @@ The gateway runs fully on-premises. This table lists each outbound connection th
 | Your PDP URL (set per host in the admin dashboard) | **Required** | Policy decision point (PDP) for tool-level authorization |
 | Your container registry | Install time only | Image pulls during deployment |
 | Your identity provider (IdP) or OIDC discovery URL | **Required** | Admin dashboard sign-in (server-side token exchange) |
-| Upstream MCP servers that you configure | **Required** | The gateway proxies tool calls to upstream MCP servers |
+| Upstream MCP servers that you configure | **Required** | The gateway proxies tool calls to upstream MCP servers. The consent service and the admin dashboard also connect to them to list their tools and run their OAuth flow. |
+| Your SMTP relay | Only if you [configure email](#email-notifications) | Sign-in, invite, and approval emails |
+| A Slack incoming webhook URL | Only if an admin sets one in **Approvals** > **Notifications** | The gateway posts approval notifications to Slack |
+| Amazon Bedrock | Only if you turn on the Guardian | The Guardian LLM judge grades tool calls. The Guardian is off in the on-premises values template. |
 
-Normal operation doesn't require a connection to `api.permit.io`, `app.permit.io`, or any other external cloud service. The on-premises values template turns off external analytics and telemetry integrations.
+Normal operation doesn't require a connection to `api.permit.io`, `app.permit.io`, or any other external cloud service. The on-premises values template turns off the Datadog and Segment integrations, and the chart refuses the `mailgun` email provider in on-premises mode.
 
 ## Install the gateway \{#installation}
 
@@ -117,7 +121,14 @@ The `load-images.sh` script:
 
 ### 3. Choose how to pass the Keycloak admin password \{#step-3--configure-keycloak-oidc-integration}
 
-During installation, a Helm post-install Job creates the Keycloak OIDC client for the admin dashboard. You don't set up Keycloak by hand. The Job needs the Keycloak admin password from [Information you'll need](#information-youll-need). You add one of these two options to `my-values.yaml` in [step 6](#step-6--configure-values).
+During installation, a Helm post-install Job creates the Keycloak OIDC client for the admin dashboard. You don't set up Keycloak by hand. The Job:
+
+- Creates a confidential OIDC client, `agent-security-platform`, in the `permit-platform` Keycloak realm.
+- Adds the `permit-backend-audience` mapper, which the Permit API needs to accept the admin dashboard's tokens.
+- Configures the `offline_access` scope and role.
+- Stores the generated client secret in a Kubernetes secret that the admin dashboard reads.
+
+The Job needs the Keycloak admin password from [Information you'll need](#information-youll-need). You set one of these two options in `my-values.yaml` in [step 6](#step-6--configure-values). The on-premises values template ships with Option A.
 
 **Option A: reference the existing secret (recommended)**
 
@@ -127,6 +138,8 @@ permitPlatform:
   keycloakAdminPasswordSecret: "global-infrastructure-secret"
   keycloakAdminPasswordSecretKey: "KEYCLOAK_ADMIN_PASSWORD"
 ```
+
+With Option A, the Job reads the secret through the Kubernetes API of the cluster you install into, from the `permitPlatform.namespace` namespace. If the Permit Platform runs in a different cluster, use Option B.
 
 **Option B: plaintext value**
 
@@ -139,6 +152,10 @@ permitPlatform:
   namespace: "<permit-platform-namespace>"
   keycloakAdminPassword: "<password>"
 ```
+
+With Option B, Helm also stores the password in the release secret in your cluster.
+
+If your Permit Platform's Keycloak uses a realm other than `permit-platform`, set `permitPlatform.realm` to that realm, and use the same realm in `platform.oidc.discoveryUrl` in [step 6](#step-6--configure-values).
 
 The Keycloak setup Job is idempotent, so it runs safely on each `helm upgrade`. The Job never recreates an existing OIDC client.
 
@@ -178,11 +195,13 @@ Replace these placeholders:
 | `<PERMIT_BACKEND_INTERNAL_URL>` | The Permit backend service URL inside your cluster, such as `http://permit-backend-v2.<namespace>.svc.cluster.local:8000` |
 | `<permit-platform-namespace>` | The namespace where the Permit Platform runs |
 
-Note the PDP service URL. You enter the PDP URL for each host in the admin dashboard when you [create hosts](/permit-mcp-gateway/host-setup).
+Note the PDP service URL. You enter it in the **PDP URL** field when you [create a host](/permit-mcp-gateway/host-setup) in the admin dashboard.
 
 #### PDP URL is set per host in the admin dashboard \{#pdp-url--configured-per-host-in-the-platform-ui}
 
-The Helm values don't set a global PDP URL. Each host has its own PDP URL in the admin dashboard, so different hosts can use different PDPs.
+The Helm values don't set a global PDP URL. In on-premises mode, each host has its own PDP URL: the **PDP URL** field on the **Create Host** form, and the **Policy Decision Point (PDP)** section of the host's **Settings** page. Different hosts can use different PDPs.
+
+The PDP must use the API key of the Permit environment that the host uses. If the keys don't match, the admin dashboard reports that the PDP rejected the API key.
 
 | Option | URL | When to use |
 | --- | --- | --- |
@@ -227,10 +246,11 @@ global:
     apiUrl: "https://permit.yourcompany.com"
     # PDP URL is set per-host in the Platform UI (not here)
 
-# Keycloak integration (automatic: just provide the password)
+# Keycloak integration (the Helm Job creates the OIDC client)
 permitPlatform:
   namespace: "<permit-platform-namespace>"
-  keycloakAdminPassword: "<keycloak-admin-password>"
+  keycloakAdminPasswordSecret: "global-infrastructure-secret"
+  keycloakAdminPasswordSecretKey: "KEYCLOAK_ADMIN_PASSWORD"
 
 # OpenResty reverse proxy (required for on-prem)
 nginx:
@@ -255,7 +275,7 @@ Set these values for your installation:
 | --- | --- |
 | `global.baseDomain` | Your MCP Gateway domain. Hosts get subdomains of this domain. |
 | `global.permit.apiUrl` | Your Permit Platform URL. |
-| `permitPlatform` | The Keycloak password option you chose in [step 3](#step-3--configure-keycloak-oidc-integration). The template shows Option B. For Option A, replace the `keycloakAdminPassword` line with the `keycloakAdminPasswordSecret` and `keycloakAdminPasswordSecretKey` lines. |
+| `permitPlatform` | The namespace of your Permit Platform, and the Keycloak password option you chose in [step 3](#step-3--configure-keycloak-oidc-integration). The template ships with Option A. For Option B, replace the `keycloakAdminPasswordSecret` and `keycloakAdminPasswordSecretKey` lines with a `keycloakAdminPassword` line. |
 | `platform.ingress.host` | `app.` followed by your MCP Gateway domain. |
 | `platform.oidc.discoveryUrl` | Your Permit Platform URL followed by `/auth/realms/permit-platform/.well-known/openid-configuration`. |
 
@@ -267,7 +287,7 @@ The chart sets these values for you:
 - **Database passwords:** generated, and kept across upgrades.
 - **Redis password:** generated.
 - **Admin tokens and session secrets:** generated.
-- **Email verification:** off by default for on-premises deployments. To turn it on, see [Email notifications](#email-notifications).
+- **Email verification for new accounts:** off. In on-premises mode, the chart turns it off whatever `email.requireVerification` is set to. To send sign-in, invite, and approval emails, see [Email notifications](#email-notifications).
 
 ### 7. Install the Helm chart \{#step-7--install}
 
@@ -386,6 +406,13 @@ externalRedis:
   existingSecretKey: "REDIS_URL"
 ```
 
+Only the gateway connects to Redis. How the gateway connects depends on whether you set `externalRedis.existingSecret`:
+
+- **With `existingSecret`:** the gateway uses the full URL in the secret, and the chart ignores `host`, `port`, and `tls`. Use a `rediss://` URL for a Redis that requires TLS, and a `redis://` URL for one that doesn't.
+- **Without `existingSecret`:** the chart builds the URL from `host`, `port`, and `tls`. `tls` defaults to `true`, which gives a `rediss://` URL. For a Redis without TLS, set `tls: false`.
+
+The chart refuses to install when both the bundled Redis (`redis.enabled: true`) and an external Redis are set. The same applies to PostgreSQL.
+
 ### Storage
 
 To set the storage class and volume size for the bundled PostgreSQL and Redis:
@@ -403,20 +430,36 @@ redis:
 
 ### Email notifications
 
-Email verification is off by default. To use email for registration, password reset, and one-time passcodes (OTP), configure an SMTP server. `existingSecret` names a Kubernetes secret that holds the SMTP password:
+The consent service and the admin dashboard send email through an SMTP relay. Without one, these emails aren't delivered:
+
+| Sent by | Email |
+| --- | --- |
+| Consent service | Password reset links and sign-in codes, when those sign-in methods are on for the host |
+| Consent service | Invites that an admin sends from **Humans** > **Invite by Email** |
+| Consent service | Approval requests to a person who turned on **Ask me before this agent changes or deletes anything** on the consent screen |
+| Consent service | Emailed confirmation codes, when a person confirms an approval decision or a change to their agent with a code |
+| Consent service | Notices when a person adds or removes a passkey |
+| Admin dashboard | Approval notifications to the email recipients set in **Approvals** > **Notifications** |
+
+The chart's `email` values set the provider and the sender address. Set the relay's host and port as environment variables on both services:
 
 ```yaml
 email:
   provider: "smtp"
   from: "MCP Gateway <noreply@yourcompany.com>"
-  requireVerification: "true"
-  smtp:
-    host: "smtp.yourcompany.com"
-    port: 587
-    username: "noreply@yourcompany.com"
-    existingSecret: "my-smtp-secret"
-    existingSecretKey: "SMTP_PASSWORD"
+
+consentService:
+  env:
+    SMTP_HOST: "smtp.yourcompany.com"
+    SMTP_PORT: "25"
+
+platform:
+  env:
+    SMTP_HOST: "smtp.yourcompany.com"
+    SMTP_PORT: "25"
 ```
+
+The SMTP client connects without a username or password, and without implicit TLS (port 465). Use a relay that accepts mail from the cluster without authentication.
 
 :::note SMTP only in on-premises mode
 The `mailgun` email provider isn't available in on-premises mode, so email can't be sent through an external cloud service by mistake.
@@ -424,13 +467,53 @@ The `mailgun` email provider isn't available in on-premises mode, so email can't
 
 ### Permit Platform in a different cluster \{#cross-cluster-deployment}
 
-If the Permit Platform runs in a different cluster, the Keycloak setup Job can't find Keycloak through Kubernetes DNS. Set the Keycloak URL:
+If the Permit Platform runs in a different cluster, the Keycloak setup Job can't find Keycloak through Kubernetes DNS. Set the Keycloak URL, and pass the password with Option B from [step 3](#step-3--configure-keycloak-oidc-integration), because Option A reads the secret from the cluster you install into:
 
 ```yaml
 permitPlatform:
   keycloakUrl: "https://permit.yourcompany.com/auth"
-  keycloakAdminPassword: "<password>"   # or use keycloakAdminPasswordSecret (see Step 3)
+  keycloakAdminPassword: "<password>"
 ```
+
+When `keycloakUrl` is empty, the Job uses `http://keycloak.<permit-platform-namespace>.svc.cluster.local:8080`.
+
+### Keep secrets out of ingress controller logs \{#ingress-controller-logs}
+
+The default access log formats of NGINX ingress controllers record each request's full URL, including the query string. For the gateway, the query string can hold secrets: OAuth authorization codes and `state` on sign-in callbacks, and MCP server URLs that carry upstream credentials. A password reset link also carries its token in the path (`/api/auth/reset-password/<token>`). What to set depends on your controller.
+
+**Community ingress-nginx (`kubernetes/ingress-nginx`)**
+
+- **Gateway host (`*.mcp.yourcompany.com`):** the chart sets `nginx.ingress.kubernetes.io/enable-access-log: "false"` on the gateway ingress. The bundled OpenResty behind it logs each request without its query string and with the reset token masked. Keep the controller's access log off for this host.
+- **Admin dashboard host (`app.mcp.yourcompany.com`):** requests go from your controller straight to the admin dashboard, so the controller's log is the only access log. Set `log-format-upstream` to a format that logs the path without the query string, in the ingress-nginx Helm values or the same key in the `ingress-nginx-controller` ConfigMap:
+
+```yaml
+controller:
+  config:
+    log-format-upstream: '$remote_addr - - [$time_local] "$request_method $uri $server_protocol" $status $body_bytes_sent "-" "$http_user_agent" $request_length $request_time [$proxy_upstream_name] [$proxy_alternative_upstream_name] $upstream_addr $upstream_response_length $upstream_response_time $upstream_status $req_id'
+```
+
+This format keeps the default fields except the query string, the Referer, and `$remote_user`, and applies to every ingress the controller serves.
+
+**F5 NGINX Ingress Controller (`nginx/kubernetes-ingress`)**
+
+This controller ignores `nginx.ingress.kubernetes.io/*` annotations, so it logs the gateway host as well. Set a format that logs the path without the query string and with the reset token masked, in the controller's Helm values or the same keys in its ConfigMap:
+
+```yaml
+controller:
+  config:
+    entries:
+      http-snippets: |
+        map $request_uri $redacted_path {
+          ~^(?<redacted_path_reset>[^?#]*/reset-password/)[^/?#]+ "${redacted_path_reset}[redacted]";
+          ~^(?<redacted_path_plain>[^?#]+) $redacted_path_plain;
+          default "-";
+        }
+      log-format: '$remote_addr - - [$time_local] "$request_method $redacted_path $server_protocol" $status $body_bytes_sent "-" "$http_user_agent" "$http_x_forwarded_for"'
+```
+
+**Error logs**
+
+No setting keeps the query string out of an NGINX error log. When a request fails, for example because an upstream refuses the connection or a rate limit rejects the request, the error line quotes the full request line, the upstream URL, the `Host` header, and the Referer. This applies to the error log of the bundled OpenResty (stderr of the `agent-security-nginx` pods) and to your controller's error log. If you ship pod logs to a log collector, mask these fields there: the query string in the `request:`, `upstream:`, and `referrer:` fields, a `user:password@` part in the `host:` and `referrer:` fields, and the path segment after `/reset-password/`. The `log_processing_rules` in `charts/agent-security/templates/nginx/deployment.yaml` in your installer package are a tested set of patterns (RE2 syntax) to start from.
 
 ## Upgrade the gateway \{#upgrading}
 
@@ -460,6 +543,7 @@ helm rollback agent-security -n agent-security --wait --timeout=10m
 | Admin dashboard sign-in returns to the sign-in page | No TLS on the ingresses, so the browser drops the secure cookies | [Attach the TLS secret](#step-9--patch-ingresses-for-tls) |
 | "Invalid credentials" when creating an organization | The Keycloak OIDC client is missing the audience mapper | See [Invalid credentials when creating an organization](#invalid-credentials-when-creating-an-organization) |
 | Pods stuck in `CreateContainerConfigError` | The Keycloak setup Job hasn't created the OIDC secret yet | Wait 30 to 60 seconds. If the state persists, [check the logs](#checking-logs) of the Keycloak setup Job. |
+| Admin dashboard pod fails with an OIDC error | The OIDC client, its secret, or the URLs the pod calls are wrong | See [Admin dashboard fails with an OIDC error](#admin-dashboard-fails-with-an-oidc-error) |
 | Consent service or platform pods fail to start with migration errors | PostgreSQL isn't ready yet | See [Database migration errors](#database-migration-errors) |
 
 ### Install failed
@@ -490,7 +574,7 @@ The ingresses have no TLS. The sign-in flow sets secure cookies, and the browser
 
 ### "Invalid credentials" when creating an organization \{#invalid-credentials-when-creating-an-organization}
 
-The Keycloak OIDC client might be missing the required audience mapper. Check the logs of the Keycloak setup Job:
+The Keycloak OIDC client might be missing the required audience mapper. Check the logs of the Keycloak setup Job. Helm deletes the Job when it succeeds, so this command returns logs only while the Job runs or after it fails:
 
 ```bash
 kubectl logs -n agent-security -l app.kubernetes.io/component=keycloak-setup
@@ -501,6 +585,17 @@ If the Job failed, run `helm upgrade` with the same values to run the Job again.
 ### Pods stuck in CreateContainerConfigError
 
 The OIDC secret doesn't exist yet. The Keycloak setup Job runs after the main resources deploy. The platform pod recovers when the Job completes, usually within 30 to 60 seconds.
+
+### Admin dashboard fails with an OIDC error
+
+Check each of these:
+
+- The Keycloak setup Job didn't fail. Helm deletes the Job when it succeeds, so `kubectl get jobs -n agent-security | grep keycloak` returns nothing after a success, and lists the Job while it runs or after it fails.
+- The Keycloak client `agent-security-platform` exists, with the `permit-backend-audience` mapper and the `offline_access` scope.
+- The `agent-security-oidc-secret` secret holds the client's current secret.
+- The Keycloak admin password in your `permitPlatform` values is correct.
+- The Permit Platform URL resolves from inside the admin dashboard pod.
+- The TLS certificate is valid. The admin dashboard exchanges OIDC tokens server-side over HTTPS.
 
 ### Database migration errors
 
@@ -525,7 +620,7 @@ kubectl logs -n agent-security deployment/agent-security-consent-service --tail=
 # Platform
 kubectl logs -n agent-security deployment/agent-security-platform --tail=20
 
-# Keycloak setup Job
+# Keycloak setup Job (only while it runs or after it fails; Helm deletes it on success)
 kubectl logs -n agent-security -l app.kubernetes.io/component=keycloak-setup
 ```
 
