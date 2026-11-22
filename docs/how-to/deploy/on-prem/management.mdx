@@ -1,14 +1,14 @@
 ---
 title: "Manage an On-Premises Deployment"
 sidebar_label: "Management Guide"
-description: "Run day-2 operations on a self-hosted Permit Platform: credentials, health checks, configuration changes, scaling, backups, upgrades, support bundles, and uninstalling."
+description: "Run day-2 operations on a self-hosted Permit Platform: credentials, admin consoles, health checks, configuration changes, scaling, backups, upgrades, support bundles, and uninstalling."
 ---
 
 :::info Enterprise on-premises license required
 The on-premises installer is available to Enterprise customers with an on-premises license. To get a license, [contact Permit.io](https://www.permit.io/demo).
 :::
 
-This page is for operators who run a self-hosted Permit Platform on Kubernetes. It covers day-2 operations: signing in, checking health, applying configuration changes, scaling, backing up, upgrading, rotating certificates, collecting a support bundle, and uninstalling. For every `values.yaml` key and installer flag, see the [on-premises reference](/how-to/deploy/on-prem/reference). For fixes to specific errors, see [on-premises troubleshooting](/how-to/deploy/on-prem/troubleshooting).
+This page is for operators who run a self-hosted Permit Platform on Kubernetes. It covers day-2 operations: signing in, reaching the admin consoles, checking health, applying configuration changes, scaling, backing up, upgrading, rotating certificates, collecting a support bundle, and uninstalling. For every `values.yaml` key and installer flag, see the [on-premises reference](/how-to/deploy/on-prem/reference). For fixes to specific errors, see [on-premises troubleshooting](/how-to/deploy/on-prem/troubleshooting).
 
 ## Before you begin
 
@@ -36,14 +36,16 @@ kubectl get secret global-infrastructure-secret -n permit-platform \
 
 Older installations can keep the admin password in a `keycloak-admin-secret` secret under the `password` key. The installer reads that secret as a fallback when `global-infrastructure-secret` has no admin password.
 
-### Management dashboards \{#management-dashboards}
+### What the frontend domain and the admin listener serve \{#management-dashboards}
 
-The ingress routes your domain to the Permit frontend. Keycloak, the identity provider that handles sign-in, is served under `/auth` on the same domain.
+In installer packages with the admin listener (see [Which installer packages have the admin listener](#admin-listener-packages)), the `permit-frontend` pods run two listeners. The platform's ingress, `permit-platform-ingress`, routes your domain to the public listener only.
 
-| Service | URL | Credentials | Purpose |
-|---------|-----|-------------|---------|
-| Permit frontend | `https://your-domain.com` | Admin user and the generated password | Manage policies, users, and environments |
-| Keycloak admin console | `https://your-domain.com/auth` | Admin user and the generated password | Manage authentication and identities |
+| Listener | Container port | Kubernetes Service | Reached through | Serves |
+|---|---|---|---|---|
+| Public | 3000 | `permit-frontend`, port 80 | The ingress, at `https://your-domain.com` | The Permit frontend, the Permit API under `/v2/`, the SCIM API under `/scim`, and the Keycloak sign-in paths `/auth/realms/permit-platform/` and `/auth/resources/` |
+| Admin | 3001 | `permit-frontend-admin`, port 3001 | `kubectl port-forward` | All of Keycloak under `/auth/`, including the admin console, the Admin REST API, and the `master` realm. RabbitMQ management under `/rabbitmq/`, and OpenSearch Dashboards under `/opensearch/`. |
+
+On the public listener, every other path under `/auth` returns `404`. [Reach the admin consoles](#admin-consoles) shows how to open each console, and which installer packages have the admin listener.
 
 ### Retrieve service credentials \{#retrieving-service-credentials}
 
@@ -54,7 +56,9 @@ The installer generates the passwords for Keycloak, RabbitMQ, and PostgreSQL and
 kubectl get secret global-infrastructure-secret -n permit-platform \
   -o jsonpath='{.data.KEYCLOAK_ADMIN_PASSWORD}' | base64 -d
 
-# RabbitMQ password
+# RabbitMQ user name (permit by default) and password
+kubectl get secret global-infrastructure-secret -n permit-platform \
+  -o jsonpath='{.data.RABBITMQ_USERNAME}' | base64 -d
 kubectl get secret global-infrastructure-secret -n permit-platform \
   -o jsonpath='{.data.RABBITMQ_PASSWORD}' | base64 -d
 
@@ -100,6 +104,121 @@ kubectl exec -n permit-platform deployment/permit-backend-v2 -- \
 # Frontend reachability through the ingress (prints an HTTP status code, 200 when the frontend serves the page)
 curl -k -s -o /dev/null -w '%{http_code}\n' https://your-domain.com/
 ```
+
+## Reach the admin consoles \{#admin-consoles}
+
+The Keycloak admin console, RabbitMQ management, and OpenSearch Dashboards are served on the admin listener of the `permit-frontend` pods, port 3001. The `permit-frontend-admin` Service exposes that port inside the cluster. No ingress in the Helm chart routes to it, so you open the consoles through `kubectl port-forward` from a workstation that has `kubectl` access to the namespace.
+
+### Which installer packages have the admin listener \{#admin-listener-packages}
+
+Installer packages built on or after ADMIN_LISTENER_RELEASE_DATE serve the admin consoles on the admin listener. The build date is the `YYYYMMDD` part of the package file name, `permit-platform-on-prem-installer-YYYYMMDD-HHMMSS.tar.gz`.
+
+To check a cluster, run:
+
+```bash
+kubectl get service permit-frontend-admin -n permit-platform
+```
+
+The command lists the Service with port `3001/TCP` when the cluster runs a package with the admin listener. It returns `Error from server (NotFound): services "permit-frontend-admin" not found` when the cluster runs an older package. For older packages, see [Admin consoles in older installer packages](#admin-consoles-older-packages).
+
+To check an extracted package before you install it, run `grep -c permit-frontend-admin charts/permit-platform/templates/frontend-service.yaml` from the package root. A number greater than `0` means the package has the admin listener.
+
+### 1. Forward the admin listener to your workstation \{#forward-the-admin-listener}
+
+Run the port forward in its own terminal and keep it running while you use the consoles:
+
+```bash
+kubectl port-forward -n permit-platform svc/permit-frontend-admin 3001:3001
+```
+
+`kubectl` prints `Forwarding from 127.0.0.1:3001 -> 3001` and listens on your workstation only. Keep the local port at `3001`, because the Keycloak step below writes that address into Keycloak. On OpenShift, `oc port-forward` takes the same arguments.
+
+Creating a port forward needs the Kubernetes `create` permission on `pods/portforward` in the namespace.
+
+### 2. Sign in to each console \{#admin-console-sign-in}
+
+| Console | URL | Sign-in |
+|---|---|---|
+| Keycloak admin console | `http://localhost:3001/auth/`, which redirects to `/auth/admin/master/console/` | The `master` realm admin. The user name is `thirdPartyServices.keycloak.adminUsername` in `values.yaml`, `admin` by default. The password is `KEYCLOAK_ADMIN_PASSWORD` in `global-infrastructure-secret`. Works after [the one-time Keycloak step](#keycloak-master-frontend-url). |
+| RabbitMQ management | `http://localhost:3001/rabbitmq/` | `RABBITMQ_USERNAME` (`permit` by default) and `RABBITMQ_PASSWORD` in `global-infrastructure-secret` |
+| OpenSearch Dashboards | `http://localhost:3001/opensearch/` | None |
+
+[Retrieve service credentials](#retrieving-service-credentials) shows how to read the secret. Keycloak reads `KEYCLOAK_ADMIN_PASSWORD` only when it creates the `master` realm admin on its first start. If the admin's user name or password was changed in Keycloak later, sign in with the changed values.
+
+RabbitMQ management and OpenSearch Dashboards also answer on their own Services:
+
+```bash
+# RabbitMQ management at http://localhost:15672/
+kubectl port-forward -n permit-platform svc/rabbitmq 15672:15672
+
+# OpenSearch Dashboards at http://localhost:5601/opensearch/
+kubectl port-forward -n permit-platform svc/opensearch-dashboards 5601:5601
+```
+
+Open the Keycloak admin console through the admin listener only. After the one-time step, the console sends its sign-in to `http://localhost:3001/auth`.
+
+:::warning OpenSearch Dashboards has no sign-in
+Anyone who can reach the admin listener can read decision logs in OpenSearch Dashboards. That includes anyone with the `pods/portforward` permission in the namespace, and any pod in the cluster that can reach the `permit-frontend-admin` Service when no NetworkPolicy restricts it. Grant the permission only to platform operators.
+:::
+
+### 3. Set the Keycloak master realm's Frontend URL once \{#keycloak-master-frontend-url}
+
+The Keycloak admin console signs in through the `master` realm. Keycloak builds every realm's URLs from the frontend domain, `https://<your-frontend-domain>/auth`, and the public listener doesn't serve the `master` realm. Until you set the `master` realm's **Frontend URL** to the admin listener's address, the console at `http://localhost:3001/auth/` sends the browser to `https://<your-frontend-domain>/auth/realms/master/...`, which returns `404`.
+
+Run these two commands once per installation: after the first installation, and after the upgrade from a package without the admin listener.
+
+```bash
+# Sign in to the Keycloak admin CLI inside the Keycloak pod. Prompts for the master realm admin password.
+kubectl exec -it -n permit-platform deploy/keycloak -- /opt/keycloak/bin/kcadm.sh config credentials \
+  --config /tmp/kcadm.config --server http://localhost:8080 --realm master --user admin
+
+# Set the master realm's Frontend URL to the forwarded admin listener
+kubectl exec -n permit-platform deploy/keycloak -- /opt/keycloak/bin/kcadm.sh update realms/master \
+  --config /tmp/kcadm.config -s attributes.frontendUrl=http://localhost:3001/auth
+```
+
+Replace `admin` after `--user` if the `master` realm admin has another user name. `http://localhost:8080` is Keycloak inside its own pod, so the first command works before the Frontend URL is set. The second command prints nothing when it succeeds.
+
+To check the result, keep the port forward from step 1 running and read the `master` realm's issuer:
+
+```bash
+curl -s http://localhost:3001/auth/realms/master/.well-known/openid-configuration | grep -o '"issuer":"[^"]*"'
+```
+
+The step worked when the command prints `"issuer":"http://localhost:3001/auth/realms/master"`. Before the step, it prints `"issuer":"https://<your-frontend-domain>/auth/realms/master"`. Then open `http://localhost:3001/auth/`. The Keycloak sign-in page loads from `http://localhost:3001`, and the admin console opens after you sign in.
+
+The step has these effects:
+
+- The `master` realm's issuer is `http://localhost:3001/auth/realms/master`. Sessions and tokens issued by the `master` realm before the change are no longer accepted. Admins sign in again, and a `kcadm.sh` session needs the `config credentials` command again. The Permit services don't use `master` realm tokens.
+- The `permit-platform` realm, which users of the Permit frontend sign in to, keeps its URLs on the frontend domain.
+- Open the console at `http://localhost:3001`. Opened on another local port, the console still sends the browser to port 3001 to sign in. If port 3001 is taken on your workstation, forward another local port and set `attributes.frontendUrl` to `http://localhost:<port>/auth`.
+- Keycloak stores the Frontend URL in its database. The setting survives restarts and upgrades, and it isn't in `values.yaml`.
+- To use another address, such as an internal address from [Reach the admin consoles without a port forward](#expose-admin-consoles), set `attributes.frontendUrl` to that address followed by `/auth`.
+- To undo the step, clear **Frontend URL** under **Realm settings** > **General** in the `master` realm. The `master` realm then uses the frontend domain again.
+
+### Reach the admin consoles without a port forward \{#expose-admin-consoles}
+
+The admin listener isn't meant to be routed by the platform's ingress. The Helm chart creates no ingress or route for `permit-frontend-admin`, and `values.yaml` has no setting that creates one.
+
+If your operators need the consoles at an address on your internal network:
+
+1. Create your own Ingress, or an OpenShift Route, for the `permit-frontend-admin` Service, port 3001, on a host that only your internal network reaches. Don't add a path for it to `permit-platform-ingress`, and don't add port 3001 to the `permit-frontend` Service. An OpenShift Route without a target port sends traffic to every port of its Service, so the admin listener stays on a Service of its own.
+2. Set the `master` realm's Frontend URL to that address followed by `/auth`, for example `https://permit-admin.internal.yourcompany.com/auth`. Use the commands in [step 3](#keycloak-master-frontend-url) with that value.
+3. Restrict who can reach the address. OpenSearch Dashboards has no sign-in, so anyone who reaches the address can read decision logs.
+
+The installer and `helm upgrade` don't manage an Ingress or Route you create yourself.
+
+### Admin consoles in older installer packages \{#admin-consoles-older-packages}
+
+Installer packages without the admin listener serve the admin consoles on the frontend domain, with the same credentials:
+
+| Console | URL |
+|---|---|
+| Keycloak admin console | `https://<your-frontend-domain>/auth` |
+| RabbitMQ management | `https://<your-frontend-domain>/rabbitmq/` |
+| OpenSearch Dashboards | `https://<your-frontend-domain>/opensearch/` |
+
+These packages don't need the Keycloak step. OpenSearch Dashboards has no sign-in on these packages either, so restrict network access to the ingress. To move to the admin listener, follow [Upgrade to a package with the admin listener](#upgrade-admin-listener).
 
 ## Change the platform configuration \{#configuration-management}
 
@@ -498,9 +617,64 @@ The upgrade succeeded when `helm list` shows `third-party-services`, `migrations
 When the new package contains a different Keycloak version, Keycloak migrates its database schema on first start. The schema migration can't be rolled back, and sign-in is unavailable while it runs. Dump the `keycloak-postgres` database first (see [Create backups](#creating-backups)) and schedule a maintenance window. The installer asks you to confirm the migration. For a non-interactive run, pass `--yes`.
 :::
 
+### Upgrade to a package with the admin listener \{#upgrade-admin-listener}
+
+The first upgrade from a package without the admin listener to a package with it moves the admin consoles off the frontend domain. [Which installer packages have the admin listener](#admin-listener-packages) shows how to tell the two apart. The upgrade makes these changes:
+
+- **The `permit-frontend` pods restart** with the admin listener on port 3001, and the upgrade adds the `permit-frontend-admin` Service.
+- **Keycloak restarts.** The upgrade removes the `KC_HOSTNAME_ADMIN` setting from the `keycloak` deployment, so Kubernetes replaces the Keycloak pod. The deployment uses the `Recreate` strategy: the old pod stops before the new pod starts, and nobody can sign in to the Permit frontend until the new pod is ready. The restart doesn't migrate the Keycloak database unless the package also changes the Keycloak version. Schedule the upgrade in a maintenance window.
+- **The admin URLs on the frontend domain stop working.** After the upgrade, the frontend domain answers as follows:
+
+| Path on the frontend domain | Before the upgrade | After the upgrade |
+|---|---|---|
+| `/auth/admin/...`: the Keycloak admin console and the Admin REST API | Served | `404` |
+| `/auth/realms/master/...`, including the `master` realm token endpoint | Served | `404` |
+| `/auth` and `/auth/` | Served by Keycloak | `404` |
+| `/rabbitmq/` and `/opensearch/` | The consoles | The Permit frontend app, not the console |
+| `/auth/realms/permit-platform/...` and `/auth/resources/...` | Served | Served. Users sign in as before. |
+| `/v2/` and `/scim` | Served | Served |
+
+Bookmarks, scripts, a Terraform Keycloak provider, or monitoring checks that use the paths marked `404` need another address:
+
+- From a workstation, use the admin listener: `http://localhost:3001/auth/...` through the port forward in [Forward the admin listener to your workstation](#forward-the-admin-listener), or your internal address from [Reach the admin consoles without a port forward](#expose-admin-consoles).
+- From inside the cluster, call the `keycloak` Service directly: `http://keycloak:8080` in the platform namespace, or `http://keycloak.permit-platform.svc.cluster.local:8080` from another namespace. Keycloak serves its paths there without the `/auth` prefix. For example, `https://<your-frontend-domain>/auth/admin/realms/permit-platform` becomes `http://keycloak:8080/admin/realms/permit-platform`.
+
+To upgrade:
+
+1. [Back up the platform](#creating-backups), including the `keycloak-postgres` database.
+2. Run the upgrade as described in [Upgrade to a new installer version](#platform-updates). The installer's completion message prints the port forward and the Keycloak commands.
+3. Forward the admin listener and run [the one-time Keycloak step](#keycloak-master-frontend-url).
+4. Move the bookmarks and automation that use the paths marked `404` to the addresses above.
+
+Check the result:
+
+```bash
+# The frontend domain no longer serves the Keycloak admin console. Prints: 404
+# (-k accepts a self-signed certificate; without it, curl prints 000 for one)
+curl -sk -o /dev/null -w '%{http_code}\n' https://<your-frontend-domain>/auth/admin/
+
+# The admin listener's Service exists
+kubectl get service permit-frontend-admin -n permit-platform
+```
+
+The upgrade is complete when the `curl` command prints `404`, the Service is listed, you can sign in at `https://<your-frontend-domain>`, and the three consoles open through the port forward.
+
+### Chart and frontend image from different packages \{#mixed-admin-listener-versions}
+
+The Helm chart and the `permit-frontend` image ship in the same installer package. They come from different packages only when you pin `permitServices.frontend.image` or `permitServices.frontend.tag` in `values.yaml` to an image from another package. In both mixed cases, sign-in to the Permit frontend, the Permit API under `/v2/`, and SCIM work. The admin consoles behave as follows:
+
+- **Chart with the admin listener, image without it.** The `permit-frontend-admin` Service exists, but nothing listens on port 3001. The port forward starts, and each request fails with `connect: connection refused` in the port forward's output. The image serves the consoles on the frontend domain. RabbitMQ management and OpenSearch Dashboards work there. The Keycloak admin console returns `404` there, because Keycloak no longer has the `KC_HOSTNAME_ADMIN` setting that image's routes expect. Manage Keycloak with `kcadm.sh` through `kubectl exec`, as in [the one-time Keycloak step](#keycloak-master-frontend-url), until the image matches the chart.
+- **Chart without the admin listener, image with it.** The admin listener runs, but no Service exposes it. Forward the pod port instead: `kubectl port-forward -n permit-platform deploy/permit-frontend 3001:3001`. RabbitMQ management and OpenSearch Dashboards work at `http://localhost:3001/rabbitmq/` and `http://localhost:3001/opensearch/`. The Keycloak admin console doesn't load, because the older chart's `KC_HOSTNAME_ADMIN` setting points the console's assets and Admin REST API calls at the frontend domain, which this image doesn't serve them on. Manage Keycloak with `kcadm.sh` through `kubectl exec`.
+
+To end a mixed state, put back the `permitServices.frontend.image` and `permitServices.frontend.tag` values that came in the package's `values.yaml`, and run that package's installer.
+
 ### Roll back a release \{#rollback-procedures}
 
 `helm rollback` returns the `permit-platform` release to an earlier revision. It doesn't reverse database schema changes from the migrations release or from Keycloak. To return data to its state before an upgrade, [restore from a backup](#backup-management).
+
+Rolling back from a package with the admin listener to one without it doesn't reset the `master` realm's Frontend URL, which Keycloak stores in its database. While the Frontend URL is `http://localhost:3001/auth`, the Keycloak admin console on the frontend domain sends its sign-in to that address, which no longer answers. Before you roll back, clear **Frontend URL** under **Realm settings** > **General** in the `master` realm. After a rollback, run the two `kcadm.sh` commands from [the one-time Keycloak step](#keycloak-master-frontend-url) with `-s attributes.frontendUrl=https://<your-frontend-domain>/auth` in the second command. That value is the address Keycloak uses when the Frontend URL is empty.
+
+A `helm rollback` of `permit-platform` alone restores the older `permit-frontend` image but leaves Keycloak with the settings of the newer package. The result is the first case in [Chart and frontend image from different packages](#mixed-admin-listener-versions).
 
 ```bash
 # Rollback using Helm (most recent release)
