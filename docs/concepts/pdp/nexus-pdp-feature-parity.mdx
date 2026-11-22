@@ -41,7 +41,8 @@ Nexus PDP implements a subset of the container PDP's endpoints. Its capabilities
 | [Local enforcement APIs](/how-to/enforce-permissions/list-role-assignments) (`/local/*`) | Yes | No |
 | Custom data sources | Yes | No |
 | Kong and NGINX integrations | Yes | No |
-| [Offline or air-gapped boot](/how-to/deploy/offline-mode) | Yes | [No](#offline-boot) |
+| [Offline mode](/concepts/pdp/nexus-pdp-offline-mode): keep answering from local data while the control plane is unreachable | Yes | Yes |
+| [Offline or air-gapped boot](/how-to/deploy/offline-mode) | Yes | [Opt-in, time-limited](#offline-boot) |
 | Decision logs sent to Permit | Yes | Yes |
 | Health and readiness endpoints | Yes | [Partial](#health-and-readiness) |
 | Prometheus metrics (`GET /metrics`) | Yes | No |
@@ -64,13 +65,15 @@ Action search differs in one way. Nexus PDP matches a `tenant` set in the resour
 
 ### Health and readiness on Nexus PDP \{#health-and-readiness}
 
-The container PDP serves `GET /health`, `GET /healthy`, and `GET /ready` on port `7000`. On Nexus PDP, port `7000` serves `GET /health` and `GET /healthy`, which always return `200`, and has no `/ready`. Readiness is `GET /health/ready` on the management port, `7001`. Point every probe at port `7001`. See [Health and readiness](/concepts/pdp/nexus-pdp-deployment#health-and-readiness).
+The container PDP serves `GET /health`, `GET /healthy`, and `GET /ready` on port `7000`. On Nexus PDP, port `7000` serves `GET /health` and `GET /healthy`, which always return `200`, and `GET /ready`, which returns the same status code as `GET /health/ready` with only a `{"status": "ok"}` or `{"status": "error"}` body. Port `7000` opens only once Nexus PDP is ready, so during a cold start `/ready` refuses the connection instead of returning `503`. Readiness with per-component detail is `GET /health/ready` on the management port, `7001`. Point every probe at port `7001`. See [Health and readiness](/concepts/pdp/nexus-pdp-deployment#health-and-readiness).
 
 ### Booting without the control plane on Nexus PDP \{#offline-boot}
 
-Nexus PDP signs up with the control plane every time it starts, not only on its first boot. A Nexus PDP that cannot reach the control plane when it starts does not start.
+Nexus PDP signs up with the control plane every time it starts, not only on its first boot. By default, a Nexus PDP that cannot reach the control plane when it starts does not start.
 
-A running Nexus PDP that loses the control plane keeps answering on port `7000` from its local copy. Its readiness endpoint, `GET /health/ready` on port `7001`, returns `503` within about 30 seconds, so Kubernetes stops sending it traffic through its Service.
+With `PDP_OFFLINE_ALLOW_UNPROTECTED_VOLUME=true`, a Nexus PDP that cannot reach the control plane starts from the data on its persistent volume, when that volume holds data this Nexus PDP served while it was current and the control plane accepted it within `PDP_SIGNUP_RECORD_MAX_AGE_SECS` (7 days by default). It serves stale, reconnects in place, and stops serving at that age if it has not caught up by then. A Nexus PDP that never reached the control plane, or whose volume is empty, cannot start offline, so Nexus PDP does not run air-gapped for longer than that age. See [Start Nexus PDP without the control plane](/concepts/pdp/nexus-pdp-offline-mode#offline-boot).
+
+A running Nexus PDP that loses the control plane keeps answering on port `7000` from its local copy and stays ready, with `"state": "serving_stale"`. Each successful decision it answers while it is behind the control plane carries the `X-Permit-Stale-Seconds` header. To take a stale Nexus PDP out of rotation after a time you choose, set `PDP_MAX_STALE_SECS`. See [Stale serving while the control plane is unreachable](/concepts/pdp/nexus-pdp-offline-mode#stale-serving).
 
 ### ABAC policies on Nexus PDP \{#abac}
 
