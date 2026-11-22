@@ -102,10 +102,12 @@ Nexus PDP serves health endpoints on the management port, `7001`. Point every pr
 | Endpoint | Authentication | Behavior |
 | --- | --- | --- |
 | `GET /health` | None | Always returns `200` and the status of each component. Answers during startup, including a cold start. |
-| `GET /health/ready` | None | Returns `200` only when every component that gates readiness is up, and `503` otherwise. |
+| `GET /health/ready` | None | Returns `200` only when every component that gates readiness is up, and `503` otherwise. In Nexus PDP 0.8.1 and later, it also returns `200` once Nexus PDP serves, while it [serves stale data](/concepts/pdp/nexus-pdp-offline-mode#stale-serving). |
 | `GET /health/detail` | Bearer token equal to `PDP_API_KEY` | Returns full diagnostic detail for each component. |
 
-Nine components gate readiness: the control-plane link (`nats_leaf`), the four sync planes (`wal_mirror`, `kv_source`, `policy_files_source`, `policy_data_source`), the embedded database (`embedded_db`), Open Policy Agent (OPA) (`opa`), and both loopback servers (`query_loopback`, `bundle_server`).
+In Nexus PDP 0.8.1 and later, ten components gate readiness at startup: the NATS leaf node (`nats_leaf`), its link to the control plane (`hub_link`), the four sync planes (`wal_mirror`, `kv_source`, `policy_files_source`, `policy_data_source`), the embedded database (`embedded_db`), Open Policy Agent (OPA) (`opa`), and both loopback servers (`query_loopback`, `bundle_server`). In Nexus PDP 0.8.0 and earlier, nine components gate readiness: the same list without `hub_link`, where `nats_leaf` also reports the link to the control plane.
+
+In Nexus PDP 0.8.1 and later, losing the control plane does not turn readiness off once Nexus PDP serves. When `hub_link`, `wal_mirror`, or `kv_source` goes down, `GET /health/ready` keeps returning `200` with `"state": "serving_stale"`. Any other gating component going down returns `503`, and so does `hub_link` reading `rejected`, when the control plane refuses this Nexus PDP. See [Stale serving while the control plane is unreachable](/concepts/pdp/nexus-pdp-offline-mode#stale-serving). Nexus PDP 0.8.0 and earlier report not ready when they lose the control plane.
 
 :::warning Probe port 7001, not port 7000
 The Nexus PDP authorization port, `7000`, also answers `GET /health` and `GET /healthy`. Nexus PDP keeps `/healthy` so tooling written for the container PDP works. Don't point probes at port `7000`:
@@ -122,11 +124,11 @@ Call `GET /health/detail` on port `7001` with the header `Authorization: Bearer 
 
 - restart counts and exit codes for the OPA and NATS leaf node child processes,
 - the Nexus PDP's position in the change stream compared with the oldest change the control plane still holds,
-- whether the Nexus PDP is serving stale data, and for how long,
+- whether the Nexus PDP is serving stale data, and for how long (in Nexus PDP 0.8.1 and later, the fields `state`, `stale_on`, `stale_seconds`, and `stale_limit_exceeded`; see [Health fields that report staleness](/concepts/pdp/nexus-pdp-offline-mode#health-fields)),
 - whether decision-log shipping is configured and working.
 
-:::note Staleness and decision-log failures do not gate Nexus PDP readiness
-A Nexus PDP that serves stale data, or that cannot ship decision logs, stays ready and keeps answering authorization queries.
+:::note Staleness and decision-log failures do not gate Nexus PDP readiness by default
+A Nexus PDP that serves stale data, or that cannot ship decision logs, stays ready and keeps answering authorization queries. In Nexus PDP 0.8.1 and later, you can make a stale Nexus PDP report not ready after a time you choose with `PDP_MAX_STALE_SECS`. See [Limit how long a stale Nexus PDP stays ready](/concepts/pdp/nexus-pdp-offline-mode#max-stale).
 :::
 
 ## Logs
