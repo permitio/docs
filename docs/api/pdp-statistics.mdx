@@ -1,10 +1,10 @@
 ---
 sidebar_position: 5
 title: PDP Statistics
-description: "Query the PDP statistics API for the uptime, version, and policy update delivery status of the PDPs connected to your Permit.io environment."
+description: "Query the PDP statistics API for the uptime and version of the PDPs connected to your Permit.io environment, and, in a full on-premise deployment, the delivery status of data updates."
 ---
 
-Permit.io policy decision points (PDPs) report their uptime, version, and platform to Permit, along with which policy and data update messages they received. This page is for operators who monitor PDPs: use the PDP statistics API to list the PDPs connected to an environment, check one PDP, and find update messages that PDPs did not receive.
+Permit.io policy decision points (PDPs) report their uptime, version, and platform to Permit. This page is for operators who monitor PDPs: use the PDP statistics API to list the PDPs connected to an environment and check one PDP. In a [full on-premise deployment](/concepts/deployment-options#full-on-prem), you can also find data updates that PDPs did not receive.
 
 ## PDP statistics endpoints
 
@@ -14,7 +14,7 @@ The PDP statistics API has its own base URL: `https://pdp-statistics.api.permit.
 | --- | --- |
 | List the PDPs in an environment | `GET /v2/stats/{project}/{environment}/pdps` |
 | Get one PDP | `GET /v2/stats/{project}/{environment}/pdps/{pdp_id}` |
-| List recent update messages and their delivery status | `GET /v2/stats/{project}/{environment}/messages` |
+| List recent data updates and their delivery status (full on-premise deployments only) | `GET /v2/stats/{project}/{environment}/messages` |
 
 For every endpoint and field, see the [PDP statistics API reference](https://pdp-statistics.api.permit.io/v2/redoc). The OpenAPI spec is at [https://pdp-statistics.api.permit.io/v2/openapi.json](https://pdp-statistics.api.permit.io/v2/openapi.json).
 
@@ -119,7 +119,12 @@ The response holds the same fields as one entry of the PDP list:
 
 ## Check the delivery status of update messages \{#getting-statistics-on-message-delivery}
 
-Permit sends policy and data updates to PDPs as messages and tracks which PDPs acknowledge each message. To list the recent messages in an environment, send a GET request to the [messages endpoint](https://pdp-statistics.api.permit.io/v2/redoc#tag/Tracked-Messages/operation/get_delivery_stats_for_recent_messages):
+What the messages endpoint returns depends on where the Permit control plane runs:
+
+- **Permit's cloud** (`https://pdp-statistics.api.permit.io`): Permit does not track which PDPs receive each update. The messages endpoint returns an empty `data` list for every environment, whether or not your PDPs received the updates. To check that your PDPs are online, [list the PDPs](#getting-statistics-from-a-pdp-viewpoint) and read `active` and `last_seen_at`.
+- **[Full on-premise deployment](/concepts/deployment-options#full-on-prem)**: Permit tracks which PDPs acknowledge each data update it sends to them, and keeps each update's delivery status for 24 hours by default. Policy updates are not tracked. Send the requests to your deployment's own address instead of `https://pdp-statistics.api.permit.io`.
+
+In a full on-premise deployment, to list the recent data updates in an environment, send a GET request to the [messages endpoint](https://pdp-statistics.api.permit.io/v2/redoc#tag/Tracked-Messages/operation/get_delivery_stats_for_recent_messages):
 
 ```bash
 curl --location \
@@ -173,13 +178,13 @@ The `state` field of a message shows its acknowledgement (ack) state. The main v
 | `partial_ack` | Some connected PDPs acknowledged the message and others did not. |
 | `full_ack` | All known connected PDPs acknowledged the message. |
 | `assumed_ack` | Every PDP that did not acknowledge the message is assumed to be disconnected, because it stopped sending pings. |
-| `assumed_lost` | At least one PDP that still sends pings did not acknowledge the message after several retries. The PDP is out of sync. |
+| `assumed_lost` | At least one PDP that still sends pings did not acknowledge the message within a few minutes. The PDP is out of sync. |
 
 For the full list of states, see the [messages endpoint reference](https://pdp-statistics.api.permit.io/v2/redoc#tag/Tracked-Messages/operation/get_delivery_stats_for_recent_messages).
 
 ### List only lost messages to find sync issues \{#looking-only-at-lost-messages-sync-issues}
 
-To find PDPs that are online but out of sync, filter by `state=assumed_lost`:
+In a full on-premise deployment, to find PDPs that are online but out of sync, filter by `state=assumed_lost`:
 
 ```bash
 curl --location \
@@ -188,7 +193,9 @@ curl --location \
   --header 'Authorization: Bearer <YOUR API KEY>'
 ```
 
-An empty `data` list means every online PDP received the recent updates. To get notified of sync errors instead of polling, see [PDP sync error webhooks](/api/pdp-webhooks).
+An empty `data` list means that no data update from the last 24 hours has been declared lost. Permit decides whether a message is lost within a few minutes of sending it, so the newest updates are not included yet.
+
+On Permit's cloud, this request always returns an empty `data` list. An empty list there does not mean that your PDPs are in sync.
 
 ## Related pages
 
