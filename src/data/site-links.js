@@ -30,6 +30,7 @@ module.exports = {
     { label: "App & API Permissions", href: `${WWW}/app-and-api-permissions` },
     { label: "MCP Gateway", href: `${WWW}/mcp-gateway` },
     { label: "Coding Agents Gateway", href: `${WWW}/coding-agents-gateway` },
+    { label: "Software Factory Security", href: `${WWW}/software-factory-security` },
     { label: "AI Access Control", href: `${WWW}/ai-access-control` },
     { label: "Elements", href: `${WWW}/elements` },
   ],
