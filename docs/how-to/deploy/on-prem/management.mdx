@@ -111,7 +111,7 @@ The Keycloak admin console, RabbitMQ management, and OpenSearch Dashboards are s
 
 ### Which installer packages have the admin listener \{#admin-listener-packages}
 
-Installer packages built on or after ADMIN_LISTENER_RELEASE_DATE serve the admin consoles on the admin listener. The build date is the `YYYYMMDD` part of the package file name, `permit-platform-on-prem-installer-YYYYMMDD-HHMMSS.tar.gz`.
+The first installer package with the admin listener is `ADMIN_LISTENER_FIRST_PACKAGE`. Packages with a later date and time in the file name also have it. The date and time are the `YYYYMMDD-HHMMSS` part of the file name, `permit-platform-on-prem-installer-YYYYMMDD-HHMMSS.tar.gz`.
 
 To check a cluster, run:
 
@@ -133,7 +133,7 @@ kubectl port-forward -n permit-platform svc/permit-frontend-admin 3001:3001
 
 `kubectl` prints `Forwarding from 127.0.0.1:3001 -> 3001` and listens on your workstation only. Keep the local port at `3001`, because the Keycloak step below writes that address into Keycloak. On OpenShift, `oc port-forward` takes the same arguments.
 
-Creating a port forward needs the Kubernetes `create` permission on `pods/portforward` in the namespace.
+Creating a port forward needs the Kubernetes `create` permission on `pods/portforward`, and `get` on `services` and `pods`, in the namespace.
 
 ### 2. Set the Keycloak master realm's Frontend URL once \{#keycloak-master-frontend-url}
 
@@ -641,12 +641,14 @@ Bookmarks, scripts, a Terraform Keycloak provider, or monitoring checks that use
 - From a workstation, use the admin listener: `http://localhost:3001/auth/...` through the port forward in [Forward the admin listener to your workstation](#forward-the-admin-listener), or your internal address from [Reach the admin consoles without a port forward](#expose-admin-consoles).
 - From inside the cluster, call the `keycloak` Service directly: `http://keycloak:8080` in the platform namespace, or `http://keycloak.permit-platform.svc.cluster.local:8080` from another namespace. Keycloak serves its paths there without the `/auth` prefix. For example, `https://<your-frontend-domain>/auth/realms/master/protocol/openid-connect/token` becomes `http://keycloak:8080/realms/master/protocol/openid-connect/token`. The Admin REST API is at `http://keycloak:8080/admin/realms/<realm>`.
 
+On Keycloak 26.8.2, which installer packages with the admin listener run, a client other than the built-in `admin-cli` that calls the Admin REST API needs the `kc-admin-api` client scope assigned, or its calls return `401 Unauthorized`. This applies at every address, so check it for each client you move.
+
 To upgrade:
 
 1. [Back up the platform](#creating-backups), including the `keycloak-postgres` database.
 2. Run the upgrade as described in [Upgrade to a new installer version](#platform-updates). The installer's completion message prints the port forward and the Keycloak commands.
 3. Forward the admin listener and run [the one-time Keycloak step](#keycloak-master-frontend-url).
-4. Move the bookmarks and automation that use the paths marked `404` to the addresses above.
+4. Move the bookmarks and automation that use the paths marked `404` to the admin listener, your internal address, or the `keycloak` Service.
 
 Check the result:
 
@@ -674,14 +676,6 @@ To end a mixed state, put back the `permitServices.frontend.image` and `permitSe
 
 `helm rollback` returns the `permit-platform` release to an earlier revision. It doesn't reverse database schema changes from the migrations release or from Keycloak. To return data to its state before an upgrade, [restore from a backup](#backup-management).
 
-A rollback from a package with the admin listener to one without it depends on the Keycloak version of the older package. Compare `thirdPartyServices.keycloak.tag` in the `charts/permit-platform/values.yaml` file of each package.
-
-**The older package runs the same Keycloak version.** A rollback doesn't reset the `master` realm's Frontend URL, which Keycloak stores in its database. While the Frontend URL is `http://localhost:3001/auth`, the Keycloak admin console on the frontend domain sends its sign-in to that address, which no longer answers. Before you roll back, clear **Frontend URL** under **Realm settings** > **General** in the `master` realm. If you already rolled back, run the two `kcadm.sh` commands from [the one-time Keycloak step](#keycloak-master-frontend-url) with `-s attributes.frontendUrl=https://<your-frontend-domain>/auth` in the second command. That value is the address Keycloak uses when the Frontend URL is empty.
-
-Then roll back both the `permit-platform` and the `third-party-services` releases, or install the older package. Keycloak restarts again, so nobody can sign in until the new Keycloak pod is ready. `helm rollback permit-platform` alone restores the older image and removes `permit-frontend-admin`. Keycloak belongs to the `third-party-services` release and keeps the newer settings, so the Keycloak admin console on the frontend domain doesn't work until that release is back on the older package. Until then, manage Keycloak with `kcadm.sh`.
-
-**The older package runs an older Keycloak.** The upgrade migrated the Keycloak database schema, and the migration is one-way. Rolling back the `third-party-services` release doesn't undo the migration. The only way back to the older Keycloak is the dump of the `keycloak-postgres` database that you took before the upgrade (see [Create backups](#creating-backups)). That dump predates the one-time Keycloak step, so it has no Frontend URL to clear.
-
 ```bash
 # Rollback using Helm (most recent release)
 helm rollback permit-platform -n permit-platform
@@ -694,6 +688,16 @@ helm rollback permit-platform 3 -n permit-platform
 helm status permit-platform -n permit-platform
 kubectl get pods -n permit-platform
 ```
+
+How you roll back from a package with the admin listener to one without it depends on the older package's Keycloak version. Compare `thirdPartyServices.keycloak.tag` in the `charts/permit-platform/values.yaml` file of each package.
+
+**The older package runs the same Keycloak version.** A rollback doesn't reset the `master` realm's Frontend URL, which Keycloak stores in its database. While the Frontend URL is `http://localhost:3001/auth`, the Keycloak admin console on the frontend domain sends its sign-in to that address, which no longer answers. Before you roll back, clear **Frontend URL** under **Realm settings** > **General** in the `master` realm. Then roll back both the `permit-platform` and the `third-party-services` releases to the older package's revisions (`helm history <release> -n permit-platform` lists them), or install the older package. Keycloak restarts again, so nobody can sign in until the new Keycloak pod is ready.
+
+If you rolled back before you cleared the Frontend URL, run the two `kcadm.sh` commands from [the one-time Keycloak step](#keycloak-master-frontend-url) with `-s attributes.frontendUrl=https://<your-frontend-domain>/auth` in the second command. That value is the address Keycloak uses when the Frontend URL is empty.
+
+`helm rollback permit-platform` alone restores the older image and removes `permit-frontend-admin`. Keycloak belongs to the `third-party-services` release and keeps the newer settings, so the Keycloak admin console on the frontend domain doesn't work until that release is back on the older package. Until then, manage Keycloak with `kcadm.sh`.
+
+**The older package runs an older Keycloak.** The upgrade migrated the Keycloak database schema, and the migration is one-way. Don't roll back the `third-party-services` release on its own. The only way back to the older Keycloak is the dump of the `keycloak-postgres` database that you took before the upgrade. Restoring it discards every change made in Keycloak since the upgrade, such as new users and changed passwords. Contact [Permit support](#support) to plan the restore. The dump predates the one-time Keycloak step, so it has no Frontend URL to clear.
 
 ## Rotate certificates and passwords \{#security-maintenance}
 
