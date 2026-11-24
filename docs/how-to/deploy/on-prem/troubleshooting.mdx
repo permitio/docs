@@ -1,7 +1,7 @@
 ---
 title: "Troubleshoot an On-Premises Deployment"
 sidebar_label: "Troubleshooting Guide"
-description: "Diagnose and fix installation, image pull, sign-in, database, and policy sync problems in a self-hosted Permit Platform."
+description: "Diagnose and fix installation, image pull, sign-in, database, policy sync, and admin console problems in a self-hosted Permit Platform."
 ---
 
 :::info Enterprise on-premises license required
@@ -533,7 +533,7 @@ kubectl get secret global-infrastructure-secret -n permit-platform -o jsonpath='
    ```bash
    # Verify Keycloak is accessible
    kubectl port-forward -n permit-platform svc/keycloak 8080:8080 &
-   curl http://localhost:8080/auth/realms/permit-platform
+   curl http://localhost:8080/realms/permit-platform
    ```
 
 3. **The backend authentication settings are wrong.** Check the backend environment variables and the cookie messages in the backend logs:
@@ -621,6 +621,60 @@ kubectl get deployment permit-policy-sync-v2 -n permit-platform -o jsonpath='{.s
    ```
 
 The problem is fixed when the `permit-policy-sync-v2` pod is `Running` and its logs show no Git errors.
+
+## Admin console issues \{#admin-console-issues}
+
+Installer packages with the admin listener serve the Keycloak admin console, RabbitMQ management, and OpenSearch Dashboards on port 3001 of the `permit-frontend` pods, behind the `permit-frontend-admin` Service. [Reach the admin consoles](/how-to/deploy/on-prem/management#admin-consoles) describes the setup and lists which packages have the admin listener.
+
+### Admin console URL on the frontend domain returns 404 \{#admin-console-url-returns-404}
+
+**Symptom:** One of these happens on the frontend domain:
+
+- `https://<your-frontend-domain>/auth`, `/auth/admin/`, or `/auth/realms/master/` returns `404 Not Found`.
+- `/rabbitmq/` or `/opensearch/` opens the Permit frontend instead of the console.
+- A script, a Terraform Keycloak provider, or a monitoring check that calls the Keycloak Admin REST API or the `master` realm token endpoint on the frontend domain fails with `404`.
+
+**Cause:** The frontend domain serves the Permit frontend, `/v2/`, `/scim`, and the Keycloak sign-in paths `/auth/realms/permit-platform/` and `/auth/resources/`. The admin consoles are on the admin listener, which no ingress routes to.
+
+**Fix:** Forward the admin listener, then open `http://localhost:3001/auth/`, `http://localhost:3001/rabbitmq/`, or `http://localhost:3001/opensearch/`:
+
+```bash
+kubectl port-forward -n permit-platform svc/permit-frontend-admin 3001:3001
+```
+
+Point automation that runs inside the cluster at the `keycloak` Service, `http://keycloak:8080`, without the `/auth` prefix. For example, `https://<your-frontend-domain>/auth/realms/master/protocol/openid-connect/token` becomes `http://keycloak:8080/realms/master/protocol/openid-connect/token`. The Admin REST API is at `http://keycloak:8080/admin/realms/<realm>`. A client other than `admin-cli` that then gets `401 Unauthorized` needs the `kc-admin-api` client scope assigned. See [Upgrade to a package with the admin listener](/how-to/deploy/on-prem/management#upgrade-admin-listener).
+
+### Keycloak admin console stays blank or redirects to the frontend domain \{#keycloak-admin-console-redirect}
+
+**Symptom:** You open `http://localhost:3001/auth/` through the port forward. The page stays blank, or the browser moves to `https://<your-frontend-domain>/auth/realms/master/protocol/openid-connect/auth?...` and shows `404 Not Found`.
+
+**Find the cause.** With the port forward running, read the `master` realm's issuer:
+
+```bash
+curl -s http://localhost:3001/auth/realms/master/.well-known/openid-configuration | grep -o '"issuer":"[^"]*"'
+```
+
+If the issuer starts with `https://<your-frontend-domain>`, the `master` realm's Frontend URL isn't set.
+
+**Fix:** Run [the one-time Keycloak step](/how-to/deploy/on-prem/management#keycloak-master-frontend-url), which sets the Frontend URL to `http://localhost:3001/auth`. The problem is fixed when the issuer command prints `"issuer":"http://localhost:3001/auth/realms/master"` and the Keycloak sign-in page loads from `http://localhost:3001`.
+
+These cases look similar:
+
+- **The browser moves to `http://localhost:3001/...` and the page doesn't load.** You opened the console on another local port, or the port forward on local port 3001 stopped. Forward local port 3001, or set the Frontend URL to the address you use.
+- **The console doesn't open at an internal `http://` address.** The Keycloak admin console needs HTTPS on any host other than `localhost`. Serve the internal address over TLS, as described in [Reach the admin consoles without a port forward](/how-to/deploy/on-prem/management#expose-admin-consoles).
+- **After a rollback to a package without the admin listener, the console on the frontend domain sends you to `http://localhost:3001`.** The Frontend URL is still set. Follow [Roll back a release](/how-to/deploy/on-prem/management#rollback-procedures).
+
+### kubectl port-forward to the admin listener fails \{#admin-listener-port-forward-errors}
+
+**Symptom:** `kubectl port-forward -n permit-platform svc/permit-frontend-admin 3001:3001` fails, or the consoles don't load through it.
+
+| Error | Cause | Fix |
+|---|---|---|
+| `Error from server (NotFound): services "permit-frontend-admin" not found` | The namespace is wrong, or the cluster runs an installer package without the admin listener | Find the namespace with `kubectl get services -A \| grep permit-frontend`. In a package without the admin listener, use the URLs in [Admin consoles in older installer packages](/how-to/deploy/on-prem/management#admin-consoles-older-packages). |
+| `error: Service permit-frontend does not have a service port 3001` | The command names `svc/permit-frontend`, whose only port is 80 | Forward `svc/permit-frontend-admin` |
+| The port forward starts, and each request prints `connect: connection refused` | The `permit-frontend` image doesn't have the admin listener, while the chart does | See [Chart and frontend image from different packages](/how-to/deploy/on-prem/management#mixed-admin-listener-versions) |
+| `bind: address already in use` | Another program on your workstation uses port 3001 | Stop that program. Or forward another local port, for example `3002:3001`, and set the Keycloak Frontend URL to `http://localhost:3002/auth`. |
+| `cannot create resource "pods/portforward"` | Your Kubernetes user can't create port forwards in the namespace | Ask your cluster administrator for `create` on `pods/portforward` in the namespace |
 
 ## Collect logs and monitor resources \{#log-collection-and-monitoring}
 
