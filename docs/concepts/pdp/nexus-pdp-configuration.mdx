@@ -1,8 +1,8 @@
 ---
 title: Nexus PDP configuration reference
 sidebar_label: Configuration
-description: "Look up the environment variables that configure Permit Nexus PDP (permitio/nexus-pdp): credentials, storage, ports, logging, and storage-engine tuning."
-sidebar_position: 6
+description: "Look up the environment variables that configure Permit Nexus PDP (permitio/nexus-pdp): credentials, storage, ports, logging, offline mode, and storage-engine tuning."
+sidebar_position: 7
 ---
 
 This reference lists the environment variables that configure Permit Nexus PDP (`permitio/nexus-pdp`), a self-hosted policy decision point (PDP). It is for operators who deploy and tune Nexus PDP. The only required variable is `PDP_API_KEY`. For deployment requirements such as volumes, probes, and memory, see [Deploy Nexus PDP](/concepts/pdp/nexus-pdp-deployment).
@@ -36,11 +36,12 @@ Leave `PDP_CONTROL_PLANE` unset unless Permit support asks you to set it. On the
 | Variable | Default | Description |
 | --- | --- | --- |
 | `EDGE_DB_PATH` | `/var/lib/edge-pdp/db` | Directory of the embedded database. Must be on a persistent volume. |
-| `EDGE_DATA_DIR` | `/var/lib/edge-pdp` | Directory of the event store and generated credentials. Must be on a persistent volume. |
+| `EDGE_DATA_DIR` | `/var/lib/edge-pdp` | Directory of the event store and generated configuration. Must be on a persistent volume. It never holds the NATS credentials: at startup, Nexus PDP removes a copy that an older version left here. |
+| `PDP_RUNTIME_DIR` | `/tmp/edge-pdp` | Directory of the NATS credentials Nexus PDP receives from the Permit control plane at startup. An absolute path to a directory that the user Nexus PDP runs as (user ID `10001` in the image) can write, owned by that user or by root, not a symbolic link, not on the persistent volume, and not under `EDGE_DATA_DIR` or `EDGE_DB_PATH`. A Kubernetes `emptyDir` mount point is root-owned and writable by every user, so it qualifies. Nexus PDP keeps the credentials in an owner-only subdirectory. On Kubernetes, mount an `emptyDir` with `medium: Memory` here, into the Nexus PDP container only; it also works with `readOnlyRootFilesystem`. Use one directory per Nexus PDP: a second Nexus PDP on the same directory fails to start. |
 | `EDGE_PUBLIC_PORT` | `7000` | Port of the authorization API, the only port your services call. |
 | `EDGE_HEALTH_PORT` | `7001` | Port of the health and readiness endpoints. Point probes at this port, [not at the authorization port](/concepts/pdp/nexus-pdp-deployment#health-and-readiness). |
 
-Both storage paths must be on persistent storage that survives restarts. On ephemeral storage, every restart runs a full cold start. See [Nexus PDP deployment requirements](/concepts/pdp/nexus-pdp-deployment#deployment-requirements).
+`EDGE_DB_PATH` and `EDGE_DATA_DIR` must be on persistent storage that survives restarts: if either is on ephemeral storage, every restart runs a full cold start. `PDP_RUNTIME_DIR` must not be on the persistent volume. See [Nexus PDP deployment requirements](/concepts/pdp/nexus-pdp-deployment#deployment-requirements).
 
 Nexus PDP also uses ports `7002`, `7003`, `8181`, `4222`, and `8222` internally, bound to loopback only. See [Ports used by Nexus PDP](/concepts/pdp/nexus-pdp-architecture#ports). Expose only the ports set by `EDGE_PUBLIC_PORT` and `EDGE_HEALTH_PORT`.
 
@@ -69,6 +70,16 @@ Set the Kubernetes `terminationGracePeriodSeconds` to at least `EDGE_DRAIN_TIMEO
 :::warning Child process debug levels write authorization data to logs
 `EDGE_NATS_LOG_LEVEL=trace` logs raw message payloads, which contain your authorization data. `EDGE_OPA_LOG_LEVEL=debug` logs authorization request and response bodies. Set these levels only for short debugging sessions, and remove them before the container serves production traffic.
 :::
+
+## Offline mode and stale serving \{#offline-mode}
+
+These variables set how long Nexus PDP stays ready while it is behind the control plane, whether it may start without the control plane, and how long it may serve after the control plane last accepted it. They apply to Nexus PDP 0.8.1 and later: Nexus PDP 0.8.0 and earlier do not read them. For the behavior they control, see [Nexus PDP offline mode](/concepts/pdp/nexus-pdp-offline-mode).
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PDP_MAX_STALE_SECS` | Unset (no limit) | Seconds a stale episode may last before Nexus PDP reports not ready (`503`, `"state": "not_ready"`). Past it, Nexus PDP still answers a caller that reaches it, with `X-Permit-Stale-Seconds`. At least `1`: `0` fails startup. See [Limit how long a stale Nexus PDP stays ready](/concepts/pdp/nexus-pdp-offline-mode#max-stale). |
+| `PDP_OFFLINE_ALLOW_UNPROTECTED_VOLUME` | `false` | Set to `true` to let a startup that cannot reach the control plane serve the data already on its volume. Read from the container environment only. Read what it accepts in [Start Nexus PDP without the control plane](/concepts/pdp/nexus-pdp-offline-mode#offline-boot) before you set it. |
+| `PDP_SIGNUP_RECORD_MAX_AGE_SECS` | `604800` (7 days) | Seconds after the control plane last accepted this Nexus PDP during which it may start offline, serve after an offline start, or serve while it heals a long outage. At least `1`: `0` fails startup. See [The serve cap on an offline start](/concepts/pdp/nexus-pdp-offline-mode#serve-cap) and [The heal's ceiling](/concepts/pdp/nexus-pdp-offline-mode#heal-ceiling). |
 
 ## Storage engine
 

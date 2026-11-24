@@ -1,7 +1,7 @@
 ---
 title: How Permit MCP Gateway works with Permit.io
 sidebar_label: Permit.io Integration
-description: Learn how Permit MCP Gateway maps MCP servers, tools, and trust levels to Permit.io resources, actions, and roles, what each setup step writes to Permit, and how to inspect the result in the Permit dashboard.
+description: Learn how Permit MCP Gateway maps MCP servers, tools, and trust levels to Permit.io resources, actions, and roles, what each setup step writes to Permit, and how to inspect and reproduce a decision in the Permit dashboard.
 sidebar_position: 8
 ---
 
@@ -9,12 +9,13 @@ sidebar_position: 8
 
 | Fact | Value |
 |---|---|
-| Permit objects | MCP server: resource type. Tool: action. Trust level: role. Human and agent: users with the keys `human\|{subject}` and `agent\|{client_id}`. |
-| Supported MCP clients | Cursor, VS Code, Claude Desktop, and Claude Code. The admin dashboard shows a client configuration snippet for each. |
+| Permit objects | MCP server: resource type. Tool: action. Trust level: role. Person: user `human\|{subject}`. Agent: user `agent\|{client_id}\|{subject}`, one per person per MCP client. |
+| Checks per call | On an MCP server an admin imported: two checks, one for the agent and one for the person, and both must allow. On a server a person added by URL: the agent check only. |
+| Supported MCP clients | Cursor, VS Code, Claude Desktop, and Claude Code. Each MCP server's page in the admin dashboard shows the server's URL and a configuration snippet for each client. |
 | Deployment modes | Hosted (SaaS) on `*.agent.security`, customer-controlled, and fully on-premises. The last two are available on Enterprise plans. See [Enterprise deployment](/permit-mcp-gateway/enterprise-deployment). |
 | Authorization model | A relationship-based access control (ReBAC) trust ceiling on standard Permit objects. Gateway policies can also use RBAC and ABAC. |
 | Sign-in methods | Email and password, email one-time passcode, passkeys, Google, GitHub, and Microsoft OAuth, and SAML 2.0 or OIDC single sign-on. See [Authentication methods](/permit-mcp-gateway/authentication-methods). |
-| Audit | Each allow or deny decision is logged with the human, the agent, the tool, the MCP server, and the time, in the gateway dashboard and in the Permit **Audit Log** screen. |
+| Audit | Each allow or deny decision is logged with the person, the agent, the tool, the MCP server, and the time, in the gateway dashboard and in the Permit **Audit Log** screen. |
 | SDK or code change | None. You point the MCP client at the gateway URL instead of the MCP server URL. |
 | Free tier | Community plan, labeled "Free forever" on the [Permit MCP Gateway pricing](https://www.permit.io/mcp-gateway/pricing) page: "Up to 1,000 MAU (human + agentic identities)", Tenants 10, Environments 1, Audit log retention 7 days. The main [Permit.io pricing](https://www.permit.io/pricing) page lists different Community limits for Permit.io authorization outside the gateway. |
 | Open-source components | The Permit PDP and [OPAL](https://github.com/permitio/opal) that Permit uses are open source. The Access Request MCP server ([permitio/permit-mcp](https://github.com/permitio/permit-mcp)) is a separate open-source project and is not the gateway. |
@@ -23,7 +24,7 @@ sidebar_position: 8
 
 Learn how Permit MCP Gateway stores its authorization model in Permit.io: how MCP servers, tools, and trust levels map to Permit resources, actions, and roles, what each setup step writes to Permit, and how to inspect and debug the result in the Permit dashboard. This page is for gateway admins and developers who debug tool-call decisions or change the policy in Permit.
 
-Permit MCP Gateway checks every tool call with `permit.check()`. Permit holds the policy, evaluates each check in a policy decision point (PDP), and records each decision in the audit log.
+Permit MCP Gateway checks every tool call, resource read, and prompt fetch with `permit.check()`. Permit holds the policy, evaluates each check in a policy decision point (PDP), and records each decision in the audit log.
 
 ## How the gateway and Permit divide the work \{#the-relationship-between-permit-and-the-gateway}
 
@@ -31,12 +32,12 @@ Permit MCP Gateway checks every tool call with `permit.check()`. Permit holds th
 | --- | --- | --- |
 | **Role** | Control plane: stores the policy and evaluates checks | Enforcement point and MCP proxy |
 | **Dashboard** | [app.permit.io](https://app.permit.io) | [app.agent.security](https://app.agent.security) |
-| **Manages** | Authorization model, policy evaluation, audit logs | Hosts, MCP server imports, user consent, authentication, sessions |
-| **Stores** | Resource types, actions, roles, users, relationships, derived roles, audit log entries | Host configuration, sessions, upstream OAuth tokens |
+| **Manages** | Authorization model, policy evaluation, audit logs | Hosts, MCP server imports, consent, authentication, grants |
+| **Stores** | Resource types, actions, roles, users, relationships, derived roles, audit log entries | Host configuration, grants (one per agent and MCP server, with the upstream OAuth tokens) |
 
-**Each gateway host maps to one Permit environment.** When an admin creates a host, the admin selects a Permit project and environment, and an environment can belong to only one host. All resources, users, roles, and audit logs for the host live in that environment.
+**Each gateway host maps to one Permit environment.** When an admin creates a host, the admin selects a Permit project and environment, or creates a new environment. An environment can belong to only one host, and the host's environment can't be changed after the host is created. All resources, users, roles, and audit logs for the host live in that environment.
 
-By default, the gateway sends checks to the Permit Cloud PDP. For deployments where a PDP runs in your own network, see [Local PDP for authorization](/permit-mcp-gateway/enterprise-deployment#low-latency-authorization).
+By default, the gateway sends checks to the Permit Cloud PDP. For deployments where a PDP runs in your own network, see [Enterprise deployment](/permit-mcp-gateway/enterprise-deployment).
 
 The gateway uses standard Permit objects, so the usual Permit tools work on the gateway's policy:
 
@@ -46,38 +47,43 @@ The gateway uses standard Permit objects, so the usual Permit tools work on the 
 
 ## Why the gateway uses relationship-based access control \{#why-permitio}
 
-A tool-call decision depends on four things: the human, the agent acting for the human, the MCP server, and the tool. Relationship-based access control (ReBAC) in Permit models the link between the agent, the human, and the server, so one check can combine the trust level the human granted with the limit the admin set. When an admin changes a trust level or revokes access, the next check uses the change.
+A tool-call decision depends on four things: the person, the agent acting for the person, the MCP server, and the tool. Relationship-based access control (ReBAC) in Permit models the link between the agent, the person, and the server, so one check can combine the trust level the person approved with the limit the admin set. When an admin lowers a level or revokes access, the next check uses the change.
 
 ## The policy model
 
-The gateway maps its concepts to Permit objects. This mapping explains every decision in the audit log.
+The gateway maps its concepts to Permit objects. This mapping explains every decision in the audit log. The examples on this page use the DeepWiki MCP server, imported with the server key `deepwiki`.
 
 ### Resources and actions
 
-Each imported MCP server becomes a **resource type** in Permit. Each of the server's tools becomes an **action** on that resource type.
+Each imported MCP server becomes a **resource type** in Permit. Each of the server's tools becomes an **action** on that resource type. The action key is the tool name in lowercase, with each run of characters other than letters and digits replaced by one underscore, and leading and trailing underscores removed.
 
 | Gateway concept | Permit object | Example |
 | --- | --- | --- |
-| MCP server | Resource type | `linear` |
-| MCP server instance | Resource instance | `linear:linear` (type and instance share the same key) |
-| Tool | Action | `create_issue`, `get_issues`, `delete_project` |
+| MCP server | Resource type | `deepwiki` |
+| MCP server instance | Resource instance | `deepwiki:deepwiki` (type and instance share the same key) |
+| Tool | Action | `read_wiki_structure`, `read_wiki_contents`, `ask_wiki_question` |
+| Connecting, resource reads, prompt fetches | Action `connect_static` | Granted to every trust level |
 
 ```mermaid
 graph TD
-    Server["Resource Type: linear<br/>Instance: linear:linear"]
-    Server --"Action"--> T1["get_issues<br/>(low trust)"]
-    Server --"Action"--> T2["create_issue<br/>(medium trust)"]
-    Server --"Action"--> T3["delete_project<br/>(high trust)"]
+    Server["Resource Type: deepwiki<br/>Instance: deepwiki:deepwiki"]
+    Server --"Action"--> T1["read_wiki_structure<br/>(low trust)"]
+    Server --"Action"--> T2["read_wiki_contents<br/>(low trust)"]
+    Server --"Action"--> T3["ask_wiki_question<br/>(medium trust)"]
 ```
+
+A resource read, a prompt fetch, or a completion names no tool, so the gateway checks it on the server's `connect_static` action.
 
 ### Users
 
-Permit stores humans and agents as users with different key prefixes:
+Permit stores people and agents as users with different key prefixes:
 
-| Caller type | Permit user key | Used by |
-| --- | --- | --- |
-| Human | `human\|{subject}` | Consent Service and gateway admin dashboard, to manage policy (grant access, set trust levels) |
-| Agent | `agent\|{client_id}` | Gateway, to authorize tool calls at runtime |
+| Caller type | Permit user key | Created by | Used by |
+| --- | --- | --- | --- |
+| Person | `human\|{subject}` | Consent Service, when the person signs in to the host | Gateway, for the person check on imported servers. Admin dashboard, to manage access. |
+| Agent | `agent\|{client_id}\|{subject}` | Consent Service, when the person approves the agent | Gateway, for the agent check on every call |
+
+`{subject}` is the person's user ID, and `{client_id}` is the OAuth client ID the MCP client received when it registered with the gateway. An agent is one person using one MCP client: when two people approve the same client, Permit has two agent users, each with only the roles its own person approved. The admin dashboard shows both keys on each approval request, as **Agent ID** and **Person ID**.
 
 ### Roles and trust levels
 
@@ -89,23 +95,25 @@ Trust levels are Permit roles. Each MCP server has two sets of roles:
 | Medium | `medium` | `{server}-medium` | Read and write tools |
 | High | `high` | `{server}-high` | Read, write, and destructive tools |
 
-The roles on the MCP server resource hold the permissions: each tool's action is granted to the role of the tool's trust level. The roles are hierarchical: `high` extends `medium`, and `medium` extends `low`. Agents don't get these roles directly. Permit derives them from the agent's role on the human's profile, as the next section explains.
+The roles on the MCP server resource hold the permissions: each tool's action is granted to the role of the tool's trust level. The roles are hierarchical: `high` extends `medium`, and `medium` extends `low`. A tool that has no trust level is granted to no role, so no agent can call it. Agents don't get the server roles directly. Permit derives them from the agent's role on the person's profile, as the next section explains.
 
 ### The UserProfile indirection (ReBAC) \{#the-userprofile-indirection-rebac}
 
-Agents don't get direct access to MCP servers. Authorization goes through a **`user_profile`** resource that represents the human:
+Agents don't get direct access to MCP servers. Authorization goes through a **`user_profile`** resource that represents the person:
 
 ```mermaid
 flowchart LR
-    Agent["Agent<br/>agent|client_id"]
+    Agent["Agent<br/>agent|client_id|subject"]
+    Human["Person<br/>human|subject"]
     Profile["UserProfile<br/>user_profile:subject"]
-    Server["MCP Server<br/>server_key:server_key"]
+    Server["MCP Server<br/>deepwiki:deepwiki"]
 
-    Agent -->|"role: {server}-medium"| Profile
-    Profile -->|"relation: medium"| Server
+    Agent -->|"role: deepwiki-low"| Profile
+    Human -->|"role: owner"| Profile
+    Profile -->|"relation: high"| Server
 ```
 
-The `user_profile` indirection sets a trust ceiling. The profile's relation to the server, set by the admin, caps what any of the human's agents can do, whatever the human grants during consent.
+The `user_profile` indirection sets a trust ceiling. The profile's relation to the server, set by the admin, caps what any of the person's agents can do, whatever the person approves during consent.
 
 The effective permission is the lower of the two: **min(agent's role on profile, profile's relation to server)**.
 
@@ -121,7 +129,7 @@ The effective permission is the lower of the two: **min(agent's role on profile,
 | `{server}-low` | `medium` | **low** |
 | `{server}-low` | `low` | **low** |
 
-The gateway creates **12 derived role rules per MCP server** in Permit to implement this calculation. There is one rule for every pair in the table above, plus one `owner` rule per trust level:
+The gateway creates **12 derived role rules per imported MCP server** in Permit to implement this calculation. There is one rule for every pair in the table above, plus one `owner` rule per trust level:
 
 | Derived role on the server | Rules (role on `user_profile` + relation to server) |
 | --- | --- |
@@ -129,34 +137,37 @@ The gateway creates **12 derived role rules per MCP server** in Permit to implem
 | `{server}#medium` (4 rules) | `owner` + `medium`; `{server}-medium` + `medium`; `{server}-medium` + `high`; `{server}-high` + `medium` (high capped to medium) |
 | `{server}#low` (6 rules) | `owner` + `low`; `{server}-low` + `low`; `{server}-low` + `medium`; `{server}-low` + `high`; `{server}-medium` + `low` (medium capped to low); `{server}-high` + `low` (high capped to low) |
 
-An agent that consented to a level below the admin's ceiling keeps the lower level: `{server}-low` with a `high` relation derives `{server}#low`, not `{server}#high`.
+An agent approved at a level below the admin's ceiling keeps the lower level: `{server}-low` with a `high` relation derives `{server}#low`, not `{server}#high`.
 
-The `owner` rules give the human who owns the profile derived permissions on the server. The gateway admin dashboard uses them to discover a human's permissions. Each trust level needs only one `owner` rule, because `high` extends `medium` and `medium` extends `low`.
+The `owner` rules give the person who owns the profile the role of their own max trust level on the server. The gateway's person check uses them: `human|{subject}` owns `user_profile:{subject}`, so the person check allows exactly the tools the admin's max covers. Each trust level needs only one `owner` rule, because `high` extends `medium` and `medium` extends `low`.
 
 :::note Where the Permit dashboard shows derivation rules
-The gateway writes the derivation rules on the MCP server roles, for example `linear#high`. The Permit dashboard shows the rules on the source roles on `user_profile` instead. If the **DERIVATIONS** column of an MCP server role looks empty, check the `user_profile` roles.
+The gateway writes the derivation rules on the MCP server roles, for example `deepwiki#high`. The Permit dashboard shows the rules on the source roles on `user_profile` instead. If the **DERIVATIONS** column of an MCP server role looks empty, check the `user_profile` roles.
 :::
 
 ### Max trust level: three layers of enforcement \{#max-trust-level-three-layers-of-enforcement}
 
-The gateway enforces the admin's max trust level in three places, so a user can't bypass it:
+The gateway enforces the admin's max trust level in three places, so a person can't bypass it:
 
-1. **Permit policy:** the profile-to-server relation is the ceiling in the `min()` calculation.
-2. **Consent screen:** the trust level slider shows all three levels, and the levels above the max are muted and can't be selected. If a user drags past the max, the slider returns to the max. A tooltip on a disabled level says the level is restricted.
-3. **Consent API:** the Consent Service checks the requested trust level on the server when the user accepts consent (`POST /api/consent/accept`). The Consent Service reads the profile's relationship to the server, finds the max trust level, and rejects a higher request with `403`, for example: `Trust level "medium" exceeds your maximum allowed level "low" for server "deepwiki".` The server-side check blocks direct API calls that skip the consent screen.
+1. **Permit policy:** the profile-to-server relation is the ceiling in the `min()` calculation of the agent check. On imported servers, the person check also denies any tool above the person's own max.
+2. **Consent screen:** the trust level slider shows all three levels, and the levels above the max are muted and can't be selected. If the person drags past the max, the slider returns to the max. A tooltip on a disabled level says the level is restricted.
+3. **Consent API:** the Consent Service checks the requested trust level on the server when the person accepts consent (`POST /api/consent/accept`). The Consent Service reads the profile's relationship to the server, finds the max trust level, and rejects a higher request with `403`, for example: `Trust level "medium" exceeds your maximum allowed level "low" for server "deepwiki".` The server-side check blocks direct API calls that skip the consent screen.
+
+After Permit allows a call, the gateway also compares the tool's trust level with the level stored in the person's grant, and refuses a tool above it. So a Permit role left higher than the grant can't widen what the agent can do.
 
 ## What each setup step writes to Permit \{#the-sync-flow}
 
-Each step of the admin and user setup creates specific objects in Permit.
+Each step of the admin and person setup creates specific objects in Permit.
 
 ### 1. Admin imports an MCP server \{#step-1-admin-imports-an-mcp-server}
 
 The gateway admin dashboard creates in Permit:
 
-- A **resource type** with the server's key, for example `linear`.
-- An **action** on the resource type for each discovered tool, for example `create_issue` and `get_issues`.
-- A **resource instance**, for example `linear:linear`.
-- The trust level roles `low`, `medium`, and `high` on the resource type, with **permissions** that grant each action to the role that matches the tool's trust level.
+- A **resource type** with the server's key, for example `deepwiki`.
+- An **action** on the resource type for each imported tool, for example `read_wiki_contents`, plus the `connect_static` action.
+- The trust level roles `low`, `medium`, and `high` on the resource type, with **permissions** that grant each action to the role that matches the tool's trust level, and the 12 derivation rules.
+- The relations `low`, `medium`, and `high` from `user_profile` to the resource type, and the roles `deepwiki-low`, `deepwiki-medium`, and `deepwiki-high` on `user_profile`.
+- A **resource instance**, for example `deepwiki:deepwiki`, with the upstream URL and the workflow intent as attributes.
 
 ```mermaid
 sequenceDiagram
@@ -164,20 +175,21 @@ sequenceDiagram
     participant Platform as Platform UI
     participant Permit as Permit API
 
-    Admin->>Platform: Import MCP server (e.g., Linear)
-    Platform->>Permit: Create resource type "linear"
-    Platform->>Permit: Create actions (get_issues, create_issue, delete_project, ...)
-    Platform->>Permit: Create resource instance "linear:linear"
-    Platform->>Permit: Assign actions to trust-level roles
+    Admin->>Platform: Import MCP server (DeepWiki)
+    Platform->>Permit: Create roles deepwiki-low/medium/high on user_profile
+    Platform->>Permit: Create resource type "deepwiki" with actions, roles, derivations, relations
+    Platform->>Permit: Create resource instance "deepwiki:deepwiki"
     Permit-->>Platform: OK
     Platform-->>Admin: Server imported
 ```
 
 In this diagram and the next one, **Platform UI** is the gateway admin dashboard.
 
-### 2. Admin grants a human access \{#step-2-admin-grants-human-access}
+### 2. Admin grants a person access \{#step-2-admin-grants-human-access}
 
-The gateway admin dashboard creates a **relationship** from the human's user profile to the MCP server. The relation name is the max trust level:
+When a person first signs in to the host, the Consent Service creates the person's user `human|{subject}`, the profile instance `user_profile:{subject}`, and the person's `owner` role on that profile. The person then appears on the **Humans** page.
+
+When an admin grants the person access to a server (**Humans**, the person's page, **MCP Server Access**, **Grant Access**), the dashboard creates a **relationship** from the person's profile to the MCP server. The relation name is the max trust level. Changing the max replaces the relation.
 
 ```mermaid
 sequenceDiagram
@@ -185,74 +197,84 @@ sequenceDiagram
     participant Platform as Platform UI
     participant Permit as Permit API
 
-    Admin->>Platform: Grant alice access to Linear (max: medium)
-    Platform->>Permit: Create user "human|alice" (if not exists)
-    Platform->>Permit: Create user_profile instance "user_profile:alice"
-    Platform->>Permit: Create relation: user_profile:alice --medium--> linear:linear
+    Admin->>Platform: Grant access to DeepWiki (Max trust: High)
+    Platform->>Permit: Ensure instance "user_profile:{subject}" exists
+    Platform->>Permit: Replace relation user_profile:{subject} --high--> deepwiki:deepwiki
     Permit-->>Platform: OK
     Platform-->>Admin: Access granted
 ```
 
-The relationship is the ceiling in the `min()` calculation. Alice's agents can't exceed medium trust on Linear, whatever trust level Alice selects during consent.
+The relationship is the ceiling in the `min()` calculation. The person's agents can't exceed that level on DeepWiki, whatever level the person picks during consent.
 
-### 3. Human consents \{#step-3-human-consents}
+### 3. Person consents \{#step-3-human-consents}
 
-When the user accepts consent with a trust level, the Consent Service assigns the **agent's role on the user profile**:
+When the person accepts consent with a trust level, the Consent Service assigns the **agent's role on the person's profile**:
 
 ```mermaid
 sequenceDiagram
-    participant User as Alice (Browser)
+    participant User as Person (Browser)
     participant CS as Consent Service
     participant Permit as Permit API
 
-    User->>CS: Accept consent (Linear, medium trust)
-    CS->>Permit: Create user "agent|cursor_abc123" (if not exists)
-    CS->>Permit: Assign role "linear-medium" to agent|cursor_abc123 on user_profile:alice
+    User->>CS: Accept consent (DeepWiki, Low)
+    CS->>Permit: Read relation user_profile:{subject} to deepwiki:deepwiki
+    CS->>Permit: Create user "agent|{client_id}|{subject}" (if not exists)
+    CS->>Permit: Assign role "deepwiki-low" on user_profile:{subject}
     Permit-->>CS: OK
     CS-->>User: Consent saved, token issued
 ```
 
-The Consent Service doesn't create MCP server resources or profile-to-server relationships. The gateway admin dashboard creates them in steps 1 and 2. The human needs a profile-to-server relationship before the Consent Service accepts consent. For the full consent flow, see [How the consent flow works](/permit-mcp-gateway/consent-service).
+The Consent Service doesn't create MCP server resources or profile-to-server relationships. The gateway admin dashboard creates them in steps 1 and 2. The person needs a profile-to-server relationship before the Consent Service accepts consent. For the full consent flow, see [How the consent flow works](/permit-mcp-gateway/consent-service).
 
 ### 4. Agent calls a tool \{#step-4-agent-calls-a-tool}
 
-The gateway calls `permit.check()` with the agent's key as the user, the tool name as the action, and the server as the resource:
+On an imported server, the gateway sends two checks to the PDP at the same time, with the tool's action and the server's instance. Both must allow:
+
+- **Agent check:** `permit.check("agent|{client_id}|{subject}", action, "deepwiki:deepwiki")`. It allows what the person approved for the agent, capped by the admin's max.
+- **Person check:** `permit.check("human|{subject}", action, "deepwiki:deepwiki")`. It allows what the admin's max for the person covers, through the `owner` rules.
 
 ```mermaid
 sequenceDiagram
-    participant Agent as MCP Client (Cursor)
+    participant Agent as MCP Client
     participant GW as Gateway
     participant PDP as Permit PDP
 
-    Agent->>GW: call_tool("create_issue", ...)
-    GW->>PDP: permit.check("agent|cursor_abc123", "create_issue", "linear:linear")
-
-    Note over PDP: 1. Agent has role "linear-medium" on user_profile:alice
-    Note over PDP: 2. user_profile:alice has relation "medium" to linear:linear
-    Note over PDP: 3. Derived role = min(medium, medium) = medium
-    Note over PDP: 4. "create_issue" requires medium trust ✓
-
-    PDP-->>GW: ALLOW
+    Agent->>GW: tools/call read_wiki_contents
+    par Agent check
+        GW->>PDP: check(agent|{client_id}|{subject}, read_wiki_contents, deepwiki:deepwiki)
+        Note over PDP: deepwiki-low on profile + relation high derives low
+        PDP-->>GW: ALLOW
+    and Person check
+        GW->>PDP: check(human|{subject}, read_wiki_contents, deepwiki:deepwiki)
+        Note over PDP: owner on profile + relation high derives high
+        PDP-->>GW: ALLOW
+    end
     GW->>Agent: Tool result
 ```
 
-If the admin had set Alice's max trust level to `low`, the check denies the call:
+The same agent calling `ask_wiki_question`, a medium-trust tool, is denied by the agent check:
 
+```text
+min(low, high) = low → "ask_wiki_question" requires medium → DENY
 ```
-min(medium, low) = low → "create_issue" requires medium → DENY
-```
+
+The agent receives JSON-RPC error `-32004`: `Permission denied: tool 'ask_wiki_question' is not allowed at your current trust level. ...`
+
+On a server a person added by URL (a dynamic server), the gateway runs the agent check only. See [Dynamic servers](#dynamic-servers).
+
+Permit is one of several checks on a call. After both Permit checks allow, the gateway also applies the grant's trust level, approval rules, and the Guardian when the host turns it on. See [Architecture](/permit-mcp-gateway/architecture).
 
 ## Which component writes what \{#separation-of-responsibilities}
 
 | Component | Permit operations |
 | --- | --- |
-| **Gateway admin dashboard** | Creates resource types, actions, instances, and trust level roles for MCP servers. Creates user profiles and profile-to-server relationships (max trust level). |
-| **Consent Service** | Creates agent users. Assigns agent roles on user profiles (consented trust level). Checks that the human has access before it accepts consent. |
-| **Gateway** | Calls `permit.check()` at runtime. Doesn't change the policy in Permit. |
+| **Gateway admin dashboard** | Creates resource types, actions, instances, trust level roles, and derivation rules for imported MCP servers. Creates profile-to-server relationships (max trust level). Moves a tool's action between roles when an admin changes the tool's level. |
+| **Consent Service** | Creates person users, profiles, and `owner` roles at sign-in. Creates agent users and assigns agent roles on profiles at consent. Lowers an agent's role when an admin lowers the agent's level, and removes it when a grant is revoked or expires. |
+| **Gateway** | Calls `permit.check()` at runtime and writes its own rows to the Permit audit log. Doesn't change the policy in Permit. |
 
 ## Reproduce a gateway decision with the Node.js SDK \{#reproduce-a-gateway-decision}
 
-The gateway checks a tool call with the agent's key as the user, the tool name as the action, and the server as the resource. You can send the same check from a script. Replace `<YOUR_API_KEY>` with the API key of the Permit environment linked to the host. The hosted gateway uses the Cloud PDP; for a self-hosted gateway, set `pdp` to the address of your PDP:
+You can send the gateway's two checks from a script. Replace `<YOUR_API_KEY>` with the API key of the Permit environment linked to the host, and `<client_id>` and `<subject>` with the values from the agent's key (an approval request in the dashboard shows it as **Agent ID**). The hosted gateway uses the Cloud PDP; for a self-hosted gateway, set `pdp` to the address of your PDP:
 
 ```javascript
 import { Permit } from "permitio";
@@ -262,11 +284,13 @@ const permit = new Permit({
   pdp: "https://cloudpdp.api.permit.io",
 });
 
-const allowed = await permit.check("agent|cursor_abc123", "create_issue", "linear:linear");
-console.log(allowed);
+const resource = "deepwiki:deepwiki";
+const agent = await permit.check("agent|<client_id>|<subject>", "read_wiki_contents", resource);
+const person = await permit.check("human|<subject>", "read_wiki_contents", resource);
+console.log({ agent, person, allowed: agent && person });
 ```
 
-The result is `true` when the agent has a trust level that covers `create_issue` on the `linear` server. The Permit **Audit Log** screen shows the same parameters for the check.
+`allowed` is `true` when the agent's approved level and the person's max both cover `read_wiki_contents`. For a dynamic server, only the agent check applies. The Permit **Audit Log** screen shows the same parameters for each check.
 
 ## Inspect the policy in the Permit dashboard \{#using-the-permit-dashboard}
 
@@ -274,9 +298,11 @@ The gateway uses standard Permit objects, so you can inspect and debug them in t
 
 ### Find the linked environment \{#finding-your-environment}
 
-1. In the [Permit MCP Gateway dashboard](https://app.agent.security), open the host and note its Permit project and environment. See [Create a host](/permit-mcp-gateway/guide#2-create-a-host).
-2. Sign in to [app.permit.io](https://app.permit.io).
-3. Select the same project and environment.
+1. In the [Permit MCP Gateway dashboard](https://app.agent.security), select the host in the host selector at the top of the page.
+2. In the sidebar, click **Settings**. The **Environment** card shows the host's **Project** and **Environment**. The host cards on the **Hosts** page show them too.
+3. Sign in to [app.permit.io](https://app.permit.io) and select the same project and environment.
+
+![Settings Environment card showing the host's Permit project and environment](/img/agent-security/platform/settings-environment.png)
 
 ### View the schema \{#viewing-the-schema}
 
@@ -284,23 +310,33 @@ In the linked environment of the Permit dashboard:
 
 | Permit screen | What you find |
 | --- | --- |
-| **Resources** | A resource type for each MCP server, for example `linear` or `github`. Open a resource to see its actions (tools) and roles. |
-| **Resource instances** | An instance for each server, for example `linear:linear`. |
-| **Users** | Humans (`human\|{subject}`) and agents (`agent\|{client_id}`). |
-| **Role assignments** | The agents' roles on user profiles. |
+| **Resources** | A resource type for each imported MCP server, for example `deepwiki`, and the `user_profile` resource type. Open a resource to see its actions (tools) and roles. |
+| **Resource instances** | An instance for each server, for example `deepwiki:deepwiki`, and a `user_profile` instance for each person. |
+| **Users** | People (`human\|{subject}`) and agents (`agent\|{client_id}\|{subject}`). |
+| **Role assignments** | The agents' roles and the people's `owner` roles on profiles. |
 
-**Expected result:** after an admin imports Linear and a user consents at medium trust, **Resources** lists `linear` with its tools as actions, and **Role assignments** shows the agent with `linear-medium` on the user's profile.
+**Expected result:** after an admin imports DeepWiki and a person approves an agent at Low, **Resources** lists `deepwiki` with its tools as actions, and **Role assignments** shows the agent with `deepwiki-low` on the person's profile.
 
 ### Reading audit logs
 
-Permit logs every `permit.check()` call. Use the **Audit Log** screen in the Permit dashboard to:
+Permit logs every `permit.check()` call, and the gateway adds its own rows. Use the **Audit Log** screen in the Permit dashboard to:
 
-- **Debug denied calls:** filter by the agent's user key to see which checks were denied and why.
+- **Debug denied calls:** filter by the agent's user key to see which checks were denied.
 - **Check setup steps:** after an import or a consent, confirm that the next tool call is evaluated against the expected resource and role.
 - **Review tool-call patterns:** see which tools and agents appear most, and whether unexpected denials occur.
 
+A tool call on an imported server produces these rows:
+
+| Row | Resource type | Written by |
+| --- | --- | --- |
+| Agent check, user `agent\|{client_id}\|{subject}` | `deepwiki` | Permit PDP |
+| Person check, user `human\|{subject}` | `deepwiki` | Permit PDP |
+| What happened to the call, action `gateway.mcp_tool_call` | `gateway.deepwiki` | Gateway |
+
+The gateway writes other rows on `gateway.deepwiki` too, such as the Guardian's verdict (`gateway.guardian_decision`) and the agent's session registration (`gateway.agent_identity`). Filter on `gateway.deepwiki` to see the gateway's rows for a server without the PDP's checks.
+
 :::tip Match Permit entries to gateway activity
-The Permit audit log shows the raw `permit.check()` parameters: user key, action, and resource. Search for the same agent key, for example `agent|cursor_abc123`, on the agent's **Audit Logs** tab in [app.agent.security](https://app.agent.security). See [Audit logs](/permit-mcp-gateway/audit-logs).
+The agent's key is `agent|{client_id}|{subject}`. To find the agent in [app.agent.security](https://app.agent.security), enter its client ID in **Search** on the **Agents** page, open the agent, and select its **Audit Logs** tab. **Show checks** on a row shows the agent check and the person check with their decisions. See [Audit logs](/permit-mcp-gateway/audit-logs).
 :::
 
 ## Server metadata and allow-list \{#server-metadata-and-allow-list}
@@ -310,16 +346,30 @@ The Permit audit log shows the raw `permit.check()` parameters: user key, action
 Each imported MCP server stores its upstream URL as an attribute on the Permit resource instance:
 
 ```text
-resource_instance.attributes.upstream_url = "https://mcp.linear.app/mcp"
+resource_instance.attributes.upstream_url = "https://mcp.deepwiki.com/mcp"
 ```
 
-The Consent Service reads `upstream_url` to resolve a server key to its upstream URL. The gateway admin dashboard reads it to show the URL on the server detail page. The allow-list check reads it too.
+The Consent Service reads `upstream_url` to resolve a server key to its upstream URL. The gateway admin dashboard reads it to show the URL on the server's page. The allow-list check reads it too.
 
 ### Allow-list enforcement
 
-When a user connects to an MCP server during consent, the Consent Service checks that the upstream URL belongs to an imported server the human has access to. When the user accepts consent, the Consent Service checks that the human has a `user_profile` to server relationship.
+When a person connects to an MCP server during consent, the Consent Service checks that the upstream URL belongs to an imported server the person has access to. When the person accepts consent, the Consent Service checks that the person has a `user_profile` to server relationship.
 
-By default, the Consent Service rejects upstream URLs that don't match an imported server. When **Dynamic MCPs** is on for the host, users can also enter their own URLs. See [Dynamic MCPs](/permit-mcp-gateway/platform#dynamic-mcps).
+By default, the Consent Service rejects upstream URLs that don't match an imported server. When the host has **Allow Dynamic MCP Connections** on, people can also enter their own URLs. Turning the setting on can't be undone. See [Platform reference](/permit-mcp-gateway/platform).
+
+## Dynamic servers
+
+A server a person adds by URL is a dynamic server. It belongs to that person, so its Permit objects differ from an imported server's:
+
+| | Imported server | Dynamic server |
+| --- | --- | --- |
+| Resource type and instance | `{server_key}`, `{server_key}:{server_key}` | `{server_key}-{subject}`, one per person and server |
+| Profile-to-server relation | Set by an admin (the max trust level) | `high`, written when the person first connects |
+| Derivation rules | 12, with `owner` rules | 9, without `owner` rules |
+| Checks per call | Agent and person | Agent only |
+| Connect action | `connect_static` | `connect_dynamic` |
+
+Connecting to a dynamic server also needs the `connect_dynamic_mcp` permission on the person's own `user_profile`, which the dashboard sets up when the host allows dynamic MCP connections.
 
 ## Tenant model
 
@@ -332,11 +382,11 @@ Permit environments include the `default` tenant, so the tenant needs no setup.
 A new Permit MCP Gateway environment has no permissions. No agent can call a tool until all four steps are done:
 
 1. **Admin imports an MCP server:** creates the resource type, actions, roles, and instance in Permit.
-2. **Admin grants a human access:** creates the profile-to-server relationship (the max trust level).
-3. **Human consents:** creates the agent's role on the user profile.
-4. **Agent calls a tool:** `permit.check()` evaluates the derived role against the tool's trust level.
+2. **Admin grants a person access:** creates the profile-to-server relationship (the max trust level). The person signs in first, which creates their user and profile.
+3. **Person consents:** creates the agent's role on the person's profile.
+4. **Agent calls a tool:** Permit evaluates the agent's derived role, and on imported servers the person's, against the tool's trust level.
 
-Each step depends on the one before. If an admin imports a server and grants no one access, no user can consent. If a user has access and hasn't consented, no agent has a role. Every `permit.check()` for an incomplete combination returns **DENY**.
+Each step depends on the one before. If an admin imports a server and grants no one access, no one can consent. If a person has access and hasn't consented, no agent has a role. Every `permit.check()` for an incomplete combination returns **DENY**.
 
 ## Customize the policy \{#customizing-policies}
 
@@ -344,21 +394,22 @@ Each step depends on the one before. If an admin imports a server and grants no 
 
 At import, the gateway classifies each tool by keywords in its name, for example `delete_*` as high and `create_*` as medium. To change a tool's trust level:
 
-1. In the gateway admin dashboard, open the MCP server's detail page.
-2. Find the tool in the tool list.
-3. Select a different trust level for the tool.
+1. In the gateway admin dashboard, click **MCP Servers** and open the server.
+2. In the **Tools** card, find the tool.
+3. Select a different trust level in the tool's trust select.
 
-The gateway admin dashboard moves the tool's action to the permissions of the new trust level role in Permit. The next tool call uses the new trust level. For the keyword list, see [Tool auto-discovery and trust level classification](/permit-mcp-gateway/platform#tool-auto-discovery-and-trust-level-classification).
+The gateway admin dashboard moves the tool's action to the permissions of the new trust level role in Permit. The new trust level applies within about a minute, because the gateway caches each tool's trust level for 60 seconds. For the keyword list, see [Platform reference](/permit-mcp-gateway/platform).
 
 ### When changes apply \{#what-changes-take-effect-immediately-vs-require-re-consent}
 
 | Change | Effect | Re-consent needed? |
 | --- | --- | --- |
-| Change a tool's trust level | The next `permit.check()` uses the new trust level. | No |
-| Lower a human's max trust level | The new ceiling caps existing agents on their next call. | No |
-| Raise a human's max trust level | Agents keep their consented role, so the effective level doesn't rise. | Yes, the user consents again at a higher level, or an admin changes the agent's trust level on the **Agents** page. |
-| Revoke a human's access | All of the human's agents lose derived permissions on that server. | Not applicable |
-| Revoke an agent | The agent's role on the profile is removed. | Yes, to restore access |
+| Change a tool's trust level | Applies within about a minute. The gateway caches each tool's trust level for 60 seconds. | No |
+| Lower a person's max trust level | The new ceiling caps the person's agents on their next call. | No |
+| Raise a person's max trust level | Agents keep their approved role, so the effective level doesn't rise. | Yes. The person revokes the agent on **Your MCP agents**, then reconnects it from the MCP client and picks a higher level on the consent screen, up to their max trust. |
+| Lower an agent's level (the agent's **Access** card) | The Consent Service lowers the agent's role in Permit and its grant. The next call uses the lower level. | Only to raise it again. An admin can't raise an agent's level. The person revokes the agent and reconnects it to pick a higher level. |
+| Revoke a person's access to a server | All of the person's agents lose derived permissions on that server. | Not applicable |
+| Revoke an agent | The grant is revoked, and the agent's role on the profile is removed. | Yes, to restore access |
 
 For the procedures, see [Manage humans and agents](/permit-mcp-gateway/managing-humans-and-agents).
 
@@ -366,11 +417,19 @@ For the procedures, see [Manage humans and agents](/permit-mcp-gateway/managing-
 
 ### How does Permit MCP Gateway map MCP concepts to Permit objects?
 
-An imported MCP server becomes a resource type, and its instance has the same key (`linear:linear`). Each tool becomes an action on that resource type. Trust levels are roles, and humans and agents are Permit users with the key prefixes `human|` and `agent|`.
+An imported MCP server becomes a resource type, and its instance has the same key (`deepwiki:deepwiki`). Each tool becomes an action on that resource type. Trust levels are roles. People are Permit users with the key `human|{subject}`, and agents are Permit users with the key `agent|{client_id}|{subject}`.
+
+### Why is the agent key per person?
+
+An agent is one person using one MCP client. With a per-person key, each person's agent holds only the role that person approved, so one person's approval never widens what another person's agent of the same client can do.
+
+### Why does the gateway check the person as well as the agent?
+
+On an imported server, the person check is a second, separate read of the person's own access, through the `owner` derivation rules. A call runs only when both the agent check and the person check allow it.
 
 ### Why does the gateway use relationship-based access control?
 
-A tool-call decision depends on the human, the agent acting for the human, the MCP server, and the tool. ReBAC models the link between the agent, the human, and the server, so one check can combine the trust level the human granted with the limit the admin set.
+A tool-call decision depends on the person, the agent acting for the person, the MCP server, and the tool. ReBAC models the link between the agent, the person, and the server, so one check can combine the trust level the person approved with the limit the admin set.
 
 ### Which Permit tenant does the gateway use?
 
@@ -382,15 +441,15 @@ The next `permit.check()` call uses the change, with no gateway restart.
 
 ### Why is every tool call denied on a new environment?
 
-A new gateway environment has no permissions. An agent can call a tool only after an admin imports an MCP server and grants a user access, the user consents, and the agent receives a trust level. A check for an incomplete combination returns deny.
+A new gateway environment has no permissions. An agent can call a tool only after an admin imports an MCP server and grants a person access, the person consents, and the agent receives a trust level. A check for an incomplete combination returns deny.
 
 ### Where do I see why a call was denied?
 
-Open the **Audit Log** screen in the linked Permit environment to see the `permit.check()` parameters and the decision, or the **Audit Logs** tab of the agent in [app.agent.security](https://app.agent.security).
+Open the agent's **Audit Logs** tab in [app.agent.security](https://app.agent.security) and click **Show checks** on the row, or open the **Audit Log** screen in the linked Permit environment to see the `permit.check()` parameters and the decision.
 
 ## Next steps
 
-- [How the consent flow works](/permit-mcp-gateway/consent-service): how a human grants an agent a trust level.
+- [How the consent flow works](/permit-mcp-gateway/consent-service): how a person approves an agent at a trust level.
 - [Audit logs](/permit-mcp-gateway/audit-logs): investigate allowed and denied tool calls.
-- [Manage humans and agents](/permit-mcp-gateway/managing-humans-and-agents): grant access, set max trust levels, and revoke agents.
+- [Manage humans and agents](/permit-mcp-gateway/managing-humans-and-agents): grant access, set max trust levels, and lower or revoke agents.
 - [Architecture](/permit-mcp-gateway/architecture): the gateway's components and request flows.
