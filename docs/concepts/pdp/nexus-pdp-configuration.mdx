@@ -57,6 +57,8 @@ Nexus PDP also uses ports `7002`, `7003`, `8181`, `4222`, and `8222` internally,
 | `EDGE_DECISION_LOG_OPT_OUT` | `false` | Set to `true` to stop sending decision logs to Permit. |
 | `EDGE_DRAIN_TIMEOUT_SECS` | `10` | Seconds that in-flight requests have to finish during shutdown before Nexus PDP aborts them. |
 | `EDGE_CHILD_TERMINATION_TIMEOUT_SECS` | `30` | Seconds that OPA and the NATS leaf node have to stop after `SIGTERM` before Nexus PDP sends `SIGKILL`. |
+| `EDGE_WAL_RETENTION_INTERVAL_SECS` | `300` | Seconds between two passes that remove old changes from the event store. In 0.8.0 and later. See [Disk](/concepts/pdp/nexus-pdp-how-it-works#disk). |
+| `EDGE_WAL_RETENTION_MIN_AGE_SECS` | `3600` | Minimum age, in seconds, of a change before Nexus PDP may remove it from the event store. Nexus PDP removes only changes it has applied and that the database it serves covers, and always keeps the newest. In 0.8.0 and later. |
 
 Set the Kubernetes `terminationGracePeriodSeconds` to at least `EDGE_DRAIN_TIMEOUT_SECS` plus `EDGE_CHILD_TERMINATION_TIMEOUT_SECS`, which is 40 seconds at the defaults. See [Nexus PDP deployment requirements](/concepts/pdp/nexus-pdp-deployment#deployment-requirements).
 
@@ -83,16 +85,18 @@ These variables set how long Nexus PDP stays ready while it is behind the contro
 
 ## Storage engine
 
-The Nexus PDP embedded database (SurrealDB on RocksDB) uses storage-engine defaults sized for large workloads, not for a small container. These variables have the largest effect on memory use:
+The Nexus PDP embedded database is SurrealDB on RocksDB. The database that serves checks sizes its memory from the container's memory limit, or from the host's memory when the container has none, not from environment variables:
 
-| Variable | Default | Effect |
-| --- | --- | --- |
-| `SURREAL_ROCKSDB_BLOCK_CACHE_SIZE` | `536870912` (512 MiB) | Size of the read cache. The largest contributor to resident memory. |
-| `SURREAL_ROCKSDB_WRITE_BUFFER_SIZE` | `268435456` (256 MiB) | Size of each in-memory write buffer before RocksDB flushes it to disk. |
-| `SURREAL_ROCKSDB_MAX_WRITE_BUFFER_NUMBER` | `32` | Maximum number of write buffers in memory at once. |
-| `SURREAL_ROCKSDB_BACKGROUND_THREADS` | `4` | Number of background compaction threads. |
+| Setting | Size |
+| --- | --- |
+| Block cache (the read cache) | Half the memory limit minus 1 GiB, and at least 16 MiB |
+| Size of each write buffer | 32 MiB below a 1 GiB limit, 64 MiB below 16 GiB, and 128 MiB from 16 GiB |
 
-At these defaults, a container with a memory limit of a few hundred MiB is killed for running out of memory (OOM) at startup. Start with 4 GiB of memory, then lower these values while you load test against your own data set. See [Nexus PDP resource footprint](/concepts/pdp/nexus-pdp-how-it-works#resource-footprint).
+Set a memory limit, for example `resources.limits.memory` on Kubernetes. In Nexus PDP 0.8.0 and later, Nexus PDP refuses to start below 2304 MiB and exits with code `78`, because below that the block cache is smaller than two write buffers and writes can stall. See [Nexus PDP resource footprint](/concepts/pdp/nexus-pdp-how-it-works#resource-footprint).
+
+The `SURREAL_ROCKSDB_*` variables, such as `SURREAL_ROCKSDB_BLOCK_CACHE_SIZE`, `SURREAL_ROCKSDB_WRITE_BUFFER_SIZE`, `SURREAL_ROCKSDB_MAX_WRITE_BUFFER_NUMBER`, and `SURREAL_ROCKSDB_BACKGROUND_THREADS`, don't change the memory of the database that serves checks. Only the step of a cold start that loads the snapshot reads them. In 0.8.0 and later, Nexus PDP logs a WARN at startup that lists any that are set. You can't lower the memory Nexus PDP needs with them.
+
+Give the Nexus PDP container a memory limit of 4 GiB to start, and more for a large data set. Never set it below 2.5 GiB.
 
 ## Next steps \{#related-documentation}
 
