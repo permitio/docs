@@ -36,7 +36,12 @@ Two background tasks keep the local copy complete:
 While a rebuild runs, Nexus PDP answers requests from the existing database. The authorization port stays open, and Nexus PDP refuses no requests. The health endpoint reports that the Nexus PDP is serving stale data.
 
 :::info Nexus PDP serves stale data instead of no data
-When the control plane is unreachable, Nexus PDP keeps answering from its local copy for as long as the outage lasts. A control-plane outage affects data freshness, not the availability of decisions.
+When the control plane is unreachable, a running Nexus PDP keeps answering from its local copy. In Nexus PDP 0.8.1 and later, it also stays ready unless you set `PDP_MAX_STALE_SECS`, and reports how old the copy is on each decision. The outage then affects data freshness, not the availability of decisions, with two exceptions:
+
+- A Nexus PDP that restarts during the outage exits at startup and does not serve until the control plane is back, unless you allow an [offline start](/concepts/pdp/nexus-pdp-offline-mode#offline-boot).
+- A Nexus PDP stops serving if the outage outlasts [the heal's ceiling](/concepts/pdp/nexus-pdp-offline-mode#heal-ceiling): by default, 7 days after the control plane last accepted the Nexus PDP.
+
+Nexus PDP 0.8.0 and earlier report not ready when they lose the control plane. See [Nexus PDP offline mode](/concepts/pdp/nexus-pdp-offline-mode).
 :::
 
 ## Consistency
@@ -120,22 +125,42 @@ Nexus PDP stores authorization data in a different place than the container PDP,
 | | Container PDP (`pdp-v2`) | Nexus PDP (`nexus-pdp`) |
 | --- | --- | --- |
 | Authorization data | In OPA's in-memory document | On disk, in an embedded database |
-| Memory as data grows | Grows with your data set | Limited by a cache size you configure |
+| Memory as data grows | Grows with your data set | Cache sized from the container's memory limit; at least 2304 MiB in 0.8.0 and later |
 | Processes | Rust API server, Python OPAL client (Horizon), and OPA | Rust binary, NATS leaf node, and OPA |
 | Python runtime | Required, for the Open Policy Administration Layer (OPAL) client | Not present |
 | Persistent storage | Not required | Required |
 
-On the container PDP, your authorization data is raw JSON in memory. The [OPA policy performance documentation](https://www.openpolicyagent.org/docs/policy-performance) states that raw JSON in OPA uses about 20 times the memory of the same data in a compact on-disk form. On Nexus PDP, the data set lives on disk in a compact form, and memory depends on the storage engine's cache sizes, which you set.
+On the container PDP, your authorization data is raw JSON in memory. The [OPA policy performance documentation](https://www.openpolicyagent.org/docs/policy-performance) states that raw JSON in OPA uses about 20 times the memory of the same data in a compact on-disk form. On Nexus PDP, the data set lives on disk in a compact form. The embedded database sizes its cache and write buffers from the container's memory limit, not from settings you choose. See [Nexus PDP storage engine settings](/concepts/pdp/nexus-pdp-configuration#storage-engine).
 
-:::caution Start Nexus PDP with 4 GiB of memory
-The default storage-engine settings of Nexus PDP target large workloads: a 512 MiB block cache and 256 MiB write buffers. If you give the container a memory limit of a few hundred MiB, the container is killed for running out of memory (OOM) at startup. Give the Nexus PDP container 4 GiB of memory to start.
+:::caution Never give Nexus PDP less than 2.5 GiB of memory
+Below 2304 MiB (2.25 GiB), the embedded database can stop applying changes for good under a sustained write load, such as a large cold start or a backlog of changes. Nexus PDP then keeps answering from the data it already has, but later changes to your policy data don't take effect.
 
-To run Nexus PDP with less memory, lower the cache and write-buffer sizes in [Nexus PDP storage engine settings](/concepts/pdp/nexus-pdp-configuration#storage-engine), then load test against your own data set before you choose a size.
+In Nexus PDP 0.8.0 and later, Nexus PDP refuses to start with less than 2,415,919,104 bytes (2304 MiB) of memory. It measures the container's memory limit, or the host's memory when the container has none. It exits with code `78` before it contacts the control plane or opens a port, and logs one ERROR line that starts with `edge-pdp refuses to start` and names the memory it found, the cache and write-buffer sizes the embedded database would use, and the minimum. There is no setting to override it. Raise the memory limit and start the container again: a restart with the same limit exits the same way.
+
+2304 MiB is the point below which writes can stall, not a size to run at. Memory limits in decimal units count as written: `2400M` (2.4 billion bytes) is below the minimum, and `2500M` is above it. Give the Nexus PDP container a memory limit of 4 GiB to start, and more for a large data set: during a [rebuild](#self-healing), Nexus PDP briefly holds two databases' caches. Before you choose a size, load test against your own data set, including a cold start and a sustained burst of updates. A load test of permission checks alone doesn't write, so it doesn't show the problem.
+
+Older builds, such as `0.7.0-beta.26`, start below 2304 MiB and don't report a stall.
 :::
+
+### Watching for a stalled database \{#stalled-database}
+
+In Nexus PDP 0.8.0 and later, if the embedded database stops applying changes, Nexus PDP keeps answering from the data it already has, and reports it. Every 30 seconds, Nexus PDP writes one row to a namespace of its own, separate from your data. After three of these writes in a row don't finish within 10 seconds:
+
+- `GET /health` shows the `ingest` component as `down`. `ingest` never affects readiness, so Nexus PDP stays in rotation and keeps answering, with data that no longer changes.
+- `GET /health/detail`, with your API key, shows `stalled: true`, `stalled_since` (UTC, RFC 3339), and `stalled_seconds` under `ingest`.
+- Nexus PDP logs `embedded database writes are stalled` at ERROR. If you export OpenTelemetry metrics (`OTEL_EXPORTER_OTLP_ENDPOINT`), `edge_pdp.embedded_db.write_stalls` counts each stall.
+
+The first write that succeeds again sets `ingest` back to `up`, and Nexus PDP logs a WARN.
+
+If Nexus PDP logs `the async runtime has stopped running tasks` at ERROR, it is not answering at all, and an HTTP liveness probe on `GET /health` times out and restarts the container.
+
+Restart the container to recover, and raise its memory limit if a stall happens again.
 
 ### Disk
 
 Two Nexus PDP paths must be on persistent storage: the embedded database (`EDGE_DB_PATH`) and the event store (`EDGE_DATA_DIR`). Plan for about twice the size of your data set, plus headroom. During a rebuild, the old and new database copies exist on disk together until Nexus PDP swaps in the new copy.
+
+The event store keeps a durable local copy of the changes Nexus PDP receives. In Nexus PDP 0.8.0 and later, Nexus PDP removes changes from it that it has applied, that the database it serves already covers, and that are at least an hour old (`EDGE_WAL_RETENTION_MIN_AGE_SECS`). It checks every 5 minutes (`EDGE_WAL_RETENTION_INTERVAL_SECS`), and always keeps the newest change. It never removes a change it hasn't applied, and removes nothing while it can't confirm that the database covers the changes. The event store can still grow, for example behind a change that stays unapplied, so monitor free space on the volume. A database built by an older build can keep every change until Nexus PDP next runs a cold start. Older builds keep every change, with no age or size limit.
 
 ## Next steps \{#related-documentation}
 
