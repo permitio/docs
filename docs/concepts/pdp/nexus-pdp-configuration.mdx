@@ -22,7 +22,7 @@ The container PDP (the Edge PDP image `permitio/pdp-v2`) uses a different set of
 | `PDP_ORG_API_KEY` | None | An organization API key. Use it with `PDP_ACTIVE_PROJECT` and `PDP_ACTIVE_ENV` instead of `PDP_API_KEY`. |
 | `PDP_ACTIVE_PROJECT` | None | The ID or key of the project, with `PDP_ORG_API_KEY`. Ignored with `PDP_PROJECT_API_KEY`. |
 | `PDP_ACTIVE_ENV` | None | The ID or key of the environment this Nexus PDP serves, with `PDP_PROJECT_API_KEY` or `PDP_ORG_API_KEY`. |
-| `PDP_BACKEND_URL` | `https://api.permit.io` | The Permit API that Nexus PDP asks for the environment's Nexus PDP API key when it starts with a project or organization key. It must use `https`, except for `localhost` and loopback addresses. |
+| `PDP_BACKEND_URL` | `https://api.permit.io` | The Permit API. Nexus PDP asks it for the environment's Nexus PDP API key when it starts with a project or organization key, and [forwards `/cloud` and `/facts` requests](#requests-forwarded-to-the-permit-api) to it. It must use `https`, except for `localhost` and loopback addresses. |
 
 ### Start with a project or organization API key
 
@@ -56,6 +56,27 @@ If the Permit API is unreachable or busy, Nexus PDP retries for up to two minute
 
 :::tip No control-plane URL to set on Nexus PDP
 Leave `PDP_CONTROL_PLANE` unset unless Permit support asks you to set it. On the container PDP, `PDP_CONTROL_PLANE` is the Permit API URL. On Nexus PDP, `PDP_CONTROL_PLANE` overrides the control-plane address that `PDP_API_KEY` carries. The Permit API URL that Nexus PDP calls with a project or organization key is `PDP_BACKEND_URL`.
+:::
+
+### Requests forwarded to the Permit API
+
+Like the container PDP, Nexus PDP forwards two families of requests to the Permit API at `PDP_BACKEND_URL`. That lets SDKs that send writes through the PDP, such as with `proxy_facts_via_pdp`, work against Nexus PDP.
+
+| Request to Nexus PDP | Forwarded to |
+| --- | --- |
+| `/cloud/{path}` | `{PDP_BACKEND_URL}/v1/{path}` |
+| `/facts/{path}` | `{PDP_BACKEND_URL}/v2/facts/{project}/{environment}/{path}`, for this Nexus PDP's own project and environment |
+| `/v2/facts/{project}/{environment}/{path}` | The same as `/facts/{path}`. Nexus PDP uses its own project and environment, whatever the request names. |
+
+- The request must carry `PDP_API_KEY` as its bearer token, as for the authorization API. Nexus PDP forwards that `Authorization` header and `Content-Type`, and no other headers. It returns the Permit API's answer unchanged, apart from `Set-Cookie` and `Strict-Transport-Security`, which describe the Permit API's own host and are removed. The Permit API's own `Access-Control-*` headers pass through unchanged, but Nexus PDP adds no CORS headers of its own, so a browser can't call these routes cross-origin. See [Cross-origin requests on Nexus PDP](/concepts/pdp/nexus-pdp-feature-parity#cors).
+- Forwarding has its own limits, so a slow or unreachable Permit API never delays authorization checks:
+  - A request gets 75 seconds. If the Permit API has not started its answer by then, Nexus PDP answers `504`. If the answer has started, Nexus PDP closes the connection.
+  - A request body can be at most 10 MiB, or Nexus PDP answers `413`.
+  - At most 64 requests are forwarded at once, and Nexus PDP answers `503` to more.
+  - If the Permit API can't be reached, Nexus PDP answers `502`.
+
+:::note Writes through Nexus PDP don't wait for the change yet
+As of November 2026, a write forwarded through `/facts` returns as soon as the Permit API accepts it. Nexus PDP ignores `X-Wait-timeout` and `X-Timeout-Policy`. The change reaches Nexus PDP through the control plane like any other change, so an authorization check made right after the write can still see the previous data. The legacy `/sdk` routes are not forwarded.
 :::
 
 ## Storage and ports
