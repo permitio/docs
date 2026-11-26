@@ -345,14 +345,14 @@ Amazon EKS with TLS terminated at an Application Load Balancer:
 4. Prepares the cluster for the target. With `--gke`, uses the existing cluster. With `--openshift`, loads the images into the internal registry. With `--kind`, or without a target flag, creates the Kind cluster and loads the images, and with `--kind` also installs the NGINX ingress controller.
 5. Creates the namespace and the Open Policy Administration Layer (OPAL) server secret.
 6. Installs the `third-party-services` Helm release and waits for the databases, cache, search, message queue, and Keycloak to become ready.
-7. Generates the relay JSON Web Token (JWT) keys, then runs the database migrations with the `migrations` Helm release.
+7. Generates the relay JSON Web Token (JWT) keys, then runs the database migrations with the `migrations` Helm release. The installer waits for the `permit-migrations` job to complete. If the job fails, or is still running after `MIGRATIONS_WAIT_TIMEOUT_S` seconds (an environment variable of the installer, 1800 by default), the installer prints the log of every job attempt and stops before it installs the `permit-platform` release.
 8. Installs the `permit-platform` Helm release with the Permit services and checks that the pods are running.
 
 ## Step 6: Verify the installation \{#verification-and-health-checks}
 
 ### Read the completion message \{#installation-complete-message}
 
-When the installer finishes, it prints the frontend URL, the admin credentials, and the dashboard URLs:
+When the installer finishes, it prints the frontend URL, the admin credentials, and how to reach the admin consoles:
 
 ```bash
 [SUCCESS] 🎉 Permit Platform On-Prem deployed successfully!
@@ -361,10 +361,15 @@ When the installer finishes, it prints the frontend URL, the admin credentials, 
 [INFO]     - Admin user: admin/[Generated Password]
 [INFO]     - Or register a new account
 [INFO] Additional services:
-[INFO]   • OpenSearch Dashboard: https://permit-frontend.local/opensearch/ (no authentication required)
-[INFO]   • RabbitMQ Dashboard: https://permit-frontend.local/rabbitmq/ (permit/[Generated Password])
-[INFO]   • Keycloak Admin: https://permit-frontend.local/auth (admin/[Same Admin Password])
 [INFO]   • SCIM Service: https://permit-frontend.local/scim
+[INFO]   • Admin consoles are not on the public host. Forward the admin listener:
+[INFO]       kubectl port-forward -n permit-platform svc/permit-frontend-admin 3001:3001
+[INFO]     - OpenSearch Dashboard: http://localhost:3001/opensearch/ (no authentication required)
+[INFO]     - RabbitMQ Dashboard: http://localhost:3001/rabbitmq/ (permit/[Generated Password])
+[INFO]     - Keycloak Admin: http://localhost:3001/auth/ (admin/[Same Admin Password]), after this one-time step
+[INFO]       (--user is thirdPartyServices.keycloak.adminUsername in values.yaml, admin by default):
+[INFO]       kubectl exec -it -n permit-platform deploy/keycloak -- /opt/keycloak/bin/kcadm.sh config credentials --config /tmp/kcadm.config --server http://localhost:8080 --realm master --user admin
+[INFO]       kubectl exec -n permit-platform deploy/keycloak -- /opt/keycloak/bin/kcadm.sh update realms/master --config /tmp/kcadm.config -s attributes.frontendUrl=http://localhost:3001/auth
 [INFO] Important:
 [INFO]   • For Kind clusters (development), add to /etc/hosts:
 [INFO]     127.0.0.1 permit-frontend.local
@@ -375,8 +380,10 @@ When the installer finishes, it prints the frontend URL, the admin credentials, 
 [INFO] For troubleshooting, run: kubectl get pods -n permit-platform
 ```
 
+Installer packages without the admin listener print the OpenSearch, RabbitMQ, and Keycloak URLs on the frontend domain instead. See [Which installer packages have the admin listener](/how-to/deploy/on-prem/management#admin-listener-packages).
+
 :::warning Generated passwords are stored in values.yaml
-The installer writes the generated passwords, including the Keycloak admin and RabbitMQ passwords, into `charts/permit-platform/values.yaml`. Anyone with a copy of the file and network access to the frontend domain can sign in to those consoles as an admin. Store the file like a secret, and don't commit it to a Git repository. The passwords are also stored in the `global-infrastructure-secret` Kubernetes secret.
+The installer writes the generated passwords, including the Keycloak admin and RabbitMQ passwords, into `charts/permit-platform/values.yaml`. Anyone with a copy of the file who can reach the admin consoles can sign in to them as an admin. Store the file like a secret, and don't commit it to a Git repository. The passwords are also stored in the `global-infrastructure-secret` Kubernetes secret.
 :::
 
 ### Check that the pods are running \{#check-platform-status}
@@ -415,20 +422,31 @@ Some pods restart a few times on first start while they wait for their dependenc
 
 The Permit sign-in page and the organization setup screen confirm that the frontend, the backend, and Keycloak work together.
 
-## Access the platform dashboards \{#additional-services}
+## Access the platform and the admin consoles \{#additional-services}
 
-All dashboards are served under the frontend domain:
+The frontend domain serves the Permit Platform and the SCIM API:
 
 | Service | URL | Sign-in |
 |---|---|---|
 | Permit Platform | `https://<your-frontend-domain>` | `admin` and the generated password, or a registered account |
-| OpenSearch Dashboards (decision and audit logs) | `https://<your-frontend-domain>/opensearch/` | None |
-| RabbitMQ management | `https://<your-frontend-domain>/rabbitmq/` | `permit` and the generated RabbitMQ password |
-| Keycloak admin console | `https://<your-frontend-domain>/auth` | `admin` and the generated Keycloak admin password |
 | System for Cross-domain Identity Management (SCIM) 2.0 API | `https://<your-frontend-domain>/scim` | Used by identity providers for user provisioning |
 
-:::danger OpenSearch Dashboards has no authentication
-Anyone who can reach the frontend domain can open `/opensearch/` and read decision logs without signing in. Restrict network access to the ingress to trusted networks.
+The Keycloak admin console, RabbitMQ management, and OpenSearch Dashboards are served on a separate port of the `permit-frontend` pods, the admin listener on port 3001. The `permit-frontend-admin` Service exposes it inside the cluster, and the platform's ingress doesn't route to it. Forward it to your workstation, and keep the command running while you use the consoles:
+
+```bash
+kubectl port-forward -n permit-platform svc/permit-frontend-admin 3001:3001
+```
+
+| Console | URL | Sign-in |
+|---|---|---|
+| Keycloak admin console | `http://localhost:3001/auth/` | `admin` and the generated Keycloak admin password, after a one-time step |
+| RabbitMQ management | `http://localhost:3001/rabbitmq/` | `permit` and the generated RabbitMQ password |
+| OpenSearch Dashboards (decision and audit logs) | `http://localhost:3001/opensearch/` | None |
+
+The Keycloak admin console opens after a one-time step that sets the Keycloak `master` realm's Frontend URL to `http://localhost:3001/auth`. [Reach the admin consoles](/how-to/deploy/on-prem/management#admin-consoles) gives the commands, how to check the result, and the URLs in installer packages without the admin listener.
+
+:::danger OpenSearch Dashboards has no sign-in
+Anyone who can reach the admin listener can read decision logs without signing in. That includes anyone with the `pods/portforward` permission in the namespace. Grant that permission only to platform operators. If you add your own route to `permit-frontend-admin`, limit it to your internal network, as described in [Reach the admin consoles without a port forward](/how-to/deploy/on-prem/management#expose-admin-consoles).
 :::
 
 ## Point the frontend domain at the cluster \{#dns-and-hosts-file-configuration}
@@ -526,7 +544,7 @@ The `permit-platform` release runs these services:
 | PDP data | `permit-pdp-data`, `permit-pdp-deltas`, `permit-pdp-cache-builder` |
 | Relay | `permit-opal-interface-v2`, `permit-opal-relay-api-v2`, `permit-opal-relay-consumer-v2`, `permit-opal-relay-statistics-api-v2`, `permit-opal-relay-watcher-v2`, `permit-opal-relay-reports-consumer-v2`, `permit-relay-jwt-api` |
 | Background workers | `celery-general`, `permit-celery-beat`, `permit-data-generator`, `permit-data-generator-heavy`, `permit-cache-rebuilder` |
-| Logs and integrations | `permit-decision-logs`, `permit-dl-enricher-v2`, `permit-webhook-transmitter-v2`, `permit-scim-okta` |
+| Logs and integrations | `permit-decision-logs`, `permit-dl-enricher-v2`, `permit-scim-okta` |
 
 To list what runs in your cluster, run `kubectl get deployments,services,pvc -n permit-platform`.
 

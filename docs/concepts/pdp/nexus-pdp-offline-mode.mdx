@@ -1,0 +1,204 @@
+---
+title: Nexus PDP offline mode
+sidebar_label: Offline Mode
+description: "Learn how Permit Nexus PDP answers from stale data when it loses the control plane, how it reports staleness, how to let it start without the control plane, and how it reconnects and heals in place."
+sidebar_position: 6
+---
+
+Permit Nexus PDP, a self-hosted policy decision point (PDP), keeps answering authorization requests from its local copy of your policy and data when it loses Permit's control plane, and reports how old that copy is. This page is for operators who run Nexus PDP. It covers stale serving, starting without the control plane, the in-place reconnect, and the limits on how long Nexus PDP serves without the control plane.
+
+:::info Offline mode applies to Nexus PDP 0.8.1 and later
+The behavior on this page applies to `permitio/nexus-pdp` 0.8.1 and later. Nexus PDP 0.8.0 and earlier report not ready when they lose the control plane, and do not start without it. To pin a release, see [Image name and tags](/concepts/pdp/nexus-pdp#image-name-and-tags).
+:::
+
+In this page, the **control plane** is the Permit cloud service that sends policy and data updates to PDPs. Nexus PDP log lines and the `hub_link` health component call the control plane **the hub**.
+
+## Stale serving while the control plane is unreachable \{#stale-serving}
+
+By default, a Nexus PDP that has started serving and then loses the control plane stays ready. `GET /health/ready` on port `7001` keeps returning `200` with `"state": "serving_stale"`, and the authorization API on port `7000` keeps answering from the local copy. Policy and data changes stop arriving until the control plane is back.
+
+A **stale episode** is the time Nexus PDP is behind the control plane. It ends when Nexus PDP is current again, and starts at one of these events:
+
+- the first loss of the control plane, including a refusal of this Nexus PDP's credentials,
+- a database rebuild that Nexus PDP runs while it serves (see [Gap detection and database rebuild](/concepts/pdp/nexus-pdp-how-it-works#self-healing)),
+- for a startup that serves data already on its volume, the last time that data was current.
+
+A control plane that refuses this Nexus PDP's credentials, as when they are revoked, is not an outage that ends by itself. The `hub_link` component reads `rejected`, and readiness turns to `503` with `"state": "not_ready"`.
+
+### The X-Permit-Stale-Seconds response header \{#stale-seconds-header}
+
+While Nexus PDP is behind the control plane, each successful decision carries the `X-Permit-Stale-Seconds` response header. Its value is the whole number of seconds since the stale episode began.
+
+- Nexus PDP adds the header only to a `2xx` answer to an authenticated request. Every decision endpoint is a `POST`. A `GET` or `HEAD` request, and a refused or failed request (`401`, any other `4xx`, or `5xx`), never carries the header. So the header tells only a caller with the API key that Nexus PDP is stale. The health endpoints on port `7001` are different: `GET /health` and `GET /health/ready` need no API key, and they report `"state": "serving_stale"` and each component's status to any caller that reaches the port. See [Health fields that report staleness](#health-fields).
+- Nexus PDP adds the header in every readiness state: serving stale, past `PDP_MAX_STALE_SECS`, refused by the control plane, not ready for a local reason, or shutting down.
+- On a `2xx` answer to an authenticated request, a missing header means Nexus PDP was current.
+- Nexus PDP reads the value once, when the request starts.
+
+To see the header, send a check to the authorization port. This example uses the port mapping and the `NEXUS_PDP_API_KEY` shell variable from [Run Nexus PDP with Docker](/concepts/pdp/nexus-pdp-deployment#run-nexus-pdp-with-docker):
+
+```bash
+curl -si -X POST http://localhost:7766/allowed \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $NEXUS_PDP_API_KEY" \
+  -d '{"user": {"key": "john@permit.io"}, "action": "read", "resource": {"type": "document", "tenant": "default"}}' \
+  | grep -i '^x-permit-stale-seconds'
+```
+
+A stale Nexus PDP prints a line such as `x-permit-stale-seconds: 742`. A current Nexus PDP prints nothing.
+
+### stale_seconds in the policy input \{#input-stale-seconds}
+
+Nexus PDP passes the same reading to Open Policy Agent (OPA) as `stale_seconds` at the top level of the policy input (`input.stale_seconds`), so OPA's decision log records how stale each decision was. A current Nexus PDP sends no `stale_seconds`. The value is not part of `input.context`, so the conditions in your policy don't see it, and a caller cannot set it.
+
+### Limit how long a stale Nexus PDP stays ready \{#max-stale}
+
+`PDP_MAX_STALE_SECS` is unset by default, so readiness does not depend on how long the outage lasts. Set it to the number of seconds a stale episode may last before readiness drops. Past that limit:
+
+- `GET /health/ready` on port `7001` returns `503`, with `"state": "not_ready"`.
+- `GET /ready` on port `7000` returns `503`, with the body `{"status": "error"}`.
+- `GET /health/detail` reports `"stale_limit_exceeded": true`.
+- Kubernetes stops routing traffic to the pod through its Service.
+- Nexus PDP still answers a caller that reaches it, with `X-Permit-Stale-Seconds`.
+
+The value must be at least `1`. `0` fails startup.
+
+### Health fields that report staleness \{#health-fields}
+
+`GET /health` and `GET /health/ready` on port `7001` return `state` and each component's `status`. `GET /health/detail` adds the detail below, and needs the header `Authorization: Bearer <PDP_API_KEY>`.
+
+| Field | Meaning |
+| --- | --- |
+| `state` | `starting`: Nexus PDP has not served yet, and a component that gates readiness is not up. `stalled`: still starting, and no component it waits on has changed status for 60 seconds by default. `ready`: current with the control plane. `serving_stale`: ready, and answering from data that may be behind the control plane. `not_ready`: Nexus PDP has served, and a local component is down, the control plane refuses this Nexus PDP, or the stale episode passed `PDP_MAX_STALE_SECS`. `shutting_down`: Nexus PDP is shutting down. `GET /health/ready` returns `200` only for `ready` and `serving_stale`. |
+| `stale_on` | The components that make Nexus PDP stale: `hub_link` (the link to the control plane), `wal_mirror` (the change stream), `kv_source` (the policy files), `staleness` (a rebuild pending after a gap in the change stream), and `cold_rebuild` (a rebuild that replaces the database Nexus PDP serves). |
+| `stale_seconds` | Seconds since the stale episode began. `0` unless `state` is `serving_stale`, or `not_ready` only because of `PDP_MAX_STALE_SECS`. |
+| `stale_limit_exceeded` | `true` when Nexus PDP is not ready because the stale episode passed `PDP_MAX_STALE_SECS`. |
+| `components.hub_link` | `up`, `down`, or `rejected` while the control plane refuses this Nexus PDP. After an offline start, its detail has `"local_only": true` until the reconnect links. |
+| `components.cold_rebuild` | `down` while a rebuild replaces the database Nexus PDP serves. Its detail has `rebuilding`, `healing` during an online heal, `refused` and `ceiling_at` when the control plane refuses a heal's signup, and `last_error` or `rebuild_blocked` when a rebuild fails or lacks disk space. |
+
+`X-Permit-Stale-Seconds` can be present while `stale_seconds` reads `0`, for example while the control plane refuses this Nexus PDP or a local component is down.
+
+After 600 seconds of a stale episode, Nexus PDP logs a WARN that starts with `serving stale past the WAL consumer reap`, and repeats it every 10 minutes while the episode lasts. It logs the WARN only while `state` is `serving_stale`, or `not_ready` only because of `PDP_MAX_STALE_SECS`. A Nexus PDP that is not ready for another reason, such as `hub_link` reading `rejected` or a local component down, logs none. The rest of the message says whether Nexus PDP heals by itself or needs a restart.
+
+## Start Nexus PDP without the control plane \{#offline-boot}
+
+By default, Nexus PDP signs up with the control plane every time it starts, and a startup that cannot reach the control plane fails. Nexus PDP logs a WARN that starts with `the hub is unreachable, and offline serving is off`, exits with the error `establish identity: the hub is unreachable`, and your orchestrator restarts it.
+
+Set `PDP_OFFLINE_ALLOW_UNPROTECTED_VOLUME=true` to let a startup that cannot reach the control plane serve the data already on its volume instead. Nexus PDP reads this setting from the container environment only: neither the control plane nor anything on the volume can turn it on.
+
+The setting has a second effect. A restart that must rebuild its database can serve its previous database stale while the rebuild runs. Without the setting, that restart opens the authorization port only once a reading shows the control-plane link up. With the setting, it also opens the port when no reading shows the link up, as long as the NATS leaf node has logged no refusal from the control plane.
+
+:::warning What PDP_OFFLINE_ALLOW_UNPROTECTED_VOLUME=true accepts
+- Without the control plane, Nexus PDP cannot check that the local policy stores on the volume are complete. A store that lost part of its contents, for example in a host crash before it reached disk, is served as it is.
+- A copy of the volume, started elsewhere with the same API key, serves too. Nexus PDP detects the copy only when both copies reach the control plane, and from then on that volume never starts offline until you replace it with an empty volume. Use each volume for one Nexus PDP only.
+- Changes made in Permit while Nexus PDP was down, including a revocation of its credentials, take effect only after Nexus PDP reconnects and catches up. `PDP_SIGNUP_RECORD_MAX_AGE_SECS` bounds how long that lasts. See [The serve cap on an offline start](#serve-cap).
+:::
+
+### When the control plane counts as unreachable \{#unreachable}
+
+Nexus PDP starts offline only when the control plane is unreachable: its host name does not resolve, or none of the addresses it resolves to sends a byte before the connection is refused, is reset, times out after 5 seconds, or is closed.
+
+Any answer from the control plane means the control plane is reachable. A startup that gets an answer and still fails, a refusal included, exits and removes the signup record (see [What an offline start needs](#offline-boot-requirements)), so no later startup serves offline until a startup succeeds. A running Nexus PDP linked to the control plane removes the record too when the control plane denies its credentials.
+
+### What an offline start needs \{#offline-boot-requirements}
+
+With the setting on, a startup that finds the control plane unreachable serves offline only when all of these hold:
+
+1. **A recent signup record.** Each successful signup writes the non-secret part of the control plane's reply to `identity/last_signup.json` under `EDGE_DATA_DIR`. The record must be for the environment and account that `PDP_API_KEY` names, written no longer ago than `PDP_SIGNUP_RECORD_MAX_AGE_SECS` (default `604800`, 7 days), and no more than 5 seconds ahead of the container's clock. While Nexus PDP is connected and current, it rewrites the record's timestamp about every hour, or every quarter of `PDP_SIGNUP_RECORD_MAX_AGE_SECS` when that is shorter.
+2. **A database this Nexus PDP served.** `ACTIVE` in `EDGE_DB_PATH` names a database that an earlier start built or served, for the same environment and account, with no change that it lost or still owes.
+3. **Proof that the data was current.** The `FRESH` marker in `EDGE_DB_PATH` names that database. Nexus PDP writes `FRESH` every 30 seconds while it serves that database and is current with the control plane. A `FRESH` time ahead of the container's clock, by any amount, does not count.
+4. **The policy schema the database was built with.** The local policy-data store still holds every schema key that the database recorded.
+5. **No sign of a copy.** Nothing on the volume shows that it is a copy of another Nexus PDP's volume.
+
+Otherwise, Nexus PDP logs the ERROR `the hub is unreachable, and this boot may not serve this volume without it`, with a `reason`, and exits. It removes nothing from the volume.
+
+### What an offline start does \{#offline-boot-behavior}
+
+- It logs the WARN `the hub is unreachable: booting offline`, with `serves_offline_for_secs`: how long it may serve before [the serve cap](#serve-cap) stops it.
+- It starts the NATS leaf node with its control-plane link held, opens the database, and starts OPA on the policy stored on the volume.
+- It serves stale from the start. `hub_link` reads `down` with `"local_only": true`, and the stale episode counts from the `FRESH` time, so `X-Permit-Stale-Seconds` and `stale_seconds` include the time Nexus PDP was down.
+- It opens the authorization port once the local components are up, and reads `serving_stale`.
+- With `PDP_MAX_STALE_SECS` set and the data already older than that, it reads `not_ready`, never opens the authorization port, and exits at the startup readiness deadline (120 seconds by default).
+
+## Reconnect in place after an offline start \{#reconnect-in-place}
+
+Once an offline start serves, Nexus PDP retries the control plane in place and logs the INFO `booted offline: retrying the hub in place, with backoff`. The wait before each attempt is random, below a ceiling that starts at 2 seconds and doubles up to 60 seconds.
+
+When a signup succeeds, Nexus PDP links the running NATS leaf node to the control plane without a restart. The process, the leaf node, and the open authorization port stay as they are, and Nexus PDP keeps serving stale while it catches up:
+
+- **Warm, when the control plane still holds its position.** When the change stream was last active less than 540 seconds before the reconnect, the control plane still holds this Nexus PDP's position in it. If the volume also shows no sign of a copy, Nexus PDP resumes applying changes from that position and logs the INFO `reconnected to the hub in place and resumed warm`.
+- **Cold otherwise.** Nexus PDP logs the INFO `the reconnect does not resume the WAL warm`, with `why`. It builds a new database from a snapshot beside the one it serves, then swaps it in. The rebuild starts at once, or, when the control plane may still hold the old position, after about 10.5 minutes, the time the control plane takes to release that position. A rebuild that lacks disk space does not restart Nexus PDP: it keeps serving stale and tries again.
+- **Policy waits for the data.** Until Nexus PDP catches up, OPA keeps the policy it served offline, so a newer policy is not combined with older data. A cold rebuild swaps in the snapshot's data, policy, and schema together. A warm resume takes the control plane's policy as soon as the change backlog starts to apply, so for a window that grows with the backlog, a decision can combine policy and data from different points in time.
+- **A failed attempt keeps the data.** A reconnect that reaches the control plane and fails, for example on a refusal, logs the WARN `a reconnect reached the hub but failed`, keeps the signup record and the data, and tries again with the same backoff.
+
+When Nexus PDP has caught up (its rebuild landed, or its warm resume is current), `cold_rebuild` reads `up`, `state` returns to `ready` once the link and the sources are up, and Nexus PDP writes a new signup record. [The serve cap](#serve-cap) then no longer applies. If the control plane denied this Nexus PDP after the signup it caught up on, Nexus PDP writes no record, and the serve cap stays.
+
+After an in-place reconnect, OPA keeps the decision-log and bundle-polling settings it started with until the next restart.
+
+## The serve cap on an offline start \{#serve-cap}
+
+An offline start serves for a limited time. If its reconnect has not caught up when its signup record is `PDP_SIGNUP_RECORD_MAX_AGE_SECS` old, counted from the record's timestamp that the offline start read, Nexus PDP stops serving:
+
+1. It logs the ERROR `this edge booted offline and has not caught up with the hub since`.
+2. It shuts down as on `SIGTERM`: the authorization port closes first, and the health port last.
+3. It exits with code `1`.
+
+Nexus PDP removes nothing: the database, `FRESH`, and the signup record stay on the volume. A restart that still cannot reach the control plane refuses the record as too old and exits before it opens a port. A restart that reaches the control plane signs up, writes a new record, and starts as an online Nexus PDP.
+
+Only a catch-up ends the cap. A reconnect's signup alone does not reset the record's age. Nexus PDP checks both its monotonic clock and the wall clock, so a host suspend does not extend the cap.
+
+## Heal in place after a long outage \{#online-heal}
+
+A Nexus PDP that started online keeps serving stale when it loses the control plane. If the link returns within about 9 minutes, Nexus PDP resumes the change stream from its position, with nothing to rebuild.
+
+Once the change stream has not been live over the control-plane link for 540 seconds (9 minutes), Nexus PDP heals in place, with no restart:
+
+1. It logs the WARN `LOCAL_WAL's source has not been live over the hub link`, and `cold_rebuild` reads `down` with `healing` in its detail.
+2. It holds the policy it serves, and stops applying changes where they stand.
+3. If the change stream is live again on the same position within 30 more seconds, so the outage ended 540 to 570 seconds after the change stream was last live, Nexus PDP resumes warm, with no signup and no rebuild. It logs the INFO `LOCAL_WAL's source is live again on the WAL consumer`.
+4. Otherwise, Nexus PDP signs up again with backoff and rebuilds its database while it serves stale, as an [in-place reconnect](#reconnect-in-place) does. The process and the authorization port stay as they are.
+
+:::note The heal's warm resume needs nats-server 2.15.0 or later
+Step 3 depends on nats-server 2.15.0 or later inside the Nexus PDP image. With nats-server 2.14.x, the change stream usually stays stalled past those 30 seconds, and Nexus PDP heals the outage cold instead. A cold heal is safe: Nexus PDP keeps serving stale and replaces its database from a snapshot, which takes longer than a warm resume. To see which nats-server version an image bundles, replace `<digest>` and run:
+
+```bash
+docker run --rm --entrypoint /usr/local/bin/nats-server \
+  permitio/nexus-pdp@sha256:<digest> --version
+```
+:::
+
+### The heal's ceiling \{#heal-ceiling}
+
+A heal serves for a limited time, like an offline start. When the heal holds its policy, it arms a ceiling `PDP_SIGNUP_RECORD_MAX_AGE_SECS` after the control plane last accepted this Nexus PDP: the timestamp of its signup record, which Nexus PDP refreshes while it is connected and current, or the time the heal began when there is no record. Nexus PDP logs the INFO `the heal arms its ceiling`, with `ceiling_at`. The heal's catch-up, a landed rebuild or a warm resume, disarms the ceiling, unless the control plane denied this Nexus PDP since its signup.
+
+At the ceiling, Nexus PDP stops as an offline start does at [its serve cap](#serve-cap): it logs the ERROR `this edge was healing a cut past the WAL consumer reap and has not caught up with the hub since the heal began`, shuts down, exits with code `1`, and removes nothing.
+
+### A refused heal serves until its ceiling \{#heal-refused}
+
+If the control plane refuses the heal's signup, Nexus PDP retries with backoff and removes nothing. The first refusal of each run logs the WARN `the hub refuses this edge's signup while it heals`, with `ceiling_at`, and `cold_rebuild` reports `"refused": true`. Nexus PDP keeps serving the policy it holds until the ceiling, then stops.
+
+To stop it sooner, restart it. A startup that the control plane refuses fails and removes the signup record, so the volume cannot start offline afterwards.
+
+## Log lines to watch \{#log-lines}
+
+Each message starts with the phrase below. Match on the phrase, not the whole line: the fields after it change from line to line.
+
+| Level | Message starts with | Meaning |
+| --- | --- | --- |
+| WARN | `serving stale: answering from data that may be behind the hub` | A stale episode began, and Nexus PDP stays ready. |
+| INFO | `no longer serving stale` | Nexus PDP is no longer serving stale: it is current, or `still_behind=true` says it stopped being ready while still behind. |
+| WARN | `serving stale past the WAL consumer reap` | The stale episode passed 600 seconds. Repeats every 10 minutes while `state` is `serving_stale`, or `not_ready` only because of `PDP_MAX_STALE_SECS`. |
+| WARN | `behind the hub past PDP_MAX_STALE_SECS` | Readiness dropped at `PDP_MAX_STALE_SECS`. |
+| WARN | `the hub is unreachable: booting offline` | An offline start began. |
+| ERROR | `the hub is unreachable, and this boot may not serve this volume without it` | An offline start was refused. `reason` says why. |
+| INFO | `reconnected to the hub in place and resumed warm` | The reconnect after an offline start resumed the change stream. |
+| ERROR | `this edge booted offline and has not caught up with the hub since` | The serve cap stopped an offline start. |
+| WARN | `LOCAL_WAL's source has not been live over the hub link` | An online heal began. |
+| WARN | `the hub refuses this edge's signup while it heals` | The control plane refuses a heal's signup. |
+| ERROR | `this edge was healing a cut past the WAL consumer reap` | The heal's ceiling stopped Nexus PDP. |
+
+## Next steps \{#related-documentation}
+
+- [Nexus PDP configuration reference](/concepts/pdp/nexus-pdp-configuration#offline-mode): `PDP_MAX_STALE_SECS`, `PDP_OFFLINE_ALLOW_UNPROTECTED_VOLUME`, and `PDP_SIGNUP_RECORD_MAX_AGE_SECS`
+- [Deploy Nexus PDP](/concepts/pdp/nexus-pdp-deployment): storage, probes, logs, and the security model
+- [How Nexus PDP syncs data](/concepts/pdp/nexus-pdp-how-it-works): sync, consistency, cold start, and sizing
+- [Nexus PDP feature parity](/concepts/pdp/nexus-pdp-feature-parity): supported endpoints and capabilities
